@@ -1,15 +1,27 @@
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { OLTTable } from '@/components/olt/OLTTable';
 import { AddOLTDialog } from '@/components/olt/AddOLTDialog';
-import { mockOLTs } from '@/lib/mock-data';
+import { useOLTs } from '@/hooks/useOLTData';
 import { StatsCard } from '@/components/dashboard/StatsCard';
-import { Server, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { Server, Wifi, WifiOff, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function OLTManagement() {
-  const totalOLTs = mockOLTs.length;
-  const onlineOLTs = mockOLTs.filter((o) => o.status === 'online').length;
-  const offlineOLTs = mockOLTs.filter((o) => o.status === 'offline').length;
-  const warningOLTs = mockOLTs.filter((o) => o.status === 'warning').length;
+  const { olts, loading, refetch } = useOLTs();
+
+  const totalOLTs = olts.length;
+  const onlineOLTs = olts.filter((o) => o.status === 'online').length;
+  const offlineOLTs = olts.filter((o) => o.status === 'offline').length;
+  const warningOLTs = olts.filter((o) => o.status === 'warning').length;
+
+  if (loading) {
+    return (
+      <DashboardLayout title="OLT Management" subtitle="Manage and monitor OLT devices">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="OLT Management" subtitle="Manage and monitor OLT devices">
@@ -42,11 +54,11 @@ export default function OLTManagement() {
               variant="warning"
             />
           </div>
-          <AddOLTDialog />
+          <AddOLTDialog onOLTAdded={refetch} />
         </div>
 
         {/* OLT Table */}
-        <OLTTable olts={mockOLTs} />
+        <OLTTable olts={olts} />
       </div>
     </DashboardLayout>
   );

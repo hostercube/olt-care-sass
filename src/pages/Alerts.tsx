@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { mockAlerts } from '@/lib/mock-data';
-import { Alert } from '@/types/olt';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAlerts, type AlertRow } from '@/hooks/useOLTData';
 import { formatDistanceToNow } from 'date-fns';
-import { AlertTriangle, AlertCircle, Info, CheckCircle, X, Bell, BellOff } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, CheckCircle, X, Bell, BellOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const severityConfig = {
@@ -34,12 +33,12 @@ const severityConfig = {
   },
 };
 
-function AlertCard({ alert }: { alert: Alert }) {
+function AlertCard({ alert, onMarkRead }: { alert: AlertRow; onMarkRead: (id: string) => void }) {
   const config = severityConfig[alert.severity];
   const Icon = config.icon;
 
   return (
-    <Card className={cn('transition-all', config.bgColor, config.borderColor, !alert.isRead && 'ring-1 ring-primary/20')}>
+    <Card className={cn('transition-all', config.bgColor, config.borderColor, !alert.is_read && 'ring-1 ring-primary/20')}>
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
           <div className={cn('rounded-lg p-2', config.bgColor)}>
@@ -53,7 +52,7 @@ function AlertCard({ alert }: { alert: Alert }) {
                   <Badge variant={alert.severity === 'critical' ? 'danger' : alert.severity === 'warning' ? 'warning' : 'info'}>
                     {config.label}
                   </Badge>
-                  {!alert.isRead && (
+                  {!alert.is_read && (
                     <Badge variant="default" className="text-xs">New</Badge>
                   )}
                 </div>
@@ -64,13 +63,17 @@ function AlertCard({ alert }: { alert: Alert }) {
               </Button>
             </div>
             <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-              <span className="font-mono">{alert.deviceName}</span>
+              <span className="font-mono">{alert.device_name || 'Unknown Device'}</span>
               <span>•</span>
-              <span>{formatDistanceToNow(alert.createdAt, { addSuffix: true })}</span>
+              <span>{formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}</span>
             </div>
             <div className="flex items-center gap-2 mt-3">
               <Button variant="outline" size="sm">View Device</Button>
-              <Button variant="ghost" size="sm">Mark as Read</Button>
+              {!alert.is_read && (
+                <Button variant="ghost" size="sm" onClick={() => onMarkRead(alert.id)}>
+                  Mark as Read
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -81,16 +84,27 @@ function AlertCard({ alert }: { alert: Alert }) {
 
 export default function Alerts() {
   const [filter, setFilter] = useState<'all' | 'unread' | 'critical' | 'warning' | 'info'>('all');
+  const { alerts, loading, markAsRead, markAllAsRead } = useAlerts();
 
-  const filteredAlerts = mockAlerts.filter((alert) => {
+  const filteredAlerts = alerts.filter((alert) => {
     if (filter === 'all') return true;
-    if (filter === 'unread') return !alert.isRead;
+    if (filter === 'unread') return !alert.is_read;
     return alert.severity === filter;
   });
 
-  const unreadCount = mockAlerts.filter((a) => !a.isRead).length;
-  const criticalCount = mockAlerts.filter((a) => a.severity === 'critical').length;
-  const warningCount = mockAlerts.filter((a) => a.severity === 'warning').length;
+  const unreadCount = alerts.filter((a) => !a.is_read).length;
+  const criticalCount = alerts.filter((a) => a.severity === 'critical').length;
+  const warningCount = alerts.filter((a) => a.severity === 'warning').length;
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Alerts" subtitle="System alerts and notifications">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Alerts" subtitle="System alerts and notifications">
@@ -103,7 +117,7 @@ export default function Alerts() {
                 <Bell className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold font-mono">{mockAlerts.length}</p>
+                <p className="text-2xl font-bold font-mono">{alerts.length}</p>
                 <p className="text-xs text-muted-foreground">Total Alerts</p>
               </div>
             </CardContent>
@@ -155,7 +169,7 @@ export default function Alerts() {
             </TabsList>
           </Tabs>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={unreadCount === 0}>
               <CheckCircle className="h-4 w-4 mr-2" />
               Mark All Read
             </Button>
@@ -166,7 +180,7 @@ export default function Alerts() {
         <div className="space-y-4">
           {filteredAlerts.length > 0 ? (
             filteredAlerts.map((alert) => (
-              <AlertCard key={alert.id} alert={alert} />
+              <AlertCard key={alert.id} alert={alert} onMarkRead={markAsRead} />
             ))
           ) : (
             <Card variant="glass">

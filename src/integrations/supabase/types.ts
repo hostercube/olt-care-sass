@@ -14,16 +14,287 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alerts: {
+        Row: {
+          created_at: string
+          device_id: string | null
+          device_name: string | null
+          id: string
+          is_read: boolean
+          message: string
+          severity: Database["public"]["Enums"]["alert_severity"]
+          title: string
+          type: Database["public"]["Enums"]["alert_type"]
+        }
+        Insert: {
+          created_at?: string
+          device_id?: string | null
+          device_name?: string | null
+          id?: string
+          is_read?: boolean
+          message: string
+          severity: Database["public"]["Enums"]["alert_severity"]
+          title: string
+          type: Database["public"]["Enums"]["alert_type"]
+        }
+        Update: {
+          created_at?: string
+          device_id?: string | null
+          device_name?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string
+          severity?: Database["public"]["Enums"]["alert_severity"]
+          title?: string
+          type?: Database["public"]["Enums"]["alert_type"]
+        }
+        Relationships: []
+      }
+      olts: {
+        Row: {
+          active_ports: number
+          brand: Database["public"]["Enums"]["olt_brand"]
+          created_at: string
+          created_by: string | null
+          id: string
+          ip_address: string
+          last_polled: string | null
+          name: string
+          password_encrypted: string
+          port: number
+          status: Database["public"]["Enums"]["connection_status"]
+          total_ports: number
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          active_ports?: number
+          brand: Database["public"]["Enums"]["olt_brand"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ip_address: string
+          last_polled?: string | null
+          name: string
+          password_encrypted: string
+          port?: number
+          status?: Database["public"]["Enums"]["connection_status"]
+          total_ports?: number
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          active_ports?: number
+          brand?: Database["public"]["Enums"]["olt_brand"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ip_address?: string
+          last_polled?: string | null
+          name?: string
+          password_encrypted?: string
+          port?: number
+          status?: Database["public"]["Enums"]["connection_status"]
+          total_ports?: number
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      onus: {
+        Row: {
+          created_at: string
+          id: string
+          last_offline: string | null
+          last_online: string | null
+          mac_address: string | null
+          name: string
+          olt_id: string
+          onu_index: number
+          pon_port: string
+          pppoe_username: string | null
+          router_name: string | null
+          rx_power: number | null
+          serial_number: string | null
+          status: Database["public"]["Enums"]["connection_status"]
+          tx_power: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_offline?: string | null
+          last_online?: string | null
+          mac_address?: string | null
+          name: string
+          olt_id: string
+          onu_index: number
+          pon_port: string
+          pppoe_username?: string | null
+          router_name?: string | null
+          rx_power?: number | null
+          serial_number?: string | null
+          status?: Database["public"]["Enums"]["connection_status"]
+          tx_power?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_offline?: string | null
+          last_online?: string | null
+          mac_address?: string | null
+          name?: string
+          olt_id?: string
+          onu_index?: number
+          pon_port?: string
+          pppoe_username?: string | null
+          router_name?: string | null
+          rx_power?: number | null
+          serial_number?: string | null
+          status?: Database["public"]["Enums"]["connection_status"]
+          tx_power?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onus_olt_id_fkey"
+            columns: ["olt_id"]
+            isOneToOne: false
+            referencedRelation: "olts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      power_readings: {
+        Row: {
+          id: string
+          onu_id: string
+          recorded_at: string
+          rx_power: number
+          tx_power: number
+        }
+        Insert: {
+          id?: string
+          onu_id: string
+          recorded_at?: string
+          rx_power: number
+          tx_power: number
+        }
+        Update: {
+          id?: string
+          onu_id?: string
+          recorded_at?: string
+          rx_power?: number
+          tx_power?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "power_readings_onu_id_fkey"
+            columns: ["onu_id"]
+            isOneToOne: false
+            referencedRelation: "onus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      system_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_authenticated: { Args: never; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      alert_severity: "critical" | "warning" | "info"
+      alert_type:
+        | "onu_offline"
+        | "power_drop"
+        | "olt_unreachable"
+        | "high_latency"
+      app_role: "admin" | "operator" | "viewer"
+      connection_status: "online" | "offline" | "warning" | "unknown"
+      olt_brand:
+        | "ZTE"
+        | "Huawei"
+        | "Fiberhome"
+        | "Nokia"
+        | "BDCOM"
+        | "VSOL"
+        | "Other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +421,25 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      alert_severity: ["critical", "warning", "info"],
+      alert_type: [
+        "onu_offline",
+        "power_drop",
+        "olt_unreachable",
+        "high_latency",
+      ],
+      app_role: ["admin", "operator", "viewer"],
+      connection_status: ["online", "offline", "warning", "unknown"],
+      olt_brand: [
+        "ZTE",
+        "Huawei",
+        "Fiberhome",
+        "Nokia",
+        "BDCOM",
+        "VSOL",
+        "Other",
+      ],
+    },
   },
 } as const

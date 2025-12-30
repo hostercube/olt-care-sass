@@ -2,12 +2,12 @@ import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert } from '@/types/olt';
+import type { Tables } from '@/integrations/supabase/types';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 interface AlertsWidgetProps {
-  alerts: Alert[];
+  alerts: Tables<'alerts'>[];
   maxItems?: number;
 }
 
@@ -48,52 +48,58 @@ export function AlertsWidget({ alerts, maxItems = 5 }: AlertsWidgetProps) {
       <CardContent>
         <ScrollArea className="h-[300px] pr-4">
           <div className="space-y-3">
-            {displayAlerts.map((alert) => {
-              const config = severityConfig[alert.severity];
-              const Icon = config.icon;
-              
-              return (
-                <div
-                  key={alert.id}
-                  className={cn(
-                    'rounded-lg border p-3 transition-colors',
-                    config.bgColor,
-                    config.borderColor,
-                    !alert.isRead && 'ring-1 ring-primary/20'
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <Icon className={cn('h-5 w-5 mt-0.5 flex-shrink-0', config.color)} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className={cn('font-medium text-sm', config.color)}>
-                          {alert.title}
+            {displayAlerts.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No alerts at this time
+              </div>
+            ) : (
+              displayAlerts.map((alert) => {
+                const config = severityConfig[alert.severity];
+                const Icon = config.icon;
+                
+                return (
+                  <div
+                    key={alert.id}
+                    className={cn(
+                      'rounded-lg border p-3 transition-colors',
+                      config.bgColor,
+                      config.borderColor,
+                      !alert.is_read && 'ring-1 ring-primary/20'
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Icon className={cn('h-5 w-5 mt-0.5 flex-shrink-0', config.color)} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className={cn('font-medium text-sm', config.color)}>
+                            {alert.title}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 flex-shrink-0 opacity-50 hover:opacity-100"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {alert.message}
                         </p>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 flex-shrink-0 opacity-50 hover:opacity-100"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                        {alert.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          {alert.deviceName}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">•</span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatDistanceToNow(alert.createdAt, { addSuffix: true })}
-                        </span>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            {alert.device_name || 'Unknown Device'}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">•</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </ScrollArea>
       </CardContent>
