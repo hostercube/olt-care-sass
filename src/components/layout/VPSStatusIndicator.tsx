@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Shield, ServerOff, Loader2, RefreshCw, CloudOff } from 'lucide-react';
+import { Shield, ServerOff, Loader2, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface VPSStatus {
-  status: 'online' | 'offline' | 'checking' | 'not-configured';
+  status: 'online' | 'offline' | 'checking';
   lastPollTime: string | null;
   isPolling: boolean;
   errorCount: number;
@@ -20,14 +20,8 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
   const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
 
   const checkVPSStatus = async () => {
-    // If no polling server URL is configured, show as not configured (not an error)
     if (!pollingServerUrl) {
-      setVpsStatus({
-        status: 'not-configured',
-        lastPollTime: null,
-        isPolling: false,
-        errorCount: 0,
-      });
+      setVpsStatus(prev => ({ ...prev, status: 'offline' }));
       return;
     }
 
@@ -52,21 +46,14 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
         setVpsStatus(prev => ({ ...prev, status: 'offline' }));
       }
     } catch (error) {
-      // Only log in development, not spam console
-      if (import.meta.env.DEV) {
-        console.log('VPS status check failed - polling server may not be running');
-      }
       setVpsStatus(prev => ({ ...prev, status: 'offline' }));
     }
   };
 
   useEffect(() => {
     checkVPSStatus();
-    // Only poll if URL is configured
-    if (pollingServerUrl) {
-      const interval = setInterval(checkVPSStatus, 30000);
-      return () => clearInterval(interval);
-    }
+    const interval = setInterval(checkVPSStatus, 30000);
+    return () => clearInterval(interval);
   }, [pollingServerUrl]);
 
   if (collapsed) {
@@ -76,26 +63,9 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
           <Shield className="h-4 w-4 text-success" />
         ) : vpsStatus.status === 'checking' ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        ) : vpsStatus.status === 'not-configured' ? (
-          <CloudOff className="h-4 w-4 text-muted-foreground" />
         ) : (
-          <ServerOff className="h-4 w-4 text-warning" />
+          <ServerOff className="h-4 w-4 text-destructive" />
         )}
-      </div>
-    );
-  }
-
-  // Not configured state - informational, not an error
-  if (vpsStatus.status === 'not-configured') {
-    return (
-      <div className="rounded-lg p-3 border bg-muted/30 border-border">
-        <div className="flex items-center gap-2">
-          <CloudOff className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">Manual Mode</span>
-        </div>
-        <p className="text-[10px] text-muted-foreground mt-1">
-          Polling server not configured. Add OLTs manually.
-        </p>
       </div>
     );
   }
@@ -107,7 +77,7 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
           ? 'bg-success/10 border-success/20'
           : vpsStatus.status === 'checking'
           ? 'bg-muted/50 border-border'
-          : 'bg-warning/10 border-warning/20'
+          : 'bg-destructive/10 border-destructive/20'
       }`}
     >
       <div className="flex items-center gap-2">
@@ -129,8 +99,8 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
           </>
         ) : (
           <>
-            <ServerOff className="h-4 w-4 text-warning" />
-            <span className="text-xs font-medium text-warning">Polling Offline</span>
+            <ServerOff className="h-4 w-4 text-destructive" />
+            <span className="text-xs font-medium text-destructive">VPS Offline</span>
           </>
         )}
       </div>
@@ -138,7 +108,7 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
         {vpsStatus.status === 'online' && vpsStatus.lastPollTime
           ? `Last poll: ${formatDistanceToNow(new Date(vpsStatus.lastPollTime), { addSuffix: true })}`
           : vpsStatus.status === 'offline'
-          ? 'Manual data entry available'
+          ? 'Cannot reach polling server'
           : 'Checking server status...'}
       </p>
       {vpsStatus.errorCount > 0 && (
