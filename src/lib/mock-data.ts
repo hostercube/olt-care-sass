@@ -14,6 +14,9 @@ const generateRandomSerial = (brand: OLTBrand) => {
     'Nokia': 'ALCLF',
     'BDCOM': 'BDCM',
     'VSOL': 'VSOL',
+    'DBC': 'DBCG',
+    'CDATA': 'CDTA',
+    'ECOM': 'ECOM',
     'Other': 'GPON'
   };
   return prefixes[brand] + Math.random().toString(36).substring(2, 10).toUpperCase();

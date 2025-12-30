@@ -37,7 +37,7 @@ const oltBrands = Constants.public.Enums.olt_brand;
 
 const addOLTSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(50),
-  brand: z.enum(['ZTE', 'Huawei', 'Fiberhome', 'Nokia', 'BDCOM', 'VSOL', 'Other']),
+  brand: z.enum(['ZTE', 'Huawei', 'Fiberhome', 'Nokia', 'BDCOM', 'VSOL', 'DBC', 'CDATA', 'ECOM', 'Other']),
   ipAddress: z
     .string()
     .regex(

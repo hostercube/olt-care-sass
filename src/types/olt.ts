@@ -1,4 +1,4 @@
-export type OLTBrand = 'ZTE' | 'Huawei' | 'Fiberhome' | 'Nokia' | 'BDCOM' | 'VSOL' | 'Other';
+export type OLTBrand = 'ZTE' | 'Huawei' | 'Fiberhome' | 'Nokia' | 'BDCOM' | 'VSOL' | 'DBC' | 'CDATA' | 'ECOM' | 'Other';
 
 export type ConnectionStatus = 'online' | 'offline' | 'warning' | 'unknown';
 
