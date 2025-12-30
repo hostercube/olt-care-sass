@@ -201,20 +201,30 @@ export function useDashboardStats() {
 export async function addOLT(data: {
   name: string;
   brand: OLTRow['brand'];
+  olt_mode: 'EPON' | 'GPON';
   ip_address: string;
   port: number;
   username: string;
   password_encrypted: string;
+  mikrotik_ip?: string | null;
+  mikrotik_port?: number;
+  mikrotik_username?: string | null;
+  mikrotik_password_encrypted?: string | null;
 }) {
   const { error } = await supabase.from('olts').insert({
     name: data.name,
     brand: data.brand,
+    olt_mode: data.olt_mode,
     ip_address: data.ip_address,
     port: data.port,
     username: data.username,
     password_encrypted: data.password_encrypted,
+    mikrotik_ip: data.mikrotik_ip,
+    mikrotik_port: data.mikrotik_port || 8728,
+    mikrotik_username: data.mikrotik_username,
+    mikrotik_password_encrypted: data.mikrotik_password_encrypted,
     status: 'unknown',
-  });
+  } as any);
 
   if (error) throw error;
 }

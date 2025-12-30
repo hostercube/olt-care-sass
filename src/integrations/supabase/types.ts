@@ -59,7 +59,12 @@ export type Database = {
           id: string
           ip_address: string
           last_polled: string | null
+          mikrotik_ip: string | null
+          mikrotik_password_encrypted: string | null
+          mikrotik_port: number | null
+          mikrotik_username: string | null
           name: string
+          olt_mode: Database["public"]["Enums"]["olt_mode"] | null
           password_encrypted: string
           port: number
           status: Database["public"]["Enums"]["connection_status"]
@@ -75,7 +80,12 @@ export type Database = {
           id?: string
           ip_address: string
           last_polled?: string | null
+          mikrotik_ip?: string | null
+          mikrotik_password_encrypted?: string | null
+          mikrotik_port?: number | null
+          mikrotik_username?: string | null
           name: string
+          olt_mode?: Database["public"]["Enums"]["olt_mode"] | null
           password_encrypted: string
           port?: number
           status?: Database["public"]["Enums"]["connection_status"]
@@ -91,7 +101,12 @@ export type Database = {
           id?: string
           ip_address?: string
           last_polled?: string | null
+          mikrotik_ip?: string | null
+          mikrotik_password_encrypted?: string | null
+          mikrotik_port?: number | null
+          mikrotik_username?: string | null
           name?: string
+          olt_mode?: Database["public"]["Enums"]["olt_mode"] | null
           password_encrypted?: string
           port?: number
           status?: Database["public"]["Enums"]["connection_status"]
@@ -298,6 +313,7 @@ export type Database = {
         | "DBC"
         | "CDATA"
         | "ECOM"
+      olt_mode: "EPON" | "GPON"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -446,6 +462,7 @@ export const Constants = {
         "CDATA",
         "ECOM",
       ],
+      olt_mode: ["EPON", "GPON"],
     },
   },
 } as const
