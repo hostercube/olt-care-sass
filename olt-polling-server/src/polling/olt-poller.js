@@ -9,8 +9,30 @@ import { parseECOMOutput } from './parsers/ecom-parser.js';
 import { executeTelnetCommands } from './telnet-client.js';
 import { executeAPICommands, parseAPIResponse } from './http-api-client.js';
 import { fetchMikroTikPPPoE, fetchMikroTikARP, fetchMikroTikDHCPLeases, enrichONUWithMikroTikData } from './mikrotik-client.js';
+import net from 'net';
 
 const SSH_TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '60000');
+const CONNECTION_TIMEOUT = 15000;
+
+/**
+ * Determine connection method based on port number
+ * Port 22 = SSH
+ * Port 23 = Telnet
+ * Port 80, 443, 8080, 8041 = HTTP API
+ * Custom ports = Try both Telnet and SSH
+ */
+function getConnectionType(port, brand) {
+  if (port === 22) return 'ssh';
+  if (port === 23) return 'telnet';
+  if ([80, 443, 8080, 8041].includes(port)) return 'http';
+  
+  // For custom ports, determine based on brand
+  // VSOL, DBC, CDATA, ECOM, BDCOM, Fiberhome typically use Telnet on custom ports
+  const telnetBrands = ['VSOL', 'DBC', 'CDATA', 'ECOM', 'BDCOM', 'Fiberhome'];
+  if (telnetBrands.includes(brand)) return 'telnet_first';
+  
+  return 'ssh_first';
+}
 
 /**
  * Poll an OLT device via SSH/Telnet/API and sync data to database
@@ -23,51 +45,52 @@ export async function pollOLT(supabase, olt) {
     let output;
     let onus = [];
     
-    // Check if port 443 or 80 - use HTTP API instead of SSH/Telnet
-    if (olt.port === 443 || olt.port === 80 || olt.port === 8080) {
-      logger.info(`Using HTTP API for ${olt.name} (port ${olt.port})`);
-      try {
+    const connectionType = getConnectionType(olt.port, olt.brand);
+    logger.info(`Polling ${olt.name} (${olt.ip_address}:${olt.port}) - Connection type: ${connectionType}`);
+    
+    switch (connectionType) {
+      case 'http':
+        logger.info(`Using HTTP API for ${olt.name}`);
         const apiResponse = await executeAPICommands(olt);
         onus = parseAPIResponse(olt.brand, apiResponse);
-      } catch (apiError) {
-        logger.error(`HTTP API failed for ${olt.name}: ${apiError.message}`);
-        throw apiError;
-      }
-    } else {
-      // Determine connection method based on port and brand
-      const telnetBrands = ['VSOL', 'DBC', 'CDATA', 'ECOM', 'BDCOM', 'Fiberhome'];
-      const useTelnetFirst = olt.port === 23 || telnetBrands.includes(olt.brand);
-      
-      if (useTelnetFirst) {
-        // Try Telnet first for these brands
-        logger.info(`Attempting Telnet connection to ${olt.name} (${olt.ip_address}:${olt.port}) - Brand: ${olt.brand}`);
+        break;
+        
+      case 'ssh':
+        logger.info(`Using SSH for ${olt.name}`);
+        output = await executeSSHCommands(olt);
+        onus = parseOLTOutput(olt.brand, output);
+        break;
+        
+      case 'telnet':
+        logger.info(`Using Telnet for ${olt.name}`);
+        output = await executeTelnetCommands(olt, commands);
+        onus = parseOLTOutput(olt.brand, output);
+        break;
+        
+      case 'telnet_first':
+        // Try Telnet first, fallback to SSH
         try {
+          logger.info(`Trying Telnet first for ${olt.name}`);
           output = await executeTelnetCommands(olt, commands);
         } catch (telnetError) {
           logger.warn(`Telnet failed for ${olt.name}: ${telnetError.message}, trying SSH...`);
-          try {
-            output = await executeSSHCommands(olt);
-          } catch (sshError) {
-            logger.error(`Both Telnet and SSH failed for ${olt.name}`);
-            throw new Error(`Connection failed - Telnet: ${telnetError.message}, SSH: ${sshError.message}`);
-          }
+          output = await executeSSHCommands(olt);
         }
-      } else {
-        // Try SSH first for other brands
+        onus = parseOLTOutput(olt.brand, output);
+        break;
+        
+      case 'ssh_first':
+      default:
+        // Try SSH first, fallback to Telnet
         try {
-          logger.info(`Attempting SSH connection to ${olt.name} (${olt.ip_address}:${olt.port})`);
+          logger.info(`Trying SSH first for ${olt.name}`);
           output = await executeSSHCommands(olt);
         } catch (sshError) {
           logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
-          try {
-            output = await executeTelnetCommands(olt, commands);
-          } catch (telnetError) {
-            logger.error(`Both SSH and Telnet failed for ${olt.name}`);
-            throw new Error(`Connection failed - SSH: ${sshError.message}, Telnet: ${telnetError.message}`);
-          }
+          output = await executeTelnetCommands(olt, commands);
         }
-      }
-      onus = parseOLTOutput(olt.brand, output);
+        onus = parseOLTOutput(olt.brand, output);
+        break;
     }
     
     logger.info(`Parsed ${onus.length} ONUs from ${olt.name}`);
@@ -82,14 +105,18 @@ export async function pollOLT(supabase, olt) {
         password: olt.mikrotik_password_encrypted,
       };
       
-      const [pppoeData, arpData, dhcpData] = await Promise.all([
-        fetchMikroTikPPPoE(mikrotik),
-        fetchMikroTikARP(mikrotik),
-        fetchMikroTikDHCPLeases(mikrotik),
-      ]);
-      
-      onus = onus.map(onu => enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData));
-      logger.info(`Enriched ${onus.length} ONUs with MikroTik data`);
+      try {
+        const [pppoeData, arpData, dhcpData] = await Promise.all([
+          fetchMikroTikPPPoE(mikrotik),
+          fetchMikroTikARP(mikrotik),
+          fetchMikroTikDHCPLeases(mikrotik),
+        ]);
+        
+        onus = onus.map(onu => enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData));
+        logger.info(`Enriched ${onus.length} ONUs with MikroTik data`);
+      } catch (mtError) {
+        logger.warn(`MikroTik enrichment failed: ${mtError.message}`);
+      }
     }
     
     await syncONUsToDatabase(supabase, olt.id, onus);
@@ -165,10 +192,10 @@ async function executeSSHCommands(olt) {
               setTimeout(() => {
                 logger.debug(`Sending command to ${olt.name}: ${cmd}`);
                 stream.write(cmd + '\r\n');
-              }, index * 1000); // Increased delay between commands
+              }, index * 1000);
             });
             
-            // Close stream after commands with more wait time
+            // Close stream after commands
             setTimeout(() => {
               stream.write('exit\r\n');
               setTimeout(() => {
@@ -176,7 +203,7 @@ async function executeSSHCommands(olt) {
               }, 2000);
             }, commands.length * 1000 + 8000);
           }
-        }, 2000); // Wait 2 seconds for initial prompt
+        }, 2000);
       });
     });
     
@@ -187,7 +214,6 @@ async function executeSSHCommands(olt) {
     });
     
     conn.on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
-      // Handle keyboard-interactive auth (some OLTs use this)
       logger.debug(`Keyboard-interactive auth for ${olt.ip_address}`);
       finish([olt.password_encrypted]);
     });
@@ -202,7 +228,7 @@ async function executeSSHCommands(olt) {
       readyTimeout: SSH_TIMEOUT,
       keepaliveInterval: 10000,
       keepaliveCountMax: 3,
-      tryKeyboard: true, // Enable keyboard-interactive auth
+      tryKeyboard: true,
       algorithms: {
         kex: [
           'curve25519-sha256',
@@ -308,6 +334,12 @@ function getOLTCommands(brand) {
         'show epon onu-info',
         'show epon optical-transceiver-diagnosis interface'
       ];
+    case 'Nokia':
+      return [
+        'environment no more',
+        'show equipment ont status',
+        'show equipment ont optics'
+      ];
     default:
       return [
         'show onu status',
@@ -328,7 +360,7 @@ function parseOLTOutput(brand, output) {
     case 'VSOL':
       return parseVSOLOutput(output);
     case 'Fiberhome':
-      return parseVSOLOutput(output); // Similar format to VSOL
+      return parseVSOLOutput(output);
     case 'DBC':
       return parseDBCOutput(output);
     case 'CDATA':
@@ -336,10 +368,12 @@ function parseOLTOutput(brand, output) {
     case 'ECOM':
       return parseECOMOutput(output);
     case 'BDCOM':
-      return parseVSOLOutput(output); // Try VSOL parser for BDCOM
+      return parseVSOLOutput(output);
+    case 'Nokia':
+      return parseVSOLOutput(output);
     default:
       logger.warn(`No parser available for brand: ${brand}, trying generic parser`);
-      return parseVSOLOutput(output); // Try VSOL parser as generic fallback
+      return parseVSOLOutput(output);
   }
 }
 
@@ -440,86 +474,51 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
 }
 
 /**
- * Check if brand typically uses Telnet instead of SSH
- */
-function brandUsesTelnet(brand) {
-  // These brands typically use Telnet on custom ports
-  const telnetBrands = ['VSOL', 'DBC', 'CDATA', 'ECOM', 'BDCOM', 'Fiberhome'];
-  return telnetBrands.includes(brand);
-}
-
-/**
  * Test OLT connection without polling data
  */
 export async function testOLTConnection(olt) {
   const startTime = Date.now();
+  const connectionType = getConnectionType(olt.port, olt.brand);
+  
+  logger.info(`Testing connection to ${olt.ip_address}:${olt.port} (${connectionType})`);
   
   try {
-    // Check if port 443/80 - use HTTP API
-    if (olt.port === 443 || olt.port === 80 || olt.port === 8080 || olt.port === 8041) {
-      logger.info(`Testing HTTP API connection to ${olt.ip_address}:${olt.port}`);
-      
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      
-      try {
-        const protocol = olt.port === 443 || olt.port === 8041 ? 'https' : 'http';
-        const response = await fetch(`${protocol}://${olt.ip_address}:${olt.port}/`, {
-          method: 'GET',
-          signal: controller.signal,
-          headers: { 'Accept': 'text/html,application/json' },
-        });
+    switch (connectionType) {
+      case 'http':
+        return await testHTTPConnection(olt);
         
-        clearTimeout(timeout);
-        
-        return { 
-          success: true, 
-          duration: Date.now() - startTime,
-          method: 'HTTP API'
-        };
-      } catch (fetchError) {
-        clearTimeout(timeout);
-        throw new Error(`HTTP API unreachable: ${fetchError.message}`);
-      }
-    }
-    
-    // Port 22 = SSH
-    if (olt.port === 22) {
-      return await testSSHConnection(olt);
-    }
-    
-    // Port 23 = Telnet
-    if (olt.port === 23) {
-      return await testTelnetConnection(olt);
-    }
-    
-    // For custom ports, determine based on brand
-    // VSOL, DBC, CDATA, ECOM, BDCOM typically use Telnet on custom ports
-    if (brandUsesTelnet(olt.brand)) {
-      logger.info(`Brand ${olt.brand} typically uses Telnet, trying Telnet first for port ${olt.port}`);
-      try {
-        return await testTelnetConnection(olt);
-      } catch (telnetErr) {
-        logger.warn(`Telnet failed for ${olt.brand}, trying SSH as fallback`);
-        try {
-          return await testSSHConnection(olt);
-        } catch (sshErr) {
-          throw new Error(`Port ${olt.port} unreachable via Telnet (${telnetErr.message}) and SSH (${sshErr.message})`);
-        }
-      }
-    } else {
-      // Unknown brand with custom port - try SSH first, then Telnet
-      logger.info(`Trying SSH first for port ${olt.port}`);
-      try {
+      case 'ssh':
         return await testSSHConnection(olt);
-      } catch (sshErr) {
-        logger.warn(`SSH failed, trying Telnet`);
+        
+      case 'telnet':
+        return await testTelnetConnection(olt);
+        
+      case 'telnet_first':
+        // Try Telnet first
         try {
           return await testTelnetConnection(olt);
         } catch (telnetErr) {
-          throw new Error(`Port ${olt.port} unreachable via SSH (${sshErr.message}) and Telnet (${telnetErr.message})`);
+          logger.warn(`Telnet failed, trying SSH fallback`);
+          try {
+            return await testSSHConnection(olt);
+          } catch (sshErr) {
+            throw new Error(`Telnet: ${telnetErr.message}, SSH: ${sshErr.message}`);
+          }
         }
-      }
+        
+      case 'ssh_first':
+      default:
+        // Try SSH first
+        try {
+          return await testSSHConnection(olt);
+        } catch (sshErr) {
+          logger.warn(`SSH failed, trying Telnet fallback`);
+          try {
+            return await testTelnetConnection(olt);
+          } catch (telnetErr) {
+            throw new Error(`SSH: ${sshErr.message}, Telnet: ${telnetErr.message}`);
+          }
+        }
     }
   } catch (error) {
     return { 
@@ -531,10 +530,39 @@ export async function testOLTConnection(olt) {
 }
 
 /**
+ * Test HTTP/HTTPS API connection
+ */
+async function testHTTPConnection(olt) {
+  const startTime = Date.now();
+  const protocol = olt.port === 443 || olt.port === 8041 ? 'https' : 'http';
+  
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT);
+  
+  try {
+    const response = await fetch(`${protocol}://${olt.ip_address}:${olt.port}/`, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { 'Accept': 'text/html,application/json' },
+    });
+    
+    clearTimeout(timeout);
+    
+    return { 
+      success: true, 
+      duration: Date.now() - startTime,
+      method: 'HTTP API'
+    };
+  } catch (fetchError) {
+    clearTimeout(timeout);
+    throw new Error(`HTTP API unreachable: ${fetchError.message}`);
+  }
+}
+
+/**
  * Test SSH connection
  */
 async function testSSHConnection(olt) {
-  const { Client } = await import('ssh2');
   const startTime = Date.now();
   
   return new Promise((resolve) => {
@@ -543,7 +571,7 @@ async function testSSHConnection(olt) {
     const timeout = setTimeout(() => {
       conn.end();
       resolve({ success: false, error: 'SSH connection timeout' });
-    }, 15000);
+    }, CONNECTION_TIMEOUT);
     
     conn.on('ready', () => {
       clearTimeout(timeout);
@@ -565,12 +593,17 @@ async function testSSHConnection(olt) {
       port: olt.port,
       username: olt.username,
       password: olt.password_encrypted,
-      readyTimeout: 15000,
+      readyTimeout: CONNECTION_TIMEOUT,
       tryKeyboard: true,
       algorithms: {
-        kex: ['diffie-hellman-group14-sha1', 'diffie-hellman-group1-sha1', 'diffie-hellman-group14-sha256'],
+        kex: [
+          'diffie-hellman-group14-sha1', 
+          'diffie-hellman-group1-sha1', 
+          'diffie-hellman-group14-sha256',
+          'curve25519-sha256'
+        ],
         cipher: ['aes128-ctr', 'aes192-ctr', 'aes256-ctr', 'aes128-cbc', '3des-cbc'],
-        serverHostKey: ['ssh-rsa', 'ssh-dss'],
+        serverHostKey: ['ssh-rsa', 'ssh-dss', 'ssh-ed25519'],
         hmac: ['hmac-sha2-256', 'hmac-sha1', 'hmac-md5']
       }
     });
@@ -581,7 +614,6 @@ async function testSSHConnection(olt) {
  * Test Telnet connection
  */
 async function testTelnetConnection(olt) {
-  const net = await import('net');
   const startTime = Date.now();
   
   return new Promise((resolve) => {
@@ -590,7 +622,7 @@ async function testTelnetConnection(olt) {
     const timeout = setTimeout(() => {
       socket.destroy();
       resolve({ success: false, error: 'Telnet connection timeout' });
-    }, 15000);
+    }, CONNECTION_TIMEOUT);
     
     socket.connect(olt.port, olt.ip_address, () => {
       clearTimeout(timeout);
