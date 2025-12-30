@@ -96,16 +96,35 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       return;
     }
 
+    const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
+    
+    if (!pollingServerUrl) {
+      toast.warning('Polling server not configured. OLT will be added without connection test.');
+      setTestResult('success');
+      return;
+    }
+
+    // Check for mixed content
+    const isHttps = window.location.protocol === 'https:';
+    const isHttpUrl = pollingServerUrl.startsWith('http://');
+    
+    if (isHttps && isHttpUrl) {
+      toast.warning('Cannot test connection from HTTPS page to HTTP server. Deploy to your own server to test connections.');
+      setTestResult('success');
+      return;
+    }
+
     setTesting(true);
     setTestResult(null);
 
     try {
-      // Call the VPS polling server to test connection
-      const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL || 'http://localhost:3001';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       
       const response = await fetch(`${pollingServerUrl}/api/test-connection`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           olt: {
             ip_address: values.ipAddress,
@@ -123,6 +142,7 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
         }),
       });
 
+      clearTimeout(timeoutId);
       const data = await response.json();
       
       if (data.olt?.success) {
@@ -136,10 +156,13 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
         toast.error(`Connection failed: ${data.olt?.error || 'Unable to connect to OLT'}`);
       }
     } catch (error: any) {
-      // If VPS is not reachable, allow saving anyway with a warning
-      console.warn('Test connection failed - VPS may not be running:', error);
+      console.warn('Test connection failed:', error);
+      if (error.name === 'AbortError') {
+        toast.warning('Connection test timed out. OLT will be added without verification.');
+      } else {
+        toast.warning('Could not reach test server. OLT will be added without verification.');
+      }
       setTestResult('success');
-      toast.warning('Could not reach test server - OLT will be added without verification');
     } finally {
       setTesting(false);
     }
