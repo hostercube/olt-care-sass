@@ -58,7 +58,7 @@ export default function OLTManagement() {
         </div>
 
         {/* OLT Table */}
-        <OLTTable olts={olts} />
+        <OLTTable olts={olts} onRefresh={refetch} />
       </div>
     </DashboardLayout>
   );
