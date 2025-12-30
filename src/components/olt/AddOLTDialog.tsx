@@ -104,16 +104,6 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       return;
     }
 
-    // Check for mixed content
-    const isHttps = window.location.protocol === 'https:';
-    const isHttpUrl = pollingServerUrl.startsWith('http://');
-    
-    if (isHttps && isHttpUrl) {
-      toast.warning('Cannot test connection from HTTPS page to HTTP server. Deploy to your own server to test connections.');
-      setTestResult('success');
-      return;
-    }
-
     setTesting(true);
     setTestResult(null);
 
@@ -158,11 +148,12 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
     } catch (error: any) {
       console.warn('Test connection failed:', error);
       if (error.name === 'AbortError') {
-        toast.warning('Connection test timed out. OLT will be added without verification.');
+        toast.warning('Connection test timed out. You can still add the OLT.');
+        setTestResult('error');
       } else {
-        toast.warning('Could not reach test server. OLT will be added without verification.');
+        toast.error(`Connection test failed: ${error.message}`);
+        setTestResult('error');
       }
-      setTestResult('success');
     } finally {
       setTesting(false);
     }
