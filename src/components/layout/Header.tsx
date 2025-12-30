@@ -13,6 +13,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useAlerts } from '@/hooks/useOLTData';
+import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
   title: string;
@@ -54,6 +55,9 @@ export function Header({ title, subtitle }: HeaderProps) {
         <Button variant="outline" size="icon" className="border-border">
           <RefreshCw className="h-4 w-4" />
         </Button>
+
+        {/* Theme Toggle */}
+        <ThemeToggle />
 
         {/* Notifications */}
         <DropdownMenu>
