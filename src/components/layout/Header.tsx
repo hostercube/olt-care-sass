@@ -1,4 +1,4 @@
-import { Bell, Search, User, RefreshCw } from 'lucide-react';
+import { Bell, Search, User, RefreshCw, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
+import { useAlerts } from '@/hooks/useOLTData';
 
 interface HeaderProps {
   title: string;
@@ -17,6 +20,17 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const { alerts } = useAlerts();
+  
+  const unreadAlerts = alerts.filter(a => !a.is_read);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
+  };
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur px-6">
       <div>
@@ -46,36 +60,44 @@ export function Header({ title, subtitle }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" className="relative border-border">
               <Bell className="h-4 w-4" />
-              <Badge
-                variant="danger"
-                className="absolute -top-1 -right-1 h-5 w-5 p-0 justify-center text-[10px]"
-              >
-                2
-              </Badge>
+              {unreadAlerts.length > 0 && (
+                <Badge
+                  variant="danger"
+                  className="absolute -top-1 -right-1 h-5 w-5 p-0 justify-center text-[10px]"
+                >
+                  {unreadAlerts.length > 9 ? '9+' : unreadAlerts.length}
+                </Badge>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80 bg-popover border-border">
             <DropdownMenuLabel className="font-normal">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">Notifications</span>
-                <Badge variant="secondary">2 new</Badge>
+                {unreadAlerts.length > 0 && (
+                  <Badge variant="secondary">{unreadAlerts.length} new</Badge>
+                )}
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="flex flex-col items-start gap-1 cursor-pointer">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-destructive" />
-                <span className="font-medium">OLT Connection Lost</span>
+            {unreadAlerts.length === 0 ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                No new notifications
               </div>
-              <span className="text-xs text-muted-foreground">OLT-Remote-West unreachable</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1 cursor-pointer">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-warning" />
-                <span className="font-medium">Low RX Power</span>
-              </div>
-              <span className="text-xs text-muted-foreground">Customer-Residence-A1-2</span>
-            </DropdownMenuItem>
+            ) : (
+              unreadAlerts.slice(0, 5).map((alert) => (
+                <DropdownMenuItem key={alert.id} className="flex flex-col items-start gap-1 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <div className={`h-2 w-2 rounded-full ${
+                      alert.severity === 'critical' ? 'bg-destructive' : 
+                      alert.severity === 'warning' ? 'bg-warning' : 'bg-info'
+                    }`} />
+                    <span className="font-medium">{alert.title}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{alert.message}</span>
+                </DropdownMenuItem>
+              ))
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -89,15 +111,19 @@ export function Header({ title, subtitle }: HeaderProps) {
           <DropdownMenuContent align="end" className="bg-popover border-border">
             <DropdownMenuLabel>
               <div className="flex flex-col">
-                <span className="font-medium">Admin User</span>
-                <span className="text-xs text-muted-foreground">admin@isp.net</span>
+                <span className="font-medium">{user?.email}</span>
+                <span className="text-xs text-muted-foreground">Authenticated</span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile Settings</DropdownMenuItem>
-            <DropdownMenuItem>API Configuration</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
+              Profile Settings
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">Logout</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
