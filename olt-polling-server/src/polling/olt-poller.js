@@ -3,6 +3,9 @@ import { logger } from '../utils/logger.js';
 import { parseZTEOutput } from './parsers/zte-parser.js';
 import { parseHuaweiOutput } from './parsers/huawei-parser.js';
 import { parseVSOLOutput } from './parsers/vsol-parser.js';
+import { parseDBCOutput } from './parsers/dbc-parser.js';
+import { parseCDATAOutput } from './parsers/cdata-parser.js';
+import { parseECOMOutput } from './parsers/ecom-parser.js';
 import { executeTelnetCommands } from './telnet-client.js';
 
 const SSH_TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '60000');
@@ -230,6 +233,33 @@ function getOLTCommands(brand) {
         'show onu optical-info all',
         'show onu info all'
       ];
+    case 'DBC':
+      return [
+        'terminal length 0',
+        'show onu status',
+        'show onu optical-power',
+        'show onu list'
+      ];
+    case 'CDATA':
+      return [
+        'terminal length 0',
+        'show onu status all',
+        'show onu optical-info all',
+        'show onu list'
+      ];
+    case 'ECOM':
+      return [
+        'terminal length 0',
+        'show gpon onu state',
+        'show gpon onu optical',
+        'show gpon onu info'
+      ];
+    case 'BDCOM':
+      return [
+        'terminal length 0',
+        'show epon onu-info',
+        'show epon optical-transceiver-diagnosis interface'
+      ];
     default:
       return [
         'show onu status',
@@ -251,6 +281,14 @@ function parseOLTOutput(brand, output) {
       return parseVSOLOutput(output);
     case 'Fiberhome':
       return parseVSOLOutput(output); // Similar format to VSOL
+    case 'DBC':
+      return parseDBCOutput(output);
+    case 'CDATA':
+      return parseCDATAOutput(output);
+    case 'ECOM':
+      return parseECOMOutput(output);
+    case 'BDCOM':
+      return parseVSOLOutput(output); // Try VSOL parser for BDCOM
     default:
       logger.warn(`No parser available for brand: ${brand}, trying generic parser`);
       return parseVSOLOutput(output); // Try VSOL parser as generic fallback
