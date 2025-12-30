@@ -1,4 +1,6 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
@@ -6,6 +8,37 @@ import { createClient } from '@supabase/supabase-js';
 import { pollOLT, testOLTConnection } from './polling/olt-poller.js';
 import { testMikrotikConnection } from './polling/mikrotik-client.js';
 import { logger } from './utils/logger.js';
+
+// Get the directory of the current file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load .env from the project root (one level up from src/)
+const envPath = join(__dirname, '..', '.env');
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.error('Failed to load .env file from:', envPath);
+  console.error('Error:', result.error.message);
+} else {
+  console.log('.env loaded successfully from:', envPath);
+}
+
+// Validate required environment variables
+if (!process.env.SUPABASE_URL) {
+  console.error('ERROR: SUPABASE_URL is not set!');
+  console.error('Please check your .env file at:', envPath);
+  console.error('Current env vars:', Object.keys(process.env).filter(k => k.includes('SUPA')));
+  process.exit(1);
+}
+
+if (!process.env.SUPABASE_SERVICE_KEY) {
+  console.error('ERROR: SUPABASE_SERVICE_KEY is not set!');
+  console.error('Please check your .env file at:', envPath);
+  process.exit(1);
+}
+
+console.log('Supabase URL:', process.env.SUPABASE_URL);
 
 const app = express();
 app.use(cors());

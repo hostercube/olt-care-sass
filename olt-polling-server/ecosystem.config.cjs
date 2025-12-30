@@ -1,14 +1,20 @@
 /**
  * PM2 Ecosystem Configuration
- * Usage: pm2 start ecosystem.config.cjs
+ * 
+ * IMPORTANT: Update 'cwd' path before running!
+ * 
+ * Usage:
+ *   cd /var/www/olt.isppoint.com/olt-polling-server
+ *   pm2 start ecosystem.config.cjs
  */
 module.exports = {
   apps: [{
     name: 'olt-polling-server',
     script: 'src/index.js',
     
-    // Working directory - UPDATE THIS to your server path
-    cwd: '/var/www/olt.yourdomain.com/olt-polling-server',
+    // Working directory - MUST match your actual server path
+    // For olt.isppoint.com use:
+    cwd: '/var/www/olt.isppoint.com/olt-polling-server',
     
     // Process settings
     instances: 1,
@@ -16,16 +22,13 @@ module.exports = {
     watch: false,
     max_memory_restart: '500M',
     
-    // Environment
+    // Environment variables
     env: {
       NODE_ENV: 'production',
       PORT: 3001
     },
     
-    // Load .env file
-    env_file: '.env',
-    
-    // Logs - UPDATE paths to your server
+    // Logs directory (will be created in cwd)
     error_file: './logs/error.log',
     out_file: './logs/out.log',
     log_file: './logs/combined.log',
