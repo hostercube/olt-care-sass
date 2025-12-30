@@ -7,45 +7,73 @@ import { parseDBCOutput } from './parsers/dbc-parser.js';
 import { parseCDATAOutput } from './parsers/cdata-parser.js';
 import { parseECOMOutput } from './parsers/ecom-parser.js';
 import { executeTelnetCommands } from './telnet-client.js';
+import { executeAPICommands, parseAPIResponse } from './http-api-client.js';
+import { fetchMikroTikPPPoE, fetchMikroTikARP, fetchMikroTikDHCPLeases, enrichONUWithMikroTikData } from './mikrotik-client.js';
 
 const SSH_TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '60000');
 
 /**
- * Poll an OLT device via SSH/Telnet and sync data to database
+ * Poll an OLT device via SSH/Telnet/API and sync data to database
  */
 export async function pollOLT(supabase, olt) {
   const startTime = Date.now();
   
   try {
-    // Get commands for this OLT brand
     const commands = getOLTCommands(olt.brand);
-    
-    // Try SSH first, if fails try Telnet (for older OLTs or VSOL)
     let output;
-    try {
-      logger.info(`Attempting SSH connection to ${olt.name} (${olt.ip_address}:${olt.port})`);
-      output = await executeSSHCommands(olt);
-    } catch (sshError) {
-      logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
-      
-      // Try Telnet as fallback
-      try {
-        output = await executeTelnetCommands(olt, commands);
-      } catch (telnetError) {
-        logger.error(`Both SSH and Telnet failed for ${olt.name}`);
-        throw new Error(`Connection failed - SSH: ${sshError.message}, Telnet: ${telnetError.message}`);
-      }
-    }
+    let onus = [];
     
-    // Parse output based on OLT brand
-    const onus = parseOLTOutput(olt.brand, output);
+    // Check if port 443 or 80 - use HTTP API instead of SSH/Telnet
+    if (olt.port === 443 || olt.port === 80 || olt.port === 8080) {
+      logger.info(`Using HTTP API for ${olt.name} (port ${olt.port})`);
+      try {
+        const apiResponse = await executeAPICommands(olt);
+        onus = parseAPIResponse(olt.brand, apiResponse);
+      } catch (apiError) {
+        logger.error(`HTTP API failed for ${olt.name}: ${apiError.message}`);
+        throw apiError;
+      }
+    } else {
+      // Try SSH first, then Telnet
+      try {
+        logger.info(`Attempting SSH connection to ${olt.name} (${olt.ip_address}:${olt.port})`);
+        output = await executeSSHCommands(olt);
+      } catch (sshError) {
+        logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
+        try {
+          output = await executeTelnetCommands(olt, commands);
+        } catch (telnetError) {
+          logger.error(`Both SSH and Telnet failed for ${olt.name}`);
+          throw new Error(`Connection failed - SSH: ${sshError.message}, Telnet: ${telnetError.message}`);
+        }
+      }
+      onus = parseOLTOutput(olt.brand, output);
+    }
     
     logger.info(`Parsed ${onus.length} ONUs from ${olt.name}`);
     
-    // Sync ONUs to database
+    // Enrich with MikroTik data if configured
+    if (olt.mikrotik_ip && olt.mikrotik_username) {
+      logger.info(`Fetching MikroTik data for ${olt.name}...`);
+      const mikrotik = {
+        ip: olt.mikrotik_ip,
+        port: olt.mikrotik_port || 8728,
+        username: olt.mikrotik_username,
+        password: olt.mikrotik_password_encrypted,
+      };
+      
+      const [pppoeData, arpData, dhcpData] = await Promise.all([
+        fetchMikroTikPPPoE(mikrotik),
+        fetchMikroTikARP(mikrotik),
+        fetchMikroTikDHCPLeases(mikrotik),
+      ]);
+      
+      onus = onus.map(onu => enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData));
+      logger.info(`Enriched ${onus.length} ONUs with MikroTik data`);
+    }
+    
     await syncONUsToDatabase(supabase, olt.id, onus);
     
-    // Update OLT status and last_polled timestamp
     await supabase
       .from('olts')
       .update({
