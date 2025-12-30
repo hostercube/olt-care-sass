@@ -13,9 +13,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Server } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Server, Loader2 } from 'lucide-react';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useUserRole } from '@/hooks/useUserRole';
 
 export default function Settings() {
+  const { settings, loading, saving, updateSetting, saveSettings, resetSettings } = useSystemSettings();
+  const { isAdmin } = useUserRole();
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Settings" subtitle="System configuration and preferences">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout title="Settings" subtitle="System configuration and preferences">
       <div className="space-y-6 animate-fade-in max-w-4xl">
@@ -52,20 +67,25 @@ export default function Settings() {
                     <Label htmlFor="systemName">System Name</Label>
                     <Input
                       id="systemName"
-                      defaultValue="OLT Manager Pro"
+                      value={settings.systemName}
+                      onChange={(e) => updateSetting('systemName', e.target.value)}
                       className="bg-secondary"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="timezone">Timezone</Label>
-                    <Select defaultValue="utc">
+                    <Select 
+                      value={settings.timezone} 
+                      onValueChange={(value) => updateSetting('timezone', value)}
+                    >
                       <SelectTrigger className="bg-secondary">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-popover border-border">
                         <SelectItem value="utc">UTC</SelectItem>
-                        <SelectItem value="est">Eastern Time</SelectItem>
-                        <SelectItem value="pst">Pacific Time</SelectItem>
+                        <SelectItem value="asia_dhaka">Asia/Dhaka (GMT+6)</SelectItem>
+                        <SelectItem value="est">Eastern Time (EST)</SelectItem>
+                        <SelectItem value="pst">Pacific Time (PST)</SelectItem>
                         <SelectItem value="gmt">GMT</SelectItem>
                       </SelectContent>
                     </Select>
@@ -81,7 +101,10 @@ export default function Settings() {
                       Automatically refresh dashboard data
                     </p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch 
+                    checked={settings.autoRefresh}
+                    onCheckedChange={(checked) => updateSetting('autoRefresh', checked)}
+                  />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -91,7 +114,10 @@ export default function Settings() {
                       Prioritize offline devices in lists
                     </p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch 
+                    checked={settings.showOfflineFirst}
+                    onCheckedChange={(checked) => updateSetting('showOfflineFirst', checked)}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -108,7 +134,10 @@ export default function Settings() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="oltPollInterval">OLT Poll Interval</Label>
-                    <Select defaultValue="5">
+                    <Select 
+                      value={String(settings.oltPollInterval)}
+                      onValueChange={(value) => updateSetting('oltPollInterval', parseInt(value))}
+                    >
                       <SelectTrigger className="bg-secondary">
                         <SelectValue />
                       </SelectTrigger>
@@ -123,7 +152,10 @@ export default function Settings() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="onuPollInterval">ONU Poll Interval</Label>
-                    <Select defaultValue="5">
+                    <Select 
+                      value={String(settings.onuPollInterval)}
+                      onValueChange={(value) => updateSetting('onuPollInterval', parseInt(value))}
+                    >
                       <SelectTrigger className="bg-secondary">
                         <SelectValue />
                       </SelectTrigger>
@@ -144,10 +176,13 @@ export default function Settings() {
                   <div className="space-y-0.5">
                     <Label>Enable Background Polling</Label>
                     <p className="text-sm text-muted-foreground">
-                      Poll devices in the background via cron jobs
+                      Poll devices in the background via VPS server
                     </p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch 
+                    checked={settings.backgroundPolling}
+                    onCheckedChange={(checked) => updateSetting('backgroundPolling', checked)}
+                  />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -157,7 +192,10 @@ export default function Settings() {
                       Save RX/TX power readings for historical analysis
                     </p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch 
+                    checked={settings.storePowerHistory}
+                    onCheckedChange={(checked) => updateSetting('storePowerHistory', checked)}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -165,7 +203,8 @@ export default function Settings() {
                   <Input
                     id="historyRetention"
                     type="number"
-                    defaultValue="30"
+                    value={settings.historyRetention}
+                    onChange={(e) => updateSetting('historyRetention', parseInt(e.target.value) || 30)}
                     className="bg-secondary max-w-[200px]"
                   />
                 </div>
@@ -179,28 +218,23 @@ export default function Settings() {
                   Backend API Configuration
                 </CardTitle>
                 <CardDescription>
-                  Configure your backend server for OLT communication
+                  Configure your VPS polling server URL
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="apiUrl">API Server URL</Label>
+                  <Label htmlFor="apiUrl">Polling Server URL</Label>
                   <Input
                     id="apiUrl"
-                    placeholder="https://your-api-server.com"
+                    placeholder="http://olt.isppoint.com/olt-polling-server"
+                    value={settings.apiServerUrl}
+                    onChange={(e) => updateSetting('apiServerUrl', e.target.value)}
                     className="bg-secondary"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    This URL is configured in .env as VITE_POLLING_SERVER_URL for production
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="apiKey">API Key</Label>
-                  <Input
-                    id="apiKey"
-                    type="password"
-                    placeholder="••••••••••••••••"
-                    className="bg-secondary"
-                  />
-                </div>
-                <Button variant="outline">Test Connection</Button>
               </CardContent>
             </Card>
           </TabsContent>
@@ -219,7 +253,8 @@ export default function Settings() {
                     <Input
                       id="rxPowerThreshold"
                       type="number"
-                      defaultValue="-25"
+                      value={settings.rxPowerThreshold}
+                      onChange={(e) => updateSetting('rxPowerThreshold', parseInt(e.target.value) || -25)}
                       className="bg-secondary"
                     />
                   </div>
@@ -228,7 +263,8 @@ export default function Settings() {
                     <Input
                       id="offlineThreshold"
                       type="number"
-                      defaultValue="5"
+                      value={settings.offlineThreshold}
+                      onChange={(e) => updateSetting('offlineThreshold', parseInt(e.target.value) || 5)}
                       className="bg-secondary"
                     />
                   </div>
@@ -243,7 +279,10 @@ export default function Settings() {
                       Alert when ONU goes offline
                     </p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch 
+                    checked={settings.onuOfflineAlerts}
+                    onCheckedChange={(checked) => updateSetting('onuOfflineAlerts', checked)}
+                  />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -253,7 +292,10 @@ export default function Settings() {
                       Alert when RX power drops below threshold
                     </p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch 
+                    checked={settings.powerDropAlerts}
+                    onCheckedChange={(checked) => updateSetting('powerDropAlerts', checked)}
+                  />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -263,7 +305,10 @@ export default function Settings() {
                       Alert when OLT becomes unreachable
                     </p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch 
+                    checked={settings.oltUnreachableAlerts}
+                    onCheckedChange={(checked) => updateSetting('oltUnreachableAlerts', checked)}
+                  />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -273,7 +318,10 @@ export default function Settings() {
                       Send critical alerts via email
                     </p>
                   </div>
-                  <Switch />
+                  <Switch 
+                    checked={settings.emailNotifications}
+                    onCheckedChange={(checked) => updateSetting('emailNotifications', checked)}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -294,7 +342,10 @@ export default function Settings() {
                       Require 2FA for all admin accounts
                     </p>
                   </div>
-                  <Switch />
+                  <Switch 
+                    checked={settings.twoFactorAuth}
+                    onCheckedChange={(checked) => updateSetting('twoFactorAuth', checked)}
+                  />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -304,7 +355,10 @@ export default function Settings() {
                       Auto-logout after inactivity
                     </p>
                   </div>
-                  <Select defaultValue="30">
+                  <Select 
+                    value={String(settings.sessionTimeout)}
+                    onValueChange={(value) => updateSetting('sessionTimeout', parseInt(value))}
+                  >
                     <SelectTrigger className="w-[150px] bg-secondary">
                       <SelectValue />
                     </SelectTrigger>
@@ -324,7 +378,9 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground mb-3">
                     OLT credentials are encrypted using AES-256 before storage
                   </p>
-                  <Button variant="outline">Rotate Encryption Keys</Button>
+                  {isAdmin && (
+                    <Button variant="outline">Rotate Encryption Keys</Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -344,10 +400,12 @@ export default function Settings() {
                     <span className="text-sm font-medium text-success">Connected to PostgreSQL</span>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline">Test Connection</Button>
-                  <Button variant="outline">Backup Now</Button>
-                </div>
+                {isAdmin && (
+                  <div className="flex gap-2">
+                    <Button variant="outline">Test Connection</Button>
+                    <Button variant="outline">Backup Now</Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -355,8 +413,19 @@ export default function Settings() {
 
         {/* Save Button */}
         <div className="flex justify-end gap-2">
-          <Button variant="outline">Cancel</Button>
-          <Button variant="glow">Save Changes</Button>
+          <Button variant="outline" onClick={resetSettings}>
+            Reset to Defaults
+          </Button>
+          <Button variant="glow" onClick={saveSettings} disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Changes'
+            )}
+          </Button>
         </div>
       </div>
     </DashboardLayout>
