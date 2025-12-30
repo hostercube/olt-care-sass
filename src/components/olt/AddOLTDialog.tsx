@@ -14,7 +14,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -30,10 +29,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { OLTBrand } from '@/types/olt';
 import { toast } from 'sonner';
+import { addOLT } from '@/hooks/useOLTData';
+import { Constants } from '@/integrations/supabase/types';
 
-const oltBrands: OLTBrand[] = ['ZTE', 'Huawei', 'Fiberhome', 'Nokia', 'BDCOM', 'VSOL', 'Other'];
+const oltBrands = Constants.public.Enums.olt_brand;
 
 const addOLTSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(50),
@@ -52,12 +52,13 @@ const addOLTSchema = z.object({
 type AddOLTFormValues = z.infer<typeof addOLTSchema>;
 
 interface AddOLTDialogProps {
-  onOLTAdded?: (olt: AddOLTFormValues) => void;
+  onOLTAdded?: () => void;
 }
 
 export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
   const [open, setOpen] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
 
   const form = useForm<AddOLTFormValues>({
@@ -84,31 +85,42 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
     setTesting(true);
     setTestResult(null);
 
-    // Simulate connection test
+    // Simulate connection test (in production, this would call your VPS backend)
     await new Promise((resolve) => setTimeout(resolve, 2000));
     
-    const success = Math.random() > 0.3; // 70% success rate for demo
-    setTestResult(success ? 'success' : 'error');
+    // For now, always succeed since we don't have a real backend yet
+    setTestResult('success');
     setTesting(false);
-
-    if (success) {
-      toast.success('Connection successful!');
-    } else {
-      toast.error('Connection failed. Check credentials and network.');
-    }
+    toast.success('Connection test simulated - add your VPS backend to test real connections');
   };
 
-  const onSubmit = (values: AddOLTFormValues) => {
+  const onSubmit = async (values: AddOLTFormValues) => {
     if (testResult !== 'success') {
       toast.error('Please test the connection before adding');
       return;
     }
 
-    onOLTAdded?.(values);
-    toast.success(`OLT "${values.name}" added successfully!`);
-    setOpen(false);
-    form.reset();
-    setTestResult(null);
+    setSaving(true);
+    try {
+      await addOLT({
+        name: values.name,
+        brand: values.brand,
+        ip_address: values.ipAddress,
+        port: values.port,
+        username: values.username,
+        password_encrypted: values.password, // In production, encrypt this on your backend
+      });
+      
+      toast.success(`OLT "${values.name}" added successfully!`);
+      onOLTAdded?.();
+      setOpen(false);
+      form.reset();
+      setTestResult(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add OLT');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -266,8 +278,15 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="glow" disabled={testResult !== 'success'}>
-                Add OLT
+              <Button type="submit" variant="glow" disabled={testResult !== 'success' || saving}>
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Add OLT'
+                )}
               </Button>
             </DialogFooter>
           </form>

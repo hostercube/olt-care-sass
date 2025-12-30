@@ -3,11 +3,39 @@ import { StatsCard } from '@/components/dashboard/StatsCard';
 import { OLTOverviewCard } from '@/components/dashboard/OLTOverviewCard';
 import { AlertsWidget } from '@/components/dashboard/AlertsWidget';
 import { ONUTable } from '@/components/dashboard/ONUTable';
-import { mockOLTs, mockONUs, mockAlerts, mockDashboardStats } from '@/lib/mock-data';
-import { Server, Router, AlertTriangle, Activity, Zap, Wifi } from 'lucide-react';
+import { useOLTs, useONUs, useAlerts, useDashboardStats } from '@/hooks/useOLTData';
+import { Server, Router, AlertTriangle, Zap, Wifi, Loader2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 export default function Dashboard() {
-  const stats = mockDashboardStats;
+  const stats = useDashboardStats();
+  const { olts, loading: oltsLoading } = useOLTs();
+  const { onus, loading: onusLoading } = useONUs();
+  const { alerts, loading: alertsLoading } = useAlerts();
+
+  // Create a map of OLT IDs to names
+  const oltNameMap = olts.reduce((acc, olt) => {
+    acc[olt.id] = olt.name;
+    return acc;
+  }, {} as Record<string, string>);
+
+  // Add OLT name to each ONU
+  const onusWithOltName = onus.map(onu => ({
+    ...onu,
+    oltName: oltNameMap[onu.olt_id] || 'Unknown OLT'
+  }));
+
+  const loading = oltsLoading || onusLoading || alertsLoading;
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Dashboard" subtitle="Network Operations Overview">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Dashboard" subtitle="Network Operations Overview">
@@ -51,20 +79,32 @@ export default function Dashboard() {
             <Wifi className="h-5 w-5 text-primary" />
             OLT Status Overview
           </h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {mockOLTs.map((olt) => (
-              <OLTOverviewCard key={olt.id} olt={olt} />
-            ))}
-          </div>
+          {olts.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {olts.map((olt) => (
+                <OLTOverviewCard key={olt.id} olt={olt} />
+              ))}
+            </div>
+          ) : (
+            <Card variant="glass">
+              <CardContent className="p-8 text-center">
+                <Server className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold">No OLTs configured</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Add your first OLT to start monitoring your network.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Alerts and Activity */}
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <ONUTable onus={mockONUs.slice(0, 10)} title="Recent ONU Activity" showFilters={false} />
+            <ONUTable onus={onusWithOltName.slice(0, 10)} title="Recent ONU Activity" showFilters={false} />
           </div>
           <div>
-            <AlertsWidget alerts={mockAlerts} maxItems={4} />
+            <AlertsWidget alerts={alerts} maxItems={4} />
           </div>
         </div>
       </div>

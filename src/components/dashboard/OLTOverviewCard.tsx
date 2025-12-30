@@ -1,16 +1,16 @@
-import { Server, Cpu, HardDrive } from 'lucide-react';
+import { Server } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { StatusIndicator } from './StatusIndicator';
-import { OLT } from '@/types/olt';
+import type { Tables } from '@/integrations/supabase/types';
 import { formatDistanceToNow } from 'date-fns';
 
 interface OLTOverviewCardProps {
-  olt: OLT;
+  olt: Tables<'olts'>;
 }
 
 export function OLTOverviewCard({ olt }: OLTOverviewCardProps) {
-  const portUsage = (olt.activePorts / olt.totalPorts) * 100;
+  const portUsage = (olt.active_ports / olt.total_ports) * 100;
 
   return (
     <Card variant="glass" className="hover:border-primary/30 transition-colors">
@@ -22,7 +22,7 @@ export function OLTOverviewCard({ olt }: OLTOverviewCardProps) {
             </div>
             <div>
               <CardTitle className="text-base font-semibold">{olt.name}</CardTitle>
-              <p className="text-xs text-muted-foreground font-mono">{olt.ipAddress}</p>
+              <p className="text-xs text-muted-foreground font-mono">{olt.ip_address}</p>
             </div>
           </div>
           <StatusIndicator status={olt.status} size="sm" />
@@ -44,7 +44,7 @@ export function OLTOverviewCard({ olt }: OLTOverviewCardProps) {
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Port Usage</span>
             <span className="font-mono text-foreground">
-              {olt.activePorts}/{olt.totalPorts}
+              {olt.active_ports}/{olt.total_ports}
             </span>
           </div>
           <Progress value={portUsage} className="h-2" />
@@ -53,8 +53,8 @@ export function OLTOverviewCard({ olt }: OLTOverviewCardProps) {
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
           <span>Last polled</span>
           <span>
-            {olt.lastPolled
-              ? formatDistanceToNow(olt.lastPolled, { addSuffix: true })
+            {olt.last_polled
+              ? formatDistanceToNow(new Date(olt.last_polled), { addSuffix: true })
               : 'Never'}
           </span>
         </div>
