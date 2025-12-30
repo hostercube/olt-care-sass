@@ -18,7 +18,8 @@ import { OLTBrandBadge } from '@/components/olt/OLTBrandBadge';
 import type { Tables } from '@/integrations/supabase/types';
 import type { OLTBrand } from '@/types/olt';
 import { formatDistanceToNow } from 'date-fns';
-import { Search, MoreHorizontal, RefreshCw, Settings, Trash2, Eye, Pencil } from 'lucide-react';
+import { Search, MoreHorizontal, RefreshCw, Settings, Trash2, Eye, Pencil, Router, WifiOff } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface OLTTableProps {
   olts: Tables<'olts'>[];
@@ -73,6 +80,7 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                   <TableHead className="font-semibold">IP Address</TableHead>
                   <TableHead className="font-semibold">Port</TableHead>
                   <TableHead className="font-semibold text-center">Status</TableHead>
+                  <TableHead className="font-semibold text-center">MikroTik</TableHead>
                   <TableHead className="font-semibold">Port Usage</TableHead>
                   <TableHead className="font-semibold">Last Polled</TableHead>
                   <TableHead className="w-10"></TableHead>
@@ -81,13 +89,14 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
               <TableBody>
                 {filteredOLTs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No OLTs found
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredOLTs.map((olt) => {
                     const portUsage = (olt.active_ports / olt.total_ports) * 100;
+                    const hasMikrotik = !!(olt.mikrotik_ip && olt.mikrotik_username);
                     
                     return (
                       <TableRow key={olt.id} className="hover:bg-muted/30">
@@ -106,6 +115,30 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                         <TableCell className="font-mono">{olt.port}</TableCell>
                         <TableCell className="text-center">
                           <StatusIndicator status={olt.status} size="sm" />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                {hasMikrotik ? (
+                                  <Badge variant="outline" className="gap-1 bg-success/10 text-success border-success/30">
+                                    <Router className="h-3 w-3" />
+                                    <span className="text-xs">Configured</span>
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="gap-1 text-muted-foreground">
+                                    <WifiOff className="h-3 w-3" />
+                                    <span className="text-xs">None</span>
+                                  </Badge>
+                                )}
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {hasMikrotik 
+                                  ? `MikroTik: ${olt.mikrotik_ip}:${olt.mikrotik_port || 8728}`
+                                  : 'MikroTik not configured - PPPoE data unavailable'}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2 min-w-[120px]">

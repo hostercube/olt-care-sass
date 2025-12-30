@@ -96,21 +96,53 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
     setTesting(true);
     setTestResult(null);
 
-    // Simulate connection test (in production, this would call your VPS backend)
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    // For now, always succeed since we don't have a real backend yet
-    setTestResult('success');
-    setTesting(false);
-    toast.success('Connection test simulated - add your VPS backend to test real connections');
+    try {
+      // Call the VPS polling server to test connection
+      const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL || 'http://localhost:3001';
+      
+      const response = await fetch(`${pollingServerUrl}/api/test-connection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          olt: {
+            ip_address: values.ipAddress,
+            port: values.port,
+            username: values.username,
+            password_encrypted: values.password,
+            brand: values.brand,
+          },
+          mikrotik: values.mikrotikIp ? {
+            ip: values.mikrotikIp,
+            port: values.mikrotikPort || 8728,
+            username: values.mikrotikUsername,
+            password: values.mikrotikPassword,
+          } : null,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.olt?.success) {
+        setTestResult('success');
+        const mikrotikMsg = data.mikrotik?.success 
+          ? ' MikroTik: Connected' 
+          : (values.mikrotikIp ? ' MikroTik: Failed' : '');
+        toast.success(`OLT Connection: Success!${mikrotikMsg}`);
+      } else {
+        setTestResult('error');
+        toast.error(`Connection failed: ${data.olt?.error || 'Unable to connect to OLT'}`);
+      }
+    } catch (error: any) {
+      // If VPS is not reachable, allow saving anyway with a warning
+      console.warn('Test connection failed - VPS may not be running:', error);
+      setTestResult('success');
+      toast.warning('Could not reach test server - OLT will be added without verification');
+    } finally {
+      setTesting(false);
+    }
   };
 
   const onSubmit = async (values: AddOLTFormValues) => {
-    if (testResult !== 'success') {
-      toast.error('Please test the connection before adding');
-      return;
-    }
-
     setSaving(true);
     try {
       await addOLT({
@@ -398,7 +430,7 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="glow" disabled={testResult !== 'success' || saving}>
+              <Button type="submit" variant="glow" disabled={saving}>
                 {saving ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

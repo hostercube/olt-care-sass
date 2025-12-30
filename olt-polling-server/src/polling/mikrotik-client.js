@@ -289,3 +289,79 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData) {
     mac_address: macAddress || onu.mac_address,
   };
 }
+
+/**
+ * Test MikroTik connection
+ */
+export async function testMikrotikConnection(mikrotik) {
+  if (!mikrotik.ip || !mikrotik.username) {
+    return { success: false, error: 'Missing MikroTik credentials' };
+  }
+
+  const startTime = Date.now();
+
+  try {
+    // Try REST API first (port 443)
+    try {
+      const restUrl = `https://${mikrotik.ip}:${mikrotik.port || 443}/rest/system/resource`;
+      const auth = Buffer.from(`${mikrotik.username}:${mikrotik.password}`).toString('base64');
+      
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      
+      const response = await fetch(restUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeout);
+      
+      if (response.ok) {
+        return { 
+          success: true, 
+          duration: Date.now() - startTime,
+          method: 'REST API'
+        };
+      }
+    } catch (restErr) {
+      // REST failed, try plain API
+    }
+
+    // Try plain API (port 8728)
+    const net = await import('net');
+    
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+      
+      const timeout = setTimeout(() => {
+        socket.destroy();
+        resolve({ success: false, error: 'MikroTik API connection timeout' });
+      }, 10000);
+      
+      socket.connect(mikrotik.port || 8728, mikrotik.ip, () => {
+        clearTimeout(timeout);
+        socket.destroy();
+        resolve({ 
+          success: true, 
+          duration: Date.now() - startTime,
+          method: 'Plain API'
+        });
+      });
+      
+      socket.on('error', (err) => {
+        clearTimeout(timeout);
+        resolve({ success: false, error: `MikroTik API: ${err.message}` });
+      });
+    });
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.message,
+      duration: Date.now() - startTime 
+    };
+  }
+}

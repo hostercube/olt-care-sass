@@ -1,11 +1,14 @@
 import 'dotenv/config';
 import express from 'express';
+import cors from 'cors';
 import cron from 'node-cron';
 import { createClient } from '@supabase/supabase-js';
-import { pollOLT } from './polling/olt-poller.js';
+import { pollOLT, testOLTConnection } from './polling/olt-poller.js';
+import { testMikrotikConnection } from './polling/mikrotik-client.js';
 import { logger } from './utils/logger.js';
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 // Initialize Supabase client with service role key
@@ -34,6 +37,40 @@ app.get('/health', (req, res) => {
 // Get polling status
 app.get('/status', (req, res) => {
   res.json(pollingStatus);
+});
+
+// Test connection endpoint - for validating OLT and MikroTik before saving
+app.post('/api/test-connection', async (req, res) => {
+  const { olt, mikrotik } = req.body;
+  
+  const result = {
+    olt: { success: false, error: null },
+    mikrotik: null
+  };
+
+  try {
+    // Test OLT connection
+    if (olt) {
+      logger.info(`Testing OLT connection: ${olt.ip_address}:${olt.port}`);
+      const oltResult = await testOLTConnection(olt);
+      result.olt = oltResult;
+    }
+
+    // Test MikroTik connection if provided
+    if (mikrotik && mikrotik.ip) {
+      logger.info(`Testing MikroTik connection: ${mikrotik.ip}:${mikrotik.port}`);
+      const mtResult = await testMikrotikConnection(mikrotik);
+      result.mikrotik = mtResult;
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error('Test connection error:', error);
+    res.json({
+      olt: { success: false, error: error.message },
+      mikrotik: null
+    });
+  }
 });
 
 // Poll specific OLT
