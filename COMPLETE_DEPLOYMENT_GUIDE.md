@@ -1,85 +1,149 @@
 # OLTCare Complete Deployment Guide (HTTPS/SSL)
 
-This guide provides step-by-step instructions for deploying OLTCare with HTTPS/SSL support.
+## 🚨 QUICK FIX: PM2 "errored" Status (Your Current Issue)
+
+Your PM2 is crashing because of working directory issues. Run these commands:
+
+```bash
+# 1. Stop and delete old PM2 process
+pm2 delete olt-polling-server
+
+# 2. Create logs directory
+mkdir -p /www/wwwroot/olt.isppoint.com/olt-polling-server/logs
+
+# 3. Go to polling server directory
+cd /www/wwwroot/olt.isppoint.com/olt-polling-server
+
+# 4. Start with ecosystem file (THIS IS THE FIX!)
+pm2 start ecosystem.config.js
+
+# 5. Save PM2 config
+pm2 save
+
+# 6. Check status - should show "online"
+pm2 status
+pm2 logs olt-polling-server
+```
+
+## 🔒 COMPLETE NGINX CONFIG WITH SSL
+
+Replace your ENTIRE Nginx config with this. In aaPanel: **Website → olt.isppoint.com → Config**
+
+```nginx
+server {
+    listen 80;
+    server_name olt.isppoint.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name olt.isppoint.com;
+
+    # SSL Certificate (aaPanel paths - check your actual paths!)
+    ssl_certificate /www/server/panel/vhost/cert/olt.isppoint.com/fullchain.pem;
+    ssl_certificate_key /www/server/panel/vhost/cert/olt.isppoint.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:HIGH:!aNULL:!MD5:!RC4:!DHE;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # FRONTEND (React/Vite)
+    root /www/wwwroot/olt.isppoint.com/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # BACKEND (Node.js Polling Server) - CRITICAL!
+    location /olt-polling-server/ {
+        proxy_pass http://127.0.0.1:3001/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # CORS headers
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
+        
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+    }
+
+    # Gzip
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/json application/javascript text/xml;
+}
+```
+
+## ⚠️ Check SSL Certificate Paths
+
+In aaPanel: **Website → olt.isppoint.com → SSL**
+1. Make sure SSL is enabled (Let's Encrypt or your cert)
+2. Check the certificate file paths - update Nginx config if different
+
+Common aaPanel SSL paths:
+- `/www/server/panel/vhost/cert/olt.isppoint.com/fullchain.pem`
+- `/www/server/panel/vhost/cert/olt.isppoint.com/privkey.pem`
+
+## After Changes
+
+```bash
+# Test nginx config
+nginx -t
+
+# Reload nginx
+nginx -s reload
+
+# Verify polling server
+curl http://127.0.0.1:3001/health
+curl https://olt.isppoint.com/olt-polling-server/health
+```
+
+---
 
 ## Prerequisites
 
 - Node.js 18+ installed
 - Access to aaPanel
-- Supabase project configured
 - Domain with SSL certificate: `olt.isppoint.com`
 
 ---
 
-## Part 1: Polling Server Fix (PM2 Errored Status)
+## Part 1: Polling Server Setup
 
-Your PM2 processes are showing "errored" status. Follow these steps to fix:
+### Step 1: Create `.env` File (Already done!)
 
-### Step 1: Stop All PM2 Processes
+Your `.env` file looks correct. Just verify it's at:
+`/www/wwwroot/olt.isppoint.com/olt-polling-server/.env`
+
+### Step 2: Use Ecosystem Config (Fixes PM2 Issues)
+
+Upload `ecosystem.config.js` to `/www/wwwroot/olt.isppoint.com/olt-polling-server/`
 
 ```bash
-pm2 delete all
-```
-
-### Step 2: Create Proper `.env` File
-
-```bash
+pm2 delete olt-polling-server
 cd /www/wwwroot/olt.isppoint.com/olt-polling-server
-nano .env
-```
-
-Add this content:
-
-```env
-# Supabase Configuration
-SUPABASE_URL=https://srofhdgdraihxgpmpdye.supabase.co
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyb2ZoZGdkcmFpaHhncG1wZHllIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzA4MjUwNSwiZXhwIjoyMDgyNjU4NTA1fQ.59U6UuXchMAcd86IzPE-zlJumn-ajx18BjVZGLD6NYs
-
-# Polling Configuration
-POLLING_INTERVAL_MS=60000
-SSH_TIMEOUT_MS=60000
-MIKROTIK_TIMEOUT_MS=30000
-
-# Server Configuration
-PORT=3001
-NODE_ENV=production
-
-# Debug
-DEBUG=false
-```
-
-### Step 3: Install Dependencies
-
-```bash
-cd /www/wwwroot/olt.isppoint.com/olt-polling-server
-npm install
-```
-
-### Step 4: Test Server Manually First
-
-```bash
-# Run directly to see any errors
-node src/index.js
-```
-
-If you see "OLT Polling Server running on port 3001", the server works. Press Ctrl+C to stop.
-
-### Step 5: Start with PM2
-
-```bash
-# Start the polling server
-pm2 start src/index.js --name "olt-polling-server"
-
-# Check status
-pm2 status
-
-# View logs if there are issues
-pm2 logs olt-polling-server --lines 50
-
-# Save and enable startup
+pm2 start ecosystem.config.js
 pm2 save
 pm2 startup
-```
 
 ---
 
