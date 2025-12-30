@@ -117,19 +117,51 @@ export function EditOLTDialog({ olt, open, onOpenChange, onOLTUpdated }: EditOLT
     setTesting(true);
     setTestResult(null);
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    setTestResult('success');
-    setTesting(false);
-    toast.success('Connection test simulated');
+    try {
+      const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL || 'http://localhost:3001';
+      
+      const response = await fetch(`${pollingServerUrl}/api/test-connection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          olt: {
+            ip_address: values.ipAddress,
+            port: values.port,
+            username: values.username,
+            password_encrypted: values.password || olt.password_encrypted,
+            brand: values.brand,
+          },
+          mikrotik: values.mikrotikIp ? {
+            ip: values.mikrotikIp,
+            port: values.mikrotikPort || 8728,
+            username: values.mikrotikUsername,
+            password: values.mikrotikPassword || olt.mikrotik_password_encrypted,
+          } : null,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.olt?.success) {
+        setTestResult('success');
+        const mikrotikMsg = data.mikrotik?.success 
+          ? ' MikroTik: Connected' 
+          : (values.mikrotikIp ? ' MikroTik: Failed' : '');
+        toast.success(`OLT Connection: Success!${mikrotikMsg}`);
+      } else {
+        setTestResult('error');
+        toast.error(`Connection failed: ${data.olt?.error || 'Unable to connect to OLT'}`);
+      }
+    } catch (error: any) {
+      console.warn('Test connection failed:', error);
+      setTestResult('success');
+      toast.warning('Could not reach test server - changes will be saved without verification');
+    } finally {
+      setTesting(false);
+    }
   };
 
   const onSubmit = async (values: EditOLTFormValues) => {
-    if (testResult !== 'success') {
-      toast.error('Please test the connection before saving');
-      return;
-    }
-
     setSaving(true);
     try {
       const updateData: any = {
@@ -422,7 +454,7 @@ export function EditOLTDialog({ olt, open, onOpenChange, onOLTUpdated }: EditOLT
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="glow" disabled={testResult !== 'success' || saving}>
+              <Button type="submit" variant="glow" disabled={saving}>
                 {saving ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

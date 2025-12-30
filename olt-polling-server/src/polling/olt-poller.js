@@ -418,3 +418,145 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
     }
   }
 }
+
+/**
+ * Test OLT connection without polling data
+ */
+export async function testOLTConnection(olt) {
+  const startTime = Date.now();
+  
+  try {
+    // Check if port 443/80 - use HTTP API
+    if (olt.port === 443 || olt.port === 80 || olt.port === 8080 || olt.port === 8041) {
+      logger.info(`Testing HTTP API connection to ${olt.ip_address}:${olt.port}`);
+      
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      
+      try {
+        const protocol = olt.port === 443 || olt.port === 8041 ? 'https' : 'http';
+        const response = await fetch(`${protocol}://${olt.ip_address}:${olt.port}/`, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: { 'Accept': 'text/html,application/json' },
+        });
+        
+        clearTimeout(timeout);
+        
+        // If we get any response, the connection worked
+        return { 
+          success: true, 
+          duration: Date.now() - startTime,
+          method: 'HTTP API'
+        };
+      } catch (fetchError) {
+        clearTimeout(timeout);
+        // Connection refused or timeout
+        throw new Error(`HTTP API unreachable: ${fetchError.message}`);
+      }
+    }
+    
+    // Try SSH for ports 22 or Telnet for port 23
+    if (olt.port === 22) {
+      return await testSSHConnection(olt);
+    } else if (olt.port === 23) {
+      return await testTelnetConnection(olt);
+    } else {
+      // Unknown port - try SSH then Telnet
+      try {
+        return await testSSHConnection(olt);
+      } catch (sshErr) {
+        try {
+          return await testTelnetConnection(olt);
+        } catch (telnetErr) {
+          throw new Error(`Port ${olt.port} unreachable via SSH and Telnet`);
+        }
+      }
+    }
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.message,
+      duration: Date.now() - startTime 
+    };
+  }
+}
+
+/**
+ * Test SSH connection
+ */
+async function testSSHConnection(olt) {
+  const { Client } = await import('ssh2');
+  const startTime = Date.now();
+  
+  return new Promise((resolve) => {
+    const conn = new Client();
+    
+    const timeout = setTimeout(() => {
+      conn.end();
+      resolve({ success: false, error: 'SSH connection timeout' });
+    }, 15000);
+    
+    conn.on('ready', () => {
+      clearTimeout(timeout);
+      conn.end();
+      resolve({ 
+        success: true, 
+        duration: Date.now() - startTime,
+        method: 'SSH'
+      });
+    });
+    
+    conn.on('error', (err) => {
+      clearTimeout(timeout);
+      resolve({ success: false, error: `SSH: ${err.message}` });
+    });
+    
+    conn.connect({
+      host: olt.ip_address,
+      port: olt.port,
+      username: olt.username,
+      password: olt.password_encrypted,
+      readyTimeout: 15000,
+      tryKeyboard: true,
+      algorithms: {
+        kex: ['diffie-hellman-group14-sha1', 'diffie-hellman-group1-sha1', 'diffie-hellman-group14-sha256'],
+        cipher: ['aes128-ctr', 'aes192-ctr', 'aes256-ctr', 'aes128-cbc', '3des-cbc'],
+        serverHostKey: ['ssh-rsa', 'ssh-dss'],
+        hmac: ['hmac-sha2-256', 'hmac-sha1', 'hmac-md5']
+      }
+    });
+  });
+}
+
+/**
+ * Test Telnet connection
+ */
+async function testTelnetConnection(olt) {
+  const net = await import('net');
+  const startTime = Date.now();
+  
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      resolve({ success: false, error: 'Telnet connection timeout' });
+    }, 15000);
+    
+    socket.connect(olt.port, olt.ip_address, () => {
+      clearTimeout(timeout);
+      socket.destroy();
+      resolve({ 
+        success: true, 
+        duration: Date.now() - startTime,
+        method: 'Telnet'
+      });
+    });
+    
+    socket.on('error', (err) => {
+      clearTimeout(timeout);
+      resolve({ success: false, error: `Telnet: ${err.message}` });
+    });
+  });
+}
