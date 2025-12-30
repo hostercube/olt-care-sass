@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Table,
   TableBody,
@@ -41,6 +42,7 @@ interface OLTTableProps {
 }
 
 export function OLTTable({ olts, onRefresh }: OLTTableProps) {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingOLT, setEditingOLT] = useState<Tables<'olts'> | null>(null);
   const [deletingOLT, setDeletingOLT] = useState<{ id: string; name: string } | null>(null);
@@ -50,7 +52,7 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
     setPollingOLT(oltId);
     try {
       const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL || 'http://localhost:3001';
-      const response = await fetch(`${pollingServerUrl}/poll/${oltId}`, {
+      const response = await fetch(`${pollingServerUrl}/api/poll/${oltId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -69,6 +71,10 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
     } finally {
       setPollingOLT(null);
     }
+  };
+
+  const handleViewDetails = (oltId: string) => {
+    navigate(`/olts/${oltId}`);
   };
 
   const filteredOLTs = olts.filter(
@@ -126,7 +132,11 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                     const hasMikrotik = !!(olt.mikrotik_ip && olt.mikrotik_username);
                     
                     return (
-                      <TableRow key={olt.id} className="hover:bg-muted/30">
+                      <TableRow 
+                        key={olt.id} 
+                        className="hover:bg-muted/30 cursor-pointer"
+                        onClick={() => handleViewDetails(olt.id)}
+                      >
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="font-medium">{olt.name}</span>
@@ -182,23 +192,23 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                               <Button variant="ghost" size="icon" className="h-8 w-8">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="bg-popover border-border">
-                              <DropdownMenuItem className="gap-2">
+                              <DropdownMenuItem className="gap-2" onClick={() => handleViewDetails(olt.id)}>
                                 <Eye className="h-4 w-4" />
                                 View Details
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2" onClick={() => setEditingOLT(olt)}>
+                              <DropdownMenuItem className="gap-2" onClick={(e) => { e.stopPropagation(); setEditingOLT(olt); }}>
                                 <Pencil className="h-4 w-4" />
                                 Edit
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 className="gap-2"
-                                onClick={() => handlePollNow(olt.id, olt.name)}
+                                onClick={(e) => { e.stopPropagation(); handlePollNow(olt.id, olt.name); }}
                                 disabled={pollingOLT === olt.id}
                               >
                                 {pollingOLT === olt.id ? (
@@ -213,14 +223,14 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                                   </>
                                 )}
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2">
+                              <DropdownMenuItem className="gap-2" onClick={(e) => e.stopPropagation()}>
                                 <Settings className="h-4 w-4" />
                                 Configure
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem 
                                 className="gap-2 text-destructive"
-                                onClick={() => setDeletingOLT({ id: olt.id, name: olt.name })}
+                                onClick={(e) => { e.stopPropagation(); setDeletingOLT({ id: olt.id, name: olt.name }); }}
                               >
                                 <Trash2 className="h-4 w-4" />
                                 Delete
