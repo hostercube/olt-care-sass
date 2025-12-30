@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import OLTManagement from "./pages/OLTManagement";
+import OLTDetails from "./pages/OLTDetails";
 import ONUDevices from "./pages/ONUDevices";
 import Alerts from "./pages/Alerts";
 import Monitoring from "./pages/Monitoring";
@@ -33,6 +34,11 @@ const App = () => (
             <Route path="/olts" element={
               <ProtectedRoute>
                 <OLTManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/olts/:id" element={
+              <ProtectedRoute>
+                <OLTDetails />
               </ProtectedRoute>
             } />
             <Route path="/onus" element={

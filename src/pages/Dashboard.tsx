@@ -3,6 +3,7 @@ import { StatsCard } from '@/components/dashboard/StatsCard';
 import { OLTOverviewCard } from '@/components/dashboard/OLTOverviewCard';
 import { AlertsWidget } from '@/components/dashboard/AlertsWidget';
 import { ONUTable } from '@/components/dashboard/ONUTable';
+import { ONUStatsWidget } from '@/components/dashboard/ONUStatsWidget';
 import { useOLTs, useONUs, useAlerts, useDashboardStats } from '@/hooks/useOLTData';
 import { Server, Router, AlertTriangle, Zap, Wifi, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,6 +27,12 @@ export default function Dashboard() {
   }));
 
   const loading = oltsLoading || onusLoading || alertsLoading;
+
+  // Calculate low signal ONUs
+  const lowSignalONUs = onus.filter(o => o.rx_power !== null && o.rx_power < -25).length;
+  const avgRxPower = onus.length > 0 
+    ? onus.reduce((acc, o) => acc + (o.rx_power || 0), 0) / onus.length
+    : 0;
 
   if (loading) {
     return (
@@ -98,10 +105,19 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Alerts and Activity */}
-        <div className="grid gap-6 lg:grid-cols-3">
+        {/* Alerts, ONU Stats and Activity */}
+        <div className="grid gap-6 lg:grid-cols-4">
           <div className="lg:col-span-2">
             <ONUTable onus={onusWithOltName.slice(0, 10)} title="Recent ONU Activity" showFilters={false} />
+          </div>
+          <div>
+            <ONUStatsWidget
+              totalONUs={stats.totalONUs}
+              onlineONUs={stats.onlineONUs}
+              offlineONUs={stats.offlineONUs}
+              lowSignalONUs={lowSignalONUs}
+              avgRxPower={avgRxPower}
+            />
           </div>
           <div>
             <AlertsWidget alerts={alerts} maxItems={4} />
