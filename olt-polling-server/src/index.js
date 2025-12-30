@@ -1,54 +1,29 @@
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+/**
+ * OLT Polling Server - Main Entry Point
+ * 
+ * CRITICAL: config.js MUST be imported first to load environment variables
+ * before any module that uses process.env (like Supabase client)
+ */
+
+// ============================================================
+// STEP 1: Load config FIRST - this loads .env synchronously
+// ============================================================
+import './config.js';
+
+// ============================================================
+// STEP 2: Now we can safely import Supabase and other modules
+// ============================================================
+import { supabase } from './supabase-client.js';
 import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
-import { createClient } from '@supabase/supabase-js';
 import { pollOLT, testOLTConnection } from './polling/olt-poller.js';
 import { testMikrotikConnection } from './polling/mikrotik-client.js';
 import { logger } from './utils/logger.js';
 
-// Get the directory of the current file
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Load .env from the project root (one level up from src/)
-const envPath = join(__dirname, '..', '.env');
-const result = dotenv.config({ path: envPath });
-
-if (result.error) {
-  console.error('Failed to load .env file from:', envPath);
-  console.error('Error:', result.error.message);
-} else {
-  console.log('.env loaded successfully from:', envPath);
-}
-
-// Validate required environment variables
-if (!process.env.SUPABASE_URL) {
-  console.error('ERROR: SUPABASE_URL is not set!');
-  console.error('Please check your .env file at:', envPath);
-  console.error('Current env vars:', Object.keys(process.env).filter(k => k.includes('SUPA')));
-  process.exit(1);
-}
-
-if (!process.env.SUPABASE_SERVICE_KEY) {
-  console.error('ERROR: SUPABASE_SERVICE_KEY is not set!');
-  console.error('Please check your .env file at:', envPath);
-  process.exit(1);
-}
-
-console.log('Supabase URL:', process.env.SUPABASE_URL);
-
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-// Initialize Supabase client with service role key
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
 
 // Store polling status
 const pollingStatus = {
@@ -63,13 +38,18 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     uptime: process.uptime(),
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    supabase: process.env.SUPABASE_URL ? 'configured' : 'missing'
   });
 });
 
 // Get polling status
 app.get('/status', (req, res) => {
-  res.json(pollingStatus);
+  res.json({
+    ...pollingStatus,
+    supabaseConfigured: !!process.env.SUPABASE_URL,
+    uptime: process.uptime()
+  });
 });
 
 // Test connection endpoint - for validating OLT and MikroTik before saving
@@ -90,6 +70,38 @@ app.post('/api/test-connection', async (req, res) => {
     }
 
     // Test MikroTik connection if provided
+    if (mikrotik && mikrotik.ip) {
+      logger.info(`Testing MikroTik connection: ${mikrotik.ip}:${mikrotik.port}`);
+      const mtResult = await testMikrotikConnection(mikrotik);
+      result.mikrotik = mtResult;
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error('Test connection error:', error);
+    res.json({
+      olt: { success: false, error: error.message },
+      mikrotik: null
+    });
+  }
+});
+
+// Simple test-connection endpoint (without /api prefix for Nginx)
+app.post('/test-connection', async (req, res) => {
+  const { olt, mikrotik } = req.body;
+  
+  const result = {
+    olt: { success: false, error: null },
+    mikrotik: null
+  };
+
+  try {
+    if (olt) {
+      logger.info(`Testing OLT connection: ${olt.ip_address}:${olt.port}`);
+      const oltResult = await testOLTConnection(olt);
+      result.olt = oltResult;
+    }
+
     if (mikrotik && mikrotik.ip) {
       logger.info(`Testing MikroTik connection: ${mikrotik.ip}:${mikrotik.port}`);
       const mtResult = await testMikrotikConnection(mikrotik);
@@ -229,10 +241,20 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   logger.info(`OLT Polling Server running on port ${PORT}`);
   logger.info(`Polling interval: ${process.env.POLLING_INTERVAL_MS || 60000}ms`);
+  logger.info(`Supabase URL: ${process.env.SUPABASE_URL}`);
   
   // Run initial poll after startup
   setTimeout(() => {
     logger.info('Running initial poll...');
     pollAllOLTs();
   }, 5000);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled rejection at:', promise, 'reason:', reason);
 });
