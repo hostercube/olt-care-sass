@@ -1,0 +1,4 @@
+-- Add new OLT brand values to the enum
+ALTER TYPE olt_brand ADD VALUE IF NOT EXISTS 'DBC';
+ALTER TYPE olt_brand ADD VALUE IF NOT EXISTS 'CDATA';
+ALTER TYPE olt_brand ADD VALUE IF NOT EXISTS 'ECOM';

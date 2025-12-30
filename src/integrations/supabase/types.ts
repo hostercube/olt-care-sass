@@ -295,6 +295,9 @@ export type Database = {
         | "BDCOM"
         | "VSOL"
         | "Other"
+        | "DBC"
+        | "CDATA"
+        | "ECOM"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -439,6 +442,9 @@ export const Constants = {
         "BDCOM",
         "VSOL",
         "Other",
+        "DBC",
+        "CDATA",
+        "ECOM",
       ],
     },
   },
