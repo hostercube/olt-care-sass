@@ -30,7 +30,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, Loader2, CheckCircle, XCircle, Router } from 'lucide-react';
+import { Plus, Loader2, CheckCircle, XCircle, Router, Wifi } from 'lucide-react';
 import { toast } from 'sonner';
 import { addOLT } from '@/hooks/useOLTData';
 import { Constants } from '@/integrations/supabase/types';
@@ -48,7 +48,7 @@ const addOLTSchema = z.object({
   port: z.coerce.number().min(1).max(65535),
   username: z.string().min(1, 'Username is required').max(50),
   password: z.string().min(1, 'Password is required').max(100),
-  // MikroTik fields (all optional - leave empty to skip MikroTik integration)
+  // MikroTik fields (all optional)
   mikrotikIp: z.string().optional().refine(
     (val) => !val || ipRegex.test(val),
     { message: 'Invalid IP address' }
@@ -64,6 +64,20 @@ interface AddOLTDialogProps {
   onOLTAdded?: () => void;
 }
 
+// Helper to get default port and connection info for each brand
+const brandConnectionInfo: Record<string, { defaultPort: number; protocol: string; hint: string }> = {
+  ZTE: { defaultPort: 22, protocol: 'SSH', hint: 'SSH পোর্ট 22' },
+  Huawei: { defaultPort: 22, protocol: 'SSH', hint: 'SSH পোর্ট 22' },
+  Nokia: { defaultPort: 22, protocol: 'SSH', hint: 'SSH পোর্ট 22' },
+  VSOL: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
+  DBC: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
+  CDATA: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
+  ECOM: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
+  BDCOM: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
+  Fiberhome: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23' },
+  Other: { defaultPort: 22, protocol: 'SSH/Telnet', hint: 'SSH 22, Telnet 23, API 443' },
+};
+
 export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
   const [open, setOpen] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -77,7 +91,7 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       brand: 'VSOL',
       oltMode: 'GPON',
       ipAddress: '',
-      port: 22,
+      port: 23,
       username: '',
       password: '',
       mikrotikIp: '',
@@ -86,6 +100,25 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       mikrotikPassword: '',
     },
   });
+
+  const selectedBrand = form.watch('brand');
+  const selectedPort = form.watch('port');
+  
+  // Get connection type info
+  const getConnectionType = (port: number) => {
+    if (port === 22) return 'SSH';
+    if (port === 23) return 'Telnet';
+    if ([80, 443, 8080, 8041].includes(port)) return 'HTTP API';
+    return 'Auto (Telnet/SSH)';
+  };
+
+  // Update port when brand changes
+  const handleBrandChange = (brand: string) => {
+    const info = brandConnectionInfo[brand] || brandConnectionInfo.Other;
+    form.setValue('brand', brand as any);
+    form.setValue('port', info.defaultPort);
+    setTestResult(null);
+  };
 
   const handleTestConnection = async () => {
     const values = form.getValues();
@@ -111,8 +144,6 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
       
-      // Remove trailing slash and construct proper URL
-      // If VITE_POLLING_SERVER_URL is "https://olt.domain.com/api", we call "https://olt.domain.com/api/test-connection"
       const baseUrl = pollingServerUrl.replace(/\/+$/, '');
       const response = await fetch(`${baseUrl}/test-connection`, {
         method: 'POST',
@@ -140,13 +171,14 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       
       if (data.olt?.success) {
         setTestResult('success');
+        const methodInfo = data.olt.method ? ` (${data.olt.method})` : '';
         const mikrotikMsg = data.mikrotik?.success 
-          ? ' MikroTik: Connected' 
-          : (values.mikrotikIp ? ' MikroTik: Failed' : '');
-        toast.success(`OLT Connection: Success!${mikrotikMsg}`);
+          ? ' | MikroTik: Connected' 
+          : (values.mikrotikIp ? ' | MikroTik: Failed' : '');
+        toast.success(`OLT Connected${methodInfo}!${mikrotikMsg}`);
       } else {
         setTestResult('error');
-        toast.error(`Connection failed: ${data.olt?.error || 'Unable to connect to OLT'}`);
+        toast.error(`Connection failed: ${data.olt?.error || 'Unable to connect'}`);
       }
     } catch (error: any) {
       console.warn('Test connection failed:', error);
@@ -203,7 +235,7 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
         <DialogHeader>
           <DialogTitle>Add New OLT</DialogTitle>
           <DialogDescription>
-            Enter the OLT connection details. MikroTik is optional for PPPoE data.
+            Enter the OLT connection details. Port determines connection type (SSH/Telnet/API).
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -231,7 +263,7 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>OLT Brand</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={handleBrandChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger className="bg-secondary">
                             <SelectValue placeholder="Select OLT brand" />
@@ -245,6 +277,9 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
                           ))}
                         </SelectContent>
                       </Select>
+                      <FormDescription className="text-xs">
+                        {brandConnectionInfo[selectedBrand]?.hint || 'Select brand'}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -300,9 +335,12 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
                     <FormItem>
                       <FormLabel>Port Number</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="22 or 23 or 443" {...field} className="bg-secondary font-mono" />
+                        <Input type="number" placeholder="22, 23, or custom" {...field} className="bg-secondary font-mono" />
                       </FormControl>
-                      <FormDescription className="text-xs">SSH: 22, Telnet: 23, API: 443</FormDescription>
+                      <FormDescription className="text-xs flex items-center gap-1">
+                        <Wifi className="h-3 w-3" />
+                        {getConnectionType(selectedPort)}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
