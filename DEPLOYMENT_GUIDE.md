@@ -354,7 +354,7 @@ Upload `olt-polling-server/` folder to your VPS
 SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
 SUPABASE_SERVICE_KEY=YOUR_SERVICE_ROLE_KEY
 POLLING_INTERVAL_MS=60000
-SSH_TIMEOUT_MS=30000
+SSH_TIMEOUT_MS=60000
 PORT=3001
 ```
 
@@ -397,9 +397,11 @@ your-project/
 │   │   ├── index.js         # Main server
 │   │   ├── polling/
 │   │   │   ├── olt-poller.js
+│   │   │   ├── telnet-client.js  # Telnet support for older OLTs
 │   │   │   └── parsers/
 │   │   │       ├── zte-parser.js
-│   │   │       └── huawei-parser.js
+│   │   │       ├── huawei-parser.js
+│   │   │       └── vsol-parser.js
 │   │   └── utils/
 │   │       └── logger.js
 │   ├── .env                 # Your config (create this)
@@ -411,9 +413,52 @@ your-project/
 
 ## 🔧 Troubleshooting
 
+### Issue: OLT shows "Offline" or "Connection lost before handshake"
+This error occurs when SSH connection fails. Possible causes:
+
+1. **Wrong Port**: 
+   - SSH default is port 22
+   - VSOL OLTs often use port 23 (Telnet) or 8041 (Web)
+   - Make sure you're using the correct SSH/Telnet port
+
+2. **OLT doesn't support SSH**:
+   - Some older OLTs (especially VSOL) only support Telnet
+   - The polling server now supports both SSH and Telnet as fallback
+
+3. **Firewall blocking**:
+   - Make sure VPS can reach OLT IP on the correct port
+   - Test: `telnet OLT_IP 22` or `telnet OLT_IP 23`
+
+4. **Wrong credentials**:
+   - Verify username/password are correct
+   - Some OLTs have default: admin/admin or root/admin
+
+### Issue: VSOL OLT not polling correctly
+VSOL OLTs have specific requirements:
+
+1. **Correct Port**:
+   - SSH: Port 22
+   - Telnet: Port 23
+   - Try both if unsure
+
+2. **Supported Commands**:
+   The polling server sends these commands for VSOL:
+   - `terminal length 0`
+   - `show onu status all`
+   - `show onu optical-info all`
+   - `show onu info all`
+
+3. **Check OLT CLI**:
+   Connect manually to your OLT and verify which commands work:
+   ```bash
+   telnet OLT_IP 23
+   # or
+   ssh admin@OLT_IP -p 22
+   ```
+
 ### Issue: OLT shows "Unknown" status
 - Make sure the polling server is running on VPS
-- Check VPS can reach OLT IP via SSH
+- Check VPS can reach OLT IP via SSH/Telnet
 - Check polling server logs: `pm2 logs olt-poller`
 
 ### Issue: Login not working
@@ -422,6 +467,35 @@ your-project/
 
 ### Issue: 404 on page refresh
 - Configure SPA routing in Nginx/Apache (see above)
+
+### Checking Polling Server Logs
+```bash
+# If using PM2
+pm2 logs olt-poller
+
+# If running directly
+# Logs appear in terminal
+
+# Check status
+curl http://localhost:3001/status
+
+# Manually trigger poll for specific OLT
+curl -X POST http://localhost:3001/poll/OLT_ID_HERE
+```
+
+---
+
+## 🔌 Supported OLT Brands
+
+| Brand | Protocol | Default Port | Status |
+|-------|----------|--------------|--------|
+| ZTE | SSH | 22 | ✅ Full Support |
+| Huawei | SSH | 22 | ✅ Full Support |
+| VSOL | SSH/Telnet | 22/23 | ✅ Full Support |
+| Fiberhome | SSH | 22 | ⚠️ Basic Support |
+| Nokia | SSH | 22 | ⚠️ Basic Support |
+| BDCOM | SSH | 22 | ⚠️ Basic Support |
+| Other | SSH/Telnet | 22/23 | ⚠️ Basic Support |
 
 ---
 

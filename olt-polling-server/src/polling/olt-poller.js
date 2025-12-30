@@ -2,21 +2,40 @@ import { Client } from 'ssh2';
 import { logger } from '../utils/logger.js';
 import { parseZTEOutput } from './parsers/zte-parser.js';
 import { parseHuaweiOutput } from './parsers/huawei-parser.js';
+import { parseVSOLOutput } from './parsers/vsol-parser.js';
+import { executeTelnetCommands } from './telnet-client.js';
 
-const SSH_TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '30000');
+const SSH_TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '60000');
 
 /**
- * Poll an OLT device via SSH and sync data to database
+ * Poll an OLT device via SSH/Telnet and sync data to database
  */
 export async function pollOLT(supabase, olt) {
   const startTime = Date.now();
   
   try {
-    // Connect to OLT via SSH
-    const sshOutput = await executeSSHCommands(olt);
+    // Get commands for this OLT brand
+    const commands = getOLTCommands(olt.brand);
+    
+    // Try SSH first, if fails try Telnet (for older OLTs or VSOL)
+    let output;
+    try {
+      logger.info(`Attempting SSH connection to ${olt.name} (${olt.ip_address}:${olt.port})`);
+      output = await executeSSHCommands(olt);
+    } catch (sshError) {
+      logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
+      
+      // Try Telnet as fallback
+      try {
+        output = await executeTelnetCommands(olt, commands);
+      } catch (telnetError) {
+        logger.error(`Both SSH and Telnet failed for ${olt.name}`);
+        throw new Error(`Connection failed - SSH: ${sshError.message}, Telnet: ${telnetError.message}`);
+      }
+    }
     
     // Parse output based on OLT brand
-    const onus = parseOLTOutput(olt.brand, sshOutput);
+    const onus = parseOLTOutput(olt.brand, output);
     
     logger.info(`Parsed ${onus.length} ONUs from ${olt.name}`);
     
@@ -50,18 +69,21 @@ async function executeSSHCommands(olt) {
   return new Promise((resolve, reject) => {
     const conn = new Client();
     let output = '';
+    let commandsSent = false;
     
     const timeout = setTimeout(() => {
+      logger.error(`SSH connection timeout for ${olt.ip_address}`);
       conn.end();
       reject(new Error('SSH connection timeout'));
     }, SSH_TIMEOUT);
     
     conn.on('ready', () => {
-      logger.debug(`SSH connected to ${olt.ip_address}`);
+      logger.info(`SSH connected to ${olt.ip_address}:${olt.port}`);
       
-      conn.shell((err, stream) => {
+      conn.shell({ term: 'vt100' }, (err, stream) => {
         if (err) {
           clearTimeout(timeout);
+          logger.error(`Shell error for ${olt.ip_address}:`, err);
           reject(err);
           return;
         }
@@ -69,6 +91,7 @@ async function executeSSHCommands(olt) {
         stream.on('close', () => {
           clearTimeout(timeout);
           conn.end();
+          logger.debug(`SSH session closed for ${olt.ip_address}, output length: ${output.length}`);
           resolve(output);
         });
         
@@ -76,45 +99,101 @@ async function executeSSHCommands(olt) {
           output += data.toString();
         });
         
-        // Send commands based on OLT brand
-        const commands = getOLTCommands(olt.brand);
-        commands.forEach((cmd, index) => {
-          setTimeout(() => {
-            stream.write(cmd + '\n');
-          }, index * 500);
+        stream.stderr.on('data', (data) => {
+          logger.warn(`SSH stderr from ${olt.ip_address}: ${data.toString()}`);
         });
         
-        // Close stream after commands
+        // Wait for initial prompt before sending commands
         setTimeout(() => {
-          stream.end('exit\n');
-        }, commands.length * 500 + 5000);
+          if (!commandsSent) {
+            commandsSent = true;
+            const commands = getOLTCommands(olt.brand);
+            logger.debug(`Sending ${commands.length} commands to ${olt.name}`);
+            
+            commands.forEach((cmd, index) => {
+              setTimeout(() => {
+                logger.debug(`Sending command to ${olt.name}: ${cmd}`);
+                stream.write(cmd + '\r\n');
+              }, index * 1000); // Increased delay between commands
+            });
+            
+            // Close stream after commands with more wait time
+            setTimeout(() => {
+              stream.write('exit\r\n');
+              setTimeout(() => {
+                stream.end();
+              }, 2000);
+            }, commands.length * 1000 + 8000);
+          }
+        }, 2000); // Wait 2 seconds for initial prompt
       });
     });
     
     conn.on('error', (err) => {
       clearTimeout(timeout);
+      logger.error(`SSH error for ${olt.ip_address}:${olt.port}:`, err.message);
       reject(err);
     });
+    
+    conn.on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
+      // Handle keyboard-interactive auth (some OLTs use this)
+      logger.debug(`Keyboard-interactive auth for ${olt.ip_address}`);
+      finish([olt.password_encrypted]);
+    });
+    
+    logger.debug(`Connecting SSH to ${olt.ip_address}:${olt.port} as ${olt.username}`);
     
     conn.connect({
       host: olt.ip_address,
       port: olt.port,
       username: olt.username,
-      password: olt.password_encrypted, // In production, decrypt this
+      password: olt.password_encrypted,
       readyTimeout: SSH_TIMEOUT,
+      keepaliveInterval: 10000,
+      keepaliveCountMax: 3,
+      tryKeyboard: true, // Enable keyboard-interactive auth
       algorithms: {
         kex: [
+          'curve25519-sha256',
+          'curve25519-sha256@libssh.org',
+          'ecdh-sha2-nistp256',
+          'ecdh-sha2-nistp384',
+          'ecdh-sha2-nistp521',
           'diffie-hellman-group-exchange-sha256',
           'diffie-hellman-group14-sha256',
-          'diffie-hellman-group1-sha1',
-          'diffie-hellman-group14-sha1'
+          'diffie-hellman-group16-sha512',
+          'diffie-hellman-group18-sha512',
+          'diffie-hellman-group14-sha1',
+          'diffie-hellman-group1-sha1'
         ],
         cipher: [
           'aes128-ctr',
           'aes192-ctr',
           'aes256-ctr',
+          'aes128-gcm',
+          'aes128-gcm@openssh.com',
+          'aes256-gcm',
+          'aes256-gcm@openssh.com',
           'aes128-cbc',
+          'aes192-cbc',
+          'aes256-cbc',
           '3des-cbc'
+        ],
+        serverHostKey: [
+          'ssh-rsa',
+          'ssh-dss',
+          'ecdsa-sha2-nistp256',
+          'ecdsa-sha2-nistp384',
+          'ecdsa-sha2-nistp521',
+          'ssh-ed25519',
+          'rsa-sha2-256',
+          'rsa-sha2-512'
+        ],
+        hmac: [
+          'hmac-sha2-256',
+          'hmac-sha2-512',
+          'hmac-sha1',
+          'hmac-md5'
         ]
       }
     });
@@ -144,9 +223,17 @@ function getOLTCommands(brand) {
         'show gpon onu state',
         'show gpon onu list'
       ];
+    case 'VSOL':
+      return [
+        'terminal length 0',
+        'show onu status all',
+        'show onu optical-info all',
+        'show onu info all'
+      ];
     default:
       return [
-        'show onu status'
+        'show onu status',
+        'show onu list'
       ];
   }
 }
@@ -160,9 +247,13 @@ function parseOLTOutput(brand, output) {
       return parseZTEOutput(output);
     case 'Huawei':
       return parseHuaweiOutput(output);
+    case 'VSOL':
+      return parseVSOLOutput(output);
+    case 'Fiberhome':
+      return parseVSOLOutput(output); // Similar format to VSOL
     default:
-      logger.warn(`No parser available for brand: ${brand}`);
-      return [];
+      logger.warn(`No parser available for brand: ${brand}, trying generic parser`);
+      return parseVSOLOutput(output); // Try VSOL parser as generic fallback
   }
 }
 
