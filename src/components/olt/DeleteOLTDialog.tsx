@@ -27,7 +27,29 @@ export function DeleteOLTDialog({ oltId, oltName, open, onOpenChange, onDeleted 
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      // First delete all ONUs associated with this OLT
+      // Get all ONU IDs for this OLT to delete power readings
+      const { data: onus } = await supabase
+        .from('onus')
+        .select('id')
+        .eq('olt_id', oltId);
+      
+      const onuIds = onus?.map(o => o.id) || [];
+      
+      // Delete power readings for all ONUs
+      if (onuIds.length > 0) {
+        await supabase
+          .from('power_readings')
+          .delete()
+          .in('onu_id', onuIds);
+      }
+
+      // Delete alerts associated with this OLT
+      await supabase
+        .from('alerts')
+        .delete()
+        .eq('device_id', oltId);
+
+      // Delete all ONUs associated with this OLT
       const { error: onuError } = await supabase
         .from('onus')
         .delete()
@@ -43,7 +65,7 @@ export function DeleteOLTDialog({ oltId, oltName, open, onOpenChange, onDeleted 
 
       if (oltError) throw oltError;
 
-      toast.success(`OLT "${oltName}" and its ONUs have been deleted`);
+      toast.success(`OLT "${oltName}" and all related data have been deleted`);
       onDeleted?.();
       onOpenChange(false);
     } catch (error: any) {

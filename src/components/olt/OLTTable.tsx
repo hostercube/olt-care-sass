@@ -18,8 +18,9 @@ import { OLTBrandBadge } from '@/components/olt/OLTBrandBadge';
 import type { Tables } from '@/integrations/supabase/types';
 import type { OLTBrand } from '@/types/olt';
 import { formatDistanceToNow } from 'date-fns';
-import { Search, MoreHorizontal, RefreshCw, Settings, Trash2, Eye, Pencil, Router, WifiOff } from 'lucide-react';
+import { Search, MoreHorizontal, RefreshCw, Settings, Trash2, Eye, Pencil, Router, WifiOff, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +44,32 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingOLT, setEditingOLT] = useState<Tables<'olts'> | null>(null);
   const [deletingOLT, setDeletingOLT] = useState<{ id: string; name: string } | null>(null);
+  const [pollingOLT, setPollingOLT] = useState<string | null>(null);
+
+  const handlePollNow = async (oltId: string, oltName: string) => {
+    setPollingOLT(oltId);
+    try {
+      const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL || 'http://localhost:3001';
+      const response = await fetch(`${pollingServerUrl}/poll/${oltId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Poll failed');
+      }
+      
+      const result = await response.json();
+      toast.success(`Polled ${oltName}: Found ${result.result?.onuCount || 0} ONUs`);
+      onRefresh?.();
+    } catch (error: any) {
+      console.error('Poll error:', error);
+      toast.error(`Failed to poll ${oltName}: ${error.message || 'VPS server unreachable'}`);
+    } finally {
+      setPollingOLT(null);
+    }
+  };
 
   const filteredOLTs = olts.filter(
     (olt) =>
@@ -169,9 +196,22 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                                 <Pencil className="h-4 w-4" />
                                 Edit
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2">
-                                <RefreshCw className="h-4 w-4" />
-                                Poll Now
+                              <DropdownMenuItem 
+                                className="gap-2"
+                                onClick={() => handlePollNow(olt.id, olt.name)}
+                                disabled={pollingOLT === olt.id}
+                              >
+                                {pollingOLT === olt.id ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Polling...
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw className="h-4 w-4" />
+                                    Poll Now
+                                  </>
+                                )}
                               </DropdownMenuItem>
                               <DropdownMenuItem className="gap-2">
                                 <Settings className="h-4 w-4" />

@@ -11,10 +11,10 @@ import {
   ChevronRight,
   Network,
   Activity,
-  Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { VPSStatusIndicator } from './VPSStatusIndicator';
 
 interface NavItem {
   title: string;
@@ -108,20 +108,10 @@ export function Sidebar() {
         )}
       </Button>
 
-      {/* Connection Status */}
-      {!collapsed && (
-        <div className="absolute bottom-16 left-3 right-3">
-          <div className="rounded-lg bg-success/10 border border-success/20 p-3">
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-success" />
-              <span className="text-xs font-medium text-success">System Online</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              All services operational
-            </p>
-          </div>
-        </div>
-      )}
+      {/* VPS Connection Status */}
+      <div className="absolute bottom-16 left-3 right-3">
+        <VPSStatusIndicator collapsed={collapsed} />
+      </div>
     </aside>
   );
 }

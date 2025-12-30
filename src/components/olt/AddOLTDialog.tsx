@@ -48,11 +48,14 @@ const addOLTSchema = z.object({
   port: z.coerce.number().min(1).max(65535),
   username: z.string().min(1, 'Username is required').max(50),
   password: z.string().min(1, 'Password is required').max(100),
-  // MikroTik fields (optional)
-  mikrotikIp: z.string().regex(ipRegex, 'Invalid IP address').optional().or(z.literal('')),
-  mikrotikPort: z.coerce.number().min(1).max(65535).optional(),
-  mikrotikUsername: z.string().max(50).optional(),
-  mikrotikPassword: z.string().max(100).optional(),
+  // MikroTik fields (all optional - leave empty to skip MikroTik integration)
+  mikrotikIp: z.string().optional().refine(
+    (val) => !val || ipRegex.test(val),
+    { message: 'Invalid IP address' }
+  ),
+  mikrotikPort: z.coerce.number().min(1).max(65535).optional().or(z.literal('')),
+  mikrotikUsername: z.string().optional(),
+  mikrotikPassword: z.string().optional(),
 });
 
 type AddOLTFormValues = z.infer<typeof addOLTSchema>;
