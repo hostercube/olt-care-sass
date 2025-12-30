@@ -1,74 +1,73 @@
-# OLT Polling Server for VPS
+# OLT Polling Server
 
-This is a standalone Node.js application that runs on your VPS to poll OLT devices via SSH and sync data to your Supabase database.
+Node.js server that polls OLT devices via SSH/Telnet/HTTP and syncs data to Supabase.
 
-## Features
-
-- SSH connection to OLT devices (ZTE, Huawei, Fiberhome, etc.)
-- Automatic ONU discovery and status monitoring
-- Power level readings (RX/TX)
-- Real-time sync to Supabase database
-- Configurable polling intervals
-- Alert generation for offline ONUs and power issues
-
-## Prerequisites
-
-- Node.js 18+ installed on your VPS
-- Network access from VPS to OLT devices
-- Supabase project credentials
-
-## Installation
+## Quick Start
 
 ```bash
-# Clone or copy this folder to your VPS
-cd olt-polling-server
-
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Copy environment file
+# 2. Create environment file
 cp .env.example .env
+nano .env  # Edit with your Supabase credentials
 
-# Edit .env with your credentials
-nano .env
+# 3. Create logs directory
+mkdir -p logs
 
-# Start the server
-npm start
-
-# For production with PM2
-npm install -g pm2
-pm2 start npm --name "olt-poller" -- start
+# 4. Start with PM2
+pm2 start ecosystem.config.cjs
 pm2 save
-pm2 startup
 ```
 
 ## Environment Variables
 
-```
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key
-POLLING_INTERVAL_MS=60000
-SSH_TIMEOUT_MS=30000
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SUPABASE_URL` | Your Supabase project URL | Required |
+| `SUPABASE_SERVICE_KEY` | Supabase service role key | Required |
+| `POLLING_INTERVAL_MS` | Polling interval in milliseconds | 60000 |
+| `SSH_TIMEOUT_MS` | SSH connection timeout | 60000 |
+| `MIKROTIK_TIMEOUT_MS` | MikroTik API timeout | 30000 |
+| `PORT` | Server port | 3001 |
+| `NODE_ENV` | Environment | production |
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| GET | `/status` | Polling status |
+| POST | `/poll/:oltId` | Poll specific OLT |
+| POST | `/poll-all` | Poll all OLTs |
+| POST | `/api/test-connection` | Test OLT/MikroTik connection |
+
+## PM2 Commands
+
+```bash
+pm2 status                      # Check status
+pm2 logs olt-polling-server     # View logs
+pm2 restart olt-polling-server  # Restart
+pm2 stop olt-polling-server     # Stop
 ```
 
 ## Supported OLT Brands
 
-- ZTE (C300, C320, C600)
-- Huawei (MA5800, MA5683T)
-- Fiberhome (AN5516-01, AN5516-06)
-- Nokia
-- BDCOM
-- VSOL
+- **Full Support**: ZTE, Huawei, VSOL, Fiberhome, DBC, CDATA, ECOM
+- **Partial Support**: BDCOM, Nokia
 
-## API Endpoints
+## Troubleshooting
 
-The server also exposes a REST API for manual operations:
+### Server won't start
+1. Check `.env` file exists and has correct values
+2. Run `npm install` to ensure dependencies are installed
+3. Check logs: `pm2 logs olt-polling-server`
 
-- `GET /health` - Health check
-- `POST /poll/:oltId` - Trigger immediate poll for specific OLT
-- `POST /poll-all` - Trigger poll for all OLTs
-- `GET /status` - Get current polling status
+### Connection errors
+1. Verify OLT IP is reachable from server
+2. Check SSH/Telnet credentials
+3. Ensure firewall allows outbound connections
 
-## Logs
+## License
 
-Logs are stored in `./logs/` directory with daily rotation.
+Private - For internal use only
