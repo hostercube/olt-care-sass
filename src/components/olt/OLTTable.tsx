@@ -14,7 +14,9 @@ import { Progress } from '@/components/ui/progress';
 import { StatusIndicator } from '@/components/dashboard/StatusIndicator';
 import { EditOLTDialog } from '@/components/olt/EditOLTDialog';
 import { DeleteOLTDialog } from '@/components/olt/DeleteOLTDialog';
+import { OLTBrandBadge } from '@/components/olt/OLTBrandBadge';
 import type { Tables } from '@/integrations/supabase/types';
+import type { OLTBrand } from '@/types/olt';
 import { formatDistanceToNow } from 'date-fns';
 import { Search, MoreHorizontal, RefreshCw, Settings, Trash2, Eye, Pencil } from 'lucide-react';
 import {
@@ -98,9 +100,7 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="px-2 py-1 rounded bg-secondary text-secondary-foreground text-xs font-medium">
-                            {olt.brand}
-                          </span>
+                          <OLTBrandBadge brand={olt.brand as OLTBrand} size="sm" />
                         </TableCell>
                         <TableCell className="font-mono">{olt.ip_address}</TableCell>
                         <TableCell className="font-mono">{olt.port}</TableCell>
