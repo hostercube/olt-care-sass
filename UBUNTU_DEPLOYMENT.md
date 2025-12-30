@@ -534,20 +534,59 @@ pm2 status
 ## Troubleshooting
 
 ### ❌ Error: "supabaseUrl is required"
-**Cause:** The `.env` file is missing or has wrong values.
+**Cause:** The `.env` file is missing, has wrong values, OR the environment variables are not loading properly.
 
-**Fix:**
+**CRITICAL FIX - Follow these steps exactly:**
+
 ```bash
-cd /var/www/olt.yourdomain.com/olt-polling-server
+# Step 1: Go to polling server directory
+cd /var/www/olt.isppoint.com/olt-polling-server
+
+# Step 2: Pull the latest code (if using git)
+git pull origin main
+
+# Step 3: Check your .env file exists and has correct content
 cat .env
-# Check if SUPABASE_URL and SUPABASE_SERVICE_KEY have real values (not placeholders)
 
-# If empty or wrong, edit:
+# Step 4: Your .env file MUST have these exact keys (with YOUR values):
+# SUPABASE_URL=https://srofhdgdraihxgpmpdye.supabase.co
+# SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...your-full-key
+
+# Step 5: If .env is wrong/missing, create it:
 nano .env
-# Add your actual Supabase credentials
 
-# Restart PM2
-pm2 restart olt-polling-server
+# Step 6: Add these lines (replace with YOUR actual values):
+SUPABASE_URL=https://srofhdgdraihxgpmpdye.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyb2ZoZGdkcmFpaHhncG1wZHllIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzA4MjUwNSwiZXhwIjoyMDgyNjU4NTA1fQ.your-signature
+POLLING_INTERVAL_MS=60000
+SSH_TIMEOUT_MS=60000
+MIKROTIK_TIMEOUT_MS=30000
+PORT=3001
+NODE_ENV=production
+DEBUG=false
+
+# Step 7: Save and exit (Ctrl+X, Y, Enter)
+
+# Step 8: Create logs directory
+mkdir -p logs
+
+# Step 9: Delete old PM2 process and restart fresh
+pm2 delete olt-polling-server
+pm2 start ecosystem.config.cjs
+
+# Step 10: Check logs for errors
+pm2 logs olt-polling-server --lines 30
+
+# Step 11: Test health endpoint
+curl http://127.0.0.1:3001/health
+```
+
+**If still getting the error, test manually:**
+```bash
+cd /var/www/olt.isppoint.com/olt-polling-server
+node src/index.js
+# This will show detailed error messages
+```
 ```
 
 ### ❌ Error: "301 Moved Permanently" when testing API
