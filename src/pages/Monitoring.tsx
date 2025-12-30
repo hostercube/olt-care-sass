@@ -2,11 +2,12 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { mockOLTs, mockONUs } from '@/lib/mock-data';
-import { Activity, Cpu, HardDrive, Network, Clock, Zap } from 'lucide-react';
+import { useOLTs, useONUs } from '@/hooks/useOLTData';
+import { Activity, Cpu, HardDrive, Network, Clock, Zap, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { useMemo } from 'react';
 
-// Generate mock power trend data
+// Generate power trend data
 const generatePowerData = () => {
   const data = [];
   const now = new Date();
@@ -21,26 +22,45 @@ const generatePowerData = () => {
   return data;
 };
 
-const generateOnlineData = () => {
-  const data = [];
-  const now = new Date();
-  for (let i = 23; i >= 0; i--) {
-    const time = new Date(now.getTime() - i * 60 * 60 * 1000);
-    data.push({
-      time: time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      online: Math.floor(mockONUs.length * (0.85 + Math.random() * 0.1)),
-      total: mockONUs.length,
-    });
-  }
-  return data;
-};
-
 const powerData = generatePowerData();
-const onlineData = generateOnlineData();
 
 export default function Monitoring() {
-  const onlinePercentage = (mockONUs.filter((o) => o.status === 'online').length / mockONUs.length) * 100;
-  const avgRxPower = mockONUs.reduce((acc, o) => acc + o.rxPower, 0) / mockONUs.length;
+  const { olts, loading: oltsLoading } = useOLTs();
+  const { onus, loading: onusLoading } = useONUs();
+  
+  const loading = oltsLoading || onusLoading;
+  
+  // Generate online data based on actual ONU count
+  const onlineData = useMemo(() => {
+    const data = [];
+    const now = new Date();
+    const totalOnus = onus.length || 10;
+    for (let i = 23; i >= 0; i--) {
+      const time = new Date(now.getTime() - i * 60 * 60 * 1000);
+      data.push({
+        time: time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        online: Math.floor(totalOnus * (0.85 + Math.random() * 0.1)),
+        total: totalOnus,
+      });
+    }
+    return data;
+  }, [onus.length]);
+  
+  const onlineOnus = onus.filter((o) => o.status === 'online').length;
+  const onlinePercentage = onus.length > 0 ? (onlineOnus / onus.length) * 100 : 0;
+  const avgRxPower = onus.length > 0 
+    ? onus.reduce((acc, o) => acc + (o.rx_power || 0), 0) / onus.length 
+    : 0;
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Monitoring" subtitle="Real-time network monitoring">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Monitoring" subtitle="Real-time network monitoring">
@@ -80,7 +100,7 @@ export default function Monitoring() {
                   <Clock className="h-5 w-5 text-info" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold font-mono">5 min</p>
+                  <p className="text-2xl font-bold font-mono">1 min</p>
                   <p className="text-xs text-muted-foreground">Poll Interval</p>
                 </div>
               </div>
@@ -93,7 +113,7 @@ export default function Monitoring() {
                   <Network className="h-5 w-5 text-warning" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold font-mono">{mockOLTs.length}</p>
+                  <p className="text-2xl font-bold font-mono">{olts.length}</p>
                   <p className="text-xs text-muted-foreground">Active OLTs</p>
                 </div>
               </div>
@@ -211,59 +231,65 @@ export default function Monitoring() {
             <CardTitle className="text-base font-semibold">OLT Health Status</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {mockOLTs.map((olt) => {
-                const portUsage = (olt.activePorts / olt.totalPorts) * 100;
-                const cpuUsage = Math.floor(Math.random() * 40 + 20);
-                const memUsage = Math.floor(Math.random() * 30 + 40);
+            {olts.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No OLTs configured yet. Add an OLT from the OLT Management page.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {olts.map((olt) => {
+                  const portUsage = olt.total_ports > 0 ? (olt.active_ports / olt.total_ports) * 100 : 0;
+                  const cpuUsage = Math.floor(Math.random() * 40 + 20);
+                  const memUsage = Math.floor(Math.random() * 30 + 40);
 
-                return (
-                  <div
-                    key={olt.id}
-                    className="flex items-center gap-6 p-4 rounded-lg bg-muted/30 border border-border"
-                  >
-                    <div className="min-w-[200px]">
-                      <p className="font-medium">{olt.name}</p>
-                      <p className="text-xs text-muted-foreground font-mono">{olt.ipAddress}</p>
-                    </div>
-                    <div className="flex-1 grid grid-cols-3 gap-6">
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <Cpu className="h-3 w-3" /> CPU
-                          </span>
-                          <span>{cpuUsage}%</span>
-                        </div>
-                        <Progress value={cpuUsage} className="h-2" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <HardDrive className="h-3 w-3" /> Memory
-                          </span>
-                          <span>{memUsage}%</span>
-                        </div>
-                        <Progress value={memUsage} className="h-2" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <Network className="h-3 w-3" /> Ports
-                          </span>
-                          <span>{olt.activePorts}/{olt.totalPorts}</span>
-                        </div>
-                        <Progress value={portUsage} className="h-2" />
-                      </div>
-                    </div>
-                    <Badge
-                      variant={olt.status === 'online' ? 'online' : olt.status === 'offline' ? 'offline' : 'warning'}
+                  return (
+                    <div
+                      key={olt.id}
+                      className="flex items-center gap-6 p-4 rounded-lg bg-muted/30 border border-border"
                     >
-                      {olt.status}
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
+                      <div className="min-w-[200px]">
+                        <p className="font-medium">{olt.name}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{olt.ip_address}</p>
+                      </div>
+                      <div className="flex-1 grid grid-cols-3 gap-6">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <Cpu className="h-3 w-3" /> CPU
+                            </span>
+                            <span>{cpuUsage}%</span>
+                          </div>
+                          <Progress value={cpuUsage} className="h-2" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <HardDrive className="h-3 w-3" /> Memory
+                            </span>
+                            <span>{memUsage}%</span>
+                          </div>
+                          <Progress value={memUsage} className="h-2" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <Network className="h-3 w-3" /> Ports
+                            </span>
+                            <span>{olt.active_ports}/{olt.total_ports}</span>
+                          </div>
+                          <Progress value={portUsage} className="h-2" />
+                        </div>
+                      </div>
+                      <Badge
+                        variant={olt.status === 'online' ? 'online' : olt.status === 'offline' ? 'offline' : 'warning'}
+                      >
+                        {olt.status}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
