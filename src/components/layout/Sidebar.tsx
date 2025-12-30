@@ -11,16 +11,19 @@ import {
   ChevronRight,
   Network,
   Activity,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { VPSStatusIndicator } from './VPSStatusIndicator';
+import { useUserRole } from '@/hooks/useUserRole';
 
 interface NavItem {
   title: string;
   href: string;
   icon: React.ElementType;
   badge?: number;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -29,12 +32,17 @@ const navItems: NavItem[] = [
   { title: 'ONU Devices', href: '/onus', icon: Router },
   { title: 'Alerts', href: '/alerts', icon: Bell, badge: 2 },
   { title: 'Monitoring', href: '/monitoring', icon: Activity },
+  { title: 'User Management', href: '/users', icon: Users, adminOnly: true },
   { title: 'Settings', href: '/settings', icon: Settings },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { isAdmin } = useUserRole();
+
+  // Filter nav items based on user role
+  const filteredNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <aside
@@ -64,7 +72,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1 p-3 mt-2">
-        {navItems.map((item) => {
+        {filteredNavItems.map((item) => {
           const isActive = location.pathname === item.href;
           return (
             <Link
