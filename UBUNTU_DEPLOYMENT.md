@@ -346,16 +346,19 @@ cd /var/www/olt.yourdomain.com/olt-polling-server
 
 ### Step 2: Create Environment File
 ```bash
+cp .env.example .env
 nano .env
 ```
 
-Add your configuration:
-```env
-# Supabase Configuration (Use Service Role Key!)
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key
+**⚠️ IMPORTANT: Fill in your actual Supabase credentials!**
 
-# Polling Configuration
+```env
+# Supabase Configuration (REQUIRED!)
+# Get these from: Supabase Dashboard → Settings → API
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...your-service-role-key
+
+# Polling Configuration  
 POLLING_INTERVAL_MS=60000
 SSH_TIMEOUT_MS=60000
 MIKROTIK_TIMEOUT_MS=30000
@@ -364,9 +367,17 @@ MIKROTIK_TIMEOUT_MS=30000
 PORT=3001
 NODE_ENV=production
 
-# Debug (optional)
+# Debug (set to true for verbose logging)
 DEBUG=false
 ```
+
+**Where to find your Supabase keys:**
+1. Go to [supabase.com](https://supabase.com) → Your Project
+2. Click "Project Settings" (gear icon)
+3. Click "API" in the sidebar
+4. Copy:
+   - **Project URL** → `SUPABASE_URL`
+   - **service_role (secret)** → `SUPABASE_SERVICE_KEY`
 
 ### Step 3: Install Dependencies
 ```bash
@@ -378,11 +389,17 @@ npm install
 mkdir -p logs
 ```
 
-### Step 5: Test Manually
+### Step 5: Verify .env is Correct
+```bash
+cat .env | grep SUPABASE
+# Should show your actual Supabase URL and key (not placeholder values!)
+```
+
+### Step 6: Test Manually
 ```bash
 node src/index.js
 ```
-If it starts without errors, press `Ctrl+C` to stop.
+If it starts without errors (should show "OLT Polling Server running on port 3001"), press `Ctrl+C` to stop.
 
 ---
 
@@ -492,7 +509,73 @@ pm2 logs olt-polling-server
 
 ---
 
+## Verify Everything is Working
+
+### Step 1: Test Polling Server Health
+```bash
+curl http://127.0.0.1:3001/health
+# Should return: {"status":"healthy","uptime":...}
+```
+
+### Step 2: Test Through Nginx
+```bash
+curl https://olt.yourdomain.com/api/health
+# Should return: {"status":"healthy","uptime":...}
+```
+
+### Step 3: Check PM2 Status
+```bash
+pm2 status
+# Should show: olt-polling-server | online
+```
+
+---
+
 ## Troubleshooting
+
+### ❌ Error: "supabaseUrl is required"
+**Cause:** The `.env` file is missing or has wrong values.
+
+**Fix:**
+```bash
+cd /var/www/olt.yourdomain.com/olt-polling-server
+cat .env
+# Check if SUPABASE_URL and SUPABASE_SERVICE_KEY have real values (not placeholders)
+
+# If empty or wrong, edit:
+nano .env
+# Add your actual Supabase credentials
+
+# Restart PM2
+pm2 restart olt-polling-server
+```
+
+### ❌ Error: "301 Moved Permanently" when testing API
+**Cause:** Nginx is redirecting HTTP to HTTPS.
+
+**Fix:** Use `https://` or test locally:
+```bash
+# Test directly (bypassing nginx)
+curl http://127.0.0.1:3001/health
+
+# Or use https
+curl https://olt.yourdomain.com/api/health
+```
+
+### ❌ Connection Test Returns HTML/JSON Error
+**Cause:** Polling server not running or wrong URL.
+
+**Fix:**
+```bash
+# Check if server is running
+pm2 status
+
+# If errored, check logs
+pm2 logs olt-polling-server --lines 50
+
+# Restart
+pm2 restart olt-polling-server
+```
 
 ### PM2 Shows "errored"
 ```bash

@@ -35,7 +35,9 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
-      const response = await fetch(`${pollingServerUrl}/status`, {
+      // Remove trailing slash and construct proper URL
+      const baseUrl = pollingServerUrl.replace(/\/+$/, '');
+      const response = await fetch(`${baseUrl}/status`, {
         method: 'GET',
         signal: controller.signal,
         headers: {

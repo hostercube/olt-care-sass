@@ -109,9 +109,12 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       
-      const response = await fetch(`${pollingServerUrl}/api/test-connection`, {
+      // Remove trailing slash and construct proper URL
+      // If VITE_POLLING_SERVER_URL is "https://olt.domain.com/api", we call "https://olt.domain.com/api/test-connection"
+      const baseUrl = pollingServerUrl.replace(/\/+$/, '');
+      const response = await fetch(`${baseUrl}/test-connection`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
