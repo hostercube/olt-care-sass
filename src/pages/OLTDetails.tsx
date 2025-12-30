@@ -1,4 +1,5 @@
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useOLTs, useONUs } from '@/hooks/useOLTData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatusIndicator } from '@/components/dashboard/StatusIndicator';
 import { ONUTable } from '@/components/dashboard/ONUTable';
 import { ONUStatsWidget } from '@/components/dashboard/ONUStatsWidget';
+import { AddONUDialog } from '@/components/onu/AddONUDialog';
 import { 
   ArrowLeft, 
   Server, 
@@ -17,12 +19,12 @@ import {
   Router as RouterIcon,
   Signal,
   RefreshCw,
-  Loader2
+  Loader2,
+  Plus
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
-import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 export default function OLTDetails() {
@@ -32,6 +34,7 @@ export default function OLTDetails() {
   const { onus, loading: onusLoading } = useONUs();
   const [powerHistory, setPowerHistory] = useState<any[]>([]);
   const [polling, setPolling] = useState(false);
+  const [addONUDialogOpen, setAddONUDialogOpen] = useState(false);
 
   const olt = olts.find(o => o.id === id);
   const oltONUs = onus.filter(onu => onu.olt_id === id).map(onu => ({
@@ -77,17 +80,18 @@ export default function OLTDetails() {
     fetchPowerHistory();
   }, [id, oltONUs.length]);
 
+  const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
+
   const handlePollNow = async () => {
     if (!olt) return;
     
+    if (!pollingServerUrl) {
+      toast.info('Polling server not configured. Add ONUs manually using the Add ONU button.');
+      return;
+    }
+    
     setPolling(true);
     try {
-      const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
-      if (!pollingServerUrl) {
-        toast.error('Polling server URL not configured');
-        return;
-      }
-
       const response = await fetch(`${pollingServerUrl}/api/poll/${olt.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -173,16 +177,25 @@ export default function OLTDetails() {
             <StatusIndicator status={olt.status} size="md" showLabel />
             <Button 
               variant="outline" 
-              onClick={handlePollNow}
-              disabled={polling}
+              onClick={() => setAddONUDialogOpen(true)}
             >
-              {polling ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Poll Now
+              <Plus className="h-4 w-4 mr-2" />
+              Add ONU
             </Button>
+            {pollingServerUrl && (
+              <Button 
+                variant="outline" 
+                onClick={handlePollNow}
+                disabled={polling}
+              >
+                {polling ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Poll Now
+              </Button>
+            )}
           </div>
         </div>
 
@@ -351,6 +364,14 @@ export default function OLTDetails() {
           showFilters={true}
         />
       </div>
+
+      {/* Add ONU Dialog */}
+      <AddONUDialog
+        open={addONUDialogOpen}
+        onOpenChange={setAddONUDialogOpen}
+        olts={olts}
+        defaultOltId={olt.id}
+      />
     </DashboardLayout>
   );
 }
