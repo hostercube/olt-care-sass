@@ -1,73 +1,69 @@
-# Welcome to your Lovable project
+# OLTCare - GPON/EPON OLT Management System
 
-## Project info
+A modern web application for monitoring and managing Optical Line Terminal (OLT) devices and Optical Network Units (ONUs).
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+- 🖥️ **OLT Management**: Add, edit, and monitor multiple OLT devices
+- 📊 **Real-time Monitoring**: Live status updates for OLTs and ONUs
+- 🔔 **Smart Alerts**: Automatic alerts for offline devices and power issues
+- 📈 **Power Monitoring**: Track RX/TX power levels
+- 👥 **Multi-user Support**: Role-based access (Admin, Operator, Viewer)
+- 🌐 **MikroTik Integration**: PPPoE username lookup from MikroTik routers
 
-There are several ways of editing your application.
+## Supported OLT Brands
 
-**Use Lovable**
+| Brand | Protocol | Support Level |
+|-------|----------|---------------|
+| ZTE | SSH | Full |
+| Huawei | SSH | Full |
+| VSOL | SSH/HTTP | Full |
+| Fiberhome | SSH | Full |
+| DBC | HTTP | Full |
+| CDATA | HTTP | Full |
+| ECOM | HTTP | Full |
+| BDCOM | SSH | Partial |
+| Nokia | SSH | Partial |
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Frontend**: React, TypeScript, Tailwind CSS, Shadcn/UI
+- **Backend**: Node.js, Express (Polling Server)
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: Supabase Auth
 
-**Use your preferred IDE**
+## Project Structure
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```
+/
+├── src/                    # Frontend React application
+│   ├── components/         # React components
+│   ├── pages/              # Page components
+│   ├── hooks/              # Custom hooks
+│   └── integrations/       # Supabase client
+├── olt-polling-server/     # Backend polling server
+│   ├── src/
+│   │   ├── polling/        # OLT polling logic
+│   │   └── utils/          # Utilities
+│   └── ecosystem.config.cjs
+├── dist/                   # Built frontend (after npm run build)
+└── UBUNTU_DEPLOYMENT.md    # Full deployment guide
+```
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Quick Start (Development)
 
-Follow these steps:
+```bash
+# Install dependencies
+npm install
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Deployment
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+See [UBUNTU_DEPLOYMENT.md](./UBUNTU_DEPLOYMENT.md) for complete deployment instructions on Ubuntu 24.04.
 
-**Use GitHub Codespaces**
+## License
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Private - For internal use only

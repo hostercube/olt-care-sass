@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# OLTCare Build Script for cPanel/aaPanel Deployment
-# Run this script to build the frontend for deployment
+# ============================================
+# OLTCare Build Script for Ubuntu Deployment
+# ============================================
 
 echo "========================================="
 echo "  OLTCare Frontend Build Script"
@@ -9,7 +10,8 @@ echo "========================================="
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
-    echo "❌ Node.js is not installed. Please install Node.js 18+ first."
+    echo "❌ Node.js is not installed!"
+    echo "Install with: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs"
     exit 1
 fi
 
@@ -17,26 +19,32 @@ echo "✓ Node.js version: $(node -v)"
 
 # Check if npm is installed
 if ! command -v npm &> /dev/null; then
-    echo "❌ npm is not installed. Please install npm first."
+    echo "❌ npm is not installed!"
     exit 1
 fi
 
 echo "✓ npm version: $(npm -v)"
 
-# Create .env file if not exists
+# Check for .env file
 if [ ! -f .env ]; then
     echo ""
-    echo "Creating .env file..."
+    echo "⚠️  No .env file found!"
+    echo "Creating template .env file..."
     cat > .env << 'EOF'
-VITE_POLLING_SERVER_URL="https://olt.isppoint.com/olt-polling-server"
-VITE_SUPABASE_PROJECT_ID="srofhdgdraihxgpmpdye"
-VITE_SUPABASE_PUBLISHABLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyb2ZoZGdkcmFpaHhncG1wZHllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwODI1MDUsImV4cCI6MjA4MjY1ODUwNX0.EYIvK99xo_mCNdNslb5sWNEGAm5-kBz5Dfr0878J0kw"
-VITE_SUPABASE_URL="https://srofhdgdraihxgpmpdye.supabase.co"
+# Update these values with your Supabase credentials
+VITE_POLLING_SERVER_URL="https://olt.yourdomain.com/api"
+VITE_SUPABASE_PROJECT_ID="your-project-id"
+VITE_SUPABASE_PUBLISHABLE_KEY="your-anon-key"
+VITE_SUPABASE_URL="https://your-project-id.supabase.co"
 EOF
-    echo "✓ .env file created"
-else
-    echo "✓ .env file exists"
+    echo "✓ Template .env file created"
+    echo ""
+    echo "⚠️  Please edit .env with your actual Supabase credentials before building!"
+    echo "   nano .env"
+    exit 1
 fi
+
+echo "✓ .env file found"
 
 # Install dependencies
 echo ""
@@ -67,14 +75,12 @@ echo "========================================="
 echo ""
 echo "The 'dist' folder is ready for deployment."
 echo ""
+echo "Your dist folder is at: $(pwd)/dist"
+echo ""
 echo "Next steps:"
-echo "1. Upload all files from 'dist/' folder to your public_html"
-echo "2. Configure your server for SPA routing (see COMPLETE_DEPLOYMENT_GUIDE.md)"
-echo "3. Ensure your polling server is running at https://olt.isppoint.com/olt-polling-server"
+echo "1. Configure Nginx to serve from dist folder"
+echo "2. Set up SSL with Certbot"
+echo "3. Start the polling server with PM2"
 echo ""
-echo "For Apache (.htaccess is already in dist/):"
-echo "  Just upload the files"
-echo ""
-echo "For Nginx:"
-echo "  Add: try_files \$uri \$uri/ /index.html;"
+echo "See UBUNTU_DEPLOYMENT.md for full instructions."
 echo ""
