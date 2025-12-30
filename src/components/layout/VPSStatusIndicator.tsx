@@ -18,11 +18,24 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
   });
 
   const checkVPSStatus = async () => {
+    const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
+    
+    // If no polling server URL is configured, show as not configured
+    if (!pollingServerUrl) {
+      setVpsStatus(prev => ({ 
+        ...prev, 
+        status: 'offline',
+      }));
+      return;
+    }
+
     try {
-      const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL || 'http://localhost:3001';
       const response = await fetch(`${pollingServerUrl}/status`, {
         method: 'GET',
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(10000),
+        headers: {
+          'Accept': 'application/json',
+        },
       });
       
       if (response.ok) {
@@ -36,7 +49,8 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
       } else {
         setVpsStatus(prev => ({ ...prev, status: 'offline' }));
       }
-    } catch {
+    } catch (error) {
+      console.log('VPS status check failed:', error);
       setVpsStatus(prev => ({ ...prev, status: 'offline' }));
     }
   };
@@ -99,7 +113,7 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
         {vpsStatus.status === 'online' && vpsStatus.lastPollTime
           ? `Last poll: ${formatDistanceToNow(new Date(vpsStatus.lastPollTime), { addSuffix: true })}`
           : vpsStatus.status === 'offline'
-          ? 'Cannot reach polling server'
+          ? (import.meta.env.VITE_POLLING_SERVER_URL ? 'Cannot reach polling server' : 'Polling server URL not configured')
           : 'Checking server status...'}
       </p>
       {vpsStatus.errorCount > 0 && (

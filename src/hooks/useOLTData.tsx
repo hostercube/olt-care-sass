@@ -211,7 +211,14 @@ export async function addOLT(data: {
   mikrotik_username?: string | null;
   mikrotik_password_encrypted?: string | null;
 }) {
-  const { error } = await supabase.from('olts').insert({
+  // Get current user for created_by field
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('You must be logged in to add an OLT');
+  }
+
+  const insertData: any = {
     name: data.name,
     brand: data.brand,
     olt_mode: data.olt_mode,
@@ -219,14 +226,24 @@ export async function addOLT(data: {
     port: data.port,
     username: data.username,
     password_encrypted: data.password_encrypted,
-    mikrotik_ip: data.mikrotik_ip,
-    mikrotik_port: data.mikrotik_port || 8728,
-    mikrotik_username: data.mikrotik_username,
-    mikrotik_password_encrypted: data.mikrotik_password_encrypted,
     status: 'unknown',
-  } as any);
+    created_by: user.id,
+  };
 
-  if (error) throw error;
+  // Only add MikroTik fields if IP is provided
+  if (data.mikrotik_ip) {
+    insertData.mikrotik_ip = data.mikrotik_ip;
+    insertData.mikrotik_port = data.mikrotik_port || 8728;
+    insertData.mikrotik_username = data.mikrotik_username;
+    insertData.mikrotik_password_encrypted = data.mikrotik_password_encrypted;
+  }
+
+  const { error } = await supabase.from('olts').insert(insertData);
+
+  if (error) {
+    console.error('Failed to add OLT:', error);
+    throw new Error(error.message || 'Failed to add OLT');
+  }
 }
 
 export async function deleteOLT(id: string) {
