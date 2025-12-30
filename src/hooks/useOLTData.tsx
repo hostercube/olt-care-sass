@@ -250,3 +250,59 @@ export async function deleteOLT(id: string) {
   const { error } = await supabase.from('olts').delete().eq('id', id);
   if (error) throw error;
 }
+
+export async function updateOLT(id: string, data: Partial<OLTRow>) {
+  const { error } = await supabase.from('olts').update(data).eq('id', id);
+  if (error) throw error;
+}
+
+// ONU Management Functions
+export async function addONU(data: {
+  name: string;
+  olt_id: string;
+  pon_port: string;
+  onu_index: number;
+  status?: 'online' | 'offline' | 'warning' | 'unknown';
+  mac_address?: string | null;
+  serial_number?: string | null;
+  pppoe_username?: string | null;
+  router_name?: string | null;
+  rx_power?: number | null;
+  tx_power?: number | null;
+}) {
+  const insertData = {
+    ...data,
+    status: data.status || 'unknown',
+  };
+
+  const { error } = await supabase.from('onus').insert(insertData);
+
+  if (error) {
+    console.error('Failed to add ONU:', error);
+    throw new Error(error.message || 'Failed to add ONU');
+  }
+}
+
+export async function updateONU(id: string, data: Partial<ONURow>) {
+  const { error } = await supabase.from('onus').update(data).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteONU(id: string) {
+  const { error } = await supabase.from('onus').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Update ONU status (for manual status updates)
+export async function updateONUStatus(id: string, status: 'online' | 'offline' | 'warning' | 'unknown') {
+  const updateData: Partial<ONURow> = { status };
+  
+  if (status === 'online') {
+    updateData.last_online = new Date().toISOString();
+  } else if (status === 'offline') {
+    updateData.last_offline = new Date().toISOString();
+  }
+
+  const { error } = await supabase.from('onus').update(updateData).eq('id', id);
+  if (error) throw error;
+}
