@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { StatusIndicator } from '@/components/dashboard/StatusIndicator';
 import { ONUTable } from '@/components/dashboard/ONUTable';
 import { ONUStatsWidget } from '@/components/dashboard/ONUStatsWidget';
-import { AddONUDialog } from '@/components/onu/AddONUDialog';
 import { 
   ArrowLeft, 
   Server, 
@@ -19,8 +18,7 @@ import {
   Router as RouterIcon,
   Signal,
   RefreshCw,
-  Loader2,
-  Plus
+  Loader2
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -34,7 +32,6 @@ export default function OLTDetails() {
   const { onus, loading: onusLoading } = useONUs();
   const [powerHistory, setPowerHistory] = useState<any[]>([]);
   const [polling, setPolling] = useState(false);
-  const [addONUDialogOpen, setAddONUDialogOpen] = useState(false);
 
   const olt = olts.find(o => o.id === id);
   const oltONUs = onus.filter(onu => onu.olt_id === id).map(onu => ({
@@ -177,25 +174,16 @@ export default function OLTDetails() {
             <StatusIndicator status={olt.status} size="md" showLabel />
             <Button 
               variant="outline" 
-              onClick={() => setAddONUDialogOpen(true)}
+              onClick={handlePollNow}
+              disabled={polling || !pollingServerUrl}
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Add ONU
+              {polling ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Poll Now
             </Button>
-            {pollingServerUrl && (
-              <Button 
-                variant="outline" 
-                onClick={handlePollNow}
-                disabled={polling}
-              >
-                {polling ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Poll Now
-              </Button>
-            )}
           </div>
         </div>
 
@@ -364,14 +352,6 @@ export default function OLTDetails() {
           showFilters={true}
         />
       </div>
-
-      {/* Add ONU Dialog */}
-      <AddONUDialog
-        open={addONUDialogOpen}
-        onOpenChange={setAddONUDialogOpen}
-        olts={olts}
-        defaultOltId={olt.id}
-      />
     </DashboardLayout>
   );
 }
