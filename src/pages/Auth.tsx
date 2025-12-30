@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useRegistrationStatus } from '@/hooks/useSystemSettings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Server, Shield } from 'lucide-react';
+import { Loader2, Server, Shield, AlertTriangle } from 'lucide-react';
 import { z } from 'zod';
 
 const authSchema = z.object({
@@ -19,6 +20,7 @@ const authSchema = z.object({
 export default function Auth() {
   const navigate = useNavigate();
   const { user, loading, signIn, signUp } = useAuth();
+  const { allowRegistration, loading: registrationLoading } = useRegistrationStatus();
   const { toast } = useToast();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,6 +83,16 @@ export default function Auth() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!allowRegistration) {
+      toast({
+        variant: 'destructive',
+        title: 'Registration Disabled',
+        description: 'New user registration is currently disabled. Please contact an administrator.',
+      });
+      return;
+    }
+    
     if (!validateForm()) return;
     
     setIsSubmitting(true);
@@ -105,7 +117,7 @@ export default function Auth() {
     }
   };
 
-  if (loading) {
+  if (loading || registrationLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -129,7 +141,9 @@ export default function Auth() {
           <Tabs defaultValue="signin" className="w-full">
             <TabsList className="grid w-full grid-cols-2 bg-secondary">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              <TabsTrigger value="signup" disabled={!allowRegistration}>
+                Sign Up
+              </TabsTrigger>
             </TabsList>
             
             <TabsContent value="signin">
@@ -206,6 +220,12 @@ export default function Auth() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {!allowRegistration && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning/20 text-warning">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span className="text-sm">Registration is currently disabled</span>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="signup-name">Full Name</Label>
                     <Input
@@ -215,7 +235,7 @@ export default function Auth() {
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       className="bg-input border-border"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !allowRegistration}
                     />
                   </div>
                   <div className="space-y-2">
@@ -227,7 +247,7 @@ export default function Auth() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="bg-input border-border"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !allowRegistration}
                     />
                     {errors.email && (
                       <p className="text-sm text-destructive">{errors.email}</p>
@@ -242,7 +262,7 @@ export default function Auth() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="bg-input border-border"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !allowRegistration}
                     />
                     {errors.password && (
                       <p className="text-sm text-destructive">{errors.password}</p>
@@ -253,7 +273,7 @@ export default function Auth() {
                   <Button 
                     type="submit" 
                     className="w-full" 
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !allowRegistration}
                   >
                     {isSubmitting ? (
                       <>

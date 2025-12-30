@@ -25,15 +25,17 @@ interface SystemSettings {
   powerDropAlerts: boolean;
   oltUnreachableAlerts: boolean;
   emailNotifications: boolean;
+  notificationEmail: string;
   
   // Security
   twoFactorAuth: boolean;
   sessionTimeout: number;
+  allowUserRegistration: boolean;
 }
 
 const defaultSettings: SystemSettings = {
-  systemName: 'OLT Manager Pro',
-  timezone: 'utc',
+  systemName: 'OLTCARE',
+  timezone: 'asia_dhaka',
   autoRefresh: true,
   showOfflineFirst: true,
   oltPollInterval: 5,
@@ -48,8 +50,10 @@ const defaultSettings: SystemSettings = {
   powerDropAlerts: true,
   oltUnreachableAlerts: true,
   emailNotifications: false,
+  notificationEmail: '',
   twoFactorAuth: false,
   sessionTimeout: 30,
+  allowUserRegistration: true,
 };
 
 export function useSystemSettings() {
@@ -138,4 +142,37 @@ export function useSystemSettings() {
     saveSettings,
     resetSettings: () => setSettings(defaultSettings),
   };
+}
+
+// Hook to check if registration is allowed (used in Auth page)
+export function useRegistrationStatus() {
+  const [allowRegistration, setAllowRegistration] = useState(true);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRegistrationStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'allowUserRegistration')
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (data?.value) {
+          const typedValue = data.value as { value?: boolean };
+          setAllowRegistration(typedValue.value !== false);
+        }
+      } catch (error) {
+        console.error('Error fetching registration status:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRegistrationStatus();
+  }, []);
+
+  return { allowRegistration, loading };
 }
