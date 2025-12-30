@@ -321,7 +321,8 @@ nano .env
 
 Add your Supabase credentials:
 ```env
-VITE_POLLING_SERVER_URL="https://olt.yourdomain.com/api"
+# IMPORTANT: Must include https:// and correct path
+VITE_POLLING_SERVER_URL="https://olt.yourdomain.com/olt-polling-server"
 VITE_SUPABASE_PROJECT_ID="your-project-id"
 VITE_SUPABASE_PUBLISHABLE_KEY="your-anon-key"
 VITE_SUPABASE_URL="https://your-project-id.supabase.co"
@@ -437,7 +438,8 @@ server {
     }
 
     # Backend API (Node.js Polling Server)
-    location /api/ {
+    # Note: Location path MUST match VITE_POLLING_SERVER_URL path
+    location /olt-polling-server/ {
         proxy_pass http://127.0.0.1:3001/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -519,7 +521,7 @@ curl http://127.0.0.1:3001/health
 
 ### Step 2: Test Through Nginx
 ```bash
-curl https://olt.yourdomain.com/api/health
+curl https://olt.yourdomain.com/olt-polling-server/health
 # Should return: {"status":"healthy","uptime":...}
 ```
 
@@ -696,19 +698,70 @@ npm run build
 
 ---
 
-## Supported OLT Brands
+## Supported OLT Brands & Connection Protocols
 
-| Brand | Protocol | Default Port | Support Level |
-|-------|----------|--------------|---------------|
-| ZTE | SSH | 22 | Full |
-| Huawei | SSH | 22 | Full |
-| VSOL | SSH/HTTP | 22/80 | Full |
-| Fiberhome | SSH | 22 | Full |
-| BDCOM | SSH | 22 | Partial |
-| Nokia | SSH | 22 | Partial |
-| DBC | HTTP | 80 | Full |
-| CDATA | HTTP | 80 | Full |
-| ECOM | HTTP | 80 | Full |
+| Brand | Default Protocol | Default Port | Notes |
+|-------|-----------------|--------------|-------|
+| ZTE | SSH | 22 | Full support |
+| Huawei | SSH | 22 | Full support |
+| VSOL | **Telnet** | 23 or custom (8085, etc.) | Uses Telnet, NOT SSH |
+| Fiberhome | Telnet | 23 | Telnet first |
+| BDCOM | Telnet | 23 | Telnet first |
+| Nokia | SSH | 22 | SSH first |
+| DBC | Telnet/HTTP | 23/80 | Telnet for CLI, HTTP for API |
+| CDATA | Telnet/HTTP | 23/80 | Telnet for CLI, HTTP for API |
+| ECOM | Telnet/HTTP | 23/80 | Telnet for CLI, HTTP for API |
+
+**Important:** VSOL, DBC, CDATA, ECOM, BDCOM এবং Fiberhome OLT গুলো সাধারণত **Telnet** ব্যবহার করে। SSH দিয়ে কাজ না হলে Telnet port ব্যবহার করুন।
+
+---
+
+## Git Update Commands (Lovable থেকে VPS আপডেট)
+
+যখন Lovable এ কোড পরিবর্তন করবেন, VPS আপডেট করতে এই কমান্ডগুলো ব্যবহার করুন:
+
+### Quick Update (সবচেয়ে সাধারণ)
+```bash
+cd /var/www/olt.isppoint.com
+
+# Pull latest code from GitHub
+git pull origin main
+
+# Rebuild frontend
+npm run build
+
+# Restart polling server
+pm2 restart olt-polling-server
+
+# Verify
+pm2 logs olt-polling-server --lines 20
+```
+
+### Full Update (যখন dependencies বদলেছে)
+```bash
+cd /var/www/olt.isppoint.com
+
+# Pull latest
+git pull origin main
+
+# Update frontend dependencies and rebuild
+npm install
+npm run build
+
+# Update polling server
+cd olt-polling-server
+npm install
+cd ..
+
+# Restart
+pm2 restart olt-polling-server
+pm2 status
+```
+
+### One-liner Quick Update
+```bash
+cd /var/www/olt.isppoint.com && git pull origin main && npm run build && pm2 restart olt-polling-server && pm2 logs olt-polling-server --lines 10
+```
 
 ---
 
@@ -732,7 +785,7 @@ WHERE user_id = (
 ```
                     ┌──────────────────┐
                     │   OLT Devices    │
-                    │ (SSH/HTTP/Telnet)│
+                    │ (SSH/Telnet/HTTP)│
                     └────────┬─────────┘
                              │
                              ▼
@@ -746,7 +799,8 @@ WHERE user_id = (
 │       ┌─────────▼──────┐   ┌────▼────────────┐    │
 │       │   Frontend     │   │ Polling Server  │    │
 │       │   (React)      │   │ (Node.js:3001)  │    │
-│       │   /dist        │   │ /api/*          │    │
+│       │   /dist        │   │ /olt-polling-   │    │
+│       │                │   │ server/*        │    │
 │       └────────────────┘   └────────┬────────┘    │
 │                                     │             │
 └─────────────────────────────────────┼─────────────┘
@@ -760,5 +814,41 @@ WHERE user_id = (
 
 ---
 
-**Created for OLTCare v1.0**
+## Quick Reference Commands
+
+```bash
+# PM2 Commands
+pm2 status                        # Check status
+pm2 logs olt-polling-server       # View logs
+pm2 logs olt-polling-server --lines 50  # Last 50 lines
+pm2 restart olt-polling-server    # Restart
+pm2 stop olt-polling-server       # Stop
+pm2 delete olt-polling-server     # Remove
+pm2 save                          # Save process list
+
+# Nginx Commands
+sudo nginx -t                     # Test config
+sudo systemctl reload nginx       # Reload
+sudo systemctl restart nginx      # Restart
+
+# Git Commands
+git pull origin main              # Pull latest
+git status                        # Check status
+
+# Test Endpoints
+curl http://127.0.0.1:3001/health  # Test locally
+curl https://olt.isppoint.com/olt-polling-server/health  # Test through Nginx
+
+# SSL Commands
+sudo certbot renew               # Renew SSL
+sudo certbot certificates        # List certificates
+
+# Rebuild Frontend
+cd /var/www/olt.isppoint.com
+npm run build
+```
+
+---
+
+**Created for OLT Manager v1.0**
 **Last Updated: December 2024**

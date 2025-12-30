@@ -34,17 +34,37 @@ export async function pollOLT(supabase, olt) {
         throw apiError;
       }
     } else {
-      // Try SSH first, then Telnet
-      try {
-        logger.info(`Attempting SSH connection to ${olt.name} (${olt.ip_address}:${olt.port})`);
-        output = await executeSSHCommands(olt);
-      } catch (sshError) {
-        logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
+      // Determine connection method based on port and brand
+      const telnetBrands = ['VSOL', 'DBC', 'CDATA', 'ECOM', 'BDCOM', 'Fiberhome'];
+      const useTelnetFirst = olt.port === 23 || telnetBrands.includes(olt.brand);
+      
+      if (useTelnetFirst) {
+        // Try Telnet first for these brands
+        logger.info(`Attempting Telnet connection to ${olt.name} (${olt.ip_address}:${olt.port}) - Brand: ${olt.brand}`);
         try {
           output = await executeTelnetCommands(olt, commands);
         } catch (telnetError) {
-          logger.error(`Both SSH and Telnet failed for ${olt.name}`);
-          throw new Error(`Connection failed - SSH: ${sshError.message}, Telnet: ${telnetError.message}`);
+          logger.warn(`Telnet failed for ${olt.name}: ${telnetError.message}, trying SSH...`);
+          try {
+            output = await executeSSHCommands(olt);
+          } catch (sshError) {
+            logger.error(`Both Telnet and SSH failed for ${olt.name}`);
+            throw new Error(`Connection failed - Telnet: ${telnetError.message}, SSH: ${sshError.message}`);
+          }
+        }
+      } else {
+        // Try SSH first for other brands
+        try {
+          logger.info(`Attempting SSH connection to ${olt.name} (${olt.ip_address}:${olt.port})`);
+          output = await executeSSHCommands(olt);
+        } catch (sshError) {
+          logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
+          try {
+            output = await executeTelnetCommands(olt, commands);
+          } catch (telnetError) {
+            logger.error(`Both SSH and Telnet failed for ${olt.name}`);
+            throw new Error(`Connection failed - SSH: ${sshError.message}, Telnet: ${telnetError.message}`);
+          }
         }
       }
       onus = parseOLTOutput(olt.brand, output);
@@ -420,6 +440,15 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
 }
 
 /**
+ * Check if brand typically uses Telnet instead of SSH
+ */
+function brandUsesTelnet(brand) {
+  // These brands typically use Telnet on custom ports
+  const telnetBrands = ['VSOL', 'DBC', 'CDATA', 'ECOM', 'BDCOM', 'Fiberhome'];
+  return telnetBrands.includes(brand);
+}
+
+/**
  * Test OLT connection without polling data
  */
 export async function testOLTConnection(olt) {
@@ -443,7 +472,6 @@ export async function testOLTConnection(olt) {
         
         clearTimeout(timeout);
         
-        // If we get any response, the connection worked
         return { 
           success: true, 
           duration: Date.now() - startTime,
@@ -451,25 +479,45 @@ export async function testOLTConnection(olt) {
         };
       } catch (fetchError) {
         clearTimeout(timeout);
-        // Connection refused or timeout
         throw new Error(`HTTP API unreachable: ${fetchError.message}`);
       }
     }
     
-    // Try SSH for ports 22 or Telnet for port 23
+    // Port 22 = SSH
     if (olt.port === 22) {
       return await testSSHConnection(olt);
-    } else if (olt.port === 23) {
+    }
+    
+    // Port 23 = Telnet
+    if (olt.port === 23) {
       return await testTelnetConnection(olt);
+    }
+    
+    // For custom ports, determine based on brand
+    // VSOL, DBC, CDATA, ECOM, BDCOM typically use Telnet on custom ports
+    if (brandUsesTelnet(olt.brand)) {
+      logger.info(`Brand ${olt.brand} typically uses Telnet, trying Telnet first for port ${olt.port}`);
+      try {
+        return await testTelnetConnection(olt);
+      } catch (telnetErr) {
+        logger.warn(`Telnet failed for ${olt.brand}, trying SSH as fallback`);
+        try {
+          return await testSSHConnection(olt);
+        } catch (sshErr) {
+          throw new Error(`Port ${olt.port} unreachable via Telnet (${telnetErr.message}) and SSH (${sshErr.message})`);
+        }
+      }
     } else {
-      // Unknown port - try SSH then Telnet
+      // Unknown brand with custom port - try SSH first, then Telnet
+      logger.info(`Trying SSH first for port ${olt.port}`);
       try {
         return await testSSHConnection(olt);
       } catch (sshErr) {
+        logger.warn(`SSH failed, trying Telnet`);
         try {
           return await testTelnetConnection(olt);
         } catch (telnetErr) {
-          throw new Error(`Port ${olt.port} unreachable via SSH and Telnet`);
+          throw new Error(`Port ${olt.port} unreachable via SSH (${sshErr.message}) and Telnet (${telnetErr.message})`);
         }
       }
     }
