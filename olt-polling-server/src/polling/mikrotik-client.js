@@ -218,22 +218,28 @@ async function callMikroTikAPI(mikrotik, endpoint) {
  */
 async function callMikroTikREST(mikrotik, endpoint) {
   const { ip, username, password, port = 8728 } = mikrotik;
+
+  // RouterOS REST paths do NOT use "/print" suffix.
+  // Our internal endpoints use API-style paths like "/ppp/active/print".
+  // For REST, translate to "/ppp/active" etc.
+  const restEndpoint = endpoint.replace(/\/print$/, '');
+
   // REST API is typically on port 443 (HTTPS) or 80 (HTTP)
   // Custom ports > 1024 (except API ports) might be for REST API with port forwarding
   // API ports (8728/8729) mean we should try 443 for REST
   const restPort = [8728, 8729].includes(port) ? 443 : (port > 1024 ? port : 443);
-  
-  const url = `https://${ip}:${restPort}/rest${endpoint}`;
+
+  const url = `https://${ip}:${restPort}/rest${restEndpoint}`;
   const auth = Buffer.from(`${username}:${password}`).toString('base64');
-  
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MIKROTIK_TIMEOUT);
-  
+
   try {
     // Dynamic import for https agent
     const https = await import('https');
     const agent = new https.Agent({ rejectUnauthorized: false });
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -243,13 +249,13 @@ async function callMikroTikREST(mikrotik, endpoint) {
       signal: controller.signal,
       agent: agent,
     });
-    
+
     clearTimeout(timeout);
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    
+
     const data = await response.json();
     return Array.isArray(data) ? data : [data];
   } catch (error) {

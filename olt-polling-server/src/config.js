@@ -50,7 +50,12 @@ if (!envLoaded) {
 console.log('==============================================');
 console.log('Environment Configuration:');
 console.log('  SUPABASE_URL:', process.env.SUPABASE_URL ? '✓ Set' : '✗ NOT SET');
-console.log('  SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? '✓ Set (hidden)' : '✗ NOT SET');
+console.log(
+  '  SUPABASE_SERVICE_KEY:',
+  (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
+    ? '✓ Set (hidden)'
+    : '✗ NOT SET'
+);
 console.log('  PORT:', process.env.PORT || '3001 (default)');
 console.log('  POLLING_INTERVAL_MS:', process.env.POLLING_INTERVAL_MS || '60000 (default)');
 console.log('==============================================');
@@ -59,10 +64,10 @@ console.log('==============================================');
 if (!process.env.SUPABASE_URL) {
   console.error('\n❌ FATAL ERROR: SUPABASE_URL is not set!');
   console.error('Please ensure your .env file contains:');
-  console.error('  SUPABASE_URL=https://your-project-id.supabase.co');
-  
+  console.error('  SUPABASE_URL=https://<your-backend-url>');
+
   if (loadedPath) {
-    console.error('\nLoaded .env file contents (for debugging):');
+    console.error('\nLoaded .env file keys (for debugging):');
     try {
       const content = fs.readFileSync(loadedPath, 'utf8');
       const lines = content.split('\n').filter(l => l.trim() && !l.startsWith('#'));
@@ -76,21 +81,24 @@ if (!process.env.SUPABASE_URL) {
       console.error('  (Could not read file)');
     }
   }
-  
+
   process.exit(1);
 }
 
-if (!process.env.SUPABASE_SERVICE_KEY) {
-  console.error('\n❌ FATAL ERROR: SUPABASE_SERVICE_KEY is not set!');
-  console.error('Please ensure your .env file contains:');
-  console.error('  SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...');
+const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!serviceKey) {
+  console.error('\n❌ FATAL ERROR: SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) is not set!');
+  console.error('Please ensure your .env file contains one of these keys:');
+  console.error('  SUPABASE_SERVICE_KEY=...');
+  console.error('  SUPABASE_SERVICE_ROLE_KEY=...');
   process.exit(1);
 }
 
 // Export configuration
 export const config = {
   supabaseUrl: process.env.SUPABASE_URL,
-  supabaseKey: process.env.SUPABASE_SERVICE_KEY,
+  supabaseKey: serviceKey,
   port: parseInt(process.env.PORT || '3001'),
   pollingInterval: parseInt(process.env.POLLING_INTERVAL_MS || '60000'),
   sshTimeout: parseInt(process.env.SSH_TIMEOUT_MS || '60000'),
