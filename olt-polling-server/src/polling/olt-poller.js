@@ -687,10 +687,68 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
 export async function testOLTConnection(olt) {
   const startTime = Date.now();
   const connectionType = getConnectionType(olt.port, olt.brand);
+  const config = OLT_PROTOCOL_CONFIG[olt.brand] || OLT_PROTOCOL_CONFIG.Other;
   
   logger.info(`Testing connection to ${olt.ip_address}:${olt.port} (${connectionType})`);
   
   try {
+    // Handle http_first_* connection types (most common for VSOL, DBC, CDATA, ECOM)
+    if (connectionType.startsWith('http_first_')) {
+      const fallbackMethod = connectionType.replace('http_first_', '');
+      const telnetPort = config.telnetPort || 23;
+      
+      // Try HTTP first on the specified port
+      try {
+        logger.info(`Testing HTTP on port ${olt.port}`);
+        const httpResult = await testHTTPConnection(olt);
+        if (httpResult.success) {
+          return httpResult;
+        }
+      } catch (httpErr) {
+        logger.warn(`HTTP failed on port ${olt.port}: ${httpErr.message}`);
+      }
+      
+      // Try fallback method
+      if (fallbackMethod === 'telnet') {
+        try {
+          logger.info(`Testing Telnet fallback on port ${telnetPort}`);
+          const telnetOlt = { ...olt, port: telnetPort };
+          const telnetResult = await testTelnetConnection(telnetOlt);
+          if (telnetResult.success) {
+            return { ...telnetResult, note: `HTTP failed, Telnet on port ${telnetPort} works` };
+          }
+        } catch (telnetErr) {
+          logger.warn(`Telnet failed on port ${telnetPort}: ${telnetErr.message}`);
+        }
+        
+        // Try SSH as last resort
+        try {
+          logger.info(`Testing SSH fallback on port 22`);
+          const sshOlt = { ...olt, port: 22 };
+          const sshResult = await testSSHConnection(sshOlt);
+          if (sshResult.success) {
+            return { ...sshResult, note: 'HTTP and Telnet failed, SSH on port 22 works' };
+          }
+        } catch (sshErr) {
+          throw new Error(`All protocols failed - HTTP:${olt.port}, Telnet:${telnetPort}, SSH:22`);
+        }
+      } else if (fallbackMethod === 'ssh') {
+        try {
+          logger.info(`Testing SSH fallback on port 22`);
+          const sshOlt = { ...olt, port: 22 };
+          const sshResult = await testSSHConnection(sshOlt);
+          if (sshResult.success) {
+            return { ...sshResult, note: 'HTTP failed, SSH on port 22 works' };
+          }
+        } catch (sshErr) {
+          throw new Error(`All protocols failed - HTTP:${olt.port}, SSH:22`);
+        }
+      }
+      
+      throw new Error(`Connection failed on all protocols`);
+    }
+    
+    // Standard connection types
     switch (connectionType) {
       case 'http':
         return await testHTTPConnection(olt);
@@ -708,11 +766,13 @@ export async function testOLTConnection(olt) {
         } catch (httpErr) {
           logger.warn(`HTTP failed, trying Telnet fallback`);
           try {
-            return await testTelnetConnection(olt);
+            const telnetOlt = { ...olt, port: config.telnetPort || 23 };
+            return await testTelnetConnection(telnetOlt);
           } catch (telnetErr) {
             logger.warn(`Telnet failed, trying SSH fallback`);
             try {
-              return await testSSHConnection(olt);
+              const sshOlt = { ...olt, port: 22 };
+              return await testSSHConnection(sshOlt);
             } catch (sshErr) {
               throw new Error(`HTTP: ${httpErr.message}, Telnet: ${telnetErr.message}, SSH: ${sshErr.message}`);
             }
@@ -726,7 +786,8 @@ export async function testOLTConnection(olt) {
         } catch (telnetErr) {
           logger.warn(`Telnet failed, trying SSH fallback`);
           try {
-            return await testSSHConnection(olt);
+            const sshOlt = { ...olt, port: 22 };
+            return await testSSHConnection(sshOlt);
           } catch (sshErr) {
             throw new Error(`Telnet: ${telnetErr.message}, SSH: ${sshErr.message}`);
           }
@@ -739,7 +800,8 @@ export async function testOLTConnection(olt) {
         } catch (sshErr) {
           logger.warn(`SSH failed, trying Telnet fallback`);
           try {
-            return await testTelnetConnection(olt);
+            const telnetOlt = { ...olt, port: config.telnetPort || 23 };
+            return await testTelnetConnection(telnetOlt);
           } catch (telnetErr) {
             throw new Error(`SSH: ${sshErr.message}, Telnet: ${telnetErr.message}`);
           }
@@ -750,17 +812,25 @@ export async function testOLTConnection(olt) {
         
       case 'auto_detect':
       default:
-        // Auto-detect: Try HTTP -> Telnet -> SSH
+        // Auto-detect: Try HTTP -> Telnet -> SSH -> SNMP
         try {
           return await testHTTPConnection(olt);
         } catch (httpErr) {
           try {
-            return await testTelnetConnection(olt);
+            const telnetOlt = { ...olt, port: config.telnetPort || olt.port };
+            return await testTelnetConnection(telnetOlt);
           } catch (telnetErr) {
             try {
-              return await testSSHConnection(olt);
+              const sshOlt = { ...olt, port: 22 };
+              return await testSSHConnection(sshOlt);
             } catch (sshErr) {
-              throw new Error(`HTTP: ${httpErr.message}, Telnet: ${telnetErr.message}, SSH: ${sshErr.message}`);
+              // Try SNMP as last resort
+              try {
+                const snmpOlt = { ...olt, port: 161 };
+                return await testSNMPConnection(snmpOlt);
+              } catch (snmpErr) {
+                throw new Error(`All protocols failed - HTTP, Telnet, SSH, SNMP`);
+              }
             }
           }
         }
@@ -772,6 +842,80 @@ export async function testOLTConnection(olt) {
       duration: Date.now() - startTime 
     };
   }
+}
+
+/**
+ * Test all protocols and return which ones work
+ */
+export async function testAllProtocols(olt) {
+  const config = OLT_PROTOCOL_CONFIG[olt.brand] || OLT_PROTOCOL_CONFIG.Other;
+  const results = {
+    http: null,
+    telnet: null,
+    ssh: null,
+    snmp: null,
+    recommended: null
+  };
+  
+  // Test HTTP on common web ports
+  const httpPorts = [olt.port, 80, 8080, 8085, 443].filter((v, i, a) => a.indexOf(v) === i);
+  for (const port of httpPorts) {
+    try {
+      const httpOlt = { ...olt, port };
+      const result = await testHTTPConnection(httpOlt);
+      if (result.success) {
+        results.http = { success: true, port, ...result };
+        break;
+      }
+    } catch (e) {
+      // Continue trying other ports
+    }
+  }
+  if (!results.http) {
+    results.http = { success: false, error: 'No HTTP ports responded' };
+  }
+  
+  // Test Telnet on port 23
+  try {
+    const telnetOlt = { ...olt, port: config.telnetPort || 23 };
+    results.telnet = await testTelnetConnection(telnetOlt);
+    results.telnet.port = telnetOlt.port;
+  } catch (e) {
+    results.telnet = { success: false, error: e.message };
+  }
+  
+  // Test SSH on port 22
+  try {
+    const sshOlt = { ...olt, port: 22 };
+    results.ssh = await testSSHConnection(sshOlt);
+    results.ssh.port = 22;
+  } catch (e) {
+    results.ssh = { success: false, error: e.message };
+  }
+  
+  // Test SNMP on port 161
+  try {
+    const snmpOlt = { ...olt, port: 161 };
+    results.snmp = await testSNMPConnection(snmpOlt);
+    results.snmp.port = 161;
+  } catch (e) {
+    results.snmp = { success: false, error: e.message };
+  }
+  
+  // Determine recommended protocol
+  if (results.http?.success) {
+    results.recommended = { protocol: 'HTTP', port: results.http.port };
+  } else if (results.telnet?.success) {
+    results.recommended = { protocol: 'Telnet', port: results.telnet.port };
+  } else if (results.ssh?.success) {
+    results.recommended = { protocol: 'SSH', port: 22 };
+  } else if (results.snmp?.success) {
+    results.recommended = { protocol: 'SNMP', port: 161, note: 'Limited data - status only' };
+  } else {
+    results.recommended = null;
+  }
+  
+  return results;
 }
 
 /**

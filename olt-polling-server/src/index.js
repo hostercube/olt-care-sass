@@ -17,7 +17,7 @@ import { supabase } from './supabase-client.js';
 import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
-import { pollOLT, testOLTConnection } from './polling/olt-poller.js';
+import { pollOLT, testOLTConnection, testAllProtocols } from './polling/olt-poller.js';
 import { testMikrotikConnection } from './polling/mikrotik-client.js';
 import { logger } from './utils/logger.js';
 
