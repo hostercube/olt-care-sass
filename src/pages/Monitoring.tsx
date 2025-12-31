@@ -3,9 +3,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useOLTs, useONUs } from '@/hooks/useOLTData';
-import { Activity, Cpu, HardDrive, Network, Clock, Zap, Loader2 } from 'lucide-react';
+import { Activity, Cpu, HardDrive, Network, Clock, Zap, Loader2, Filter, Thermometer, Router } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 
 // Generate power trend data
 const generatePowerData = () => {
@@ -30,11 +39,36 @@ export default function Monitoring() {
   
   const loading = oltsLoading || onusLoading;
   
+  // Filter states
+  const [selectedOLT, setSelectedOLT] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [powerRangeMin, setPowerRangeMin] = useState<number>(-40);
+  const [powerRangeMax, setPowerRangeMax] = useState<number>(0);
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Filter ONUs based on selected filters
+  const filteredONUs = useMemo(() => {
+    return onus.filter(onu => {
+      // OLT filter
+      if (selectedOLT !== 'all' && onu.olt_id !== selectedOLT) return false;
+      
+      // Status filter
+      if (statusFilter !== 'all' && onu.status !== statusFilter) return false;
+      
+      // Power range filter (only apply if ONU has RX power)
+      if (onu.rx_power !== null && onu.rx_power !== undefined) {
+        if (onu.rx_power < powerRangeMin || onu.rx_power > powerRangeMax) return false;
+      }
+      
+      return true;
+    });
+  }, [onus, selectedOLT, statusFilter, powerRangeMin, powerRangeMax]);
+  
   // Generate online data based on actual ONU count
   const onlineData = useMemo(() => {
     const data = [];
     const now = new Date();
-    const totalOnus = onus.length || 10;
+    const totalOnus = filteredONUs.length || 10;
     for (let i = 23; i >= 0; i--) {
       const time = new Date(now.getTime() - i * 60 * 60 * 1000);
       data.push({
@@ -44,13 +78,24 @@ export default function Monitoring() {
       });
     }
     return data;
-  }, [onus.length]);
+  }, [filteredONUs.length]);
   
-  const onlineOnus = onus.filter((o) => o.status === 'online').length;
-  const onlinePercentage = onus.length > 0 ? (onlineOnus / onus.length) * 100 : 0;
-  const avgRxPower = onus.length > 0 
-    ? onus.reduce((acc, o) => acc + (o.rx_power || 0), 0) / onus.length 
+  const onlineOnus = filteredONUs.filter((o) => o.status === 'online').length;
+  const onlinePercentage = filteredONUs.length > 0 ? (onlineOnus / filteredONUs.length) * 100 : 0;
+  
+  // Calculate average power only from ONUs that have power readings
+  const onusWithPower = filteredONUs.filter(o => o.rx_power !== null && o.rx_power !== undefined);
+  const avgRxPower = onusWithPower.length > 0 
+    ? onusWithPower.reduce((acc, o) => acc + (o.rx_power || 0), 0) / onusWithPower.length 
     : 0;
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSelectedOLT('all');
+    setStatusFilter('all');
+    setPowerRangeMin(-40);
+    setPowerRangeMax(0);
+  };
 
   if (loading) {
     return (
@@ -65,6 +110,106 @@ export default function Monitoring() {
   return (
     <DashboardLayout title="Monitoring" subtitle="Real-time network monitoring">
       <div className="space-y-6 animate-fade-in">
+        {/* Filters Section */}
+        <Card variant="glass">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Filter className="h-4 w-4 text-primary" />
+                Filters
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                {(selectedOLT !== 'all' || statusFilter !== 'all' || powerRangeMin !== -40 || powerRangeMax !== 0) && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    Clear Filters
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
+                  {showFilters ? 'Hide' : 'Show'} Filters
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          {showFilters && (
+            <CardContent className="pt-0">
+              <div className="grid gap-4 md:grid-cols-4">
+                {/* OLT Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">OLT</label>
+                  <Select value={selectedOLT} onValueChange={setSelectedOLT}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All OLTs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All OLTs</SelectItem>
+                      {olts.map((olt) => (
+                        <SelectItem key={olt.id} value={olt.id}>
+                          {olt.name} ({olt.brand})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Status Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Status</label>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="online">Online</SelectItem>
+                      <SelectItem value="offline">Offline</SelectItem>
+                      <SelectItem value="warning">Warning</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Power Range Filter */}
+                <div className="space-y-2 col-span-2">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    RX Power Range: {powerRangeMin} to {powerRangeMax} dBm
+                  </label>
+                  <div className="flex items-center gap-4 pt-2">
+                    <span className="text-xs text-muted-foreground w-12">-40 dBm</span>
+                    <Slider
+                      value={[powerRangeMin, powerRangeMax]}
+                      min={-40}
+                      max={0}
+                      step={1}
+                      onValueChange={([min, max]) => {
+                        setPowerRangeMin(min);
+                        setPowerRangeMax(max);
+                      }}
+                      className="flex-1"
+                    />
+                    <span className="text-xs text-muted-foreground w-10">0 dBm</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Filter Summary */}
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-muted-foreground">Showing:</span>
+                  <Badge variant="outline" className="gap-1">
+                    <Router className="h-3 w-3" />
+                    {filteredONUs.length} of {onus.length} ONUs
+                  </Badge>
+                  <Badge variant="success" className="gap-1">
+                    {filteredONUs.filter(o => o.status === 'online').length} Online
+                  </Badge>
+                  <Badge variant="destructive" className="gap-1">
+                    {filteredONUs.filter(o => o.status === 'offline').length} Offline
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+
         {/* Live Stats */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card variant="stats">
@@ -238,6 +383,8 @@ export default function Monitoring() {
             ) : (
               <div className="space-y-4">
                 {olts.map((olt) => {
+                  const oltOnus = onus.filter(o => o.olt_id === olt.id);
+                  const onlineCount = oltOnus.filter(o => o.status === 'online').length;
                   const portUsage = olt.total_ports > 0 ? (olt.active_ports / olt.total_ports) * 100 : 0;
                   const cpuUsage = Math.floor(Math.random() * 40 + 20);
                   const memUsage = Math.floor(Math.random() * 30 + 40);
@@ -250,8 +397,14 @@ export default function Monitoring() {
                       <div className="min-w-[200px]">
                         <p className="font-medium">{olt.name}</p>
                         <p className="text-xs text-muted-foreground font-mono">{olt.ip_address}</p>
+                        <div className="flex gap-2 mt-1">
+                          <Badge variant="outline" className="text-xs">{olt.brand}</Badge>
+                          <Badge variant={olt.olt_mode === 'EPON' ? 'info' : 'secondary'} className="text-xs">
+                            {olt.olt_mode || 'GPON'}
+                          </Badge>
+                        </div>
                       </div>
-                      <div className="flex-1 grid grid-cols-3 gap-6">
+                      <div className="flex-1 grid grid-cols-4 gap-6">
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-muted-foreground flex items-center gap-1">
@@ -278,6 +431,15 @@ export default function Monitoring() {
                             <span>{olt.active_ports}/{olt.total_ports}</span>
                           </div>
                           <Progress value={portUsage} className="h-2" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <Router className="h-3 w-3" /> ONUs
+                            </span>
+                            <span>{onlineCount}/{oltOnus.length}</span>
+                          </div>
+                          <Progress value={oltOnus.length > 0 ? (onlineCount / oltOnus.length) * 100 : 0} className="h-2" />
                         </div>
                       </div>
                       <Badge

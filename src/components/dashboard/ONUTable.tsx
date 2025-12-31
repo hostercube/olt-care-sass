@@ -458,6 +458,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <TableHead className="font-semibold">MAC Address</TableHead>
                   <TableHead className="font-semibold text-center">RX Power</TableHead>
                   <TableHead className="font-semibold text-center">TX Power</TableHead>
+                  <TableHead className="font-semibold text-center">Temp</TableHead>
                   <TableHead className="font-semibold text-center">Status</TableHead>
                   <TableHead className="font-semibold">Last Online</TableHead>
                   <TableHead className="w-10"></TableHead>
@@ -466,13 +467,14 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
               <TableBody>
                 {paginatedONUs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
                       No ONU devices found
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedONUs.map((onu) => {
                     const isSelected = selectedONUs.has(onu.id);
+                    const temp = (onu as any).temperature;
                     return (
                       <TableRow 
                         key={onu.id} 
@@ -504,6 +506,15 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                         </TableCell>
                         <TableCell className="text-center">
                           <PowerBadge power={onu.tx_power} type="tx" showIcon={false} />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {temp !== null && temp !== undefined ? (
+                            <Badge variant={temp > 60 ? 'destructive' : temp > 50 ? 'warning' : 'outline'} className="font-mono text-xs">
+                              {temp.toFixed(1)}°C
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">N/A</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-center">
                           <StatusIndicator status={onu.status} size="sm" />

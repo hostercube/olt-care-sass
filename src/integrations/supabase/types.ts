@@ -198,11 +198,13 @@ export type Database = {
       onus: {
         Row: {
           created_at: string
+          distance: number | null
           id: string
           last_offline: string | null
           last_online: string | null
           mac_address: string | null
           name: string
+          offline_reason: string | null
           olt_id: string
           onu_index: number
           pon_port: string
@@ -211,16 +213,19 @@ export type Database = {
           rx_power: number | null
           serial_number: string | null
           status: Database["public"]["Enums"]["connection_status"]
+          temperature: number | null
           tx_power: number | null
           updated_at: string
         }
         Insert: {
           created_at?: string
+          distance?: number | null
           id?: string
           last_offline?: string | null
           last_online?: string | null
           mac_address?: string | null
           name: string
+          offline_reason?: string | null
           olt_id: string
           onu_index: number
           pon_port: string
@@ -229,16 +234,19 @@ export type Database = {
           rx_power?: number | null
           serial_number?: string | null
           status?: Database["public"]["Enums"]["connection_status"]
+          temperature?: number | null
           tx_power?: number | null
           updated_at?: string
         }
         Update: {
           created_at?: string
+          distance?: number | null
           id?: string
           last_offline?: string | null
           last_online?: string | null
           mac_address?: string | null
           name?: string
+          offline_reason?: string | null
           olt_id?: string
           onu_index?: number
           pon_port?: string
@@ -247,6 +255,7 @@ export type Database = {
           rx_power?: number | null
           serial_number?: string | null
           status?: Database["public"]["Enums"]["connection_status"]
+          temperature?: number | null
           tx_power?: number | null
           updated_at?: string
         }

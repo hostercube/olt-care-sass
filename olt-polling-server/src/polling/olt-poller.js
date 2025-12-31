@@ -867,6 +867,9 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
         tx_power: onu.tx_power,
         pon_port: onu.pon_port,
         onu_index: onu.onu_index,
+        temperature: onu.temperature || null,
+        distance: onu.distance || null,
+        offline_reason: onu.offline_reason || null,
         updated_at: new Date().toISOString()
       };
       
@@ -950,6 +953,9 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
           mac_address: onu.mac_address,
           router_name: onu.router_name,
           pppoe_username: onu.pppoe_username,
+          temperature: onu.temperature || null,
+          distance: onu.distance || null,
+          offline_reason: onu.offline_reason || null,
           last_online: onu.status === 'online' ? new Date().toISOString() : null
         })
         .select()

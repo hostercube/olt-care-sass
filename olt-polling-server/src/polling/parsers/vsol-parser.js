@@ -231,25 +231,29 @@ export function parseVSOLOutput(output) {
     // EPON0/1:2  43.5  3.29  12.00  1.96  -18.10
     // (Temperature, Voltage, Bias, TX(dBm), RX(dBm))
 
-    // Pattern 4a: VSOL V1.0.2R power table format (TX then RX at end)
-    const vsolPowerTableMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)\s+([-\d.]+)\s*$/i);
+    // Pattern 4a: VSOL V1.0.2R power table format WITH TEMPERATURE (first column is temp)
+    // Format: EPON0/1:2  43.5  3.29  12.00  1.96  -18.10
+    // Columns: Port:ONU  Temperature  Voltage  Bias  TX(dBm)  RX(dBm)
+    const vsolPowerTableMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+([\d.]+)\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)\s+([-\d.]+)\s*$/i);
     if (vsolPowerTableMatch) {
       const ponPort = vsolPowerTableMatch[1];
       const onuIndex = parseInt(vsolPowerTableMatch[2]);
-      const txPower = parseFloat(vsolPowerTableMatch[3]);
-      const rxPower = parseFloat(vsolPowerTableMatch[4]);
+      const temperature = parseFloat(vsolPowerTableMatch[3]); // First value is temperature
+      const txPower = parseFloat(vsolPowerTableMatch[4]);
+      const rxPower = parseFloat(vsolPowerTableMatch[5]);
       const key = `${ponPort}:${onuIndex}`;
 
       // RX is normally negative, validate range
       if (rxPower < 0 && rxPower > -50) {
-        opmDiagData.set(key, { rxPower, txPower });
+        opmDiagData.set(key, { rxPower, txPower, temperature });
 
         if (onuMap.has(key)) {
           const onu = onuMap.get(key);
           onu.rx_power = rxPower;
           onu.tx_power = txPower;
+          onu.temperature = temperature;
         }
-        logger.debug(`VSOL power table parsed: ${key} RX=${rxPower} TX=${txPower}`);
+        logger.debug(`VSOL power table parsed: ${key} RX=${rxPower} TX=${txPower} Temp=${temperature}°C`);
       }
       continue;
     }
