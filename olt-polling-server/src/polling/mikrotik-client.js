@@ -193,12 +193,14 @@ async function callMikroTikAPI(mikrotik, endpoint) {
 
 /**
  * Call MikroTik REST API (RouterOS 7.1+)
+ * REST API typically runs on 443 (HTTPS) or 80 (HTTP), separate from API port
  */
 async function callMikroTikREST(mikrotik, endpoint) {
-  const { ip, username, password } = mikrotik;
+  const { ip, username, password, port = 8728 } = mikrotik;
   // REST API is typically on port 443 (HTTPS) or 80 (HTTP)
-  // If mikrotik.port is 8728/8729 (API ports), use 443 for REST
-  const restPort = (mikrotik.port === 8728 || mikrotik.port === 8729) ? 443 : (mikrotik.port || 443);
+  // Custom ports > 1024 (except API ports) might be for REST API with port forwarding
+  // API ports (8728/8729) mean we should try 443 for REST
+  const restPort = [8728, 8729].includes(port) ? 443 : (port > 1024 ? port : 443);
   
   const url = `https://${ip}:${restPort}/rest${endpoint}`;
   const auth = Buffer.from(`${username}:${password}`).toString('base64');
@@ -565,12 +567,16 @@ export async function testMikrotikConnection(mikrotik) {
   const startTime = Date.now();
 
   try {
-    // Try REST API first (port 443)
+    const apiPort = mikrotik.port || 8728;
+    // Custom ports > 1024 (except 8728/8729) likely mean port forwarding - try both REST and Plain API
+    const restPort = [8728, 8729].includes(apiPort) ? 443 : (apiPort > 1024 ? apiPort : 443);
+    
+    // Try REST API first
     try {
       const https = await import('https');
       const agent = new https.Agent({ rejectUnauthorized: false });
       
-      const restUrl = `https://${mikrotik.ip}:${mikrotik.port === 8728 ? 443 : mikrotik.port || 443}/rest/system/resource`;
+      const restUrl = `https://${mikrotik.ip}:${restPort}/rest/system/resource`;
       const auth = Buffer.from(`${mikrotik.username}:${mikrotik.password}`).toString('base64');
       
       const controller = new AbortController();
@@ -593,15 +599,15 @@ export async function testMikrotikConnection(mikrotik) {
         return { 
           success: true, 
           duration: Date.now() - startTime,
-          method: 'REST API',
+          method: `REST API (port ${restPort})`,
           version: data.version || data[0]?.version,
         };
       }
     } catch (restErr) {
-      logger.debug(`REST test failed: ${restErr.message}`);
+      logger.debug(`REST test failed on port ${restPort}: ${restErr.message}`);
     }
 
-    // Try plain API (port 8728)
+    // Try plain API on the configured port
     const net = await import('net');
     
     return new Promise((resolve) => {
@@ -609,16 +615,16 @@ export async function testMikrotikConnection(mikrotik) {
       
       const timeout = setTimeout(() => {
         socket.destroy();
-        resolve({ success: false, error: 'MikroTik API connection timeout' });
+        resolve({ success: false, error: `MikroTik API timeout on port ${apiPort}` });
       }, 10000);
       
-      socket.connect(mikrotik.port || 8728, mikrotik.ip, () => {
+      socket.connect(apiPort, mikrotik.ip, () => {
         clearTimeout(timeout);
         socket.destroy();
-        resolve({ 
+        resolve({
           success: true, 
           duration: Date.now() - startTime,
-          method: 'Plain API'
+          method: `Plain API (port ${apiPort})`
         });
       });
       
