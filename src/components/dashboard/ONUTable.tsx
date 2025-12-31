@@ -183,21 +183,43 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
   const isAllSelected = paginatedONUs.length > 0 && paginatedONUs.every(onu => selectedONUs.has(onu.id));
   const isSomeSelected = paginatedONUs.some(onu => selectedONUs.has(onu.id));
 
-  // Bulk actions
-  const handleBulkReboot = () => {
-    toast({
-      title: 'Reboot Command Sent',
-      description: `Reboot command sent to ${selectedONUs.size} ONU(s). This may take a few moments.`,
-    });
+  // Bulk actions - call actual API endpoints
+  const handleBulkReboot = async () => {
+    const onuIds = Array.from(selectedONUs);
+    toast({ title: 'Sending Reboot Commands...', description: `Rebooting ${onuIds.length} ONU(s)...` });
+    
+    try {
+      const response = await fetch('/olt-polling-server/api/onu/bulk-reboot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onu_ids: onuIds }),
+      });
+      const data = await response.json();
+      const successCount = data.results?.filter((r: any) => r.success).length || 0;
+      toast({ title: 'Reboot Complete', description: `${successCount}/${onuIds.length} ONU(s) rebooted successfully.` });
+    } catch (error) {
+      toast({ title: 'Reboot Failed', description: 'Failed to send reboot commands.', variant: 'destructive' });
+    }
     setSelectedONUs(new Set());
   };
 
-  const handleBulkDeauthorize = () => {
-    toast({
-      title: 'Deauthorize Command Sent',
-      description: `Deauthorize command sent to ${selectedONUs.size} ONU(s).`,
-      variant: 'destructive',
-    });
+  const handleBulkDeauthorize = async () => {
+    const onuIds = Array.from(selectedONUs);
+    toast({ title: 'Sending Deauthorize Commands...', description: `Deauthorizing ${onuIds.length} ONU(s)...` });
+    
+    try {
+      const response = await fetch('/olt-polling-server/api/onu/bulk-deauthorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onu_ids: onuIds }),
+      });
+      const data = await response.json();
+      const successCount = data.results?.filter((r: any) => r.success).length || 0;
+      toast({ title: 'Deauthorize Complete', description: `${successCount}/${onuIds.length} ONU(s) deauthorized.`, variant: 'destructive' });
+      onRefresh?.();
+    } catch (error) {
+      toast({ title: 'Deauthorize Failed', description: 'Failed to send deauthorize commands.', variant: 'destructive' });
+    }
     setSelectedONUs(new Set());
   };
 
