@@ -2,16 +2,25 @@ import { logger } from '../utils/logger.js';
 
 /**
  * OLT HTTP API Client
- * For OLTs that use web API on port 443 instead of SSH/Telnet
+ * For OLTs that use web API interfaces
+ * 
+ * Supported Brands:
+ * - VSOL: Web UI on port 8080/8085, CGI-based API
+ * - DBC: REST API
+ * - CDATA: REST API with token auth
+ * - ECOM: CGI-based API
+ * - BDCOM: REST API
  */
 
 const API_TIMEOUT = parseInt(process.env.API_TIMEOUT_MS || '30000');
 
 /**
- * Execute API calls for OLTs that support HTTP/HTTPS API (port 443)
+ * Execute API calls for OLTs that support HTTP/HTTPS API
  */
 export async function executeAPICommands(olt) {
   const brand = olt.brand?.toUpperCase();
+  
+  logger.info(`Executing HTTP API commands for ${olt.name} (${brand}) on port ${olt.port}`);
   
   try {
     switch (brand) {
@@ -37,206 +46,179 @@ export async function executeAPICommands(olt) {
 
 /**
  * VSOL OLT HTTP API
- * VSOL uses various web interfaces depending on model
+ * VSOL uses web interfaces with CGI scripts
+ * Common ports: 80, 8080, 8085
+ * 
+ * Important: VSOL web UI is primarily for display, 
+ * the actual ONU data comes from CLI commands via Telnet/SSH
  */
 async function fetchVSOLAPI(olt) {
-  const baseUrl = `http://${olt.ip_address}:${olt.port}`;
+  // Try both HTTP and HTTPS
+  const protocols = olt.port === 443 ? ['https'] : ['http', 'https'];
   
-  logger.info(`Attempting VSOL API connection to ${baseUrl}`);
-  
-  // Try multiple authentication and API endpoints
-  const authEndpoints = [
-    { url: '/cgi-bin/login.cgi', method: 'POST', type: 'form' },
-    { url: '/login.cgi', method: 'POST', type: 'form' },
-    { url: '/api/login', method: 'POST', type: 'json' },
-    { url: '/goform/login', method: 'POST', type: 'form' },
-  ];
-  
-  let sessionCookie = '';
-  let authToken = '';
-  let loginSuccess = false;
-  
-  // Try each authentication method
-  for (const auth of authEndpoints) {
+  for (const protocol of protocols) {
+    const baseUrl = `${protocol}://${olt.ip_address}:${olt.port}`;
+    
+    logger.info(`Attempting VSOL API connection to ${baseUrl}`);
+    
     try {
-      let body;
-      let headers = {};
-      
-      if (auth.type === 'form') {
-        body = new URLSearchParams({
-          username: olt.username,
-          password: olt.password_encrypted,
-        }).toString();
-        headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      } else {
-        body = JSON.stringify({
-          username: olt.username,
-          password: olt.password_encrypted,
-        });
-        headers['Content-Type'] = 'application/json';
-      }
-      
-      const loginResponse = await apiRequestWithCookies(`${baseUrl}${auth.url}`, {
-        method: auth.method,
-        headers,
-        body,
-      });
-      
-      if (loginResponse.cookies) {
-        sessionCookie = loginResponse.cookies;
-      }
-      if (loginResponse.data?.token) {
-        authToken = loginResponse.data.token;
-      }
-      
-      loginSuccess = true;
-      logger.info(`VSOL login successful via ${auth.url}`);
-      break;
-    } catch (err) {
-      logger.debug(`VSOL auth endpoint ${auth.url} failed: ${err.message}`);
-    }
-  }
-  
-  // If no auth worked, try with Basic Auth
-  if (!loginSuccess) {
-    logger.info('VSOL: Trying Basic Auth');
-    const basicAuth = Buffer.from(`${olt.username}:${olt.password_encrypted}`).toString('base64');
-    sessionCookie = '';
-    authToken = '';
-    
-    // Build common headers for Basic Auth
-    const basicHeaders = {
-      'Authorization': `Basic ${basicAuth}`,
-    };
-    
-    // Try to fetch ONU data with various endpoints
-    const dataEndpoints = [
-      '/cgi-bin/onu_status.cgi',
-      '/onu_status.cgi',
-      '/api/onu/status',
-      '/api/gpon/onu',
-      '/goform/getOnuList',
-      '/cgi-bin/gpon_onu.cgi',
-    ];
-    
-    for (const endpoint of dataEndpoints) {
-      try {
-        const response = await apiRequest(`${baseUrl}${endpoint}`, {
+      // VSOL Web UI Authentication Methods
+      const authMethods = [
+        // Method 1: CGI form login
+        {
+          url: '/cgi-bin/login.cgi',
+          method: 'POST',
+          contentType: 'application/x-www-form-urlencoded',
+          body: `username=${encodeURIComponent(olt.username)}&password=${encodeURIComponent(olt.password_encrypted)}`
+        },
+        // Method 2: GoForm login (common in Chinese OLTs)
+        {
+          url: '/goform/login',
+          method: 'POST',
+          contentType: 'application/x-www-form-urlencoded',
+          body: `username=${encodeURIComponent(olt.username)}&password=${encodeURIComponent(olt.password_encrypted)}`
+        },
+        // Method 3: API login
+        {
+          url: '/api/login',
+          method: 'POST',
+          contentType: 'application/json',
+          body: JSON.stringify({ username: olt.username, password: olt.password_encrypted })
+        },
+        // Method 4: Direct CGI with Basic Auth
+        {
+          url: '/cgi-bin/onu_status.cgi',
           method: 'GET',
-          headers: basicHeaders,
-        });
-        
-        // Check if response is HTML (login page)
-        if (typeof response === 'string' && response.includes('<!DOCTYPE')) {
-          logger.debug(`Endpoint ${endpoint} returned HTML login page, skipping`);
-          continue;
+          useBasicAuth: true
         }
+      ];
+      
+      let sessionCookie = '';
+      let authToken = '';
+      let loginSuccess = false;
+      
+      // Try authentication methods
+      for (const auth of authMethods) {
+        if (auth.useBasicAuth) continue; // Skip auth for direct access methods
         
-        logger.info(`VSOL data fetch successful via ${endpoint}`);
-        return {
-          raw: JSON.stringify(response),
-          parsed: { onuStatus: response },
-        };
-      } catch (err) {
-        logger.debug(`VSOL data endpoint ${endpoint} failed: ${err.message}`);
-      }
-    }
-    
-    throw new Error('VSOL: All API endpoints failed. The OLT may require Telnet/SSH access instead.');
-  }
-  
-  // Build headers for authenticated requests
-  const authHeaders = {};
-  if (sessionCookie) {
-    authHeaders['Cookie'] = sessionCookie;
-  }
-  if (authToken) {
-    authHeaders['Authorization'] = `Bearer ${authToken}`;
-  }
-  
-  // Try to fetch ONU data
-  const dataEndpoints = [
-    '/cgi-bin/onu_status.cgi',
-    '/onu_status.cgi',
-    '/api/onu/status',
-    '/api/gpon/onu',
-    '/goform/getOnuList',
-  ];
-  
-  let onuData = null;
-  for (const endpoint of dataEndpoints) {
-    try {
-      const response = await apiRequest(`${baseUrl}${endpoint}`, {
-        method: 'GET',
-        headers: authHeaders,
-      });
-      
-      // Check if response is HTML (login page)
-      if (typeof response === 'string' && response.includes('<!DOCTYPE')) {
-        logger.debug(`Endpoint ${endpoint} returned HTML, skipping`);
-        continue;
+        try {
+          const headers = {
+            'Content-Type': auth.contentType,
+            'User-Agent': 'OLTCare-Poller/1.0'
+          };
+          
+          const response = await fetchWithTimeout(`${baseUrl}${auth.url}`, {
+            method: auth.method,
+            headers,
+            body: auth.body,
+          });
+          
+          if (response.ok || response.status === 302) {
+            // Extract cookies
+            const setCookie = response.headers.get('set-cookie');
+            if (setCookie) {
+              sessionCookie = setCookie.split(';')[0];
+            }
+            
+            // Try to get token from response
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('json')) {
+              const data = await response.json();
+              authToken = data.token || data.access_token || data.sessionId || '';
+            }
+            
+            loginSuccess = true;
+            logger.info(`VSOL login successful via ${auth.url}`);
+            break;
+          }
+        } catch (err) {
+          logger.debug(`VSOL auth ${auth.url} failed: ${err.message}`);
+        }
       }
       
-      onuData = response;
-      logger.info(`VSOL ONU data fetch successful via ${endpoint}`);
-      break;
-    } catch (err) {
-      logger.debug(`VSOL endpoint ${endpoint} failed: ${err.message}`);
+      // Build headers for data requests
+      const dataHeaders = {
+        'User-Agent': 'OLTCare-Poller/1.0',
+        'Accept': 'application/json, text/plain, */*'
+      };
+      
+      if (sessionCookie) {
+        dataHeaders['Cookie'] = sessionCookie;
+      }
+      if (authToken) {
+        dataHeaders['Authorization'] = `Bearer ${authToken}`;
+      }
+      
+      // If no auth worked, try Basic Auth
+      if (!loginSuccess) {
+        const basicAuth = Buffer.from(`${olt.username}:${olt.password_encrypted}`).toString('base64');
+        dataHeaders['Authorization'] = `Basic ${basicAuth}`;
+      }
+      
+      // Data endpoints to try
+      const dataEndpoints = [
+        '/cgi-bin/onu_status.cgi',
+        '/cgi-bin/gpon_onu.cgi',
+        '/cgi-bin/epon_onu.cgi',
+        '/api/onu/status',
+        '/api/onu/list',
+        '/api/gpon/onu',
+        '/api/epon/onu',
+        '/goform/getOnuList',
+        '/goform/getOnuStatus',
+        '/onu_status.cgi',
+        '/cgi-bin/onu_optical.cgi',
+        '/cgi-bin/pon_status.cgi'
+      ];
+      
+      for (const endpoint of dataEndpoints) {
+        try {
+          const response = await fetchWithTimeout(`${baseUrl}${endpoint}`, {
+            method: 'GET',
+            headers: dataHeaders,
+          });
+          
+          if (response.ok) {
+            const text = await response.text();
+            
+            // Skip HTML login pages
+            if (text.includes('<!DOCTYPE') || text.includes('<html') || text.includes('login')) {
+              logger.debug(`Endpoint ${endpoint} returned login page, skipping`);
+              continue;
+            }
+            
+            // Try to parse as JSON
+            let parsed;
+            try {
+              parsed = JSON.parse(text);
+            } catch {
+              // If not JSON, return as raw text
+              parsed = { raw: text };
+            }
+            
+            logger.info(`VSOL data fetch successful via ${endpoint}`);
+            return {
+              raw: text,
+              parsed: { onuStatus: parsed },
+              source: 'http_api'
+            };
+          }
+        } catch (err) {
+          logger.debug(`VSOL endpoint ${endpoint} failed: ${err.message}`);
+        }
+      }
+      
+      throw new Error(`VSOL HTTP API: All endpoints failed on ${baseUrl}`);
+      
+    } catch (error) {
+      if (protocol === protocols[protocols.length - 1]) {
+        throw error;
+      }
+      logger.debug(`VSOL ${protocol} failed, trying next protocol...`);
     }
   }
   
-  if (!onuData) {
-    throw new Error('VSOL: Could not fetch ONU data from any endpoint');
-  }
-  
-  return {
-    raw: JSON.stringify(onuData),
-    parsed: { onuStatus: onuData },
-  };
-}
-
-/**
- * Make HTTP API request with cookie handling
- */
-async function apiRequestWithCookies(url, options = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
-  
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      redirect: 'manual',
-    });
-    
-    clearTimeout(timeout);
-    
-    const cookies = response.headers.get('set-cookie') || '';
-    
-    // Accept 200, 302 (redirect after login), or other success codes
-    if (response.status >= 400) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const contentType = response.headers.get('content-type') || '';
-    let data;
-    
-    if (contentType.includes('application/json')) {
-      data = await response.json();
-    } else {
-      data = await response.text();
-    }
-    
-    return { data, cookies };
-  } catch (error) {
-    clearTimeout(timeout);
-    
-    if (error.name === 'AbortError') {
-      throw new Error('API request timeout');
-    }
-    
-    throw error;
-  }
+  throw new Error('VSOL: All HTTP API attempts failed. Use Telnet/SSH instead.');
 }
 
 /**
@@ -244,33 +226,52 @@ async function apiRequestWithCookies(url, options = {}) {
  */
 async function fetchDBCAPI(olt) {
   const baseUrl = `http://${olt.ip_address}:${olt.port}`;
-  
-  // DBC uses basic auth
   const auth = Buffer.from(`${olt.username}:${olt.password_encrypted}`).toString('base64');
   
   const headers = {
     'Authorization': `Basic ${auth}`,
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'User-Agent': 'OLTCare-Poller/1.0'
   };
   
-  // Get ONU list
-  const onuList = await apiRequest(`${baseUrl}/api/onu/list`, {
-    method: 'GET',
-    headers,
-  });
+  // Try multiple API endpoints
+  const endpoints = [
+    { url: '/api/onu/list', name: 'onuList' },
+    { url: '/api/onu/status', name: 'onuStatus' },
+    { url: '/api/onu/optical', name: 'opticalInfo' },
+    { url: '/api/gpon/onu', name: 'gponOnu' },
+    { url: '/api/epon/onu', name: 'eponOnu' },
+    { url: '/cgi-bin/onu_list.cgi', name: 'cgiOnuList' }
+  ];
   
-  // Get optical info
-  const opticalInfo = await apiRequest(`${baseUrl}/api/onu/optical`, {
-    method: 'GET',
-    headers,
-  });
+  const results = {};
+  
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetchWithTimeout(`${baseUrl}${endpoint.url}`, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        results[endpoint.name] = data;
+        logger.info(`DBC endpoint ${endpoint.url} successful`);
+      }
+    } catch (err) {
+      logger.debug(`DBC endpoint ${endpoint.url} failed: ${err.message}`);
+    }
+  }
+  
+  if (Object.keys(results).length === 0) {
+    throw new Error('DBC: No API endpoints returned valid data');
+  }
   
   return {
-    raw: JSON.stringify({ onuList, opticalInfo }),
-    parsed: {
-      onuList,
-      opticalInfo,
-    },
+    raw: JSON.stringify(results),
+    parsed: results,
+    source: 'http_api'
   };
 }
 
@@ -280,41 +281,90 @@ async function fetchDBCAPI(olt) {
 async function fetchCDATAAPI(olt) {
   const baseUrl = `http://${olt.ip_address}:${olt.port}`;
   
-  // CDATA login
-  const loginData = await apiRequest(`${baseUrl}/api/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: olt.username,
-      password: olt.password_encrypted,
-    }),
-  });
+  // Try token-based auth first
+  let token = '';
   
-  const token = loginData.token || loginData.access_token;
+  const loginEndpoints = [
+    '/api/login',
+    '/api/auth',
+    '/login'
+  ];
   
+  for (const endpoint of loginEndpoints) {
+    try {
+      const response = await fetchWithTimeout(`${baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'User-Agent': 'OLTCare-Poller/1.0'
+        },
+        body: JSON.stringify({
+          username: olt.username,
+          password: olt.password_encrypted,
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        token = data.token || data.access_token || data.sessionId || '';
+        if (token) {
+          logger.info(`CDATA login successful via ${endpoint}`);
+          break;
+        }
+      }
+    } catch (err) {
+      logger.debug(`CDATA login ${endpoint} failed: ${err.message}`);
+    }
+  }
+  
+  // Build auth headers
   const headers = {
-    'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'User-Agent': 'OLTCare-Poller/1.0'
   };
   
-  // Get ONU status
-  const onuStatus = await apiRequest(`${baseUrl}/api/onu/status`, {
-    method: 'GET',
-    headers,
-  });
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  } else {
+    const auth = Buffer.from(`${olt.username}:${olt.password_encrypted}`).toString('base64');
+    headers['Authorization'] = `Basic ${auth}`;
+  }
   
-  // Get optical power
-  const opticalPower = await apiRequest(`${baseUrl}/api/onu/optical-power`, {
-    method: 'GET',
-    headers,
-  });
+  // Data endpoints
+  const dataEndpoints = [
+    '/api/onu/status',
+    '/api/onu/list',
+    '/api/onu/optical-power',
+    '/cgi-bin/onu_status.cgi'
+  ];
+  
+  const results = {};
+  
+  for (const endpoint of dataEndpoints) {
+    try {
+      const response = await fetchWithTimeout(`${baseUrl}${endpoint}`, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        results[endpoint] = data;
+      }
+    } catch (err) {
+      logger.debug(`CDATA endpoint ${endpoint} failed: ${err.message}`);
+    }
+  }
+  
+  if (Object.keys(results).length === 0) {
+    throw new Error('CDATA: No API endpoints returned valid data');
+  }
   
   return {
-    raw: JSON.stringify({ onuStatus, opticalPower }),
-    parsed: {
-      onuStatus,
-      opticalPower,
-    },
+    raw: JSON.stringify(results),
+    parsed: results,
+    source: 'http_api'
   };
 }
 
@@ -323,22 +373,56 @@ async function fetchCDATAAPI(olt) {
  */
 async function fetchECOMAPI(olt) {
   const baseUrl = `http://${olt.ip_address}:${olt.port}`;
-  
   const auth = Buffer.from(`${olt.username}:${olt.password_encrypted}`).toString('base64');
   
   const headers = {
     'Authorization': `Basic ${auth}`,
+    'Accept': 'application/json, text/plain, */*',
+    'User-Agent': 'OLTCare-Poller/1.0'
   };
   
-  const onuData = await apiRequest(`${baseUrl}/cgi-bin/gpon_onu.cgi`, {
-    method: 'GET',
-    headers,
-  });
+  const endpoints = [
+    '/cgi-bin/gpon_onu.cgi',
+    '/cgi-bin/epon_onu.cgi',
+    '/cgi-bin/onu_status.cgi',
+    '/api/onu/status',
+    '/api/onu/list'
+  ];
   
-  return {
-    raw: JSON.stringify(onuData),
-    parsed: onuData,
-  };
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetchWithTimeout(`${baseUrl}${endpoint}`, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (response.ok) {
+        const text = await response.text();
+        
+        // Skip HTML pages
+        if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+          continue;
+        }
+        
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = { raw: text };
+        }
+        
+        return {
+          raw: text,
+          parsed,
+          source: 'http_api'
+        };
+      }
+    } catch (err) {
+      logger.debug(`ECOM endpoint ${endpoint} failed: ${err.message}`);
+    }
+  }
+  
+  throw new Error('ECOM: No API endpoints returned valid data');
 }
 
 /**
@@ -346,23 +430,50 @@ async function fetchECOMAPI(olt) {
  */
 async function fetchBDCOMAPI(olt) {
   const baseUrl = `http://${olt.ip_address}:${olt.port}`;
-  
   const auth = Buffer.from(`${olt.username}:${olt.password_encrypted}`).toString('base64');
   
   const headers = {
     'Authorization': `Basic ${auth}`,
     'Accept': 'application/json',
+    'User-Agent': 'OLTCare-Poller/1.0'
   };
   
-  const onuInfo = await apiRequest(`${baseUrl}/api/epon/onu-info`, {
-    method: 'GET',
-    headers,
-  });
+  const endpoints = [
+    '/api/epon/onu-info',
+    '/api/epon/onu-status',
+    '/api/onu/list',
+    '/cgi-bin/epon_onu.cgi'
+  ];
   
-  return {
-    raw: JSON.stringify(onuInfo),
-    parsed: onuInfo,
-  };
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetchWithTimeout(`${baseUrl}${endpoint}`, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (response.ok) {
+        const text = await response.text();
+        
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = { raw: text };
+        }
+        
+        return {
+          raw: text,
+          parsed,
+          source: 'http_api'
+        };
+      }
+    } catch (err) {
+      logger.debug(`BDCOM endpoint ${endpoint} failed: ${err.message}`);
+    }
+  }
+  
+  throw new Error('BDCOM: No API endpoints returned valid data');
 }
 
 /**
@@ -370,34 +481,51 @@ async function fetchBDCOMAPI(olt) {
  */
 async function fetchGenericOLTAPI(olt) {
   const baseUrl = `http://${olt.ip_address}:${olt.port}`;
-  
   const auth = Buffer.from(`${olt.username}:${olt.password_encrypted}`).toString('base64');
   
-  // Try common API endpoints
   const endpoints = [
     '/api/onu/status',
+    '/api/onu/list',
     '/cgi-bin/onu_status.cgi',
     '/onu/list',
     '/gpon/onu',
+    '/epon/onu'
   ];
   
   for (const endpoint of endpoints) {
     try {
-      const response = await apiRequest(`${baseUrl}${endpoint}`, {
+      const response = await fetchWithTimeout(`${baseUrl}${endpoint}`, {
         method: 'GET',
         headers: {
           'Authorization': `Basic ${auth}`,
+          'Accept': 'application/json, text/plain, */*',
+          'User-Agent': 'OLTCare-Poller/1.0'
         },
       });
       
-      if (response) {
+      if (response.ok) {
+        const text = await response.text();
+        
+        // Skip HTML pages
+        if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+          continue;
+        }
+        
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = { raw: text };
+        }
+        
         return {
-          raw: JSON.stringify(response),
-          parsed: response,
+          raw: text,
+          parsed,
+          source: 'http_api'
         };
       }
     } catch (err) {
-      logger.debug(`Endpoint ${endpoint} failed: ${err.message}`);
+      logger.debug(`Generic endpoint ${endpoint} failed: ${err.message}`);
     }
   }
   
@@ -405,9 +533,9 @@ async function fetchGenericOLTAPI(olt) {
 }
 
 /**
- * Make HTTP API request with timeout
+ * Fetch with timeout
  */
-async function apiRequest(url, options = {}) {
+async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
   
@@ -415,26 +543,16 @@ async function apiRequest(url, options = {}) {
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
+      redirect: 'manual', // Don't follow redirects automatically
     });
     
     clearTimeout(timeout);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const contentType = response.headers.get('content-type') || '';
-    
-    if (contentType.includes('application/json')) {
-      return await response.json();
-    }
-    
-    return await response.text();
+    return response;
   } catch (error) {
     clearTimeout(timeout);
     
     if (error.name === 'AbortError') {
-      throw new Error('API request timeout');
+      throw new Error(`API request timeout (${API_TIMEOUT}ms)`);
     }
     
     throw error;
@@ -448,31 +566,69 @@ export function parseAPIResponse(brand, response) {
   const onus = [];
   const data = response.parsed || response;
   
+  logger.debug(`Parsing ${brand} API response: ${JSON.stringify(data).substring(0, 500)}`);
+  
   try {
     // Handle different response formats
     let onuList = [];
     
+    // Find the ONU array in various possible locations
     if (Array.isArray(data)) {
       onuList = data;
     } else if (data.onuList) {
-      onuList = data.onuList;
+      onuList = Array.isArray(data.onuList) ? data.onuList : [];
     } else if (data.onuStatus) {
       onuList = Array.isArray(data.onuStatus) ? data.onuStatus : [data.onuStatus];
     } else if (data.data) {
       onuList = Array.isArray(data.data) ? data.data : [data.data];
+    } else if (data.onus) {
+      onuList = Array.isArray(data.onus) ? data.onus : [];
+    } else if (data.result) {
+      onuList = Array.isArray(data.result) ? data.result : [];
+    } else if (data.rows) {
+      onuList = Array.isArray(data.rows) ? data.rows : [];
+    } else {
+      // Try to find any array in the response
+      for (const key of Object.keys(data)) {
+        if (Array.isArray(data[key]) && data[key].length > 0) {
+          onuList = data[key];
+          logger.debug(`Found ONU array in field: ${key}`);
+          break;
+        }
+      }
     }
     
+    logger.info(`Found ${onuList.length} ONUs in API response`);
+    
     for (const item of onuList) {
-      onus.push({
-        serial_number: item.serial || item.serialNumber || item.sn || item.mac || '',
-        pon_port: item.port || item.ponPort || item.pon || '1/1',
-        onu_index: parseInt(item.index || item.onuId || item.id || 1),
-        status: parseOnuStatus(item.status || item.state),
-        rx_power: parseFloat(item.rxPower || item.rx_power || item.rxpower) || null,
-        tx_power: parseFloat(item.txPower || item.tx_power || item.txpower) || null,
-        mac_address: item.mac || item.macAddress || item.mac_address || null,
-        name: item.name || item.description || null,
-      });
+      if (!item || typeof item !== 'object') continue;
+      
+      const onu = {
+        serial_number: item.serial || item.serialNumber || item.sn || item.SN || 
+                       item.serial_number || item.serialNo || item.mac || item.MAC || '',
+        pon_port: item.port || item.ponPort || item.pon_port || item.pon || 
+                  item.ponId || item.pon_id || 'default',
+        onu_index: parseInt(item.index || item.onuId || item.onu_id || item.id || 
+                           item.onuIndex || item.onu_index || 1),
+        status: parseOnuStatus(item.status || item.state || item.Status || item.State),
+        rx_power: parseFloat(item.rxPower || item.rx_power || item.rxpower || 
+                            item.RxPower || item.rxdbm) || null,
+        tx_power: parseFloat(item.txPower || item.tx_power || item.txpower || 
+                            item.TxPower || item.txdbm) || null,
+        mac_address: item.mac || item.macAddress || item.mac_address || 
+                     item.MAC || item.macAddr || null,
+        name: item.name || item.description || item.desc || item.Name || 
+              item.onuName || item.onu_name || null,
+      };
+      
+      // Generate name if missing
+      if (!onu.name) {
+        onu.name = onu.serial_number ? 
+          `ONU-${onu.serial_number.substring(0, 8)}` : 
+          `ONU-${onu.pon_port}:${onu.onu_index}`;
+      }
+      
+      onus.push(onu);
     }
   } catch (error) {
     logger.error(`Failed to parse ${brand} API response:`, error.message);
@@ -484,15 +640,23 @@ export function parseAPIResponse(brand, response) {
 function parseOnuStatus(status) {
   if (!status) return 'unknown';
   
-  const s = String(status).toLowerCase();
+  const s = String(status).toLowerCase().trim();
   
-  if (s.includes('online') || s.includes('up') || s === '1' || s === 'active') {
+  // Online statuses
+  if (s.includes('online') || s.includes('up') || s === '1' || 
+      s === 'active' || s.includes('working') || s === 'registered') {
     return 'online';
   }
-  if (s.includes('offline') || s.includes('down') || s === '0' || s === 'inactive') {
+  
+  // Offline statuses
+  if (s.includes('offline') || s.includes('down') || s === '0' || 
+      s === 'inactive' || s.includes('deregistered') || s.includes('los')) {
     return 'offline';
   }
-  if (s.includes('warning') || s.includes('los') || s.includes('dying')) {
+  
+  // Warning statuses
+  if (s.includes('warning') || s.includes('dying') || s.includes('gasp') ||
+      s.includes('low') || s.includes('critical')) {
     return 'warning';
   }
   

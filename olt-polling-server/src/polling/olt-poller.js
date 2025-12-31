@@ -161,53 +161,93 @@ export async function pollOLT(supabase, olt) {
     // Handle dynamic connection types like 'http_first_telnet'
     if (connectionType.startsWith('http_first_')) {
       const fallbackMethod = connectionType.replace('http_first_', '');
+      const config = OLT_PROTOCOL_CONFIG[olt.brand] || OLT_PROTOCOL_CONFIG.Other;
+      const telnetPort = config.telnetPort || 23;
+      let httpApiSuccess = false;
+      
+      // Step 1: Try HTTP API first
       try {
-        logger.info(`Trying HTTP API first for ${olt.name} (fallback: ${fallbackMethod})`);
+        logger.info(`Trying HTTP API first for ${olt.name} on port ${olt.port}`);
         const apiResp = await executeAPICommands(olt);
         onus = parseAPIResponse(olt.brand, apiResp);
+        
+        // Check if we got any ONUs from API
+        if (onus.length > 0) {
+          httpApiSuccess = true;
+          logger.info(`HTTP API successful: Found ${onus.length} ONUs`);
+        } else {
+          logger.warn(`HTTP API returned empty data for ${olt.name}, trying CLI methods...`);
+        }
       } catch (httpError) {
         logger.warn(`HTTP API failed for ${olt.name}: ${httpError.message}`);
+      }
+      
+      // Step 2: If HTTP API failed or returned no data, try Telnet on configured port first
+      // This handles port forwarding scenarios (e.g., 8080 externally -> 23 internally)
+      if (!httpApiSuccess) {
+        const errors = [];
+        let cliSuccess = false;
         
-        // Get brand config to determine Telnet port
-        const config = OLT_PROTOCOL_CONFIG[olt.brand] || OLT_PROTOCOL_CONFIG.Other;
-        const telnetPort = config.telnetPort || 23;
+        // For VSOL/Chinese OLTs with HTTP ports (8080, 80), the OLT might only have Web UI
+        // without API, so we need CLI access. Try Telnet on:
+        // 1. The configured port (in case it's actually forwarded to Telnet)
+        // 2. Standard Telnet port 23
+        // 3. SSH port 22
         
-        if (fallbackMethod === 'telnet') {
+        const portsToTry = [
+          { port: olt.port, method: 'Telnet', desc: `configured port ${olt.port}` },
+          { port: telnetPort, method: 'Telnet', desc: `standard Telnet port ${telnetPort}` },
+          { port: 22, method: 'SSH', desc: 'SSH port 22' }
+        ].filter((p, i, arr) => arr.findIndex(x => x.port === p.port && x.method === p.method) === i); // Remove duplicates
+        
+        for (const attempt of portsToTry) {
+          if (cliSuccess) break;
+          
           try {
-            logger.info(`Falling back to Telnet (port ${telnetPort}) for ${olt.name}`);
-            // Create a modified OLT object with Telnet port
-            const telnetOlt = { ...olt, port: telnetPort };
-            output = await executeTelnetCommands(telnetOlt, commands);
-            onus = parseOLTOutput(olt.brand, output);
-          } catch (telnetError) {
-            logger.warn(`Telnet failed for ${olt.name}: ${telnetError.message}, trying SSH...`);
-            const sshOlt = { ...olt, port: 22 };
-            output = await executeSSHCommands(sshOlt);
-            onus = parseOLTOutput(olt.brand, output);
+            if (attempt.method === 'Telnet') {
+              logger.info(`Trying Telnet on ${attempt.desc} for ${olt.name}`);
+              const telnetOlt = { ...olt, port: attempt.port };
+              output = await executeTelnetCommands(telnetOlt, commands);
+              
+              if (output && output.length > 100) {
+                onus = parseOLTOutput(olt.brand, output);
+                if (onus.length > 0) {
+                  cliSuccess = true;
+                  logger.info(`Telnet on port ${attempt.port} successful: Found ${onus.length} ONUs`);
+                } else {
+                  errors.push(`Telnet:${attempt.port} (no ONUs parsed)`);
+                }
+              } else {
+                errors.push(`Telnet:${attempt.port} (insufficient data)`);
+              }
+            } else if (attempt.method === 'SSH') {
+              logger.info(`Trying SSH on ${attempt.desc} for ${olt.name}`);
+              const sshOlt = { ...olt, port: attempt.port };
+              output = await executeSSHCommands(sshOlt);
+              
+              if (output && output.length > 100) {
+                onus = parseOLTOutput(olt.brand, output);
+                if (onus.length > 0) {
+                  cliSuccess = true;
+                  logger.info(`SSH on port ${attempt.port} successful: Found ${onus.length} ONUs`);
+                } else {
+                  errors.push(`SSH:${attempt.port} (no ONUs parsed)`);
+                }
+              } else {
+                errors.push(`SSH:${attempt.port} (insufficient data)`);
+              }
+            }
+          } catch (err) {
+            errors.push(`${attempt.method}:${attempt.port} (${err.message})`);
+            logger.debug(`${attempt.method} on port ${attempt.port} failed: ${err.message}`);
           }
-        } else if (fallbackMethod === 'ssh') {
-          try {
-            logger.info(`Falling back to SSH (port 22) for ${olt.name}`);
-            const sshOlt = { ...olt, port: 22 };
-            output = await executeSSHCommands(sshOlt);
-            onus = parseOLTOutput(olt.brand, output);
-          } catch (sshError) {
-            logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
-            const telnetOlt = { ...olt, port: telnetPort };
-            output = await executeTelnetCommands(telnetOlt, commands);
-            onus = parseOLTOutput(olt.brand, output);
-          }
-        } else {
-          // Default fallback chain: Telnet -> SSH
-          try {
-            const telnetOlt = { ...olt, port: telnetPort };
-            output = await executeTelnetCommands(telnetOlt, commands);
-            onus = parseOLTOutput(olt.brand, output);
-          } catch (e) {
-            const sshOlt = { ...olt, port: 22 };
-            output = await executeSSHCommands(sshOlt);
-            onus = parseOLTOutput(olt.brand, output);
-          }
+        }
+        
+        if (!cliSuccess && onus.length === 0) {
+          // All methods failed
+          const errorMsg = `All connection methods failed for ${olt.name}. Tried: ${errors.join(', ')}. ` +
+            `Please ensure the OLT has CLI access enabled (Telnet port 23 or SSH port 22) and is reachable from the VPS.`;
+          throw new Error(errorMsg);
         }
       }
     } else {
@@ -559,18 +599,28 @@ function getOLTCommands(brand) {
         'show gpon onu list'
       ];
     case 'VSOL':
+      // VSOL EPON/GPON OLT CLI commands - comprehensive list
       return [
         'terminal length 0',
+        'enable',
+        'configure terminal',
+        // ONU status commands
         'show onu status',
         'show onu status all',
-        'show gpon onu state',
-        'show epon onu status',
-        'show onu optical-info',
+        'show onu opm-diag all',      // Optical power diagnosis for all ONUs
         'show onu optical-info all',
-        'show gpon optical-info',
+        // EPON specific
+        'show epon onu status',
+        'show epon onu-info',
+        // GPON specific
+        'show gpon onu state',
+        'show gpon onu list',
+        'show gpon onu optical-info',
+        // General ONU info
         'show onu info',
         'show onu info all',
-        'show onu list'
+        'show onu list',
+        'show onu running-status'
       ];
     case 'DBC':
       return [
