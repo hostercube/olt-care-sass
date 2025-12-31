@@ -577,32 +577,35 @@ function getOLTCommands(brand) {
         'show gpon onu list'
       ];
     case 'VSOL':
-      // VSOL EPON/GPON OLT CLI commands - comprehensive list for all models
-      // These commands work on most VSOL V1600 series and similar Chinese OLTs
+      // VSOL EPON OLT CLI commands
+      // Based on actual CLI output - these OLTs use config mode commands
+      // First discover available commands, then get ONU data
       return [
-        'terminal length 0',           // Disable pagination
-        'enable',                       // Enter privileged mode
-        // EPON ONU commands (most common for VSOL)
-        'show epon onu-information',    // Main ONU info command
-        'show epon active onu',         // Active ONU list
-        'show epon optical-transceiver-diagnosis interface EPON0/1', // Optical power PON 1
-        'show epon optical-transceiver-diagnosis interface EPON0/2', // Optical power PON 2
-        'show epon optical-transceiver-diagnosis interface EPON0/3', // Optical power PON 3
-        'show epon optical-transceiver-diagnosis interface EPON0/4', // Optical power PON 4
-        'show epon onu ctc optical-transceiver-diagnosis',  // CTC optical info
-        // GPON ONU commands
-        'show gpon onu state',          // GPON ONU state
-        'show gpon onu list',           // GPON ONU list  
-        'show gpon optical-info',       // GPON optical info
-        // Generic ONU commands
-        'show onu status',              // ONU status
-        'show onu status all',          // All ONU status
-        'show onu opm-diag all',        // Optical power diagnosis
-        'show onu optical-info all',    // All optical info
-        'show onu running-status',      // Running status
-        'show onu information',         // ONU information
-        'show onu list',                // ONU list
-        'show onu register-info'        // Register info
+        'terminal length 0',                    // Disable pagination
+        'show run',                             // Show running config - contains ONU info
+        'show running-config',                  // Alternative format
+        'show interface epon 0/1',              // Interface info PON 1
+        'show interface epon 0/2',              // Interface info PON 2  
+        'show interface epon 0/3',              // Interface info PON 3
+        'show interface epon 0/4',              // Interface info PON 4
+        'config',                               // Enter config mode
+        'show run',                             // Show config in config mode
+        'interface epon 0/1',                   // Enter interface mode
+        'show bind-info',                       // Show ONU bindings
+        'exit',                                 // Exit interface
+        'interface epon 0/2',                   // Try PON 2
+        'show bind-info',                       // Show ONU bindings  
+        'exit',
+        'interface epon 0/3',                   // Try PON 3
+        'show bind-info',
+        'exit',
+        'interface epon 0/4',                   // Try PON 4
+        'show bind-info',
+        'exit',
+        'exit',                                 // Exit config mode
+        'show ?',                               // Discover available show commands
+        'show mac-address-table',               // MAC address table
+        'show interface status'                 // Interface status
       ];
     case 'DBC':
       return [
