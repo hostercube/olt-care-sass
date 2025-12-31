@@ -19,6 +19,7 @@ import cors from 'cors';
 import cron from 'node-cron';
 import { pollOLT, testOLTConnection, testAllProtocols } from './polling/olt-poller.js';
 import { testMikrotikConnection, fetchAllMikroTikData } from './polling/mikrotik-client.js';
+import { rebootONU, deauthorizeONU, executeBulkOperation } from './onu-commands.js';
 import { logger } from './utils/logger.js';
 
 const app = express();
@@ -339,6 +340,77 @@ app.get('/debug-logs/:oltId', async (req, res) => {
     res.json({ success: true, logs: data || [] });
   } catch (error) {
     logger.error(`Error fetching debug logs for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============= ONU BULK OPERATIONS =============
+
+// Bulk reboot ONUs
+app.post('/api/onu/bulk-reboot', async (req, res) => {
+  const { onu_ids } = req.body;
+  
+  if (!onu_ids || !Array.isArray(onu_ids) || onu_ids.length === 0) {
+    return res.status(400).json({ error: 'onu_ids array required' });
+  }
+  
+  try {
+    // Fetch ONUs with their OLT info
+    const { data: onus, error: onuError } = await supabase
+      .from('onus')
+      .select('*, olts(*)')
+      .in('id', onu_ids);
+    
+    if (onuError) throw onuError;
+    
+    const results = [];
+    for (const onu of onus) {
+      const olt = onu.olts;
+      if (!olt) {
+        results.push({ onu_id: onu.id, success: false, message: 'OLT not found' });
+        continue;
+      }
+      const result = await rebootONU(olt, onu);
+      results.push({ onu_id: onu.id, onu_name: onu.name, ...result });
+    }
+    
+    res.json({ success: true, results });
+  } catch (error) {
+    logger.error('Bulk reboot error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk deauthorize ONUs
+app.post('/api/onu/bulk-deauthorize', async (req, res) => {
+  const { onu_ids } = req.body;
+  
+  if (!onu_ids || !Array.isArray(onu_ids) || onu_ids.length === 0) {
+    return res.status(400).json({ error: 'onu_ids array required' });
+  }
+  
+  try {
+    const { data: onus, error: onuError } = await supabase
+      .from('onus')
+      .select('*, olts(*)')
+      .in('id', onu_ids);
+    
+    if (onuError) throw onuError;
+    
+    const results = [];
+    for (const onu of onus) {
+      const olt = onu.olts;
+      if (!olt) {
+        results.push({ onu_id: onu.id, success: false, message: 'OLT not found' });
+        continue;
+      }
+      const result = await deauthorizeONU(olt, onu);
+      results.push({ onu_id: onu.id, onu_name: onu.name, ...result });
+    }
+    
+    res.json({ success: true, results });
+  } catch (error) {
+    logger.error('Bulk deauthorize error:', error);
     res.status(500).json({ error: error.message });
   }
 });
