@@ -15,40 +15,43 @@ import { logger } from '../utils/logger.js';
  */
 export async function executeTelnetCommands(olt, commands) {
   return new Promise((resolve, reject) => {
-    const TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '180000'); // 3 minutes timeout
-    const COMMAND_DELAY = 2000; // 2 seconds between commands
-    const COMMAND_WAIT = 5000; // Wait 5 seconds for command output
+    const TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '180000'); // 3 minutes total timeout
+    const LOGIN_TIMEOUT = 30000; // 30 seconds for login
+    const COMMAND_OUTPUT_WAIT = 8000; // Wait 8 seconds for each command output
+    const POST_COMMANDS_WAIT = 10000; // Wait 10 seconds after all commands for remaining output
     
     let output = '';
-    let authenticated = false;
-    let commandIndex = 0;
     let loginStep = 0; 
-    // 0: waiting for username prompt
-    // 1: sent username, waiting for password prompt
+    // 0: waiting for login prompt
+    // 1: sent username, waiting for password
     // 2: sent password, waiting for prompt
-    // 3: in user mode (>), sent enable command
+    // 3: in user mode (>), sent enable
     // 4: sent enable password
-    // 5: fully authenticated in enable mode (#)
-    let dataBuffer = '';
-    let lastDataTime = Date.now();
-    let commandsStarted = false;
-    let allCommandsSent = false;
-    let waitingForOutput = false;
+    // 5: authenticated in enable mode (#)
+    // 6: sent terminal length 0
+    // 7: commands started
+    // 8: all commands sent, waiting for output
+    
+    let commandIndex = 0;
+    let commandsSent = false;
+    let finished = false;
     
     const socket = new net.Socket();
     socket.setEncoding('utf8');
-    
-    // Track if we resolved/rejected to prevent double calls
-    let finished = false;
     
     function finish(result, error = null) {
       if (finished) return;
       finished = true;
       clearTimeout(timeout);
+      clearTimeout(loginTimeout);
+      
+      try {
+        socket.destroy();
+      } catch (e) {}
       
       if (error) {
-        if (output.length > 100) {
-          // We got some data, return what we have
+        if (output.length > 200) {
+          // Got significant data, return what we have
           logger.warn(`Telnet error but returning partial output: ${output.length} chars`);
           resolve(output);
         } else {
@@ -60,237 +63,185 @@ export async function executeTelnetCommands(olt, commands) {
     }
     
     const timeout = setTimeout(() => {
-      logger.warn(`Telnet timeout for ${olt.ip_address}:${olt.port} - Output: ${output.length} chars`);
-      socket.destroy();
-      finish(output.length > 100 ? output : null, output.length <= 100 ? new Error('Telnet timeout') : null);
+      logger.warn(`Telnet total timeout for ${olt.ip_address}:${olt.port} - Output: ${output.length} chars`);
+      finish(output.length > 200 ? output : null, output.length <= 200 ? new Error('Telnet timeout') : null);
     }, TIMEOUT);
+    
+    let loginTimeout = setTimeout(() => {
+      if (loginStep < 5) {
+        logger.warn(`Telnet login timeout for ${olt.ip_address} at step ${loginStep}`);
+        finish(null, new Error('Telnet login timeout'));
+      }
+    }, LOGIN_TIMEOUT);
     
     socket.on('connect', () => {
       logger.info(`Telnet connected to ${olt.ip_address}:${olt.port}`);
-      lastDataTime = Date.now();
     });
     
     socket.on('data', (data) => {
       const chunk = data.toString();
       output += chunk;
-      dataBuffer += chunk;
-      lastDataTime = Date.now();
       
-      const lowerBuffer = dataBuffer.toLowerCase();
+      const lowerOutput = output.toLowerCase();
+      const lastLine = output.split('\n').pop()?.trim() || '';
+      const lastLineLower = lastLine.toLowerCase();
       
-      // Handle login sequence with multiple pattern matching
-      if (!authenticated) {
-        handleLoginSequence(lowerBuffer);
-      } else {
-        handleAuthenticatedData(lowerBuffer);
-      }
-    });
-    
-    function handleLoginSequence(lowerBuffer) {
-      // Check for username/login prompts - various formats
+      // Handle login sequence
       if (loginStep === 0) {
-        if (lowerBuffer.includes('username') || 
-            lowerBuffer.includes('login:') || 
-            lowerBuffer.includes('login :') ||
-            lowerBuffer.includes('user:') ||
-            lowerBuffer.includes('user name') ||
-            lowerBuffer.match(/user\s*:/)) {
+        // Wait for login prompt
+        if (lowerOutput.includes('login:') || 
+            lowerOutput.includes('username') || 
+            lowerOutput.includes('user:') ||
+            lowerOutput.match(/user\s*name/i)) {
           loginStep = 1;
           setTimeout(() => {
             socket.write(olt.username + '\r\n');
             logger.debug(`Sent username: ${olt.username}`);
-            dataBuffer = '';
-          }, 500);
+          }, 300);
         }
       }
       
-      // Check for password prompt (initial login) - only if we've sent username
-      if (loginStep === 1 && lowerBuffer.includes('password')) {
-        loginStep = 2;
-        setTimeout(() => {
-          socket.write(olt.password_encrypted + '\r\n');
-          logger.debug(`Sent login password`);
-          dataBuffer = '';
-        }, 500);
+      if (loginStep === 1) {
+        // Wait for password prompt after sending username
+        if (lowerOutput.includes('password') && 
+            (lowerOutput.lastIndexOf('password') > lowerOutput.lastIndexOf('login'))) {
+          loginStep = 2;
+          setTimeout(() => {
+            socket.write(olt.password_encrypted + '\r\n');
+            logger.debug(`Sent login password`);
+          }, 300);
+        }
       }
       
-      // Check if we're now logged in (various CLI prompts)
       if (loginStep === 2) {
-        // Check for user mode prompt (>) - need to escalate to enable mode
-        if (lowerBuffer.match(/[\w\-]+>\s*$/) && !lowerBuffer.includes('#')) {
-          // In user mode, need to escalate to enable mode
+        // Check login result
+        if (lastLineLower.match(/[\w\-]+>\s*$/)) {
+          // User mode - need to enable
           loginStep = 3;
           setTimeout(() => {
             socket.write('enable\r\n');
-            logger.debug(`Sending enable command`);
-            dataBuffer = '';
-          }, 1000);
-        }
-        // Already in privileged mode (#)
-        else if (lowerBuffer.match(/[\w\-]+#\s*$/)) {
+            logger.debug(`Sent enable command`);
+          }, 500);
+        } else if (lastLineLower.match(/[\w\-]+#\s*$/)) {
+          // Already in privileged mode
           enterPrivilegedMode();
-        }
-        // Check for login failure
-        else if (lowerBuffer.includes('invalid') || 
-                 lowerBuffer.includes('failed') || 
-                 lowerBuffer.includes('incorrect') ||
-                 lowerBuffer.includes('denied') ||
-                 lowerBuffer.includes('bad password')) {
-          finish(null, new Error('Telnet login failed - invalid credentials'));
-          socket.destroy();
-          return;
+        } else if (lowerOutput.includes('invalid') || 
+                   lowerOutput.includes('failed') || 
+                   lowerOutput.includes('incorrect') ||
+                   lowerOutput.includes('denied')) {
+          finish(null, new Error('Login failed - invalid credentials'));
         }
       }
       
-      // Handle enable password prompt (step 3)
-      if (loginStep === 3 && lowerBuffer.includes('password')) {
-        loginStep = 4;
-        setTimeout(() => {
-          socket.write(olt.password_encrypted + '\r\n');
-          logger.debug(`Sent enable password`);
-          dataBuffer = '';
-        }, 500);
-      }
-      
-      // Check if we're now in enable mode (after sending enable or enable password)
-      if (loginStep === 3 || loginStep === 4) {
-        if (lowerBuffer.match(/[\w\-]+#\s*$/)) {
-          enterPrivilegedMode();
-        }
-        // Some OLTs go directly to enable mode without password after a delay
-        else if (loginStep === 3 && !lowerBuffer.includes('password')) {
+      if (loginStep === 3) {
+        // Sent enable, check for password prompt or direct entry
+        if (lastLineLower.includes('password')) {
+          loginStep = 4;
           setTimeout(() => {
-            const currentBuffer = dataBuffer.toLowerCase();
-            if (currentBuffer.match(/[\w\-]+#\s*$/)) {
-              enterPrivilegedMode();
-            } else if (currentBuffer.match(/[\w\-]+>\s*$/)) {
-              // Still in user mode, send enable again
-              socket.write('enable\r\n');
-              dataBuffer = '';
-            }
-          }, 2000);
+            socket.write(olt.password_encrypted + '\r\n');
+            logger.debug(`Sent enable password`);
+          }, 300);
+        } else if (lastLineLower.match(/[\w\-]+#\s*$/)) {
+          enterPrivilegedMode();
         }
       }
-    }
+      
+      if (loginStep === 4) {
+        // Sent enable password, check for privileged prompt
+        if (lastLineLower.match(/[\w\-]+#\s*$/)) {
+          enterPrivilegedMode();
+        }
+      }
+      
+      // Handle More prompts during command execution
+      if (loginStep >= 6) {
+        if (lowerOutput.includes('--more--') || 
+            lowerOutput.includes('-- more --') ||
+            lowerOutput.includes('press any key')) {
+          socket.write(' '); // Send space to continue
+        }
+      }
+    });
     
     function enterPrivilegedMode() {
-      if (authenticated) return; // Prevent duplicate calls
-      authenticated = true;
+      if (loginStep >= 5) return;
       loginStep = 5;
+      clearTimeout(loginTimeout);
       logger.info(`Telnet authenticated (enable mode) at ${olt.ip_address}`);
-      dataBuffer = '';
       
-      // Send terminal length 0 first to disable paging, then start commands
+      // Send terminal length 0 first
       setTimeout(() => {
         socket.write('terminal length 0\r\n');
+        loginStep = 6;
         logger.debug(`Sent: terminal length 0`);
         
+        // Start sending commands after a delay
         setTimeout(() => {
           startSendingCommands();
-        }, COMMAND_DELAY);
+        }, 2000);
       }, 1000);
     }
     
-    function handleAuthenticatedData(lowerBuffer) {
-      // Handle "More" prompts for pagination
-      if (lowerBuffer.includes('--more--') || 
-          lowerBuffer.includes('-- more --') ||
-          lowerBuffer.includes('press any key') ||
-          lowerBuffer.match(/continue\s*\?/i)) {
-        dataBuffer = '';
-        socket.write(' '); // Send space to continue
-        return;
-      }
-      
-      // Check for command prompt at end of output (ready for next command)
-      const lines = dataBuffer.split('\n');
-      const lastLine = (lines[lines.length - 1] || '').trim();
-      
-      if (waitingForOutput) {
-        // Wait for prompt indicating command completion
-        if (lastLine.match(/[#>]\s*$/) || 
-            lowerBuffer.endsWith('#') || 
-            lowerBuffer.endsWith('> ') ||
-            lowerBuffer.endsWith('# ')) {
-          waitingForOutput = false;
-          dataBuffer = '';
-          
-          if (!allCommandsSent) {
-            // More commands to send
-            setTimeout(() => sendNextCommand(), COMMAND_DELAY);
-          } else {
-            // All commands sent and completed
-            finishSession();
-          }
-        }
-      }
-    }
-    
     function startSendingCommands() {
-      if (commandsStarted) return;
-      commandsStarted = true;
-      logger.info(`Starting to send ${commands.length} commands to ${olt.name}`);
-      sendNextCommand();
-    }
-    
-    function sendNextCommand() {
-      if (commandIndex < commands.length) {
-        const cmd = commands[commandIndex];
-        commandIndex++;
-        
-        // Skip duplicate terminal length command
-        if (cmd.toLowerCase() === 'terminal length 0' && commandIndex > 1) {
-          sendNextCommand();
-          return;
-        }
-        
-        // Skip enable command if already in enable mode
-        if (cmd.toLowerCase() === 'enable' && authenticated) {
-          sendNextCommand();
-          return;
-        }
-        
-        logger.debug(`Sending command [${commandIndex}/${commands.length}]: ${cmd}`);
-        socket.write(cmd + '\r\n');
-        waitingForOutput = true;
-        dataBuffer = '';
-        
-        // Set a timeout to move on if no prompt received
+      if (commandsSent) return;
+      commandsSent = true;
+      loginStep = 7;
+      
+      // Filter out commands we already sent
+      const filteredCommands = commands.filter(cmd => {
+        const lower = cmd.toLowerCase().trim();
+        return lower !== 'terminal length 0' && lower !== 'enable';
+      });
+      
+      logger.info(`Starting to send ${filteredCommands.length} commands to ${olt.name}`);
+      
+      // Send all commands with delays between them
+      filteredCommands.forEach((cmd, index) => {
         setTimeout(() => {
-          if (waitingForOutput && commandIndex < commands.length) {
-            logger.debug(`Command timeout, moving to next command`);
-            waitingForOutput = false;
-            sendNextCommand();
-          } else if (waitingForOutput && commandIndex >= commands.length) {
-            allCommandsSent = true;
-            finishSession();
+          logger.debug(`Sending command [${index + 1}/${filteredCommands.length}]: ${cmd}`);
+          socket.write(cmd + '\r\n');
+          
+          // After last command, wait for output then finish
+          if (index === filteredCommands.length - 1) {
+            loginStep = 8;
+            // Wait for all command output to arrive
+            setTimeout(() => {
+              finishSession();
+            }, POST_COMMANDS_WAIT);
           }
-        }, COMMAND_WAIT);
-      } else {
-        allCommandsSent = true;
-        finishSession();
+        }, index * COMMAND_OUTPUT_WAIT);
+      });
+      
+      // If no commands to send, finish immediately
+      if (filteredCommands.length === 0) {
+        setTimeout(finishSession, 2000);
       }
     }
     
     function finishSession() {
       if (finished) return;
       
-      logger.debug(`All commands completed, closing session`);
+      logger.info(`Telnet session complete for ${olt.name}, output length: ${output.length}`);
       
-      // Wait a bit for any remaining output
+      // Log the full raw output for debugging (truncated for log file)
+      if (output.length > 0) {
+        const lines = output.split('\n');
+        logger.debug(`Raw output has ${lines.length} lines`);
+        // Log first 20 and last 20 lines for debugging
+        const sample = lines.length <= 40 
+          ? lines.join('\n')
+          : [...lines.slice(0, 20), '...', ...lines.slice(-20)].join('\n');
+        logger.debug(`Output sample:\n${sample}`);
+      }
+      
+      // Send exit commands
+      socket.write('exit\r\n');
       setTimeout(() => {
-        socket.write('exit\r\n');
-        
+        socket.write('quit\r\n');
         setTimeout(() => {
-          socket.write('quit\r\n');
-          
-          setTimeout(() => {
-            logger.info(`Telnet session complete for ${olt.name}, output length: ${output.length}`);
-            socket.destroy();
-            finish(output);
-          }, 2000);
+          finish(output);
         }, 1000);
-      }, 2000);
+      }, 500);
     }
     
     socket.on('error', (err) => {
@@ -307,11 +258,9 @@ export async function executeTelnetCommands(olt, commands) {
     
     socket.on('timeout', () => {
       logger.warn(`Telnet socket timeout for ${olt.ip_address}`);
-      socket.destroy();
       finish(null, new Error('Telnet socket timeout'));
     });
     
-    // Set socket timeout
     socket.setTimeout(TIMEOUT);
     
     logger.debug(`Connecting Telnet to ${olt.ip_address}:${olt.port} as ${olt.username}`);
