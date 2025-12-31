@@ -4,15 +4,21 @@ import { logger } from '../utils/logger.js';
 /**
  * Execute Telnet commands on OLT
  * Enhanced for VSOL, DBC, CDATA, ECOM and other Chinese OLTs
- * Handles various login prompts and CLI modes
+ * Handles various login prompts, enable mode, and CLI modes
  */
 export async function executeTelnetCommands(olt, commands) {
   return new Promise((resolve, reject) => {
-    const TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '90000'); // Extended timeout for slower OLTs
+    const TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '120000'); // Extended timeout for slower OLTs
     let output = '';
     let authenticated = false;
     let commandIndex = 0;
-    let loginStep = 0; // 0: waiting for username prompt, 1: waiting for password prompt, 2: logged in
+    let loginStep = 0; 
+    // 0: waiting for username prompt
+    // 1: sent username, waiting for password prompt
+    // 2: sent password, waiting for prompt
+    // 3: in user mode (>), sent enable command
+    // 4: sent enable password
+    // 5: fully authenticated in enable mode (#)
     let loginAttempts = 0;
     let dataBuffer = '';
     let lastDataTime = Date.now();
@@ -64,43 +70,97 @@ export async function executeTelnetCommands(olt, commands) {
           }
         }
         
-        // Check for password prompt
+        // Check for password prompt (initial login) - only if we've sent username
         if (loginStep === 1 && lowerBuffer.includes('password')) {
           loginStep = 2;
           setTimeout(() => {
             socket.write(olt.password_encrypted + '\r\n');
-            logger.debug(`Sent password to ${olt.ip_address}`);
+            logger.debug(`Sent login password to ${olt.ip_address}`);
             dataBuffer = '';
           }, 300);
         }
         
         // Check if we're now logged in (various CLI prompts)
         if (loginStep === 2) {
-          // Look for common CLI prompt patterns
-          if (lowerBuffer.includes('#') || 
-              lowerBuffer.includes('>') || 
-              lowerBuffer.includes('$') ||
-              lowerBuffer.includes('olt>') ||
-              lowerBuffer.includes('olt#') ||
-              lowerBuffer.match(/\w+[>#\$]\s*$/)) {
-            authenticated = true;
-            logger.info(`Telnet authenticated to ${olt.ip_address}`);
-            dataBuffer = '';
-            
-            // Wait a bit before sending commands to let the CLI settle
+          // Check for user mode prompt (>) - need to escalate to enable mode
+          if (lowerBuffer.match(/[\w\-]+>\s*$/) && !lowerBuffer.includes('#')) {
+            // In user mode, need to escalate to enable mode
+            loginStep = 3;
             setTimeout(() => {
-              sendNextCommand();
+              socket.write('enable\r\n');
+              logger.debug(`Sending enable command to ${olt.ip_address}`);
+              dataBuffer = '';
+            }, 500);
+          }
+          // Already in privileged mode (#)
+          else if (lowerBuffer.match(/[\w\-]+#\s*$/)) {
+            authenticated = true;
+            loginStep = 5;
+            logger.info(`Telnet authenticated (privileged mode) at ${olt.ip_address}`);
+            dataBuffer = '';
+            setTimeout(() => {
+              // Send terminal length 0 first to disable paging
+              socket.write('terminal length 0\r\n');
+              setTimeout(() => {
+                sendNextCommand();
+              }, 500);
             }, 500);
           }
           // Check for login failure
           else if (lowerBuffer.includes('invalid') || 
                    lowerBuffer.includes('failed') || 
                    lowerBuffer.includes('incorrect') ||
-                   lowerBuffer.includes('denied')) {
+                   lowerBuffer.includes('denied') ||
+                   lowerBuffer.includes('bad password')) {
             clearTimeout(timeout);
             socket.destroy();
             reject(new Error('Telnet login failed - invalid credentials'));
             return;
+          }
+        }
+        
+        // Handle enable password prompt (step 3)
+        if (loginStep === 3 && lowerBuffer.includes('password')) {
+          loginStep = 4;
+          setTimeout(() => {
+            socket.write(olt.password_encrypted + '\r\n');
+            logger.debug(`Sent enable password to ${olt.ip_address}`);
+            dataBuffer = '';
+          }, 300);
+        }
+        
+        // Check if we're now in enable mode (after sending enable or enable password)
+        if (loginStep === 3 || loginStep === 4) {
+          if (lowerBuffer.match(/[\w\-]+#\s*$/)) {
+            authenticated = true;
+            loginStep = 5;
+            logger.info(`Telnet authenticated (enable mode) at ${olt.ip_address}`);
+            dataBuffer = '';
+            setTimeout(() => {
+              // Send terminal length 0 first to disable paging
+              socket.write('terminal length 0\r\n');
+              setTimeout(() => {
+                sendNextCommand();
+              }, 500);
+            }, 500);
+          }
+          // Some OLTs go directly to enable mode without password
+          else if (loginStep === 3 && !lowerBuffer.includes('password')) {
+            // Wait a bit more for password prompt or # prompt
+            setTimeout(() => {
+              if (dataBuffer.toLowerCase().match(/[\w\-]+#\s*$/)) {
+                authenticated = true;
+                loginStep = 5;
+                logger.info(`Telnet authenticated (enable mode no password) at ${olt.ip_address}`);
+                dataBuffer = '';
+                setTimeout(() => {
+                  socket.write('terminal length 0\r\n');
+                  setTimeout(() => {
+                    sendNextCommand();
+                  }, 500);
+                }, 500);
+              }
+            }, 1000);
           }
         }
         
@@ -149,7 +209,7 @@ export async function executeTelnetCommands(olt, commands) {
         setTimeout(() => {
           logger.debug(`Sending Telnet command [${commandIndex}/${commands.length}] to ${olt.name}: ${cmd}`);
           socket.write(cmd + '\r\n');
-        }, 800); // Increased delay for slower OLTs
+        }, 1000); // Increased delay for slower OLTs
       } else if (commandIndex === commands.length) {
         commandIndex++; // Prevent sending exit multiple times
         
@@ -165,7 +225,7 @@ export async function executeTelnetCommands(olt, commands) {
             logger.info(`Telnet session complete for ${olt.name}, output length: ${output.length}`);
             resolve(output);
           }, 3000);
-        }, 2000);
+        }, 3000);
       }
     }
     
