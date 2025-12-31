@@ -77,30 +77,32 @@ async function detectRouterOSVersion(mikrotik) {
   }
   
   // Strategy 2: Try Plain API on port 8728 (RouterOS 6.x standard)
+  // But if the user specified a custom port, they likely want to use it for Plain API
+  const plainApiPort = (port !== 8728 && port !== 8729 && port !== 80 && port !== 443 && port !== 8090) ? port : 8728;
   try {
-    const result = await tryPlainAPIVersion(ip, port === 8728 || port === 8729 ? port : 8728, username, password);
+    const result = await tryPlainAPIVersion(ip, plainApiPort, username, password);
     if (result) {
       const connectionInfo = { ...result, timestamp: Date.now() };
       deviceConnectionCache.set(cacheKey, connectionInfo);
-      logger.info(`RouterOS detected via Plain API: v${result.version} (method: ${result.method})`);
+      logger.info(`RouterOS detected via Plain API on port ${plainApiPort}: v${result.version} (method: ${result.method})`);
       return connectionInfo;
     }
   } catch (err) {
-    logger.debug(`Plain API detection failed: ${err.message}`);
+    logger.debug(`Plain API detection on port ${plainApiPort} failed: ${err.message}`);
   }
   
-  // Strategy 3: If custom port, try Plain API on that port too (port-forwarded Plain API)
-  if (port !== 8728 && port !== 8729) {
+  // Strategy 3: If user port is different, try Plain API on standard 8728
+  if (plainApiPort !== 8728) {
     try {
-      const result = await tryPlainAPIVersion(ip, port, username, password);
+      const result = await tryPlainAPIVersion(ip, 8728, username, password);
       if (result) {
         const connectionInfo = { ...result, timestamp: Date.now() };
         deviceConnectionCache.set(cacheKey, connectionInfo);
-        logger.info(`RouterOS detected via Plain API on custom port: v${result.version}`);
+        logger.info(`RouterOS detected via Plain API on port 8728: v${result.version}`);
         return connectionInfo;
       }
     } catch (err) {
-      logger.debug(`Plain API on port ${port} failed: ${err.message}`);
+      logger.debug(`Plain API on port 8728 failed: ${err.message}`);
     }
   }
   
@@ -425,12 +427,18 @@ async function callMikroTikAPI(mikrotik, endpoint) {
   // Detect version and best connection method
   const connectionInfo = await detectRouterOSVersion(mikrotik);
   
-  logger.info(`MikroTik API call to ${ip} using ${connectionInfo.method} (v${connectionInfo.version}) - endpoint: ${endpoint}`);
+  logger.debug(`MikroTik API call to ${ip}:${connectionInfo.port || port} using ${connectionInfo.method} (v${connectionInfo.version}) - endpoint: ${endpoint}`);
   
-  if (connectionInfo.method === 'rest') {
-    return await callMikroTikREST(mikrotik, endpoint, connectionInfo);
-  } else {
-    return await callMikroTikPlainAPI(mikrotik, endpoint, connectionInfo);
+  try {
+    if (connectionInfo.method === 'rest') {
+      return await callMikroTikREST(mikrotik, endpoint, connectionInfo);
+    } else {
+      return await callMikroTikPlainAPI(mikrotik, endpoint, connectionInfo);
+    }
+  } catch (error) {
+    logger.warn(`MikroTik API call failed for ${endpoint}: ${error.message}`);
+    return [];
+  }
   }
 }
 

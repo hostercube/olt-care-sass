@@ -76,6 +76,24 @@ export function parseVSOLOutput(output) {
       continue;
     }
     
+    // Pattern 0: ONU Description / Name from running config
+    // "onu description CUSTOMER_NAME"
+    // "onu 1 description Customer ABC"
+    // "onu name ONU-ABC-123"
+    const onuDescMatch = trimmedLine.match(/onu\s+(?:(\d+)\s+)?(?:description|name)\s+(.+)/i);
+    if (onuDescMatch && currentPonPort) {
+      const onuIdx = onuDescMatch[1] ? parseInt(onuDescMatch[1]) : null;
+      const onuName = onuDescMatch[2].trim().replace(/["']/g, '');
+      if (onuIdx !== null) {
+        const key = `${currentPonPort}:${onuIdx}`;
+        if (onuMap.has(key)) {
+          onuMap.get(key).name = onuName;
+          logger.debug(`ONU name from description: ${key} -> ${onuName}`);
+        }
+      }
+      continue;
+    }
+    
     // Pattern 1b: Interface in config-pon context
     // "config-pon-0/1" prompt or "config-gpon-0/1"
     const ponContextMatch = trimmedLine.match(/config-(?:pon|gpon|epon)-(\d+\/\d+)/i);
@@ -351,25 +369,41 @@ export function parseVSOLOutput(output) {
     
     // Pattern 5: EPON onu-information format
     // EPON0/1:1    00:11:22:33:44:55    Online    VSOL
-    const eponInfoMatch = trimmedLine.match(/EPON(\d+\/\d+):(\d+)\s+([0-9A-Fa-f:.-]{12,17})\s+(\w+)/i);
+    // OR: EPON0/1:1    00:11:22:33:44:55    Online    CustomerName   VSOL
+    const eponInfoMatch = trimmedLine.match(/EPON(\d+\/\d+):(\d+)\s+([0-9A-Fa-f:.-]{12,17})\s+(Online|Offline|Active|Inactive|Deactive|LOS|Working)\s*(.*)/i);
     if (eponInfoMatch) {
       const ponPort = eponInfoMatch[1];
       const onuIndex = parseInt(eponInfoMatch[2]);
       const macAddress = formatMac(eponInfoMatch[3]);
       const status = parseStatus(eponInfoMatch[4]);
+      const restOfLine = eponInfoMatch[5]?.trim() || '';
       const key = `${ponPort}:${onuIndex}`;
+      
+      // Try to extract ONU name from rest of line (skip model like VSOL, ONU-TYPE)
+      let onuName = null;
+      if (restOfLine.length > 0) {
+        // Split by whitespace and look for something that's not just a model
+        const parts = restOfLine.split(/\s+/);
+        for (const part of parts) {
+          if (part.length > 2 && !part.match(/^(VSOL|ONU|GPON|EPON|V\d+|HG\d+)$/i)) {
+            onuName = part;
+            break;
+          }
+        }
+      }
       
       if (onuMap.has(key)) {
         const onu = onuMap.get(key);
         onu.status = status;
         if (!onu.mac_address) onu.mac_address = macAddress;
+        if (onuName && onu.name.startsWith('ONU-')) onu.name = onuName;
       } else {
         onuMap.set(key, {
           pon_port: ponPort,
           onu_index: onuIndex,
           status: status,
           serial_number: macAddress.replace(/:/g, ''),
-          name: `ONU-${ponPort}:${onuIndex}`,
+          name: onuName || `ONU-${ponPort}:${onuIndex}`,
           rx_power: null,
           tx_power: null,
           mac_address: macAddress,
