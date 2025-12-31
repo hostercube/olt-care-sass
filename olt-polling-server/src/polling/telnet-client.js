@@ -223,16 +223,10 @@ export async function executeTelnetCommands(olt, commands) {
       
       logger.info(`Telnet session complete for ${olt.name}, output length: ${output.length}`);
       
-      // Log the full raw output for debugging (truncated for log file)
-      if (output.length > 0) {
-        const lines = output.split('\n');
-        logger.debug(`Raw output has ${lines.length} lines`);
-        // Log first 20 and last 20 lines for debugging
-        const sample = lines.length <= 40 
-          ? lines.join('\n')
-          : [...lines.slice(0, 20), '...', ...lines.slice(-20)].join('\n');
-        logger.debug(`Output sample:\n${sample}`);
-      }
+      // Log the FULL raw output for debugging - this is critical for fixing parsers
+      logger.info(`=== RAW CLI OUTPUT START ===`);
+      console.log(output);
+      logger.info(`=== RAW CLI OUTPUT END ===`);
       
       // Send exit commands
       socket.write('exit\r\n');
