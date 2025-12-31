@@ -182,6 +182,12 @@ export function useDashboardStats() {
   const { onus } = useONUs();
   const { alerts } = useAlerts();
 
+  // Calculate average power only from ONUs that have power readings
+  const onusWithPower = onus.filter(o => o.rx_power !== null && o.rx_power !== undefined);
+  const avgRxPower = onusWithPower.length > 0 
+    ? parseFloat((onusWithPower.reduce((acc, o) => acc + (o.rx_power ?? 0), 0) / onusWithPower.length).toFixed(2))
+    : null;
+
   const stats: DashboardStats = {
     totalOLTs: olts.length,
     onlineOLTs: olts.filter(o => o.status === 'online').length,
@@ -190,9 +196,7 @@ export function useDashboardStats() {
     onlineONUs: onus.filter(o => o.status === 'online').length,
     offlineONUs: onus.filter(o => o.status === 'offline').length,
     activeAlerts: alerts.filter(a => !a.is_read).length,
-    avgRxPower: onus.length > 0 
-      ? parseFloat((onus.reduce((acc, o) => acc + (o.rx_power || 0), 0) / onus.length).toFixed(2))
-      : 0,
+    avgRxPower: avgRxPower ?? 0,
   };
 
   return stats;

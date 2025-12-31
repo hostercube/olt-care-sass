@@ -26,9 +26,12 @@ export default function ONUDevices() {
   const totalONUs = onus.length;
   const onlineONUs = onus.filter((o) => o.status === 'online').length;
   const offlineONUs = onus.filter((o) => o.status === 'offline').length;
-  const avgPower = totalONUs > 0 
-    ? (onus.reduce((acc, o) => acc + (o.rx_power || 0), 0) / totalONUs).toFixed(2)
-    : '0.00';
+  
+  // Calculate average power only from ONUs that have power readings
+  const onusWithPower = onus.filter(o => o.rx_power !== null && o.rx_power !== undefined);
+  const avgPower = onusWithPower.length > 0 
+    ? (onusWithPower.reduce((acc, o) => acc + (o.rx_power ?? 0), 0) / onusWithPower.length).toFixed(2)
+    : 'N/A';
 
   if (loading) {
     return (
@@ -66,7 +69,8 @@ export default function ONUDevices() {
           />
           <StatsCard
             title="Avg RX Power"
-            value={`${avgPower} dBm`}
+            value={avgPower === 'N/A' ? 'N/A' : `${avgPower} dBm`}
+            subtitle={onusWithPower.length > 0 ? `${onusWithPower.length} with data` : 'No power data'}
             icon={Zap}
             variant="default"
           />
