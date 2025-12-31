@@ -206,9 +206,27 @@ export function parseVSOLOutput(output) {
       continue;
     }
     
+    // Pattern 3d: Detect EPON port from "show epon optical-transceiver-diagnosis epon 0/X" command echo
+    const eponInterfaceMatch = trimmedLine.match(/show\s+epon\s+(?:optical-transceiver-diagnosis|onu-information)\s+(?:interface\s+)?epon\s+(\d+\/\d+)/i);
+    if (eponInterfaceMatch) {
+      currentPonPort = eponInterfaceMatch[1];
+      logger.debug(`Detected EPON interface context: ${currentPonPort}`);
+      continue;
+    }
+    
+    // Pattern 3e: Detect PON port from "show onu X/Y optical-info" command echo
+    const onuInterfaceMatch = trimmedLine.match(/show\s+onu\s+(\d+\/\d+)\s+optical-info/i);
+    if (onuInterfaceMatch) {
+      currentPonPort = onuInterfaceMatch[1];
+      logger.debug(`Detected ONU interface context: ${currentPonPort}`);
+      continue;
+    }
+    
     // Pattern 4: EPON show onu opm-diag all output
     // Format 1: EPON0/1:1   MAC:4c:ae:1c:69:cd:d0  RX:-20.5dBm  TX:2.3dBm  Status:Online
     // Format 2: 0/1:1  00:11:22:33:44:55  -20.5  2.3  Online
+    // Format 3: Port  ONU-ID  MAC-Addr  Rx-Power  Tx-Power  Temperature  Voltage  Current
+    // Format 4: 0/1   1       4c:ae:1c  -20.5     2.3       45.1         3.29     12.3
     const opmDiagMatch1 = trimmedLine.match(/(?:EPON)?(\d+\/\d+):(\d+)\s+(?:MAC:)?([0-9A-Fa-f:.-]{12,17})?\s*(?:RX:)?([-\d.]+)\s*(?:dBm)?\s+(?:TX:)?([-\d.]+)\s*(?:dBm)?/i);
     if (opmDiagMatch1) {
       const ponPort = opmDiagMatch1[1];
@@ -219,26 +237,54 @@ export function parseVSOLOutput(output) {
       const key = `${ponPort}:${onuIndex}`;
       
       // Store optical power data for later merge
-      opmDiagData.set(key, { rxPower, txPower, macAddress });
+      if (rxPower < 0 && rxPower > -50) {
+        opmDiagData.set(key, { rxPower, txPower, macAddress });
+        
+        // Update or create ONU
+        if (onuMap.has(key)) {
+          const onu = onuMap.get(key);
+          onu.rx_power = rxPower;
+          onu.tx_power = txPower;
+          if (macAddress) onu.mac_address = macAddress;
+        } else if (macAddress) {
+          onuMap.set(key, {
+            pon_port: ponPort,
+            onu_index: onuIndex,
+            status: 'online',
+            serial_number: macAddress.replace(/:/g, ''),
+            name: `ONU-${ponPort}:${onuIndex}`,
+            rx_power: rxPower,
+            tx_power: txPower,
+            mac_address: macAddress,
+            router_name: null
+          });
+        }
+        logger.debug(`OPM diag parsed: ${key} RX=${rxPower} TX=${txPower}`);
+      }
+      continue;
+    }
+    
+    // Pattern 4b: Table format with separate columns
+    // 0/1   1   4c:ae:1c:69:cd:d0   -21.5   2.1   45.2   3.3   OK
+    const opmTableMatch2 = trimmedLine.match(/^(\d+\/\d+)\s+(\d+)\s+([0-9A-Fa-f:.-]{12,17})\s+([-\d.]+)\s+([-\d.]+)/i);
+    if (opmTableMatch2) {
+      const ponPort = opmTableMatch2[1];
+      const onuIndex = parseInt(opmTableMatch2[2]);
+      const macAddress = formatMac(opmTableMatch2[3]);
+      const rxPower = parseFloat(opmTableMatch2[4]);
+      const txPower = parseFloat(opmTableMatch2[5]);
+      const key = `${ponPort}:${onuIndex}`;
       
-      // Update or create ONU
-      if (onuMap.has(key)) {
-        const onu = onuMap.get(key);
-        onu.rx_power = rxPower;
-        onu.tx_power = txPower;
-        if (macAddress) onu.mac_address = macAddress;
-      } else if (macAddress) {
-        onuMap.set(key, {
-          pon_port: ponPort,
-          onu_index: onuIndex,
-          status: 'online',
-          serial_number: macAddress.replace(/:/g, ''),
-          name: `ONU-${ponPort}:${onuIndex}`,
-          rx_power: rxPower,
-          tx_power: txPower,
-          mac_address: macAddress,
-          router_name: null
-        });
+      if (rxPower < 0 && rxPower > -50) {
+        opmDiagData.set(key, { rxPower, txPower, macAddress });
+        
+        if (onuMap.has(key)) {
+          const onu = onuMap.get(key);
+          onu.rx_power = rxPower;
+          onu.tx_power = txPower;
+          if (macAddress) onu.mac_address = macAddress;
+        }
+        logger.debug(`OPM table parsed: ${key} MAC=${macAddress} RX=${rxPower} TX=${txPower}`);
       }
       continue;
     }

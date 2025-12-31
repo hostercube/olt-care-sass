@@ -335,16 +335,33 @@ export async function pollOLT(supabase, olt) {
         // Fetch all MikroTik data including PPP secrets for PPPoE credentials
         const { pppoe, arp, dhcp, secrets } = await fetchAllMikroTikData(mikrotik);
         
-        logger.info(`MikroTik data: ${pppoe.length} PPPoE, ${arp.length} ARP, ${dhcp.length} DHCP, ${secrets.length} secrets`);
+        logger.info(`MikroTik data: ${pppoe.length} PPPoE sessions, ${arp.length} ARP entries, ${dhcp.length} DHCP leases, ${secrets.length} PPP secrets`);
+        
+        // Log some sample data for debugging
+        if (pppoe.length > 0) {
+          logger.debug(`Sample PPPoE sessions: ${JSON.stringify(pppoe.slice(0, 3))}`);
+        }
+        
+        // Count how many ONUs get enriched
+        let enrichedCount = 0;
+        const beforeOnus = JSON.stringify(onus.map(o => ({ mac: o.mac_address, pppoe: o.pppoe_username, router: o.router_name })));
         
         // Enrich ONU data with MikroTik info (router name, MAC, PPPoE username)
-        onus = onus.map(onu => enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets));
+        onus = onus.map(onu => {
+          const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
+          if (enriched.pppoe_username !== onu.pppoe_username || enriched.router_name !== onu.router_name) {
+            enrichedCount++;
+          }
+          return enriched;
+        });
         
-        logger.info(`Enriched ${onus.length} ONUs with MikroTik data`);
+        logger.info(`MikroTik enrichment: ${enrichedCount} of ${onus.length} ONUs got PPPoE/router data`);
       } catch (mikrotikErr) {
         logger.warn(`MikroTik data fetch failed (non-critical): ${mikrotikErr.message}`);
         // Continue without MikroTik data - ONU data from OLT is still valid
       }
+    } else {
+      logger.debug(`MikroTik not configured for ${olt.name} - skipping PPPoE enrichment`);
     }
     
     await syncONUsToDatabase(supabase, olt.id, onus);
@@ -575,42 +592,47 @@ function getOLTCommands(brand) {
       ];
     case 'VSOL':
       // VSOL EPON/GPON OLT CLI commands - multiple firmware versions
+      // Key insight: 'show onu opm-diag all' works in CONFIG mode (epon-OLT(config)#)
       // Primary data from 'show run' contains ONU MAC bindings
-      // GPON optical power: show gpon onu optical-info interface gpon 0/X
-      // EPON optical power: show onu opm-diag all (if supported)
       return [
         'terminal length 0',                    // Disable pagination
         'enable',                               // Enter privileged mode
-        'configure terminal',                   // Enter config mode
-        'show run',                             // Running config - ONU MAC info
+        'show run',                             // Running config - ONU MAC info (privileged mode)
         'show running-config',                  // Alternative format
         'show version',                         // Firmware version
-        // GPON optical power commands (from Gemini/Google)
+        // Enter config mode for optical power commands
+        'configure terminal',
+        // EPON optical power commands (IN CONFIG MODE)
+        'show onu opm-diag all',                // Shows all ONU optical power (config mode only!)
+        'show epon optical-transceiver-diagnosis epon 0/1',
+        'show epon optical-transceiver-diagnosis epon 0/2',
+        'show epon optical-transceiver-diagnosis epon 0/3',
+        'show epon optical-transceiver-diagnosis epon 0/4',
+        // Per-ONU optical power
+        'show onu 0/1 optical-info',
+        'show onu 0/2 optical-info',
+        'show onu 0/3 optical-info',
+        'show onu 0/4 optical-info',
+        // Alternative EPON commands
+        'show epon onu-information interface epon 0/1',
+        'show epon onu-information interface epon 0/2',
+        'show epon onu-information interface epon 0/3',
+        'show epon onu-information interface epon 0/4',
+        // ONU status commands
+        'show epon active-onu',
+        'show epon inactive-onu',
+        'show epon onu status all',
+        // Exit config mode
+        'exit',
+        // GPON optical power commands (if GPON mode)
         'show gpon onu optical-info interface gpon 0/1',
         'show gpon onu optical-info interface gpon 0/2',
         'show gpon onu optical-info interface gpon 0/3',
         'show gpon onu optical-info interface gpon 0/4',
-        'show gpon onu optical-info interface gpon 0/5',
-        'show gpon onu optical-info interface gpon 0/6',
-        'show gpon onu optical-info interface gpon 0/7',
-        'show gpon onu optical-info interface gpon 0/8',
-        // GPON ONU status
         'show gpon onu state interface gpon 0/1',
         'show gpon onu state interface gpon 0/2',
         'show gpon onu state interface gpon 0/3',
         'show gpon onu state interface gpon 0/4',
-        // GPON general info
-        'show gpon onu info interface gpon 0/1',
-        'show gpon onu info interface gpon 0/2',
-        'show gpon onu info interface gpon 0/3',
-        'show gpon onu info interface gpon 0/4',
-        // EPON optical power (alternative firmwares)
-        'show onu opm-diag all',
-        'show epon onu optical-info',
-        'show interface epon 0/1',
-        'show interface epon 0/2',
-        'show interface epon 0/3',
-        'show interface epon 0/4',
         'exit'
       ];
     case 'DBC':

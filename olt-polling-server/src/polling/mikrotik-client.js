@@ -451,26 +451,44 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   
   if (!macAddress) return onu;
   
-  // Find PPPoE session (active connection)
-  const pppoeSession = pppoeData.find(
-    p => p.mac_address === macAddress
-  );
+  // Normalize MAC for comparison (remove colons)
+  const macNormalized = macAddress.replace(/:/g, '').toUpperCase();
+  
+  // Find PPPoE session (active connection) - try exact match first, then partial
+  let pppoeSession = pppoeData.find(p => p.mac_address === macAddress);
+  if (!pppoeSession) {
+    pppoeSession = pppoeData.find(p => {
+      const pMac = p.mac_address?.replace(/:/g, '').toUpperCase();
+      return pMac && (pMac === macNormalized || macNormalized.includes(pMac) || pMac.includes(macNormalized));
+    });
+  }
   
   // Find ARP entry
-  const arpEntry = arpData.find(
-    a => a.mac_address === macAddress
-  );
+  let arpEntry = arpData.find(a => a.mac_address === macAddress);
+  if (!arpEntry) {
+    arpEntry = arpData.find(a => {
+      const aMac = a.mac_address?.replace(/:/g, '').toUpperCase();
+      return aMac && (aMac === macNormalized || macNormalized.includes(aMac) || aMac.includes(macNormalized));
+    });
+  }
   
   // Find DHCP lease
-  const dhcpLease = dhcpData.find(
-    d => d.mac_address === macAddress
-  );
+  let dhcpLease = dhcpData.find(d => d.mac_address === macAddress);
+  if (!dhcpLease) {
+    dhcpLease = dhcpData.find(d => {
+      const dMac = d.mac_address?.replace(/:/g, '').toUpperCase();
+      return dMac && (dMac === macNormalized || macNormalized.includes(dMac) || dMac.includes(macNormalized));
+    });
+  }
   
   // Find PPP secret by caller-id (MAC) or by matching username
-  const pppSecret = pppSecretsData.find(
-    s => s.caller_id === macAddress || 
-         (pppoeSession && s.pppoe_username === pppoeSession.pppoe_username)
-  );
+  let pppSecret = pppSecretsData.find(s => {
+    const sCallerId = s.caller_id?.replace(/:/g, '').toUpperCase();
+    return sCallerId === macNormalized;
+  });
+  if (!pppSecret && pppoeSession) {
+    pppSecret = pppSecretsData.find(s => s.pppoe_username === pppoeSession.pppoe_username);
+  }
   
   // Determine router name from various sources
   let routerName = onu.router_name;
@@ -486,10 +504,20 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   if (!routerName && pppSecret?.comment) {
     routerName = pppSecret.comment;
   }
+  // Use PPPoE username as router name fallback
+  if (!routerName && (pppoeSession?.pppoe_username || pppSecret?.pppoe_username)) {
+    routerName = pppoeSession?.pppoe_username || pppSecret?.pppoe_username;
+  }
+  
+  const enrichedPppoeUsername = pppoeSession?.pppoe_username || pppSecret?.pppoe_username || onu.pppoe_username;
+  
+  if (enrichedPppoeUsername && enrichedPppoeUsername !== onu.pppoe_username) {
+    logger.debug(`MikroTik enriched ONU ${onu.mac_address}: PPPoE=${enrichedPppoeUsername}, Router=${routerName}`);
+  }
   
   return {
     ...onu,
-    pppoe_username: pppoeSession?.pppoe_username || pppSecret?.pppoe_username || onu.pppoe_username,
+    pppoe_username: enrichedPppoeUsername,
     router_name: routerName,
     mac_address: macAddress,
     // Status can be inferred from PPPoE session
