@@ -202,6 +202,52 @@ app.post('/poll/:oltId', async (req, res) => {
   }
 });
 
+// Get debug logs for an OLT
+app.get('/api/debug-logs/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+  
+  try {
+    const { data, error } = await supabase
+      .from('olt_debug_logs')
+      .select('*')
+      .eq('olt_id', oltId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.json({ success: true, logs: data || [] });
+  } catch (error) {
+    logger.error(`Error fetching debug logs for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Also without /api prefix
+app.get('/debug-logs/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+  
+  try {
+    const { data, error } = await supabase
+      .from('olt_debug_logs')
+      .select('*')
+      .eq('olt_id', oltId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.json({ success: true, logs: data || [] });
+  } catch (error) {
+    logger.error(`Error fetching debug logs for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Poll all OLTs (with /api prefix)
 app.post('/api/poll-all', async (req, res) => {
   if (pollingStatus.isPolling) {

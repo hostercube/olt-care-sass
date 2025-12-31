@@ -166,13 +166,17 @@ export function getProtocolConfig(brand) {
  */
 export async function pollOLT(supabase, olt) {
   const startTime = Date.now();
+  let rawOutput = '';
+  let connectionMethod = '';
+  let errorMessage = null;
+  const commands = getOLTCommands(olt.brand);
   
   try {
-    const commands = getOLTCommands(olt.brand);
     let output = '';
     let onus = [];
     
     const connectionType = getConnectionType(olt.port, olt.brand);
+    connectionMethod = connectionType;
     logger.info(`Polling ${olt.name} (${olt.ip_address}:${olt.port}) - Brand: ${olt.brand}, Method: ${connectionType}`);
     
     // Main polling logic - simplified for reliability
@@ -183,9 +187,11 @@ export async function pollOLT(supabase, olt) {
         logger.info(`Using Telnet on port ${olt.port} for ${olt.name}`);
         try {
           output = await executeTelnetCommands(olt, commands);
+          rawOutput = output || '';
           if (output && output.length > 50) {
             logger.info(`Telnet successful, output length: ${output.length} chars`);
-            logger.debug(`CLI output sample:\n${output.substring(0, 1000)}`);
+            // Log the full raw output for debugging
+            logger.debug(`=== RAW CLI OUTPUT START ===\n${output}\n=== RAW CLI OUTPUT END ===`);
             onus = parseOLTOutput(olt.brand, output);
             logger.info(`Parsed ${onus.length} ONUs from Telnet output`);
           } else {
@@ -196,9 +202,11 @@ export async function pollOLT(supabase, olt) {
           
           // Fallback to SSH on port 22 if Telnet fails
           logger.info(`Trying SSH fallback on port 22 for ${olt.name}`);
+          connectionMethod = 'ssh_fallback';
           try {
             const sshOlt = { ...olt, port: 22 };
             output = await executeSSHCommands(sshOlt);
+            rawOutput = output || '';
             if (output && output.length > 50) {
               onus = parseOLTOutput(olt.brand, output);
               logger.info(`SSH fallback successful: Found ${onus.length} ONUs`);
@@ -215,6 +223,7 @@ export async function pollOLT(supabase, olt) {
         logger.info(`Using SSH on port ${olt.port} for ${olt.name}`);
         try {
           output = await executeSSHCommands(olt);
+          rawOutput = output || '';
           if (output && output.length > 50) {
             logger.info(`SSH successful, output length: ${output.length} chars`);
             onus = parseOLTOutput(olt.brand, output);
@@ -227,9 +236,11 @@ export async function pollOLT(supabase, olt) {
           
           // Fallback to Telnet on port 23
           logger.info(`Trying Telnet fallback on port 23 for ${olt.name}`);
+          connectionMethod = 'telnet_fallback';
           try {
             const telnetOlt = { ...olt, port: 23 };
             output = await executeTelnetCommands(telnetOlt, commands);
+            rawOutput = output || '';
             if (output && output.length > 50) {
               onus = parseOLTOutput(olt.brand, output);
               logger.info(`Telnet fallback successful: Found ${onus.length} ONUs`);
@@ -279,10 +290,13 @@ export async function pollOLT(supabase, olt) {
               output = await executeSSHCommands(attemptOlt);
             }
             
+            rawOutput = output || '';
+            
             if (output && output.length > 50) {
               onus = parseOLTOutput(olt.brand, output);
               if (onus.length > 0) {
                 success = true;
+                connectionMethod = attempt.name;
                 logger.info(`${attempt.name} successful: Found ${onus.length} ONUs`);
               } else {
                 errors.push(`${attempt.name}: no ONUs parsed`);
@@ -302,6 +316,10 @@ export async function pollOLT(supabase, olt) {
     }
     
     logger.info(`Polling complete: Found ${onus.length} ONUs from ${olt.name}`);
+    
+    // Save debug log to database
+    const duration = Date.now() - startTime;
+    await saveDebugLog(supabase, olt, rawOutput, onus.length, connectionMethod, commands, null, duration);
     
     // Enrich with MikroTik data if configured
     if (olt.mikrotik_ip && olt.mikrotik_username) {
@@ -343,13 +361,58 @@ export async function pollOLT(supabase, olt) {
       })
       .eq('id', olt.id);
     
-    const duration = Date.now() - startTime;
     logger.info(`Poll completed for ${olt.name} in ${duration}ms`);
     
-    return { onuCount: onus.length, duration };
+    return { onuCount: onus.length, duration, rawOutput };
   } catch (error) {
+    const duration = Date.now() - startTime;
+    errorMessage = error.message;
+    
+    // Save debug log even on error
+    await saveDebugLog(supabase, olt, rawOutput, 0, connectionMethod, commands, errorMessage, duration);
+    
     logger.error(`Failed to poll OLT ${olt.name}:`, error);
     throw error;
+  }
+}
+
+/**
+ * Save debug log to database for troubleshooting
+ */
+async function saveDebugLog(supabase, olt, rawOutput, parsedCount, connectionMethod, commands, errorMessage, duration) {
+  try {
+    // Keep only last 10 debug logs per OLT
+    const { data: existingLogs } = await supabase
+      .from('olt_debug_logs')
+      .select('id')
+      .eq('olt_id', olt.id)
+      .order('created_at', { ascending: false });
+    
+    if (existingLogs && existingLogs.length >= 10) {
+      const idsToDelete = existingLogs.slice(9).map(l => l.id);
+      await supabase
+        .from('olt_debug_logs')
+        .delete()
+        .in('id', idsToDelete);
+    }
+    
+    // Insert new debug log
+    await supabase
+      .from('olt_debug_logs')
+      .insert({
+        olt_id: olt.id,
+        olt_name: olt.name,
+        raw_output: rawOutput,
+        parsed_count: parsedCount,
+        connection_method: connectionMethod,
+        commands_sent: commands,
+        error_message: errorMessage,
+        duration_ms: duration
+      });
+      
+    logger.debug(`Debug log saved for ${olt.name}`);
+  } catch (err) {
+    logger.warn(`Failed to save debug log: ${err.message}`);
   }
 }
 
