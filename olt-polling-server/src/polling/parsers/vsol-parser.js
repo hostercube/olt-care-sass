@@ -137,11 +137,78 @@ export function parseVSOLOutput(output) {
       continue;
     }
     
-    // Pattern 3: show onu opm-diag all output
+    // Pattern 3: GPON optical-info output (from: show gpon onu optical-info interface gpon 0/X)
+    // Typical GPON format:
+    // ONU-ID  Serial-Number     Rx-Power(dBm)  Tx-Power(dBm)  Temperature  Voltage
+    // 1       VSOL12345678      -20.5          2.3            45           3.3
+    // or: 1  GPON12345678  -21.2dBm  2.1dBm  Online
+    // or: ONU 1: Rx=-20.5dBm Tx=2.3dBm Status=Online
+    const gponOpticalMatch = trimmedLine.match(/^\s*(\d+)\s+([A-Z0-9]{8,16})\s+([-\d.]+)\s*(?:dBm)?\s+([-\d.]+)/i);
+    if (gponOpticalMatch && currentPonPort) {
+      const onuIndex = parseInt(gponOpticalMatch[1]);
+      const serialNumber = gponOpticalMatch[2].toUpperCase();
+      const rxPower = parseFloat(gponOpticalMatch[3]);
+      const txPower = parseFloat(gponOpticalMatch[4]);
+      const key = `${currentPonPort}:${onuIndex}`;
+      
+      // Valid optical power range check
+      if (rxPower < 0 && rxPower > -50) {
+        opmDiagData.set(key, { rxPower, txPower, serialNumber });
+        
+        if (onuMap.has(key)) {
+          const onu = onuMap.get(key);
+          onu.rx_power = rxPower;
+          onu.tx_power = txPower;
+          if (!onu.serial_number) onu.serial_number = serialNumber;
+        } else {
+          onuMap.set(key, {
+            pon_port: currentPonPort,
+            onu_index: onuIndex,
+            status: 'online',
+            serial_number: serialNumber,
+            name: `ONU-${currentPonPort}:${onuIndex}`,
+            rx_power: rxPower,
+            tx_power: txPower,
+            mac_address: null,
+            router_name: null
+          });
+        }
+        logger.debug(`GPON optical parsed: ${key} SN=${serialNumber} RX=${rxPower} TX=${txPower}`);
+      }
+      continue;
+    }
+    
+    // Pattern 3b: GPON optical with ONU prefix
+    // ONU 1: Rx Power = -20.5 dBm, Tx Power = 2.3 dBm
+    const gponOpticalMatch2 = trimmedLine.match(/ONU\s*(\d+).*?(?:Rx|RX).*?([-\d.]+)\s*dBm.*?(?:Tx|TX).*?([-\d.]+)\s*dBm/i);
+    if (gponOpticalMatch2 && currentPonPort) {
+      const onuIndex = parseInt(gponOpticalMatch2[1]);
+      const rxPower = parseFloat(gponOpticalMatch2[2]);
+      const txPower = parseFloat(gponOpticalMatch2[3]);
+      const key = `${currentPonPort}:${onuIndex}`;
+      
+      if (rxPower < 0 && rxPower > -50) {
+        if (onuMap.has(key)) {
+          const onu = onuMap.get(key);
+          onu.rx_power = rxPower;
+          onu.tx_power = txPower;
+        }
+        opmDiagData.set(key, { rxPower, txPower });
+      }
+      continue;
+    }
+    
+    // Pattern 3c: Detect PON port from "show gpon onu optical-info interface gpon 0/X" command echo
+    const gponInterfaceMatch = trimmedLine.match(/show\s+gpon\s+onu\s+(?:optical-info|state|info)\s+interface\s+gpon\s+(\d+\/\d+)/i);
+    if (gponInterfaceMatch) {
+      currentPonPort = gponInterfaceMatch[1];
+      logger.debug(`Detected GPON interface context: ${currentPonPort}`);
+      continue;
+    }
+    
+    // Pattern 4: EPON show onu opm-diag all output
     // Format 1: EPON0/1:1   MAC:4c:ae:1c:69:cd:d0  RX:-20.5dBm  TX:2.3dBm  Status:Online
     // Format 2: 0/1:1  00:11:22:33:44:55  -20.5  2.3  Online
-    // Format 3: ONU EPON 0/1:1 optical power rx=-20.5dBm tx=2.3dBm
-    // Format 4: EPON0/1:1   Online   -21.5    2.3    Normal
     const opmDiagMatch1 = trimmedLine.match(/(?:EPON)?(\d+\/\d+):(\d+)\s+(?:MAC:)?([0-9A-Fa-f:.-]{12,17})?\s*(?:RX:)?([-\d.]+)\s*(?:dBm)?\s+(?:TX:)?([-\d.]+)\s*(?:dBm)?/i);
     if (opmDiagMatch1) {
       const ponPort = opmDiagMatch1[1];
