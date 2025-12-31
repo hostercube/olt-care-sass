@@ -55,6 +55,8 @@ export default function OLTDetails() {
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
   const [debugOpen, setDebugOpen] = useState(false);
   const [loadingDebug, setLoadingDebug] = useState(false);
+  const [mikrotikTesting, setMikrotikTesting] = useState(false);
+  const [mikrotikTestResult, setMikrotikTestResult] = useState<any>(null);
 
   const olt = olts.find(o => o.id === id);
   const oltONUs = onus.filter(onu => onu.olt_id === id).map(onu => ({
@@ -310,13 +312,66 @@ export default function OLTDetails() {
         {olt.mikrotik_ip && (
           <Card variant="glass">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <Network className="h-5 w-5 text-primary" />
-                MikroTik Configuration
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                  <Network className="h-5 w-5 text-primary" />
+                  MikroTik Configuration
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    if (!pollingServerUrl) {
+                      toast.error('Polling server not configured');
+                      return;
+                    }
+                    setMikrotikTesting(true);
+                    setMikrotikTestResult(null);
+                    try {
+                      const response = await fetch(`${pollingServerUrl}/api/test-mikrotik`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          mikrotik: {
+                            ip: olt.mikrotik_ip,
+                            port: olt.mikrotik_port || 8728,
+                            username: olt.mikrotik_username,
+                            password: olt.mikrotik_password_encrypted,
+                          }
+                        }),
+                      });
+                      const data = await response.json();
+                      setMikrotikTestResult(data);
+                      if (data.success) {
+                        toast.success(`MikroTik connected! Found ${data.data?.pppoe_count || 0} PPPoE sessions`);
+                      } else {
+                        toast.error(`MikroTik failed: ${data.error}`);
+                      }
+                    } catch (error: any) {
+                      setMikrotikTestResult({ success: false, error: error.message });
+                      toast.error('Failed to test MikroTik connection');
+                    } finally {
+                      setMikrotikTesting(false);
+                    }
+                  }}
+                  disabled={mikrotikTesting}
+                >
+                  {mikrotikTesting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <Network className="h-4 w-4 mr-2" />
+                      Test Connection
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-4">
                 <div className="p-3 rounded-lg bg-muted/30">
                   <p className="text-sm text-muted-foreground">IP Address</p>
                   <p className="font-mono font-medium">{olt.mikrotik_ip}:{olt.mikrotik_port || 8728}</p>
@@ -327,9 +382,71 @@ export default function OLTDetails() {
                 </div>
                 <div className="p-3 rounded-lg bg-muted/30">
                   <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge variant="success">Configured</Badge>
+                  {mikrotikTestResult ? (
+                    mikrotikTestResult.success ? (
+                      <Badge variant="success">Connected</Badge>
+                    ) : (
+                      <Badge variant="destructive">Failed</Badge>
+                    )
+                  ) : (
+                    <Badge variant="outline">Not Tested</Badge>
+                  )}
+                </div>
+                <div className="p-3 rounded-lg bg-muted/30">
+                  <p className="text-sm text-muted-foreground">Method</p>
+                  <p className="font-mono font-medium text-sm">
+                    {mikrotikTestResult?.connection?.method || 'API Port 8728'}
+                  </p>
                 </div>
               </div>
+
+              {/* MikroTik Data Summary */}
+              {mikrotikTestResult?.success && mikrotikTestResult.data && (
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <div className="p-3 rounded-lg bg-success/10 border border-success/20">
+                      <p className="text-sm text-muted-foreground">PPPoE Sessions</p>
+                      <p className="text-2xl font-bold text-success">{mikrotikTestResult.data.pppoe_count}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                      <p className="text-sm text-muted-foreground">ARP Entries</p>
+                      <p className="text-2xl font-bold text-primary">{mikrotikTestResult.data.arp_count}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
+                      <p className="text-sm text-muted-foreground">DHCP Leases</p>
+                      <p className="text-2xl font-bold text-warning">{mikrotikTestResult.data.dhcp_count}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/30">
+                      <p className="text-sm text-muted-foreground">PPP Secrets</p>
+                      <p className="text-2xl font-bold">{mikrotikTestResult.data.secrets_count}</p>
+                    </div>
+                  </div>
+
+                  {/* Sample PPPoE Data */}
+                  {mikrotikTestResult.data.pppoe_sample?.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Active PPPoE Sessions (Sample)</p>
+                      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                        {mikrotikTestResult.data.pppoe_sample.map((session: any, idx: number) => (
+                          <div key={idx} className="p-2 rounded bg-muted/20 text-xs font-mono">
+                            <div className="font-medium">{session.pppoe_username}</div>
+                            <div className="text-muted-foreground">MAC: {session.mac_address || 'N/A'}</div>
+                            <div className="text-muted-foreground">IP: {session.ip_address || 'N/A'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Error Display */}
+              {mikrotikTestResult && !mikrotikTestResult.success && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <p className="text-sm text-destructive font-medium">Connection Error</p>
+                  <p className="text-sm text-muted-foreground">{mikrotikTestResult.error}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
