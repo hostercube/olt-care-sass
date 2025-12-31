@@ -180,7 +180,11 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
     if (port === 161) return 'SNMP (Read-only Status)';
     if ([80, 443, 8080, 8085, 8086, 8041].includes(port)) return 'HTTP API (Web Interface)';
     if (port === 8728) return 'MikroTik API';
-    return 'Auto-Detect (HTTP → Telnet → SSH)';
+    // Custom ports > 1024 - for VSOL, DBC, CDATA, ECOM brands try Telnet first
+    if (port > 1024 && ['VSOL', 'DBC', 'CDATA', 'ECOM'].includes(selectedBrand)) {
+      return 'Telnet First (Port Forwarding)';
+    }
+    return 'Auto-Detect (Telnet → HTTP → SSH)';
   };
 
   // Update port when brand changes

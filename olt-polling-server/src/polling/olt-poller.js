@@ -110,7 +110,7 @@ function getConnectionType(port, brand) {
   if (port === 23) return 'telnet';
   if (port === 161) return 'snmp';
   
-  // HTTP API ports - common web interface ports
+  // HTTP API ports - common web interface ports (NOT custom telnet ports)
   const httpPorts = [80, 443, 8080, 8041, 8085, 8086, 8088, 8090];
   if (httpPorts.includes(port)) {
     // For HTTP ports, use http_first with brand-specific fallback
@@ -120,9 +120,11 @@ function getConnectionType(port, brand) {
   // SSH-first for major brands (ZTE, Huawei, Nokia)
   if (['ZTE', 'Huawei', 'Nokia'].includes(brand)) return 'ssh_first';
   
-  // HTTP-first for Chinese OLT brands with non-standard ports > 1024
+  // For non-standard ports on Chinese OLT brands, try Telnet first on the given port
+  // This handles port forwarding scenarios (e.g., 8045 -> 23 on local OLT)
   if (['VSOL', 'DBC', 'CDATA', 'ECOM'].includes(brand) && port > 1024) {
-    return 'http_first_telnet';
+    // Use telnet_first_custom - will try Telnet on the provided port
+    return 'telnet_first_custom';
   }
   
   // BDCOM uses EPON, prefer Telnet
@@ -131,7 +133,7 @@ function getConnectionType(port, brand) {
   // Fiberhome - Telnet first
   if (brand === 'Fiberhome') return 'telnet_first';
   
-  // Default: auto detect - try HTTP -> Telnet -> SSH
+  // Default: auto detect - try Telnet on given port -> HTTP -> SSH
   return 'auto_detect';
 }
 
@@ -258,6 +260,26 @@ export async function pollOLT(supabase, olt) {
             output = await executeSSHCommands(olt);
           }
           onus = parseOLTOutput(olt.brand, output);
+          break;
+          
+        case 'telnet_first_custom':
+          // Try Telnet on the provided port first (for port forwarding scenarios)
+          try {
+            logger.info(`Trying Telnet first on custom port ${olt.port} for ${olt.name}`);
+            output = await executeTelnetCommands(olt, commands);
+            onus = parseOLTOutput(olt.brand, output);
+          } catch (telnetError) {
+            logger.warn(`Telnet on port ${olt.port} failed for ${olt.name}: ${telnetError.message}, trying HTTP...`);
+            try {
+              const apiResp = await executeAPICommands(olt);
+              onus = parseAPIResponse(olt.brand, apiResp);
+            } catch (httpError) {
+              logger.warn(`HTTP failed for ${olt.name}: ${httpError.message}, trying SSH on port 22...`);
+              const sshOlt = { ...olt, port: 22 };
+              output = await executeSSHCommands(sshOlt);
+              onus = parseOLTOutput(olt.brand, output);
+            }
+          }
           break;
           
         case 'ssh_first':
@@ -793,6 +815,43 @@ export async function testOLTConnection(olt) {
           }
         }
         
+      case 'telnet_first_custom':
+        // Try Telnet on the custom/provided port first (for port forwarding)
+        try {
+          logger.info(`Testing Telnet on custom port ${olt.port}`);
+          const result = await testTelnetConnection(olt);
+          if (result.success) {
+            return { ...result, note: `Telnet on port ${olt.port} works` };
+          }
+        } catch (telnetErr) {
+          logger.warn(`Telnet on custom port ${olt.port} failed, trying HTTP fallback`);
+        }
+        
+        // Try HTTP on the same port
+        try {
+          logger.info(`Testing HTTP fallback on port ${olt.port}`);
+          const httpResult = await testHTTPConnection(olt);
+          if (httpResult.success) {
+            return { ...httpResult, note: `HTTP on port ${olt.port} works` };
+          }
+        } catch (httpErr) {
+          logger.warn(`HTTP on port ${olt.port} failed, trying SSH`);
+        }
+        
+        // Try SSH on port 22
+        try {
+          logger.info(`Testing SSH fallback on port 22`);
+          const sshOlt = { ...olt, port: 22 };
+          const sshResult = await testSSHConnection(sshOlt);
+          if (sshResult.success) {
+            return { ...sshResult, note: 'SSH on port 22 works' };
+          }
+        } catch (sshErr) {
+          // All failed
+        }
+        
+        throw new Error(`All protocols failed on port ${olt.port} and fallbacks`);
+        
       case 'ssh_first':
         // Try SSH first
         try {
@@ -875,13 +934,22 @@ export async function testAllProtocols(olt) {
     results.http = { success: false, error: 'No HTTP ports responded' };
   }
   
-  // Test Telnet on port 23
-  try {
-    const telnetOlt = { ...olt, port: config.telnetPort || 23 };
-    results.telnet = await testTelnetConnection(telnetOlt);
-    results.telnet.port = telnetOlt.port;
-  } catch (e) {
-    results.telnet = { success: false, error: e.message };
+  // Test Telnet on both the provided port AND port 23
+  const telnetPorts = [olt.port, config.telnetPort || 23, 23].filter((v, i, a) => a.indexOf(v) === i);
+  for (const port of telnetPorts) {
+    try {
+      const telnetOlt = { ...olt, port };
+      const result = await testTelnetConnection(telnetOlt);
+      if (result.success) {
+        results.telnet = { success: true, port, ...result };
+        break;
+      }
+    } catch (e) {
+      // Continue trying other ports
+    }
+  }
+  if (!results.telnet) {
+    results.telnet = { success: false, error: 'No Telnet ports responded' };
   }
   
   // Test SSH on port 22
