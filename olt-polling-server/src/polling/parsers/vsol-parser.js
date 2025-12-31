@@ -227,6 +227,33 @@ export function parseVSOLOutput(output) {
     // Format 2: 0/1:1  00:11:22:33:44:55  -20.5  2.3  Online
     // Format 3: Port  ONU-ID  MAC-Addr  Rx-Power  Tx-Power  Temperature  Voltage  Current
     // Format 4: 0/1   1       4c:ae:1c  -20.5     2.3       45.1         3.29     12.3
+    // Format 5 (VSOL V1.0.2R seen in logs):
+    // EPON0/1:2  43.5  3.29  12.00  1.96  -18.10
+    // (Temperature, Voltage, Bias, TX(dBm), RX(dBm))
+
+    // Pattern 4a: VSOL V1.0.2R power table format (TX then RX at end)
+    const vsolPowerTableMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)\s+([-\d.]+)\s*$/i);
+    if (vsolPowerTableMatch) {
+      const ponPort = vsolPowerTableMatch[1];
+      const onuIndex = parseInt(vsolPowerTableMatch[2]);
+      const txPower = parseFloat(vsolPowerTableMatch[3]);
+      const rxPower = parseFloat(vsolPowerTableMatch[4]);
+      const key = `${ponPort}:${onuIndex}`;
+
+      // RX is normally negative, validate range
+      if (rxPower < 0 && rxPower > -50) {
+        opmDiagData.set(key, { rxPower, txPower });
+
+        if (onuMap.has(key)) {
+          const onu = onuMap.get(key);
+          onu.rx_power = rxPower;
+          onu.tx_power = txPower;
+        }
+        logger.debug(`VSOL power table parsed: ${key} RX=${rxPower} TX=${txPower}`);
+      }
+      continue;
+    }
+
     const opmDiagMatch1 = trimmedLine.match(/(?:EPON)?(\d+\/\d+):(\d+)\s+(?:MAC:)?([0-9A-Fa-f:.-]{12,17})?\s*(?:RX:)?([-\d.]+)\s*(?:dBm)?\s+(?:TX:)?([-\d.]+)\s*(?:dBm)?/i);
     if (opmDiagMatch1) {
       const ponPort = opmDiagMatch1[1];
@@ -235,11 +262,11 @@ export function parseVSOLOutput(output) {
       const rxPower = parseFloat(opmDiagMatch1[4]);
       const txPower = parseFloat(opmDiagMatch1[5]);
       const key = `${ponPort}:${onuIndex}`;
-      
+
       // Store optical power data for later merge
       if (rxPower < 0 && rxPower > -50) {
         opmDiagData.set(key, { rxPower, txPower, macAddress });
-        
+
         // Update or create ONU
         if (onuMap.has(key)) {
           const onu = onuMap.get(key);
@@ -263,7 +290,7 @@ export function parseVSOLOutput(output) {
       }
       continue;
     }
-    
+
     // Pattern 4b: Table format with separate columns
     // 0/1   1   4c:ae:1c:69:cd:d0   -21.5   2.1   45.2   3.3   OK
     const opmTableMatch2 = trimmedLine.match(/^(\d+\/\d+)\s+(\d+)\s+([0-9A-Fa-f:.-]{12,17})\s+([-\d.]+)\s+([-\d.]+)/i);
