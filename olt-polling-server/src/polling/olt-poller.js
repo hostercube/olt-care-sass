@@ -574,50 +574,44 @@ function getOLTCommands(brand) {
         'show gpon onu list'
       ];
     case 'VSOL':
-      // VSOL EPON OLT CLI commands - multiple firmware versions
-      // The main data comes from 'show run' which contains ONU MAC bindings
-      // Many VSOL firmware versions have very limited CLI commands
-      // Try various command formats for different firmware versions
+      // VSOL EPON/GPON OLT CLI commands - multiple firmware versions
+      // Primary data from 'show run' contains ONU MAC bindings
+      // GPON optical power: show gpon onu optical-info interface gpon 0/X
+      // EPON optical power: show onu opm-diag all (if supported)
       return [
         'terminal length 0',                    // Disable pagination
-        'enable',                               // Enter privileged mode if needed
-        'configure terminal',                   // Enter config mode for some commands
-        'show run',                             // Show running config - contains ONU MAC info
+        'enable',                               // Enter privileged mode
+        'configure terminal',                   // Enter config mode
+        'show run',                             // Running config - ONU MAC info
         'show running-config',                  // Alternative format
-        'show version',                         // Get firmware version
-        '?',                                    // Show available commands (help)
-        'show ?',                               // Show available show commands
-        // ONU listing commands - try many formats
-        'show epon',                            // Basic EPON info
-        'show onu',                             // Basic ONU info  
-        'show interface epon 0/1',              // Interface info per port
+        'show version',                         // Firmware version
+        // GPON optical power commands (from Gemini/Google)
+        'show gpon onu optical-info interface gpon 0/1',
+        'show gpon onu optical-info interface gpon 0/2',
+        'show gpon onu optical-info interface gpon 0/3',
+        'show gpon onu optical-info interface gpon 0/4',
+        'show gpon onu optical-info interface gpon 0/5',
+        'show gpon onu optical-info interface gpon 0/6',
+        'show gpon onu optical-info interface gpon 0/7',
+        'show gpon onu optical-info interface gpon 0/8',
+        // GPON ONU status
+        'show gpon onu state interface gpon 0/1',
+        'show gpon onu state interface gpon 0/2',
+        'show gpon onu state interface gpon 0/3',
+        'show gpon onu state interface gpon 0/4',
+        // GPON general info
+        'show gpon onu info interface gpon 0/1',
+        'show gpon onu info interface gpon 0/2',
+        'show gpon onu info interface gpon 0/3',
+        'show gpon onu info interface gpon 0/4',
+        // EPON optical power (alternative firmwares)
+        'show onu opm-diag all',
+        'show epon onu optical-info',
+        'show interface epon 0/1',
         'show interface epon 0/2',
         'show interface epon 0/3',
         'show interface epon 0/4',
-        'show interface epon 0/5',
-        'show interface epon 0/6',
-        'show interface epon 0/7',
-        'show interface epon 0/8',
-        // Try to get onu info from interface context
-        'interface epon 0/1',
-        'show onu',
-        'exit',
-        'interface epon 0/2',
-        'show onu',
-        'exit',
-        'interface epon 0/3',
-        'show onu',
-        'exit',
-        'interface epon 0/4',
-        'show onu',
-        'exit',
-        // Optical power - try config mode commands
-        'show optics',                          // Some firmwares
-        'show optical',                         // Alternative
-        'show transceiver',                     // Transceiver info
-        'show pon',                             // PON info
-        'show statistics',                      // Stats may have power
-        'exit'                                  // Exit config mode
+        'exit'
       ];
     case 'DBC':
       return [
