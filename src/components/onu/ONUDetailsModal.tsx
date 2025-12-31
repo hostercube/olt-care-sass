@@ -320,19 +320,38 @@ export function ONUDetailsModal({ onu, open, onOpenChange, onUpdate }: ONUDetail
                     })()}
                   </div>
                   <div className="text-center p-4 rounded-lg bg-muted/50">
-                    <div className="flex items-center justify-center gap-2 text-2xl font-bold">
-                      {powerTrend === 'improving' && <TrendingUp className="h-5 w-5 text-success" />}
-                      {powerTrend === 'degrading' && <TrendingDown className="h-5 w-5 text-destructive" />}
-                      {powerTrend === 'stable' && <Minus className="h-5 w-5 text-muted-foreground" />}
-                      <span className={cn(
-                        powerTrend === 'improving' && 'text-success',
-                        powerTrend === 'degrading' && 'text-destructive',
-                        powerTrend === 'stable' && 'text-muted-foreground',
-                      )}>
-                        {powerTrend.charAt(0).toUpperCase() + powerTrend.slice(1)}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">Signal Trend</div>
+                    {(() => {
+                      const distance = (onu as any).distance;
+                      return (
+                        <>
+                          <div className="text-2xl font-bold flex items-center justify-center gap-1 text-foreground">
+                            <Ruler className="h-5 w-5" />
+                            {distance !== null && distance !== undefined 
+                              ? (distance >= 1000 ? `${(distance / 1000).toFixed(2)} km` : `${Math.round(distance)} m`)
+                              : 'N/A'
+                            }
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">Distance</div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+                
+                {/* Signal Trend Section */}
+                <div className="mt-4 p-4 rounded-lg bg-muted/50">
+                  <div className="flex items-center justify-center gap-2">
+                    {powerTrend === 'improving' && <TrendingUp className="h-5 w-5 text-success" />}
+                    {powerTrend === 'degrading' && <TrendingDown className="h-5 w-5 text-destructive" />}
+                    {powerTrend === 'stable' && <Minus className="h-5 w-5 text-muted-foreground" />}
+                    <span className={cn(
+                      'font-medium',
+                      powerTrend === 'improving' && 'text-success',
+                      powerTrend === 'degrading' && 'text-destructive',
+                      powerTrend === 'stable' && 'text-muted-foreground',
+                    )}>
+                      Signal Trend: {powerTrend.charAt(0).toUpperCase() + powerTrend.slice(1)}
+                    </span>
                   </div>
                 </div>
                 

@@ -643,7 +643,7 @@ function getOLTCommands(brand, mode = 'GPON') {
         'show version',                         // Firmware version
         'configure terminal',                   // Enter config mode
         // EPON optical power commands (IN CONFIG MODE)
-        'show onu opm-diag all',                // Shows all ONU optical power
+        'show onu opm-diag all',                // Shows all ONU optical power + temperature
         'show epon optical-transceiver-diagnosis epon 0/1',
         'show epon optical-transceiver-diagnosis epon 0/2',
         'show epon optical-transceiver-diagnosis epon 0/3',
@@ -662,6 +662,12 @@ function getOLTCommands(brand, mode = 'GPON') {
         'show epon active-onu',
         'show epon inactive-onu',
         'show epon onu status all',
+        // Offline reason (deregister log)
+        'show onu deregister-log',
+        'show epon onu deregister-log',
+        // Distance info (if supported)
+        'show epon onu distance',
+        'show onu distance all',
         'exit'
       ],
       GPON: [

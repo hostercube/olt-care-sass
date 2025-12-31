@@ -459,6 +459,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <TableHead className="font-semibold text-center">RX Power</TableHead>
                   <TableHead className="font-semibold text-center">TX Power</TableHead>
                   <TableHead className="font-semibold text-center">Temp</TableHead>
+                  <TableHead className="font-semibold text-center">Distance</TableHead>
                   <TableHead className="font-semibold text-center">Status</TableHead>
                   <TableHead className="font-semibold">Last Online</TableHead>
                   <TableHead className="w-10"></TableHead>
@@ -467,7 +468,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
               <TableBody>
                 {paginatedONUs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
                       No ONU devices found
                     </TableCell>
                   </TableRow>
@@ -475,6 +476,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   paginatedONUs.map((onu) => {
                     const isSelected = selectedONUs.has(onu.id);
                     const temp = (onu as any).temperature;
+                    const distance = (onu as any).distance;
                     return (
                       <TableRow 
                         key={onu.id} 
@@ -514,6 +516,13 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground text-xs">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-xs">
+                          {distance !== null && distance !== undefined ? (
+                            distance >= 1000 ? `${(distance / 1000).toFixed(2)} km` : `${Math.round(distance)} m`
+                          ) : (
+                            <span className="text-muted-foreground">N/A</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center">

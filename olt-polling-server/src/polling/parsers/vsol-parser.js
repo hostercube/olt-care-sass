@@ -25,6 +25,8 @@ export function parseVSOLOutput(output) {
   // Store inactive ONUs to mark as offline later
   const inactiveONUs = new Set();
   const opmDiagData = new Map(); // Store optical power data
+  const deregisterData = new Map(); // Store offline reasons
+  const distanceData = new Map(); // Store distance info
   
   logger.info(`VSOL parser processing ${lines.length} lines of output`);
   
@@ -463,6 +465,73 @@ export function parseVSOLOutput(output) {
       }
       continue;
     }
+    
+    // Pattern 11: Deregister log / Offline reason
+    // Formats:
+    // EPON0/1:2 2025-01-01 10:00:00 LOS (Loss of Signal)
+    // 0/1:1 deregister reason: power-off
+    // ONU 0/1:3 offline: fiber cut
+    const deregisterMatch = trimmedLine.match(/(?:EPON)?(\d+\/\d+):(\d+).*?(?:deregister|offline|reason|LOS|power.?off|fiber.?cut|dying.?gasp)[:\s]*(.+)?/i);
+    if (deregisterMatch) {
+      const ponPort = deregisterMatch[1];
+      const onuIndex = parseInt(deregisterMatch[2]);
+      const key = `${ponPort}:${onuIndex}`;
+      let reason = deregisterMatch[3]?.trim() || 'Unknown';
+      
+      // Clean up reason
+      if (trimmedLine.toLowerCase().includes('los') || trimmedLine.toLowerCase().includes('loss of signal')) {
+        reason = 'LOS (Loss of Signal)';
+      } else if (trimmedLine.toLowerCase().includes('power-off') || trimmedLine.toLowerCase().includes('power off')) {
+        reason = 'Power Off';
+      } else if (trimmedLine.toLowerCase().includes('dying-gasp') || trimmedLine.toLowerCase().includes('dying gasp')) {
+        reason = 'Dying Gasp (Power Loss)';
+      } else if (trimmedLine.toLowerCase().includes('fiber') || trimmedLine.toLowerCase().includes('cut')) {
+        reason = 'Fiber Cut';
+      }
+      
+      deregisterData.set(key, reason);
+      logger.debug(`Deregister log parsed: ${key} reason=${reason}`);
+      continue;
+    }
+    
+    // Pattern 12: Distance info
+    // Formats:
+    // EPON0/1:2  1234m
+    // 0/1:1 distance: 2500 meters
+    // ONU 1 Distance: 1.5km
+    const distanceMatch = trimmedLine.match(/(?:EPON)?(\d+\/\d+):(\d+).*?(?:distance|dist)[:\s]*(\d+(?:\.\d+)?)\s*(?:m|km|meter)/i);
+    if (distanceMatch) {
+      const ponPort = distanceMatch[1];
+      const onuIndex = parseInt(distanceMatch[2]);
+      const key = `${ponPort}:${onuIndex}`;
+      let distance = parseFloat(distanceMatch[3]);
+      
+      // Convert km to meters if needed
+      if (trimmedLine.toLowerCase().includes('km')) {
+        distance = distance * 1000;
+      }
+      
+      distanceData.set(key, distance);
+      logger.debug(`Distance parsed: ${key} distance=${distance}m`);
+      continue;
+    }
+    
+    // Pattern 12b: Simple distance table format
+    // 0/1  1  2345
+    const simpleDistMatch = trimmedLine.match(/^(\d+\/\d+)\s+(\d+)\s+(\d+)\s*$/);
+    if (simpleDistMatch && !opmDiagData.has(`${simpleDistMatch[1]}:${simpleDistMatch[2]}`)) {
+      const ponPort = simpleDistMatch[1];
+      const onuIndex = parseInt(simpleDistMatch[2]);
+      const distance = parseFloat(simpleDistMatch[3]);
+      const key = `${ponPort}:${onuIndex}`;
+      
+      // Only store if it looks like a reasonable distance (> 10m and < 100km)
+      if (distance > 10 && distance < 100000) {
+        distanceData.set(key, distance);
+        logger.debug(`Simple distance parsed: ${key} distance=${distance}m`);
+      }
+      continue;
+    }
   }
   
   // Second pass: Mark inactive ONUs as offline
@@ -478,7 +547,27 @@ export function parseVSOLOutput(output) {
       const onu = onuMap.get(key);
       if (data.rxPower !== null) onu.rx_power = data.rxPower;
       if (data.txPower !== null) onu.tx_power = data.txPower;
+      if (data.temperature !== null && data.temperature !== undefined) onu.temperature = data.temperature;
       if (data.macAddress && !onu.mac_address) onu.mac_address = data.macAddress;
+    }
+  }
+  
+  // Fourth pass: Merge deregister/offline reason data
+  for (const [key, reason] of deregisterData) {
+    if (onuMap.has(key)) {
+      const onu = onuMap.get(key);
+      onu.offline_reason = reason;
+      // If we have a deregister reason, the ONU is likely offline
+      if (!onu.status || onu.status === 'unknown') {
+        onu.status = 'offline';
+      }
+    }
+  }
+  
+  // Fifth pass: Merge distance data
+  for (const [key, distance] of distanceData) {
+    if (onuMap.has(key)) {
+      onuMap.get(key).distance = distance;
     }
   }
   
