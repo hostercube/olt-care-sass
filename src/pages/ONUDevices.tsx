@@ -1,8 +1,10 @@
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ONUTable } from '@/components/dashboard/ONUTable';
+import { PowerHistoryChart } from '@/components/onu/PowerHistoryChart';
 import { useONUs, useOLTs } from '@/hooks/useOLTData';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { Router, Wifi, WifiOff, Zap, Loader2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function ONUDevices() {
   const { onus, loading } = useONUs();
@@ -69,8 +71,21 @@ export default function ONUDevices() {
           />
         </div>
 
-        {/* ONU Table */}
-        <ONUTable onus={onusWithOltName} />
+        {/* Tabs for Devices and Power History */}
+        <Tabs defaultValue="devices" className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2 bg-muted">
+            <TabsTrigger value="devices">Device List</TabsTrigger>
+            <TabsTrigger value="power">Power History</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="devices" className="mt-4">
+            <ONUTable onus={onusWithOltName} />
+          </TabsContent>
+          
+          <TabsContent value="power" className="mt-4">
+            <PowerHistoryChart />
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );

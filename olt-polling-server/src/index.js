@@ -154,7 +154,31 @@ app.post('/test-all-protocols', async (req, res) => {
   }
 });
 
-// Poll specific OLT
+// Poll specific OLT (with /api prefix for frontend compatibility)
+app.post('/api/poll/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+  
+  try {
+    const { data: olt, error } = await supabase
+      .from('olts')
+      .select('*')
+      .eq('id', oltId)
+      .single();
+    
+    if (error || !olt) {
+      return res.status(404).json({ error: 'OLT not found' });
+    }
+    
+    logger.info(`Manual poll triggered for OLT: ${olt.name}`);
+    const result = await pollOLT(supabase, olt);
+    res.json({ success: true, result });
+  } catch (error) {
+    logger.error(`Poll error for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Poll specific OLT (without /api prefix for direct server access)
 app.post('/poll/:oltId', async (req, res) => {
   const { oltId } = req.params;
   
@@ -178,7 +202,18 @@ app.post('/poll/:oltId', async (req, res) => {
   }
 });
 
-// Poll all OLTs
+// Poll all OLTs (with /api prefix)
+app.post('/api/poll-all', async (req, res) => {
+  if (pollingStatus.isPolling) {
+    return res.status(409).json({ error: 'Polling already in progress' });
+  }
+  
+  logger.info('Manual poll-all triggered');
+  pollAllOLTs();
+  res.json({ success: true, message: 'Polling started' });
+});
+
+// Poll all OLTs (without /api prefix)
 app.post('/poll-all', async (req, res) => {
   if (pollingStatus.isPolling) {
     return res.status(409).json({ error: 'Polling already in progress' });
