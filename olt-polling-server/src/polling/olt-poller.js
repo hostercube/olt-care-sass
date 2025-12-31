@@ -331,13 +331,6 @@ export async function pollOLT(supabase, olt) {
         // Continue without MikroTik data - ONU data from OLT is still valid
       }
     }
-        
-        onus = onus.map(onu => enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData));
-        logger.info(`Enriched ${onus.length} ONUs with MikroTik data`);
-      } catch (mtError) {
-        logger.warn(`MikroTik enrichment failed: ${mtError.message}`);
-      }
-    }
     
     await syncONUsToDatabase(supabase, olt.id, onus);
     
