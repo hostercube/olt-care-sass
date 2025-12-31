@@ -116,6 +116,38 @@ export type Database = {
         }
         Relationships: []
       }
+      onu_status_history: {
+        Row: {
+          changed_at: string
+          duration_seconds: number | null
+          id: string
+          onu_id: string
+          status: string
+        }
+        Insert: {
+          changed_at?: string
+          duration_seconds?: number | null
+          id?: string
+          onu_id: string
+          status: string
+        }
+        Update: {
+          changed_at?: string
+          duration_seconds?: number | null
+          id?: string
+          onu_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onu_status_history_onu_id_fkey"
+            columns: ["onu_id"]
+            isOneToOne: false
+            referencedRelation: "onus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       onus: {
         Row: {
           created_at: string
