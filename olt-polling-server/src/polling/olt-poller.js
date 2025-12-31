@@ -263,21 +263,49 @@ export async function pollOLT(supabase, olt) {
           break;
           
         case 'telnet_first_custom':
-          // Try Telnet on the provided port first (for port forwarding scenarios)
+          // Try Telnet on the provided port first (for port forwarding scenarios like 8045->23)
+          // This is the most common case for Chinese OLTs behind NAT
           try {
             logger.info(`Trying Telnet first on custom port ${olt.port} for ${olt.name}`);
             output = await executeTelnetCommands(olt, commands);
-            onus = parseOLTOutput(olt.brand, output);
-          } catch (telnetError) {
-            logger.warn(`Telnet on port ${olt.port} failed for ${olt.name}: ${telnetError.message}, trying HTTP...`);
-            try {
-              const apiResp = await executeAPICommands(olt);
-              onus = parseAPIResponse(olt.brand, apiResp);
-            } catch (httpError) {
-              logger.warn(`HTTP failed for ${olt.name}: ${httpError.message}, trying SSH on port 22...`);
-              const sshOlt = { ...olt, port: 22 };
-              output = await executeSSHCommands(sshOlt);
+            if (output && output.length > 100) {
               onus = parseOLTOutput(olt.brand, output);
+              logger.info(`Successfully parsed ${onus.length} ONUs via Telnet on port ${olt.port}`);
+            } else {
+              throw new Error('Telnet returned insufficient data');
+            }
+          } catch (telnetError) {
+            logger.warn(`Telnet on port ${olt.port} failed for ${olt.name}: ${telnetError.message}`);
+            
+            // Try standard Telnet port 23 as second option
+            try {
+              logger.info(`Trying standard Telnet port 23 for ${olt.name}`);
+              const telnet23Olt = { ...olt, port: 23 };
+              output = await executeTelnetCommands(telnet23Olt, commands);
+              if (output && output.length > 100) {
+                onus = parseOLTOutput(olt.brand, output);
+                logger.info(`Successfully parsed ${onus.length} ONUs via Telnet on port 23`);
+              } else {
+                throw new Error('Telnet on port 23 returned insufficient data');
+              }
+            } catch (telnet23Error) {
+              logger.warn(`Telnet on port 23 failed for ${olt.name}: ${telnet23Error.message}`);
+              
+              // Try SSH on port 22 as last resort
+              try {
+                logger.info(`Trying SSH on port 22 for ${olt.name}`);
+                const sshOlt = { ...olt, port: 22 };
+                output = await executeSSHCommands(sshOlt);
+                if (output && output.length > 100) {
+                  onus = parseOLTOutput(olt.brand, output);
+                  logger.info(`Successfully parsed ${onus.length} ONUs via SSH on port 22`);
+                } else {
+                  throw new Error('SSH returned insufficient data');
+                }
+              } catch (sshError) {
+                // All CLI methods failed, throw comprehensive error
+                throw new Error(`All protocols failed - Telnet:${olt.port} (${telnetError.message}), Telnet:23 (${telnet23Error.message}), SSH:22 (${sshError.message})`);
+              }
             }
           }
           break;
@@ -533,9 +561,16 @@ function getOLTCommands(brand) {
     case 'VSOL':
       return [
         'terminal length 0',
+        'show onu status',
         'show onu status all',
+        'show gpon onu state',
+        'show epon onu status',
+        'show onu optical-info',
         'show onu optical-info all',
-        'show onu info all'
+        'show gpon optical-info',
+        'show onu info',
+        'show onu info all',
+        'show onu list'
       ];
     case 'DBC':
       return [
@@ -611,13 +646,16 @@ function parseOLTOutput(brand, output) {
  * Sync parsed ONUs to database
  */
 async function syncONUsToDatabase(supabase, oltId, onus) {
-  // Get existing ONUs for this OLT
+  // Get existing ONUs for this OLT with all fields we might update
   const { data: existingONUs } = await supabase
     .from('onus')
-    .select('id, serial_number, status')
+    .select('id, serial_number, status, name, router_name, mac_address, pppoe_username')
     .eq('olt_id', oltId);
   
   const existingMap = new Map(existingONUs?.map(o => [o.serial_number, o]) || []);
+  
+  let updatedCount = 0;
+  let insertedCount = 0;
   
   for (const onu of onus) {
     const existing = existingMap.get(onu.serial_number);
@@ -630,12 +668,33 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
       const isNowOffline = onu.status === 'offline';
       
       const updateData = {
-        name: onu.name || existing.name,
         status: onu.status,
         rx_power: onu.rx_power,
         tx_power: onu.tx_power,
+        pon_port: onu.pon_port,
+        onu_index: onu.onu_index,
         updated_at: new Date().toISOString()
       };
+      
+      // Only update name if we have a new value and it's not a generated placeholder
+      if (onu.name && !onu.name.startsWith('ONU-') && onu.name !== existing.name) {
+        updateData.name = onu.name;
+      }
+      
+      // Update MAC address if we have a new one
+      if (onu.mac_address && onu.mac_address !== existing.mac_address) {
+        updateData.mac_address = onu.mac_address;
+      }
+      
+      // Update router name if we have a new one
+      if (onu.router_name && onu.router_name !== existing.router_name) {
+        updateData.router_name = onu.router_name;
+      }
+      
+      // Update PPPoE username if we have a new one
+      if (onu.pppoe_username && onu.pppoe_username !== existing.pppoe_username) {
+        updateData.pppoe_username = onu.pppoe_username;
+      }
       
       if (wasOffline && isNowOnline) {
         updateData.last_online = new Date().toISOString();
@@ -659,6 +718,8 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
         .update(updateData)
         .eq('id', existing.id);
       
+      updatedCount++;
+      
       // Record power reading
       if (onu.rx_power !== null || onu.tx_power !== null) {
         await supabase.from('power_readings').insert({
@@ -668,7 +729,7 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
         });
       }
       
-      // Check for low power
+      // Check for low power alert
       if (onu.rx_power && onu.rx_power < -28) {
         await supabase.from('alerts').insert({
           type: 'power_drop',
@@ -680,12 +741,12 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
         });
       }
     } else {
-      // Insert new ONU
-      const { data: newONU } = await supabase
+      // Insert new ONU with all available fields
+      const { data: newONU, error } = await supabase
         .from('onus')
         .insert({
           olt_id: oltId,
-          name: onu.name || `ONU-${onu.serial_number}`,
+          name: onu.name || `ONU-${onu.pon_port}:${onu.onu_index}`,
           serial_number: onu.serial_number,
           pon_port: onu.pon_port,
           onu_index: onu.onu_index,
@@ -693,14 +754,23 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
           rx_power: onu.rx_power,
           tx_power: onu.tx_power,
           mac_address: onu.mac_address,
+          router_name: onu.router_name,
+          pppoe_username: onu.pppoe_username,
           last_online: onu.status === 'online' ? new Date().toISOString() : null
         })
         .select()
         .single();
       
-      logger.info(`New ONU discovered: ${onu.serial_number}`);
+      if (error) {
+        logger.error(`Failed to insert ONU ${onu.serial_number}: ${error.message}`);
+      } else {
+        insertedCount++;
+        logger.info(`New ONU discovered: ${onu.serial_number} on ${onu.pon_port}`);
+      }
     }
   }
+  
+  logger.info(`ONU sync complete for OLT ${oltId}: ${insertedCount} inserted, ${updatedCount} updated`);
 }
 
 /**
