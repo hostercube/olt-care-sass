@@ -576,30 +576,26 @@ function getOLTCommands(brand) {
     case 'VSOL':
       // VSOL EPON OLT CLI commands - V1600 series
       // Primary data comes from 'show run' which contains ONU MAC bindings
-      // Additional commands for ONU status and optical power
+      // Optical power from 'show onu opm-diag all' (correct VSOL command)
       return [
         'terminal length 0',                    // Disable pagination
         'show run',                             // Show running config - contains ONU MAC info
         'show running-config',                  // Alternative format
-        // ONU status and optical power commands (try various formats)
-        'show onu status',                      // ONU online/offline status
-        'show onu optical-power',               // ONU optical power readings
-        'show onu info',                        // General ONU info
-        'show onu list',                        // ONU list
-        'show epon onu',                        // EPON ONU info
-        'show epon onu status',                 // EPON ONU status  
-        'show epon onu optical',                // EPON optical power
-        'show epon active-onu',                 // Active ONU list
-        'show epon inactive-onu',               // Inactive/offline ONUs
-        'show epon optical-transceiver-diagnosis epon 0/1',  // Optical PON 1
-        'show epon optical-transceiver-diagnosis epon 0/2',  // Optical PON 2
-        'show epon optical-transceiver-diagnosis epon 0/3',  // Optical PON 3
-        'show epon optical-transceiver-diagnosis epon 0/4',  // Optical PON 4
-        'show onu 0/1 optical-info',            // ONU optical info per PON
-        'show onu 0/2 optical-info',
-        'show onu 0/3 optical-info',
-        'show onu 0/4 optical-info',
-        'show mac-address-table'                // MAC address table
+        'show onu opm-diag all',                // CORRECT: ONU optical power (RX/TX dBm)
+        'show onu opm-diag',                    // Alternative optical power
+        'show onu information',                 // ONU general info
+        'show onu information all',             // All ONUs info
+        'show epon onu-information',            // EPON ONU info table
+        'show epon active-onu all',             // Active ONU list all ports
+        'show epon inactive-onu all',           // Inactive ONU list
+        'show epon interface epon 0/1',         // Per-port ONU info
+        'show epon interface epon 0/2',
+        'show epon interface epon 0/3',
+        'show epon interface epon 0/4',
+        'show epon interface epon 0/5',
+        'show epon interface epon 0/6',
+        'show epon interface epon 0/7',
+        'show epon interface epon 0/8'
       ];
     case 'DBC':
       return [
