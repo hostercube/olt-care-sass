@@ -196,10 +196,14 @@ async function callMikroTikAPI(mikrotik, endpoint) {
   
   // Determine if this is likely a REST API port or Plain API port
   // Standard Plain API ports are 8728 (unencrypted) and 8729 (SSL)
-  const isPlainAPIPort = [8728, 8729].includes(port) || port === 23;
+  const isPlainAPIPort = [8728, 8729].includes(port);
+  
+  const errors = [];
   
   if (!isPlainAPIPort) {
-    // Custom port (like 8090) - try REST API first on this port
+    // Custom port (like 8090) - try multiple strategies
+    
+    // Strategy 1: REST API on custom port (most common for port-forwarded RouterOS 7)
     try {
       logger.debug(`Trying REST API on custom port ${port}...`);
       const restResult = await callMikroTikREST(mikrotik, endpoint, port);
@@ -208,19 +212,35 @@ async function callMikroTikAPI(mikrotik, endpoint) {
         return restResult;
       }
     } catch (err) {
+      errors.push(`REST:${port}: ${err.message}`);
       logger.debug(`REST API failed on port ${port}: ${err.message}`);
     }
     
-    // Try Plain API on port 8728 as fallback
+    // Strategy 2: Plain API on the SAME custom port (for port-forwarded Plain API)
     try {
-      logger.debug(`Trying Plain API on default port 8728...`);
-      const plainResult = await callMikroTikPlainAPI({ ...mikrotik, port: 8728 }, endpoint);
-      logger.info(`MikroTik Plain API success - got ${plainResult.length} items`);
+      logger.debug(`Trying Plain API on custom port ${port}...`);
+      const plainResult = await callMikroTikPlainAPI(mikrotik, endpoint);
+      logger.info(`MikroTik Plain API success on port ${port} - got ${plainResult.length} items`);
       return plainResult;
     } catch (err) {
-      logger.warn(`Plain API fallback failed: ${err.message}`);
-      throw err;
+      errors.push(`Plain:${port}: ${err.message}`);
+      logger.debug(`Plain API failed on port ${port}: ${err.message}`);
     }
+    
+    // Strategy 3: Try Plain API on 8728 (if accessible directly)
+    if (port !== 8728) {
+      try {
+        logger.debug(`Trying Plain API on default port 8728...`);
+        const plainResult = await callMikroTikPlainAPI({ ...mikrotik, port: 8728 }, endpoint);
+        logger.info(`MikroTik Plain API success on 8728 - got ${plainResult.length} items`);
+        return plainResult;
+      } catch (err) {
+        errors.push(`Plain:8728: ${err.message}`);
+        logger.debug(`Plain API failed on port 8728: ${err.message}`);
+      }
+    }
+    
+    throw new Error(`All MikroTik API attempts failed: ${errors.join(', ')}`);
   } else {
     // Standard Plain API port (8728/8729)
     try {
@@ -229,6 +249,7 @@ async function callMikroTikAPI(mikrotik, endpoint) {
       logger.info(`MikroTik Plain API success - got ${plainResult.length} items`);
       return plainResult;
     } catch (err) {
+      errors.push(`Plain:${port}: ${err.message}`);
       logger.debug(`Plain API failed: ${err.message}`);
       
       // Fallback to REST on port 443
@@ -240,9 +261,11 @@ async function callMikroTikAPI(mikrotik, endpoint) {
           return restResult;
         }
       } catch (restErr) {
+        errors.push(`REST:443: ${restErr.message}`);
         logger.debug(`REST API fallback failed: ${restErr.message}`);
       }
-      throw err;
+      
+      throw new Error(`All MikroTik API attempts failed: ${errors.join(', ')}`);
     }
   }
 }
