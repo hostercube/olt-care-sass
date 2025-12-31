@@ -152,6 +152,7 @@ app.post('/test-all-protocols', async (req, res) => {
     logger.error('Test all protocols error:', error);
     res.status(500).json({ error: error.message });
   }
+});
 
 // Poll specific OLT
 app.post('/poll/:oltId', async (req, res) => {
