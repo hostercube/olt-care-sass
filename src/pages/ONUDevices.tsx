@@ -8,7 +8,7 @@ import { Router, Wifi, WifiOff, Zap, Loader2, Clock, BarChart3 } from 'lucide-re
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function ONUDevices() {
-  const { onus, loading } = useONUs();
+  const { onus, loading, refetch } = useONUs();
   const { olts } = useOLTs();
 
   // Create a map of OLT IDs to names
@@ -90,7 +90,7 @@ export default function ONUDevices() {
           </TabsList>
           
           <TabsContent value="devices" className="mt-4">
-            <ONUTable onus={onusWithOltName} />
+            <ONUTable onus={onusWithOltName} onRefresh={refetch} />
           </TabsContent>
           
           <TabsContent value="power" className="mt-4">
