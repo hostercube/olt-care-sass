@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Table,
@@ -16,6 +16,7 @@ import { StatusIndicator } from '@/components/dashboard/StatusIndicator';
 import { EditOLTDialog } from '@/components/olt/EditOLTDialog';
 import { DeleteOLTDialog } from '@/components/olt/DeleteOLTDialog';
 import { OLTBrandBadge } from '@/components/olt/OLTBrandBadge';
+import { TablePagination } from '@/components/ui/table-pagination';
 import type { Tables } from '@/integrations/supabase/types';
 import type { OLTBrand } from '@/types/olt';
 import { formatDistanceToNow } from 'date-fns';
@@ -47,6 +48,10 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
   const [editingOLT, setEditingOLT] = useState<Tables<'olts'> | null>(null);
   const [deletingOLT, setDeletingOLT] = useState<{ id: string; name: string } | null>(null);
   const [pollingOLT, setPollingOLT] = useState<string | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const handlePollNow = async (oltId: string, oltName: string) => {
     setPollingOLT(oltId);
@@ -77,12 +82,20 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
     navigate(`/olts/${oltId}`);
   };
 
-  const filteredOLTs = olts.filter(
-    (olt) =>
-      olt.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      olt.ip_address.includes(searchTerm) ||
-      olt.brand.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredOLTs = useMemo(() => {
+    return olts.filter(
+      (olt) =>
+        olt.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        olt.ip_address.includes(searchTerm) ||
+        olt.brand.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [olts, searchTerm]);
+
+  // Paginated data
+  const paginatedOLTs = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredOLTs.slice(startIndex, startIndex + pageSize);
+  }, [filteredOLTs, currentPage, pageSize]);
 
   return (
     <>
@@ -120,14 +133,14 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredOLTs.length === 0 ? (
+                {paginatedOLTs.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No OLTs found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredOLTs.map((olt) => {
+                  paginatedOLTs.map((olt) => {
                     const portUsage = (olt.active_ports / olt.total_ports) * 100;
                     const hasMikrotik = !!(olt.mikrotik_ip && olt.mikrotik_username);
                     
@@ -245,9 +258,13 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
               </TableBody>
             </Table>
           </div>
-          <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-            <span>Showing {filteredOLTs.length} of {olts.length} OLTs</span>
-          </div>
+          <TablePagination
+            totalItems={filteredOLTs.length}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
         </CardContent>
       </Card>
 
