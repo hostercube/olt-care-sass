@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,12 +28,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Users, Shield, UserCog, Eye, Loader2 } from 'lucide-react';
+import { Users, Shield, UserCog, Eye, Loader2, UserPlus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
+import { TablePagination } from '@/components/ui/table-pagination';
+import { CreateUserDialog } from '@/components/users/CreateUserDialog';
 import type { Database } from '@/integrations/supabase/types';
 
 type AppRole = Database['public']['Enums']['app_role'];
@@ -59,6 +61,12 @@ export default function UserManagement() {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     userId: string;
@@ -276,14 +284,21 @@ export default function UserManagement() {
         {/* Users Table */}
         <Card variant="glass">
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              All Users
-            </CardTitle>
-            <CardDescription>
-              Manage user roles and permissions. Admins can view and modify all data. 
-              Operators can add/edit OLTs and ONUs. Viewers have read-only access.
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  All Users
+                </CardTitle>
+                <CardDescription>
+                  Manage user roles and permissions. Admins can view and modify all data.
+                </CardDescription>
+              </div>
+              <Button onClick={() => setCreateDialogOpen(true)}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Create User
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -297,7 +312,7 @@ export default function UserManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((u) => {
+                {users.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((u) => {
                   const config = roleConfig[u.role];
                   const Icon = config.icon;
                   const isCurrentUser = u.id === user?.id;
@@ -375,6 +390,13 @@ export default function UserManagement() {
                 })}
               </TableBody>
             </Table>
+            <TablePagination
+              totalItems={users.length}
+              currentPage={currentPage}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </CardContent>
         </Card>
 
@@ -429,6 +451,7 @@ export default function UserManagement() {
       </div>
 
       {/* Confirmation Dialog */}
+      {/* Confirmation Dialog */}
       <AlertDialog open={confirmDialog?.open} onOpenChange={(open) => !open && setConfirmDialog(null)}>
         <AlertDialogContent className="bg-background border-border">
           <AlertDialogHeader>
@@ -447,6 +470,13 @@ export default function UserManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create User Dialog */}
+      <CreateUserDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onUserCreated={fetchUsers}
+      />
     </DashboardLayout>
   );
 }

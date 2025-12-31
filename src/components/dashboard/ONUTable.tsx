@@ -36,6 +36,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { ONUDetailsModal } from '@/components/onu/ONUDetailsModal';
 import { PowerBadge } from '@/components/onu/PowerBadge';
+import { TablePagination } from '@/components/ui/table-pagination';
 
 type ONUWithOLTName = Tables<'onus'> & { oltName?: string };
 
@@ -54,6 +55,10 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
   const [selectedONU, setSelectedONU] = useState<ONUWithOLTName | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   
   // Filters
   const [selectedOLT, setSelectedOLT] = useState<string>('all');
@@ -122,6 +127,12 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
     });
   }, [onus, searchTerm, selectedOLT, selectedPON, statusFilter, dateFilter]);
 
+  // Paginated data
+  const paginatedONUs = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredONUs.slice(startIndex, startIndex + pageSize);
+  }, [filteredONUs, currentPage, pageSize]);
+
   const handleViewDetails = (onu: ONUWithOLTName) => {
     setSelectedONU(onu);
     setDetailsOpen(true);
@@ -133,6 +144,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
     setSelectedPON('all');
     setStatusFilter('all');
     setDateFilter('all');
+    setCurrentPage(1);
   };
 
   const activeFilterCount = [
@@ -340,14 +352,14 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredONUs.length === 0 ? (
+                {paginatedONUs.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                       No ONU devices found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredONUs.map((onu) => {
+                  paginatedONUs.map((onu) => {
                     return (
                       <TableRow 
                         key={onu.id} 
@@ -408,17 +420,13 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
               </TableBody>
             </Table>
           </div>
-          <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-            <span>Showing {filteredONUs.length} of {onus.length} devices</span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled>
-                Previous
-              </Button>
-              <Button variant="outline" size="sm">
-                Next
-              </Button>
-            </div>
-          </div>
+          <TablePagination
+            totalItems={filteredONUs.length}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
         </CardContent>
       </Card>
 
