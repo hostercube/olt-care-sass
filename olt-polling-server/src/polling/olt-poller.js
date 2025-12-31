@@ -169,7 +169,10 @@ export async function pollOLT(supabase, olt) {
   let rawOutput = '';
   let connectionMethod = '';
   let errorMessage = null;
-  const commands = getOLTCommands(olt.brand);
+  // Get commands based on brand AND mode (EPON/GPON)
+  const oltMode = olt.olt_mode || 'GPON'; // Default to GPON if not specified
+  const commands = getOLTCommands(olt.brand, oltMode);
+  logger.info(`OLT ${olt.name} mode: ${oltMode}, brand: ${olt.brand}`);
   
   try {
     let output = '';
@@ -475,8 +478,9 @@ async function executeSSHCommands(olt) {
         setTimeout(() => {
           if (!commandsSent) {
             commandsSent = true;
-            const commands = getOLTCommands(olt.brand);
-            logger.debug(`Sending ${commands.length} commands to ${olt.name}`);
+            const oltMode = olt.olt_mode || 'GPON';
+            const commands = getOLTCommands(olt.brand, oltMode);
+            logger.debug(`Sending ${commands.length} commands to ${olt.name} (mode: ${oltMode})`);
             
             commands.forEach((cmd, index) => {
               setTimeout(() => {
@@ -568,42 +572,78 @@ async function executeSSHCommands(olt) {
 }
 
 /**
- * Get CLI commands for specific OLT brand
+ * Get CLI commands for specific OLT brand and mode (EPON/GPON)
+ * 
+ * IMPORTANT: Commands are separated by mode to ensure proper polling
+ * - EPON: Uses MAC-based identification, EPON-specific CLI syntax
+ * - GPON: Uses Serial Number identification, GPON-specific CLI syntax
+ * 
+ * @param {string} brand - OLT brand (ZTE, Huawei, VSOL, etc.)
+ * @param {string} mode - OLT mode ('EPON' or 'GPON')
+ * @returns {string[]} Array of CLI commands to execute
  */
-function getOLTCommands(brand) {
-  switch (brand) {
-    case 'ZTE':
-      return [
+function getOLTCommands(brand, mode = 'GPON') {
+  logger.debug(`Getting commands for brand: ${brand}, mode: ${mode}`);
+  
+  // Brand-specific command sets
+  const commandSets = {
+    // ============= ZTE OLT Commands =============
+    ZTE: {
+      EPON: [
+        'terminal length 0',
+        'show epon onu state',
+        'show epon onu detail-info',
+        'show epon optical-transceiver-diagnosis'
+      ],
+      GPON: [
         'terminal length 0',
         'show gpon onu state',
         'show gpon onu detail-info',
         'show gpon onu optical-info'
-      ];
-    case 'Huawei':
-      return [
+      ]
+    },
+    
+    // ============= Huawei OLT Commands =============
+    Huawei: {
+      EPON: [
+        'screen-length 0 temporary',
+        'display epon ont info all',
+        'display epon optical-info all'
+      ],
+      GPON: [
         'screen-length 0 temporary',
         'display ont info summary all',
         'display ont optical-info all'
-      ];
-    case 'Fiberhome':
-      return [
+      ]
+    },
+    
+    // ============= Fiberhome OLT Commands =============
+    Fiberhome: {
+      EPON: [
+        'show epon onu state',
+        'show epon onu list',
+        'show epon optical-info'
+      ],
+      GPON: [
         'show gpon onu state',
-        'show gpon onu list'
-      ];
-    case 'VSOL':
-      // VSOL EPON/GPON OLT CLI commands - multiple firmware versions
-      // Key insight: 'show onu opm-diag all' works in CONFIG mode (epon-OLT(config)#)
-      // Primary data from 'show run' contains ONU MAC bindings
-      return [
+        'show gpon onu list',
+        'show gpon optical-info'
+      ]
+    },
+    
+    // ============= VSOL OLT Commands =============
+    // VSOL supports both EPON and GPON modes
+    // Key insight: 'show onu opm-diag all' works in CONFIG mode
+    VSOL: {
+      EPON: [
         'terminal length 0',                    // Disable pagination
         'enable',                               // Enter privileged mode
-        'show run',                             // Running config - ONU MAC info (privileged mode)
+        'show run',                             // Running config - ONU MAC info
         'show running-config',                  // Alternative format
         'show version',                         // Firmware version
-        // Enter config mode for optical power commands
-        'configure terminal',
+        'configure terminal',                   // Enter config mode
         // EPON optical power commands (IN CONFIG MODE)
-        'show onu opm-diag all',                // Shows all ONU optical power (config mode only!)
+        'show onu opm-diag all',                // Shows all ONU optical power
         'show epon optical-transceiver-diagnosis epon 0/1',
         'show epon optical-transceiver-diagnosis epon 0/2',
         'show epon optical-transceiver-diagnosis epon 0/3',
@@ -613,7 +653,7 @@ function getOLTCommands(brand) {
         'show onu 0/2 optical-info',
         'show onu 0/3 optical-info',
         'show onu 0/4 optical-info',
-        // Alternative EPON commands
+        // EPON onu-information commands
         'show epon onu-information interface epon 0/1',
         'show epon onu-information interface epon 0/2',
         'show epon onu-information interface epon 0/3',
@@ -622,9 +662,20 @@ function getOLTCommands(brand) {
         'show epon active-onu',
         'show epon inactive-onu',
         'show epon onu status all',
-        // Exit config mode
-        'exit',
-        // GPON optical power commands (if GPON mode)
+        'exit'
+      ],
+      GPON: [
+        'terminal length 0',                    // Disable pagination
+        'enable',                               // Enter privileged mode
+        'show run',                             // Running config - ONU binding info
+        'show running-config',                  // Alternative format
+        'show version',                         // Firmware version
+        'configure terminal',                   // Enter config mode
+        // GPON ONU info and optical power commands
+        'show gpon onu info',
+        'show gpon onu state',
+        'show gpon onu optical-info',
+        // Per-interface GPON commands
         'show gpon onu optical-info interface gpon 0/1',
         'show gpon onu optical-info interface gpon 0/2',
         'show gpon onu optical-info interface gpon 0/3',
@@ -633,47 +684,127 @@ function getOLTCommands(brand) {
         'show gpon onu state interface gpon 0/2',
         'show gpon onu state interface gpon 0/3',
         'show gpon onu state interface gpon 0/4',
+        // ONU detail info
+        'show gpon onu detail-info',
+        // Temperature and distance (if supported)
+        'show gpon onu distance',
         'exit'
-      ];
-    case 'DBC':
-      return [
+      ]
+    },
+    
+    // ============= DBC OLT Commands =============
+    DBC: {
+      EPON: [
         'terminal length 0',
+        'show epon onu status',
+        'show epon onu optical-power',
+        'show epon onu list',
         'show onu status',
-        'show onu optical-power',
-        'show onu list'
-      ];
-    case 'CDATA':
-      return [
+        'show onu optical-power'
+      ],
+      GPON: [
         'terminal length 0',
+        'show gpon onu status',
+        'show gpon onu optical-power',
+        'show gpon onu list',
+        'show onu status',
+        'show onu optical-power'
+      ]
+    },
+    
+    // ============= CDATA OLT Commands =============
+    CDATA: {
+      EPON: [
+        'terminal length 0',
+        'show epon onu status all',
+        'show epon onu optical-info all',
+        'show epon onu list',
         'show onu status all',
-        'show onu optical-info all',
-        'show onu list'
-      ];
-    case 'ECOM':
-      return [
+        'show onu optical-info all'
+      ],
+      GPON: [
+        'terminal length 0',
+        'show gpon onu status all',
+        'show gpon onu optical-info all',
+        'show gpon onu list',
+        'show onu status all',
+        'show onu optical-info all'
+      ]
+    },
+    
+    // ============= ECOM OLT Commands =============
+    ECOM: {
+      EPON: [
+        'terminal length 0',
+        'show epon onu state',
+        'show epon onu optical',
+        'show epon onu info'
+      ],
+      GPON: [
         'terminal length 0',
         'show gpon onu state',
         'show gpon onu optical',
         'show gpon onu info'
-      ];
-    case 'BDCOM':
-      return [
+      ]
+    },
+    
+    // ============= BDCOM OLT Commands (EPON-focused) =============
+    BDCOM: {
+      EPON: [
         'terminal length 0',
         'show epon onu-info',
-        'show epon optical-transceiver-diagnosis interface'
-      ];
-    case 'Nokia':
-      return [
+        'show epon optical-transceiver-diagnosis interface',
+        'show epon onu-status'
+      ],
+      GPON: [
+        'terminal length 0',
+        'show gpon onu-info',
+        'show gpon optical-transceiver-diagnosis interface',
+        'show gpon onu-status',
+        // Fallback to EPON if GPON not supported
+        'show epon onu-info'
+      ]
+    },
+    
+    // ============= Nokia OLT Commands =============
+    Nokia: {
+      EPON: [
+        'environment no more',
+        'show equipment epon ont status',
+        'show equipment epon ont optics'
+      ],
+      GPON: [
         'environment no more',
         'show equipment ont status',
         'show equipment ont optics'
-      ];
-    default:
-      return [
+      ]
+    },
+    
+    // ============= Default/Other OLT Commands =============
+    Other: {
+      EPON: [
+        'terminal length 0',
+        'show epon onu status',
+        'show epon onu list',
         'show onu status',
         'show onu list'
-      ];
-  }
+      ],
+      GPON: [
+        'terminal length 0',
+        'show gpon onu status',
+        'show gpon onu list',
+        'show onu status',
+        'show onu list'
+      ]
+    }
+  };
+  
+  // Get commands for the specified brand and mode
+  const brandCommands = commandSets[brand] || commandSets.Other;
+  const modeCommands = brandCommands[mode] || brandCommands.GPON;
+  
+  logger.debug(`Returning ${modeCommands.length} commands for ${brand} ${mode}`);
+  return modeCommands;
 }
 
 /**

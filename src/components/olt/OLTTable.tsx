@@ -123,6 +123,7 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
                   <TableHead className="font-semibold">Name</TableHead>
                   <TableHead className="font-semibold">Brand</TableHead>
+                  <TableHead className="font-semibold">Mode</TableHead>
                   <TableHead className="font-semibold">IP Address</TableHead>
                   <TableHead className="font-semibold">Port</TableHead>
                   <TableHead className="font-semibold text-center">Status</TableHead>
@@ -135,7 +136,7 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
               <TableBody>
                 {paginatedOLTs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                       No OLTs found
                     </TableCell>
                   </TableRow>
@@ -143,6 +144,7 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                   paginatedOLTs.map((olt) => {
                     const portUsage = (olt.active_ports / olt.total_ports) * 100;
                     const hasMikrotik = !!(olt.mikrotik_ip && olt.mikrotik_username);
+                    const oltMode = olt.olt_mode || 'GPON';
                     
                     return (
                       <TableRow 
@@ -160,6 +162,17 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
                         </TableCell>
                         <TableCell>
                           <OLTBrandBadge brand={olt.brand as OLTBrand} size="sm" />
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline" 
+                            className={oltMode === 'EPON' 
+                              ? 'bg-blue-500/10 text-blue-500 border-blue-500/30' 
+                              : 'bg-purple-500/10 text-purple-500 border-purple-500/30'
+                            }
+                          >
+                            {oltMode}
+                          </Badge>
                         </TableCell>
                         <TableCell className="font-mono">{olt.ip_address}</TableCell>
                         <TableCell className="font-mono">{olt.port}</TableCell>
