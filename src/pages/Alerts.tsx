@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAlerts, type AlertRow } from '@/hooks/useOLTData';
 import { formatDistanceToNow } from 'date-fns';
-import { AlertTriangle, AlertCircle, Info, CheckCircle, X, Bell, BellOff, Loader2 } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, CheckCircle, X, Bell, BellOff, Loader2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TablePagination } from '@/components/ui/table-pagination';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const severityConfig = {
   critical: {
@@ -33,7 +36,7 @@ const severityConfig = {
   },
 };
 
-function AlertCard({ alert, onMarkRead }: { alert: AlertRow; onMarkRead: (id: string) => void }) {
+function AlertCard({ alert, onMarkRead, onDelete }: { alert: AlertRow; onMarkRead: (id: string) => void; onDelete: (id: string) => void }) {
   const config = severityConfig[alert.severity];
   const Icon = config.icon;
 
@@ -58,8 +61,8 @@ function AlertCard({ alert, onMarkRead }: { alert: AlertRow; onMarkRead: (id: st
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">{alert.message}</p>
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
-                <X className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0 text-destructive hover:text-destructive" onClick={() => onDelete(alert.id)}>
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
             <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
@@ -68,7 +71,6 @@ function AlertCard({ alert, onMarkRead }: { alert: AlertRow; onMarkRead: (id: st
               <span>{formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}</span>
             </div>
             <div className="flex items-center gap-2 mt-3">
-              <Button variant="outline" size="sm">View Device</Button>
               {!alert.is_read && (
                 <Button variant="ghost" size="sm" onClick={() => onMarkRead(alert.id)}>
                   Mark as Read
@@ -83,18 +85,52 @@ function AlertCard({ alert, onMarkRead }: { alert: AlertRow; onMarkRead: (id: st
 }
 
 export default function Alerts() {
+  const { toast } = useToast();
   const [filter, setFilter] = useState<'all' | 'unread' | 'critical' | 'warning' | 'info'>('all');
-  const { alerts, loading, markAsRead, markAllAsRead } = useAlerts();
+  const { alerts, loading, markAsRead, markAllAsRead, refetch } = useAlerts();
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
-  const filteredAlerts = alerts.filter((alert) => {
-    if (filter === 'all') return true;
-    if (filter === 'unread') return !alert.is_read;
-    return alert.severity === filter;
-  });
+  const filteredAlerts = useMemo(() => {
+    return alerts.filter((alert) => {
+      if (filter === 'all') return true;
+      if (filter === 'unread') return !alert.is_read;
+      return alert.severity === filter;
+    });
+  }, [alerts, filter]);
+
+  const paginatedAlerts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAlerts.slice(start, start + pageSize);
+  }, [filteredAlerts, currentPage, pageSize]);
 
   const unreadCount = alerts.filter((a) => !a.is_read).length;
   const criticalCount = alerts.filter((a) => a.severity === 'critical').length;
   const warningCount = alerts.filter((a) => a.severity === 'warning').length;
+
+  const handleDeleteAlert = async (id: string) => {
+    try {
+      const { error } = await supabase.from('alerts').delete().eq('id', id);
+      if (error) throw error;
+      toast({ title: 'Alert Deleted', description: 'Alert has been removed.' });
+      refetch();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    try {
+      const { error } = await supabase.from('alerts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (error) throw error;
+      toast({ title: 'All Alerts Deleted', description: 'All alerts have been removed.' });
+      refetch();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
 
   if (loading) {
     return (
@@ -158,8 +194,8 @@ export default function Alerts() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-between">
-          <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <Tabs value={filter} onValueChange={(v) => { setFilter(v as typeof filter); setCurrentPage(1); }}>
             <TabsList className="bg-secondary">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="unread">Unread</TabsTrigger>
@@ -173,14 +209,18 @@ export default function Alerts() {
               <CheckCircle className="h-4 w-4 mr-2" />
               Mark All Read
             </Button>
+            <Button variant="destructive" size="sm" onClick={handleDeleteAll} disabled={alerts.length === 0}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete All
+            </Button>
           </div>
         </div>
 
         {/* Alert List */}
         <div className="space-y-4">
-          {filteredAlerts.length > 0 ? (
-            filteredAlerts.map((alert) => (
-              <AlertCard key={alert.id} alert={alert} onMarkRead={markAsRead} />
+          {paginatedAlerts.length > 0 ? (
+            paginatedAlerts.map((alert) => (
+              <AlertCard key={alert.id} alert={alert} onMarkRead={markAsRead} onDelete={handleDeleteAlert} />
             ))
           ) : (
             <Card variant="glass">
@@ -194,6 +234,17 @@ export default function Alerts() {
             </Card>
           )}
         </div>
+
+        {/* Pagination */}
+        {filteredAlerts.length > 0 && (
+          <TablePagination
+            totalItems={filteredAlerts.length}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
     </DashboardLayout>
   );

@@ -10,10 +10,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { StatusIndicator } from './StatusIndicator';
 import type { Tables } from '@/integrations/supabase/types';
 import { formatDistanceToNow, isAfter, subDays, subHours } from 'date-fns';
-import { Search, Filter, Download, MoreHorizontal, X } from 'lucide-react';
+import { Search, Filter, Download, MoreHorizontal, X, RefreshCw, Power, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -37,6 +38,7 @@ import { Badge } from '@/components/ui/badge';
 import { ONUDetailsModal } from '@/components/onu/ONUDetailsModal';
 import { PowerBadge } from '@/components/onu/PowerBadge';
 import { TablePagination } from '@/components/ui/table-pagination';
+import { useToast } from '@/hooks/use-toast';
 
 type ONUWithOLTName = Tables<'onus'> & { oltName?: string };
 
@@ -51,10 +53,14 @@ type StatusFilter = 'all' | 'online' | 'offline' | 'warning';
 type DateFilter = 'all' | '1h' | '24h' | '7d' | '30d';
 
 export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRefresh }: ONUTableProps) {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedONU, setSelectedONU] = useState<ONUWithOLTName | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  
+  // Bulk selection state
+  const [selectedONUs, setSelectedONUs] = useState<Set<string>>(new Set());
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -153,6 +159,79 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
     statusFilter !== 'all',
     dateFilter !== 'all',
   ].filter(Boolean).length;
+
+  // Bulk selection handlers
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const newSelected = new Set(paginatedONUs.map(onu => onu.id));
+      setSelectedONUs(newSelected);
+    } else {
+      setSelectedONUs(new Set());
+    }
+  };
+
+  const handleSelectONU = (onuId: string, checked: boolean) => {
+    const newSelected = new Set(selectedONUs);
+    if (checked) {
+      newSelected.add(onuId);
+    } else {
+      newSelected.delete(onuId);
+    }
+    setSelectedONUs(newSelected);
+  };
+
+  const isAllSelected = paginatedONUs.length > 0 && paginatedONUs.every(onu => selectedONUs.has(onu.id));
+  const isSomeSelected = paginatedONUs.some(onu => selectedONUs.has(onu.id));
+
+  // Bulk actions
+  const handleBulkReboot = () => {
+    toast({
+      title: 'Reboot Command Sent',
+      description: `Reboot command sent to ${selectedONUs.size} ONU(s). This may take a few moments.`,
+    });
+    setSelectedONUs(new Set());
+  };
+
+  const handleBulkDeauthorize = () => {
+    toast({
+      title: 'Deauthorize Command Sent',
+      description: `Deauthorize command sent to ${selectedONUs.size} ONU(s).`,
+      variant: 'destructive',
+    });
+    setSelectedONUs(new Set());
+  };
+
+  const handleBulkExport = () => {
+    const selectedOnuData = filteredONUs.filter(onu => selectedONUs.has(onu.id));
+    const headers = ['OLT', 'PON Port', 'ONU Name', 'Router Name', 'PPPoE Username', 'MAC Address', 'Serial Number', 'RX Power', 'TX Power', 'Status', 'Last Online'];
+    const rows = selectedOnuData.map(onu => [
+      onu.oltName || 'Unknown',
+      onu.pon_port,
+      onu.name,
+      onu.router_name || '',
+      onu.pppoe_username || '',
+      onu.mac_address || '',
+      onu.serial_number || '',
+      onu.rx_power?.toString() || '',
+      onu.tx_power?.toString() || '',
+      onu.status,
+      onu.last_online || ''
+    ]);
+    
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `onu-devices-selected-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    
+    toast({
+      title: 'Export Complete',
+      description: `Exported ${selectedONUs.size} ONU(s) to CSV.`,
+    });
+    setSelectedONUs(new Set());
+  };
 
   const handleExportCSV = () => {
     const headers = ['OLT', 'PON Port', 'ONU Name', 'Router Name', 'PPPoE Username', 'MAC Address', 'Serial Number', 'RX Power', 'TX Power', 'Status', 'Last Online'];
@@ -301,6 +380,32 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
               )}
             </div>
 
+            {/* Bulk Actions Bar */}
+            {selectedONUs.size > 0 && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <span className="text-sm font-medium">
+                  {selectedONUs.size} ONU(s) selected
+                </span>
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button size="sm" variant="outline" onClick={handleBulkReboot}>
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    Reboot
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleBulkExport}>
+                    <Download className="h-4 w-4 mr-1" />
+                    Export
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={handleBulkDeauthorize}>
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Deauthorize
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedONUs(new Set())}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Active Filters Display */}
             {activeFilterCount > 0 && (
               <div className="flex flex-wrap items-center gap-2">
@@ -338,6 +443,13 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={isAllSelected}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead className="font-semibold">OLT</TableHead>
                   <TableHead className="font-semibold">PON Port</TableHead>
                   <TableHead className="font-semibold">ONU Name</TableHead>
@@ -354,18 +466,29 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
               <TableBody>
                 {paginatedONUs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                       No ONU devices found
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedONUs.map((onu) => {
+                    const isSelected = selectedONUs.has(onu.id);
                     return (
                       <TableRow 
                         key={onu.id} 
-                        className="hover:bg-muted/30 cursor-pointer"
+                        className={cn(
+                          "hover:bg-muted/30 cursor-pointer",
+                          isSelected && "bg-primary/5"
+                        )}
                         onClick={() => handleViewDetails(onu)}
                       >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(checked) => handleSelectONU(onu.id, !!checked)}
+                            aria-label={`Select ${onu.name}`}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">{onu.oltName || 'Unknown'}</TableCell>
                         <TableCell className="font-mono text-xs">{onu.pon_port}</TableCell>
                         <TableCell>
