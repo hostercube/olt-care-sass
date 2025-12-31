@@ -64,18 +64,85 @@ interface AddOLTDialogProps {
   onOLTAdded?: () => void;
 }
 
-// Helper to get default port and connection info for each brand
-const brandConnectionInfo: Record<string, { defaultPort: number; protocol: string; hint: string }> = {
-  ZTE: { defaultPort: 22, protocol: 'SSH', hint: 'SSH পোর্ট 22' },
-  Huawei: { defaultPort: 22, protocol: 'SSH', hint: 'SSH পোর্ট 22' },
-  Nokia: { defaultPort: 22, protocol: 'SSH', hint: 'SSH পোর্ট 22' },
-  VSOL: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom (8085)' },
-  DBC: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom' },
-  CDATA: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom' },
-  ECOM: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom' },
-  BDCOM: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom' },
-  Fiberhome: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23' },
-  Other: { defaultPort: 23, protocol: 'Auto', hint: 'SSH 22, Telnet 23, SNMP 161, API 443' },
+// Complete Protocol and Port Documentation for each OLT brand
+const brandConnectionInfo: Record<string, { 
+  defaultPort: number; 
+  protocol: string; 
+  hint: string;
+  telnetPort?: number;
+  webPorts?: number[];
+  sshPort?: number;
+}> = {
+  ZTE: { 
+    defaultPort: 22, 
+    protocol: 'SSH', 
+    hint: 'SSH পোর্ট 22 (CLI commands)',
+    sshPort: 22,
+    telnetPort: 23
+  },
+  Huawei: { 
+    defaultPort: 22, 
+    protocol: 'SSH', 
+    hint: 'SSH পোর্ট 22 (CLI commands)',
+    sshPort: 22,
+    telnetPort: 23
+  },
+  Nokia: { 
+    defaultPort: 22, 
+    protocol: 'SSH', 
+    hint: 'SSH পোর্ট 22',
+    sshPort: 22
+  },
+  VSOL: { 
+    defaultPort: 8085, 
+    protocol: 'HTTP API', 
+    hint: 'Web API 8085 বা Telnet 23 (fallback)',
+    webPorts: [80, 8080, 8085, 8086],
+    telnetPort: 23
+  },
+  DBC: { 
+    defaultPort: 80, 
+    protocol: 'HTTP API', 
+    hint: 'Web API 80/8080 বা Telnet 23',
+    webPorts: [80, 8080],
+    telnetPort: 23
+  },
+  CDATA: { 
+    defaultPort: 80, 
+    protocol: 'HTTP API', 
+    hint: 'Web API 80/8080 বা Telnet 23',
+    webPorts: [80, 8080],
+    telnetPort: 23
+  },
+  ECOM: { 
+    defaultPort: 80, 
+    protocol: 'HTTP API', 
+    hint: 'Web API 80/8080 বা Telnet 23',
+    webPorts: [80, 8080],
+    telnetPort: 23
+  },
+  BDCOM: { 
+    defaultPort: 23, 
+    protocol: 'Telnet', 
+    hint: 'Telnet পোর্ট 23 (EPON CLI)',
+    telnetPort: 23,
+    sshPort: 22
+  },
+  Fiberhome: { 
+    defaultPort: 23, 
+    protocol: 'Telnet', 
+    hint: 'Telnet পোর্ট 23',
+    telnetPort: 23,
+    sshPort: 22
+  },
+  Other: { 
+    defaultPort: 23, 
+    protocol: 'Auto', 
+    hint: 'Auto-detect: SSH 22, Telnet 23, HTTP 80/8080',
+    sshPort: 22,
+    telnetPort: 23,
+    webPorts: [80, 8080]
+  },
 };
 
 export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
@@ -104,13 +171,14 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
   const selectedBrand = form.watch('brand');
   const selectedPort = form.watch('port');
   
-  // Get connection type info
+  // Get connection type info with better descriptions
   const getConnectionType = (port: number) => {
-    if (port === 22) return 'SSH';
-    if (port === 23) return 'Telnet';
-    if (port === 161) return 'SNMP';
-    if ([80, 443, 8080, 8041].includes(port)) return 'HTTP API';
-    return 'Auto-Detect (Telnet/SSH/HTTP)';
+    if (port === 22) return 'SSH (CLI Commands)';
+    if (port === 23) return 'Telnet (CLI Commands)';
+    if (port === 161) return 'SNMP (Read-only Status)';
+    if ([80, 443, 8080, 8085, 8086, 8041].includes(port)) return 'HTTP API (Web Interface)';
+    if (port === 8728) return 'MikroTik API';
+    return 'Auto-Detect (HTTP → Telnet → SSH)';
   };
 
   // Update port when brand changes

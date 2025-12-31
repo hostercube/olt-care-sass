@@ -15,6 +15,87 @@ const SSH_TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '60000');
 const CONNECTION_TIMEOUT = 15000;
 
 /**
+ * OLT Brand Protocol Configuration
+ * Defines primary and fallback connection methods for each brand
+ */
+const OLT_PROTOCOL_CONFIG = {
+  ZTE: { 
+    primary: 'ssh', 
+    fallback: 'telnet', 
+    defaultPort: 22,
+    webPorts: [8080],
+    hint: 'SSH port 22 (CLI commands)'
+  },
+  Huawei: { 
+    primary: 'ssh', 
+    fallback: 'telnet', 
+    defaultPort: 22,
+    webPorts: [],
+    hint: 'SSH port 22 (CLI commands)'
+  },
+  VSOL: { 
+    primary: 'http', 
+    fallback: 'telnet', 
+    defaultPort: 8085,
+    webPorts: [80, 8080, 8085, 8086, 443],
+    telnetPort: 23,
+    hint: 'Web API port 8085 or Telnet port 23'
+  },
+  BDCOM: { 
+    primary: 'telnet', 
+    fallback: 'ssh', 
+    defaultPort: 23,
+    webPorts: [80],
+    hint: 'Telnet port 23 (EPON CLI commands)'
+  },
+  DBC: { 
+    primary: 'http', 
+    fallback: 'telnet', 
+    defaultPort: 80,
+    webPorts: [80, 8080],
+    telnetPort: 23,
+    hint: 'Web API port 80 or Telnet port 23'
+  },
+  CDATA: { 
+    primary: 'http', 
+    fallback: 'telnet', 
+    defaultPort: 80,
+    webPorts: [80, 8080],
+    telnetPort: 23,
+    hint: 'Web API port 80 or Telnet port 23'
+  },
+  ECOM: { 
+    primary: 'http', 
+    fallback: 'telnet', 
+    defaultPort: 80,
+    webPorts: [80, 8080],
+    telnetPort: 23,
+    hint: 'Web API port 80 or Telnet port 23'
+  },
+  Fiberhome: { 
+    primary: 'telnet', 
+    fallback: 'ssh', 
+    defaultPort: 23,
+    webPorts: [],
+    hint: 'Telnet port 23'
+  },
+  Nokia: { 
+    primary: 'ssh', 
+    fallback: 'snmp', 
+    defaultPort: 22,
+    webPorts: [],
+    hint: 'SSH port 22'
+  },
+  Other: { 
+    primary: 'auto', 
+    fallback: 'telnet', 
+    defaultPort: 23,
+    webPorts: [80, 8080],
+    hint: 'Auto-detect (try SSH, Telnet, HTTP)'
+  }
+};
+
+/**
  * Determine connection method based on port number and brand
  * Port 22 = SSH (ZTE, Huawei, Nokia)
  * Port 23 = Telnet
@@ -22,28 +103,43 @@ const CONNECTION_TIMEOUT = 15000;
  * Port 161 = SNMP (read-only status)
  */
 function getConnectionType(port, brand) {
-  // Standard protocol ports
+  const config = OLT_PROTOCOL_CONFIG[brand] || OLT_PROTOCOL_CONFIG.Other;
+  
+  // Standard protocol ports - explicit mapping
   if (port === 22) return 'ssh';
   if (port === 23) return 'telnet';
   if (port === 161) return 'snmp';
   
-  // HTTP API ports - including common Chinese OLT web ports
-  // Port 8085, 8080, 8041, 443, 80 are typically web/API ports
-  if ([80, 443, 8080, 8041, 8085, 8086, 8088, 8090].includes(port)) return 'http';
+  // HTTP API ports - common web interface ports
+  const httpPorts = [80, 443, 8080, 8041, 8085, 8086, 8088, 8090];
+  if (httpPorts.includes(port)) {
+    // For HTTP ports, use http_first with brand-specific fallback
+    return `http_first_${config.fallback || 'telnet'}`;
+  }
   
   // SSH-first for major brands (ZTE, Huawei, Nokia)
-  const sshBrands = ['ZTE', 'Huawei', 'Nokia'];
-  if (sshBrands.includes(brand)) return 'ssh_first';
+  if (['ZTE', 'Huawei', 'Nokia'].includes(brand)) return 'ssh_first';
   
-  // HTTP-first for Chinese OLT brands with non-standard ports (they usually have web UI)
-  const httpBrands = ['VSOL', 'DBC', 'CDATA', 'ECOM', 'BDCOM'];
-  if (httpBrands.includes(brand) && port > 1024) return 'http_first';
+  // HTTP-first for Chinese OLT brands with non-standard ports > 1024
+  if (['VSOL', 'DBC', 'CDATA', 'ECOM'].includes(brand) && port > 1024) {
+    return 'http_first_telnet';
+  }
   
-  // Telnet for Fiberhome and others with non-standard ports
+  // BDCOM uses EPON, prefer Telnet
+  if (brand === 'BDCOM') return 'telnet_first';
+  
+  // Fiberhome - Telnet first
   if (brand === 'Fiberhome') return 'telnet_first';
   
   // Default: auto detect - try HTTP -> Telnet -> SSH
   return 'auto_detect';
+}
+
+/**
+ * Get protocol configuration for a brand
+ */
+export function getProtocolConfig(brand) {
+  return OLT_PROTOCOL_CONFIG[brand] || OLT_PROTOCOL_CONFIG.Other;
 }
 
 /**
@@ -60,94 +156,149 @@ export async function pollOLT(supabase, olt) {
     const connectionType = getConnectionType(olt.port, olt.brand);
     logger.info(`Polling ${olt.name} (${olt.ip_address}:${olt.port}) - Connection type: ${connectionType}`);
     
-    switch (connectionType) {
-      case 'http':
-        logger.info(`Using HTTP API for ${olt.name}`);
-        const apiResponse = await executeAPICommands(olt);
-        onus = parseAPIResponse(olt.brand, apiResponse);
-        break;
+    // Handle dynamic connection types like 'http_first_telnet'
+    if (connectionType.startsWith('http_first_')) {
+      const fallbackMethod = connectionType.replace('http_first_', '');
+      try {
+        logger.info(`Trying HTTP API first for ${olt.name} (fallback: ${fallbackMethod})`);
+        const apiResp = await executeAPICommands(olt);
+        onus = parseAPIResponse(olt.brand, apiResp);
+      } catch (httpError) {
+        logger.warn(`HTTP API failed for ${olt.name}: ${httpError.message}`);
         
-      case 'ssh':
-        logger.info(`Using SSH for ${olt.name}`);
-        output = await executeSSHCommands(olt);
-        onus = parseOLTOutput(olt.brand, output);
-        break;
+        // Get brand config to determine Telnet port
+        const config = OLT_PROTOCOL_CONFIG[olt.brand] || OLT_PROTOCOL_CONFIG.Other;
+        const telnetPort = config.telnetPort || 23;
         
-      case 'telnet':
-        logger.info(`Using Telnet for ${olt.name}`);
-        output = await executeTelnetCommands(olt, commands);
-        onus = parseOLTOutput(olt.brand, output);
-        break;
-        
-      case 'http_first':
-        // Try HTTP API first, fallback to Telnet -> SSH
-        try {
-          logger.info(`Trying HTTP API first for ${olt.name}`);
-          const apiResp = await executeAPICommands(olt);
-          onus = parseAPIResponse(olt.brand, apiResp);
-        } catch (httpError) {
-          logger.warn(`HTTP API failed for ${olt.name}: ${httpError.message}, trying Telnet...`);
+        if (fallbackMethod === 'telnet') {
           try {
-            output = await executeTelnetCommands(olt, commands);
+            logger.info(`Falling back to Telnet (port ${telnetPort}) for ${olt.name}`);
+            // Create a modified OLT object with Telnet port
+            const telnetOlt = { ...olt, port: telnetPort };
+            output = await executeTelnetCommands(telnetOlt, commands);
             onus = parseOLTOutput(olt.brand, output);
           } catch (telnetError) {
             logger.warn(`Telnet failed for ${olt.name}: ${telnetError.message}, trying SSH...`);
-            output = await executeSSHCommands(olt);
+            const sshOlt = { ...olt, port: 22 };
+            output = await executeSSHCommands(sshOlt);
+            onus = parseOLTOutput(olt.brand, output);
+          }
+        } else if (fallbackMethod === 'ssh') {
+          try {
+            logger.info(`Falling back to SSH (port 22) for ${olt.name}`);
+            const sshOlt = { ...olt, port: 22 };
+            output = await executeSSHCommands(sshOlt);
+            onus = parseOLTOutput(olt.brand, output);
+          } catch (sshError) {
+            logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
+            const telnetOlt = { ...olt, port: telnetPort };
+            output = await executeTelnetCommands(telnetOlt, commands);
+            onus = parseOLTOutput(olt.brand, output);
+          }
+        } else {
+          // Default fallback chain: Telnet -> SSH
+          try {
+            const telnetOlt = { ...olt, port: telnetPort };
+            output = await executeTelnetCommands(telnetOlt, commands);
+            onus = parseOLTOutput(olt.brand, output);
+          } catch (e) {
+            const sshOlt = { ...olt, port: 22 };
+            output = await executeSSHCommands(sshOlt);
             onus = parseOLTOutput(olt.brand, output);
           }
         }
-        break;
-        
-      case 'telnet_first':
-        // Try Telnet first, fallback to SSH
-        try {
-          logger.info(`Trying Telnet first for ${olt.name}`);
-          output = await executeTelnetCommands(olt, commands);
-        } catch (telnetError) {
-          logger.warn(`Telnet failed for ${olt.name}: ${telnetError.message}, trying SSH...`);
-          output = await executeSSHCommands(olt);
-        }
-        onus = parseOLTOutput(olt.brand, output);
-        break;
-        
-      case 'ssh_first':
-        // Try SSH first, fallback to Telnet
-        try {
-          logger.info(`Trying SSH first for ${olt.name}`);
-          output = await executeSSHCommands(olt);
-        } catch (sshError) {
-          logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
-          output = await executeTelnetCommands(olt, commands);
-        }
-        onus = parseOLTOutput(olt.brand, output);
-        break;
-        
-      case 'snmp':
-        logger.info(`Using SNMP for ${olt.name}`);
-        // SNMP polling (basic status only)
-        const snmpResult = await executeSNMPPoll(olt);
-        onus = snmpResult;
-        break;
-        
-      case 'auto_detect':
-      default:
-        // Auto-detect: Try HTTP -> Telnet -> SSH (HTTP first for web-based OLTs)
-        try {
-          logger.info(`Auto-detect: Trying HTTP API for ${olt.name}`);
+      }
+    } else {
+      // Standard connection types
+      switch (connectionType) {
+        case 'http':
+          logger.info(`Using HTTP API for ${olt.name}`);
           const apiResponse = await executeAPICommands(olt);
           onus = parseAPIResponse(olt.brand, apiResponse);
-        } catch (httpErr) {
-          logger.warn(`HTTP failed, trying Telnet for ${olt.name}...`);
+          break;
+          
+        case 'ssh':
+          logger.info(`Using SSH for ${olt.name}`);
+          output = await executeSSHCommands(olt);
+          onus = parseOLTOutput(olt.brand, output);
+          break;
+          
+        case 'telnet':
+          logger.info(`Using Telnet for ${olt.name}`);
+          output = await executeTelnetCommands(olt, commands);
+          onus = parseOLTOutput(olt.brand, output);
+          break;
+          
+        case 'http_first':
+          // Try HTTP API first, fallback to Telnet -> SSH
           try {
-            output = await executeTelnetCommands(olt, commands);
-            onus = parseOLTOutput(olt.brand, output);
-          } catch (telnetErr) {
-            logger.warn(`Telnet failed, trying SSH for ${olt.name}...`);
-            output = await executeSSHCommands(olt);
-            onus = parseOLTOutput(olt.brand, output);
+            logger.info(`Trying HTTP API first for ${olt.name}`);
+            const apiResp = await executeAPICommands(olt);
+            onus = parseAPIResponse(olt.brand, apiResp);
+          } catch (httpError) {
+            logger.warn(`HTTP API failed for ${olt.name}: ${httpError.message}, trying Telnet...`);
+            try {
+              output = await executeTelnetCommands(olt, commands);
+              onus = parseOLTOutput(olt.brand, output);
+            } catch (telnetError) {
+              logger.warn(`Telnet failed for ${olt.name}: ${telnetError.message}, trying SSH...`);
+              output = await executeSSHCommands(olt);
+              onus = parseOLTOutput(olt.brand, output);
+            }
           }
-        }
-        break;
+          break;
+          
+        case 'telnet_first':
+          // Try Telnet first, fallback to SSH
+          try {
+            logger.info(`Trying Telnet first for ${olt.name}`);
+            output = await executeTelnetCommands(olt, commands);
+          } catch (telnetError) {
+            logger.warn(`Telnet failed for ${olt.name}: ${telnetError.message}, trying SSH...`);
+            output = await executeSSHCommands(olt);
+          }
+          onus = parseOLTOutput(olt.brand, output);
+          break;
+          
+        case 'ssh_first':
+          // Try SSH first, fallback to Telnet
+          try {
+            logger.info(`Trying SSH first for ${olt.name}`);
+            output = await executeSSHCommands(olt);
+          } catch (sshError) {
+            logger.warn(`SSH failed for ${olt.name}: ${sshError.message}, trying Telnet...`);
+            output = await executeTelnetCommands(olt, commands);
+          }
+          onus = parseOLTOutput(olt.brand, output);
+          break;
+          
+        case 'snmp':
+          logger.info(`Using SNMP for ${olt.name}`);
+          // SNMP polling (basic status only)
+          const snmpResult = await executeSNMPPoll(olt);
+          onus = snmpResult;
+          break;
+          
+        case 'auto_detect':
+        default:
+          // Auto-detect: Try HTTP -> Telnet -> SSH
+          try {
+            logger.info(`Auto-detect: Trying HTTP API for ${olt.name}`);
+            const autoApiResponse = await executeAPICommands(olt);
+            onus = parseAPIResponse(olt.brand, autoApiResponse);
+          } catch (httpErr) {
+            logger.warn(`HTTP failed for ${olt.name}: ${httpErr.message}, trying Telnet...`);
+            try {
+              output = await executeTelnetCommands(olt, commands);
+              onus = parseOLTOutput(olt.brand, output);
+            } catch (telnetErr) {
+              logger.warn(`Telnet failed for ${olt.name}: ${telnetErr.message}, trying SSH...`);
+              output = await executeSSHCommands(olt);
+              onus = parseOLTOutput(olt.brand, output);
+            }
+          }
+          break;
+      }
     }
     
     logger.info(`Parsed ${onus.length} ONUs from ${olt.name}`);
