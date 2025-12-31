@@ -30,7 +30,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, Loader2, CheckCircle, XCircle, Router, Wifi } from 'lucide-react';
+import { Plus, Loader2, CheckCircle, XCircle, Router, Wifi, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { addOLT } from '@/hooks/useOLTData';
 import { Constants } from '@/integrations/supabase/types';
@@ -150,6 +150,8 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [testingAllProtocols, setTestingAllProtocols] = useState(false);
+  const [protocolResults, setProtocolResults] = useState<any>(null);
 
   const form = useForm<AddOLTFormValues>({
     resolver: zodResolver(addOLTSchema),
@@ -158,7 +160,7 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       brand: 'VSOL',
       oltMode: 'GPON',
       ipAddress: '',
-      port: 23,
+      port: 8085,  // Default to HTTP API port for VSOL
       username: '',
       password: '',
       mikrotikIp: '',
@@ -187,6 +189,67 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
     form.setValue('brand', brand as any);
     form.setValue('port', info.defaultPort);
     setTestResult(null);
+    setProtocolResults(null);
+  };
+
+  // Test all protocols to find working ones
+  const handleTestAllProtocols = async () => {
+    const values = form.getValues();
+    
+    if (!values.ipAddress || !values.username || !values.password) {
+      toast.error('Please fill in IP, username and password first');
+      return;
+    }
+
+    const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
+    
+    if (!pollingServerUrl) {
+      toast.error('Polling server not configured');
+      return;
+    }
+
+    setTestingAllProtocols(true);
+    setProtocolResults(null);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      
+      const baseUrl = pollingServerUrl.replace(/\/+$/, '');
+      const response = await fetch(`${baseUrl}/test-all-protocols`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          olt: {
+            ip_address: values.ipAddress,
+            port: values.port,
+            username: values.username,
+            password_encrypted: values.password,
+            brand: values.brand,
+          },
+        }),
+      });
+
+      clearTimeout(timeoutId);
+      const data = await response.json();
+      setProtocolResults(data);
+      
+      if (data.recommended) {
+        toast.success(`Recommended: ${data.recommended.protocol} on port ${data.recommended.port}`);
+        // Auto-set the recommended port
+        form.setValue('port', data.recommended.port);
+        setTestResult('success');
+      } else {
+        toast.error('No working protocol found. Check IP/credentials.');
+        setTestResult('error');
+      }
+    } catch (error: any) {
+      console.warn('Test all protocols failed:', error);
+      toast.error(`Protocol test failed: ${error.message}`);
+    } finally {
+      setTestingAllProtocols(false);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -518,6 +581,53 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
               </div>
             </div>
 
+            {/* Protocol Results */}
+            {protocolResults && (
+              <div className="p-3 rounded-lg bg-muted/50 border border-border space-y-2">
+                <p className="text-sm font-medium">Protocol Test Results:</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    {protocolResults.http?.success ? (
+                      <CheckCircle className="h-3 w-3 text-success" />
+                    ) : (
+                      <XCircle className="h-3 w-3 text-destructive" />
+                    )}
+                    <span>HTTP: {protocolResults.http?.success ? `Port ${protocolResults.http.port}` : 'Failed'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {protocolResults.telnet?.success ? (
+                      <CheckCircle className="h-3 w-3 text-success" />
+                    ) : (
+                      <XCircle className="h-3 w-3 text-destructive" />
+                    )}
+                    <span>Telnet: {protocolResults.telnet?.success ? `Port ${protocolResults.telnet.port}` : 'Failed'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {protocolResults.ssh?.success ? (
+                      <CheckCircle className="h-3 w-3 text-success" />
+                    ) : (
+                      <XCircle className="h-3 w-3 text-destructive" />
+                    )}
+                    <span>SSH: {protocolResults.ssh?.success ? 'Port 22' : 'Failed'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {protocolResults.snmp?.success ? (
+                      <CheckCircle className="h-3 w-3 text-success" />
+                    ) : (
+                      <XCircle className="h-3 w-3 text-destructive" />
+                    )}
+                    <span>SNMP: {protocolResults.snmp?.success ? 'Port 161' : 'Failed'}</span>
+                  </div>
+                </div>
+                {protocolResults.recommended && (
+                  <p className="text-xs text-success font-medium">
+                    ✓ Recommended: {protocolResults.recommended.protocol} on port {protocolResults.recommended.port}
+                    {protocolResults.recommended.note && ` (${protocolResults.recommended.note})`}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
               <div className="flex-1">
                 <p className="text-sm font-medium">Connection Status</p>
@@ -539,8 +649,28 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
                 type="button"
                 variant="outline"
                 size="sm"
+                onClick={handleTestAllProtocols}
+                disabled={testingAllProtocols || testing}
+                title="Test all protocols (HTTP, Telnet, SSH, SNMP)"
+              >
+                {testingAllProtocols ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Scanning...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4 mr-1" />
+                    Scan Ports
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
                 onClick={handleTestConnection}
-                disabled={testing}
+                disabled={testing || testingAllProtocols}
               >
                 {testing ? (
                   <>

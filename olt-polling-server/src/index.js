@@ -118,6 +118,41 @@ app.post('/test-connection', async (req, res) => {
   }
 });
 
+// Test all protocols endpoint - returns which protocols work for an OLT
+app.post('/api/test-all-protocols', async (req, res) => {
+  const { olt } = req.body;
+  
+  try {
+    if (!olt) {
+      return res.status(400).json({ error: 'OLT configuration required' });
+    }
+    
+    logger.info(`Testing all protocols for: ${olt.ip_address}`);
+    const results = await testAllProtocols(olt);
+    res.json(results);
+  } catch (error) {
+    logger.error('Test all protocols error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Also without /api prefix for Nginx
+app.post('/test-all-protocols', async (req, res) => {
+  const { olt } = req.body;
+  
+  try {
+    if (!olt) {
+      return res.status(400).json({ error: 'OLT configuration required' });
+    }
+    
+    logger.info(`Testing all protocols for: ${olt.ip_address}`);
+    const results = await testAllProtocols(olt);
+    res.json(results);
+  } catch (error) {
+    logger.error('Test all protocols error:', error);
+    res.status(500).json({ error: error.message });
+  }
+
 // Poll specific OLT
 app.post('/poll/:oltId', async (req, res) => {
   const { oltId } = req.params;

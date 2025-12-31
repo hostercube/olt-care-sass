@@ -136,14 +136,25 @@ This document details the connection protocols and ports for each supported OLT 
 
 ### When Adding an OLT, Use These Ports:
 
-| Scenario | Recommended Port |
-|----------|------------------|
-| SSH connection (ZTE, Huawei, Nokia) | 22 |
-| Telnet connection (older OLTs) | 23 |
-| Web API (VSOL newer models) | 8085 or 80 |
-| Web API (DBC, CDATA, ECOM) | 80 or 8080 |
-| SNMP monitoring only | 161 |
-| MikroTik API | 8728 |
+| Scenario | Recommended Port | Notes |
+|----------|------------------|-------|
+| SSH connection (ZTE, Huawei, Nokia) | 22 | Full CLI access, ONU data + optical |
+| Telnet connection (older OLTs) | 23 | Full CLI access |
+| Web API (VSOL newer models) | 8085 or 80 | HTTP API, fastest method |
+| Web API (DBC, CDATA, ECOM) | 80 or 8080 | HTTP API |
+| SNMP monitoring only | 161 | **Read-only status** (online/offline) |
+| MikroTik API | 8728 | PPPoE/Router data enrichment |
+
+### SNMP Port 161 - Important Notes:
+
+⚠️ **SNMP provides LIMITED data:**
+- ✅ OLT reachability check
+- ✅ Basic device info (sysDescr, sysUptime)
+- ❌ **NO** ONU list
+- ❌ **NO** RX/TX power readings
+- ❌ **NO** detailed ONU status
+
+**SNMP is NOT recommended for full monitoring.** Use SSH, Telnet, or HTTP API instead.
 
 ### Special Notes:
 - **VSOL Port 8085**: Most VSOL GPON OLTs use port 8085 for web interface
@@ -160,6 +171,7 @@ This document details the connection protocols and ports for each supported OLT 
 2. Verify OLT is reachable (ping test)
 3. Check firewall settings on OLT
 4. Try alternative port (e.g., Telnet on 23 instead of HTTP on 8085)
+5. Use "Scan Ports" button to auto-detect working protocols
 
 ### Authentication Failed
 1. Verify username/password
@@ -175,3 +187,22 @@ This document details the connection protocols and ports for each supported OLT 
 1. Verify CLI commands are correct for OLT model
 2. Check if ONUs are registered
 3. Try different polling method (HTTP vs Telnet)
+
+---
+
+## 📊 Protocol Priority
+
+When you enter a port, the system automatically detects the connection method:
+
+| Port | Protocol | Data Type |
+|------|----------|-----------|
+| 22 | SSH | Full ONU data |
+| 23 | Telnet | Full ONU data |
+| 80, 8080, 8085, 8086 | HTTP API | Full ONU data |
+| 443 | HTTPS | Full ONU data |
+| 161 | SNMP | **Status only** |
+
+### Auto-Fallback Chain:
+1. HTTP API → Telnet → SSH (for web ports)
+2. SSH → Telnet (for port 22)
+3. Telnet → SSH (for port 23)
