@@ -9,7 +9,7 @@ import { parseECOMOutput } from './parsers/ecom-parser.js';
 import { parseBDCOMOutput } from './parsers/bdcom-parser.js';
 import { executeTelnetCommands } from './telnet-client.js';
 import { executeAPICommands, parseAPIResponse } from './http-api-client.js';
-import { fetchMikroTikPPPoE, fetchMikroTikARP, fetchMikroTikDHCPLeases, enrichONUWithMikroTikData } from './mikrotik-client.js';
+import { fetchAllMikroTikData, enrichONUWithMikroTikData } from './mikrotik-client.js';
 import net from 'net';
 
 const SSH_TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '60000');
@@ -332,18 +332,15 @@ export async function pollOLT(supabase, olt) {
       };
       
       try {
-        const [pppoeData, arpData, dhcpData] = await Promise.all([
-          fetchMikroTikPPPoE(mikrotik),
-          fetchMikroTikARP(mikrotik),
-          fetchMikroTikDHCPLeases(mikrotik),
-        ]);
+        // Fetch all MikroTik data including PPP secrets for PPPoE credentials
+        const { pppoe, arp, dhcp, secrets } = await fetchAllMikroTikData(mikrotik);
         
-        logger.info(`MikroTik data: ${pppoeData.length} PPPoE, ${arpData.length} ARP, ${dhcpData.length} DHCP entries`);
+        logger.info(`MikroTik data: ${pppoe.length} PPPoE, ${arp.length} ARP, ${dhcp.length} DHCP, ${secrets.length} secrets`);
         
-        // Enrich ONU data with MikroTik info
-        onus = onus.map(onu => enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData));
+        // Enrich ONU data with MikroTik info (router name, MAC, PPPoE username)
+        onus = onus.map(onu => enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets));
         
-        logger.info(`Enriched ONUs with MikroTik data`);
+        logger.info(`Enriched ${onus.length} ONUs with MikroTik data`);
       } catch (mikrotikErr) {
         logger.warn(`MikroTik data fetch failed (non-critical): ${mikrotikErr.message}`);
         // Continue without MikroTik data - ONU data from OLT is still valid
@@ -577,35 +574,32 @@ function getOLTCommands(brand) {
         'show gpon onu list'
       ];
     case 'VSOL':
-      // VSOL EPON OLT CLI commands
-      // Based on actual CLI output - these OLTs use config mode commands
-      // First discover available commands, then get ONU data
+      // VSOL EPON OLT CLI commands - V1600 series
+      // Primary data comes from 'show run' which contains ONU MAC bindings
+      // Additional commands for ONU status and optical power
       return [
         'terminal length 0',                    // Disable pagination
-        'show run',                             // Show running config - contains ONU info
+        'show run',                             // Show running config - contains ONU MAC info
         'show running-config',                  // Alternative format
-        'show interface epon 0/1',              // Interface info PON 1
-        'show interface epon 0/2',              // Interface info PON 2  
-        'show interface epon 0/3',              // Interface info PON 3
-        'show interface epon 0/4',              // Interface info PON 4
-        'config',                               // Enter config mode
-        'show run',                             // Show config in config mode
-        'interface epon 0/1',                   // Enter interface mode
-        'show bind-info',                       // Show ONU bindings
-        'exit',                                 // Exit interface
-        'interface epon 0/2',                   // Try PON 2
-        'show bind-info',                       // Show ONU bindings  
-        'exit',
-        'interface epon 0/3',                   // Try PON 3
-        'show bind-info',
-        'exit',
-        'interface epon 0/4',                   // Try PON 4
-        'show bind-info',
-        'exit',
-        'exit',                                 // Exit config mode
-        'show ?',                               // Discover available show commands
-        'show mac-address-table',               // MAC address table
-        'show interface status'                 // Interface status
+        // ONU status and optical power commands (try various formats)
+        'show onu status',                      // ONU online/offline status
+        'show onu optical-power',               // ONU optical power readings
+        'show onu info',                        // General ONU info
+        'show onu list',                        // ONU list
+        'show epon onu',                        // EPON ONU info
+        'show epon onu status',                 // EPON ONU status  
+        'show epon onu optical',                // EPON optical power
+        'show epon active-onu',                 // Active ONU list
+        'show epon inactive-onu',               // Inactive/offline ONUs
+        'show epon optical-transceiver-diagnosis epon 0/1',  // Optical PON 1
+        'show epon optical-transceiver-diagnosis epon 0/2',  // Optical PON 2
+        'show epon optical-transceiver-diagnosis epon 0/3',  // Optical PON 3
+        'show epon optical-transceiver-diagnosis epon 0/4',  // Optical PON 4
+        'show onu 0/1 optical-info',            // ONU optical info per PON
+        'show onu 0/2 optical-info',
+        'show onu 0/3 optical-info',
+        'show onu 0/4 optical-info',
+        'show mac-address-table'                // MAC address table
       ];
     case 'DBC':
       return [

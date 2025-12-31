@@ -9,6 +9,10 @@ import { logger } from '../../utils/logger.js';
  * confirm onu mac 4c:ae:1c:69:cd:d0 onuid 1
  * confirm onu mac a2:7d:08:15:41:00 onuid 2
  * exit
+ * 
+ * Secondary formats (ONU status and optical power):
+ * ONU 0/1:1 status: online rx:-21.5dBm tx:2.3dBm
+ * epon 0/1 onu 1: online MAC:4c:ae:1c:69:cd:d0 RX:-22.1dBm TX:2.1dBm
  */
 export function parseVSOLOutput(output) {
   const onus = [];
@@ -25,6 +29,13 @@ export function parseVSOLOutput(output) {
     
     // Skip empty lines
     if (!trimmedLine || trimmedLine.length < 5) {
+      continue;
+    }
+    
+    // Skip command echoes and prompts
+    if (trimmedLine.startsWith('epon-olt#') || 
+        trimmedLine.startsWith('epon-olt>') ||
+        trimmedLine.includes('% Unknown command')) {
       continue;
     }
     
