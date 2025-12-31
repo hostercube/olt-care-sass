@@ -574,28 +574,50 @@ function getOLTCommands(brand) {
         'show gpon onu list'
       ];
     case 'VSOL':
-      // VSOL EPON OLT CLI commands - V1600 series
-      // Primary data comes from 'show run' which contains ONU MAC bindings
-      // Optical power from 'show onu opm-diag all' (correct VSOL command)
+      // VSOL EPON OLT CLI commands - multiple firmware versions
+      // The main data comes from 'show run' which contains ONU MAC bindings
+      // Many VSOL firmware versions have very limited CLI commands
+      // Try various command formats for different firmware versions
       return [
         'terminal length 0',                    // Disable pagination
+        'enable',                               // Enter privileged mode if needed
+        'configure terminal',                   // Enter config mode for some commands
         'show run',                             // Show running config - contains ONU MAC info
         'show running-config',                  // Alternative format
-        'show onu opm-diag all',                // CORRECT: ONU optical power (RX/TX dBm)
-        'show onu opm-diag',                    // Alternative optical power
-        'show onu information',                 // ONU general info
-        'show onu information all',             // All ONUs info
-        'show epon onu-information',            // EPON ONU info table
-        'show epon active-onu all',             // Active ONU list all ports
-        'show epon inactive-onu all',           // Inactive ONU list
-        'show epon interface epon 0/1',         // Per-port ONU info
-        'show epon interface epon 0/2',
-        'show epon interface epon 0/3',
-        'show epon interface epon 0/4',
-        'show epon interface epon 0/5',
-        'show epon interface epon 0/6',
-        'show epon interface epon 0/7',
-        'show epon interface epon 0/8'
+        'show version',                         // Get firmware version
+        '?',                                    // Show available commands (help)
+        'show ?',                               // Show available show commands
+        // ONU listing commands - try many formats
+        'show epon',                            // Basic EPON info
+        'show onu',                             // Basic ONU info  
+        'show interface epon 0/1',              // Interface info per port
+        'show interface epon 0/2',
+        'show interface epon 0/3',
+        'show interface epon 0/4',
+        'show interface epon 0/5',
+        'show interface epon 0/6',
+        'show interface epon 0/7',
+        'show interface epon 0/8',
+        // Try to get onu info from interface context
+        'interface epon 0/1',
+        'show onu',
+        'exit',
+        'interface epon 0/2',
+        'show onu',
+        'exit',
+        'interface epon 0/3',
+        'show onu',
+        'exit',
+        'interface epon 0/4',
+        'show onu',
+        'exit',
+        // Optical power - try config mode commands
+        'show optics',                          // Some firmwares
+        'show optical',                         // Alternative
+        'show transceiver',                     // Transceiver info
+        'show pon',                             // PON info
+        'show statistics',                      // Stats may have power
+        'exit'                                  // Exit config mode
       ];
     case 'DBC':
       return [
