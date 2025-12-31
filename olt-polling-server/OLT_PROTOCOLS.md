@@ -44,25 +44,39 @@ This document details the connection protocols and ports for each supported OLT 
   display ont optical-info all
   ```
 
-### VSOL (V1600D, V1600G, V2804G)
+### VSOL (V1600D, V1600G, V2804G, V1600G4)
 - **Primary Protocol**: HTTP API (port 8085, 8080, or 80)
-- **Fallback Protocol**: Telnet (port 23)
+- **Fallback Protocol**: Telnet CLI (port 23)
 - **Web UI Ports**: 80, 8080, 8085, 443
-- **Default Credentials**: admin/admin or admin/1234
-- **API Endpoints**:
+- **Telnet CLI Port**: 23 (required for full ONU data)
+- **Default Credentials**: admin/admin or admin/1234 or oltcare/Xpon@Olt9417#
+- **OLT Mode**: EPON or GPON
+
+**IMPORTANT**: VSOL Web UI (port 8080/8085) is for display only and may not have REST API.
+For **full ONU data including RX/TX power**, use **Telnet port 23**.
+
+- **API Endpoints** (if available):
   ```
   /cgi-bin/onu_status.cgi
   /api/onu/status
   /goform/getOnuList
   ```
-- **Telnet CLI Commands**:
+- **Telnet CLI Commands** (recommended):
   ```
   terminal length 0
+  enable
+  configure terminal
   show onu status all
+  show onu opm-diag all       # Optical power for all ONUs
   show onu optical-info all
   show onu info all
-  show onu opm-diag all
+  show gpon onu state         # For GPON mode
+  show epon onu status        # For EPON mode
   ```
+
+**Port Forwarding Note**: If your VSOL is behind NAT/router, you need to forward:
+- **Port 23** (Telnet) for ONU data polling
+- **Port 8080/80** (Web) for connection testing only
 
 ### BDCOM (P3310, P3608)
 - **Primary Protocol**: Telnet (port 23)
