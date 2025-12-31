@@ -19,16 +19,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Users, Shield, UserCog, Eye, Loader2, UserPlus } from 'lucide-react';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Users, Shield, UserCog, Eye, Loader2, UserPlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -36,6 +32,8 @@ import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { TablePagination } from '@/components/ui/table-pagination';
 import { CreateUserDialog } from '@/components/users/CreateUserDialog';
+import { EditUserDialog } from '@/components/users/EditUserDialog';
+import { DeleteUserDialog } from '@/components/users/DeleteUserDialog';
 import type { Database } from '@/integrations/supabase/types';
 
 type AppRole = Database['public']['Enums']['app_role'];
@@ -60,19 +58,14 @@ export default function UserManagement() {
   const { toast } = useToast();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  
-  const [confirmDialog, setConfirmDialog] = useState<{
-    open: boolean;
-    userId: string;
-    newRole: AppRole;
-    userName: string;
-  } | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -120,72 +113,29 @@ export default function UserManagement() {
     }
   }, [isAdmin, roleLoading]);
 
-  const handleRoleChange = (userId: string, newRole: AppRole, userName: string) => {
-    // Don't allow changing your own role
-    if (userId === user?.id) {
+  const handleEditUser = (u: UserWithRole) => {
+    setSelectedUser(u);
+    setEditDialogOpen(true);
+  };
+
+  const handleDeleteUser = (u: UserWithRole) => {
+    if (u.id === user?.id) {
       toast({
         title: 'Not Allowed',
-        description: 'You cannot change your own role',
+        description: 'You cannot delete your own account',
         variant: 'destructive',
       });
       return;
     }
-
-    setConfirmDialog({ open: true, userId, newRole, userName });
+    setSelectedUser(u);
+    setDeleteDialogOpen(true);
   };
 
-  const confirmRoleChange = async () => {
-    if (!confirmDialog) return;
-
-    const { userId, newRole } = confirmDialog;
-    setUpdating(userId);
-
-    try {
-      // Check if user already has a role
-      const { data: existingRole } = await supabase
-        .from('user_roles')
-        .select('id')
-        .eq('user_id', userId)
-        .single();
-
-      if (existingRole) {
-        // Update existing role
-        const { error } = await supabase
-          .from('user_roles')
-          .update({ role: newRole })
-          .eq('user_id', userId);
-
-        if (error) throw error;
-      } else {
-        // Insert new role
-        const { error } = await supabase
-          .from('user_roles')
-          .insert({ user_id: userId, role: newRole });
-
-        if (error) throw error;
-      }
-
-      // Update local state
-      setUsers(prev => prev.map(u => 
-        u.id === userId ? { ...u, role: newRole } : u
-      ));
-
-      toast({
-        title: 'Role Updated',
-        description: `User role has been changed to ${roleConfig[newRole].label}`,
-      });
-    } catch (error) {
-      console.error('Error updating role:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update user role',
-        variant: 'destructive',
-      });
-    } finally {
-      setUpdating(null);
-      setConfirmDialog(null);
-    }
-  };
+  // Paginated users
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return users.slice(startIndex, startIndex + pageSize);
+  }, [users, currentPage, pageSize]);
 
   if (roleLoading || loading) {
     return (
@@ -306,13 +256,13 @@ export default function UserManagement() {
                 <TableRow>
                   <TableHead>User</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Current Role</TableHead>
+                  <TableHead>Role</TableHead>
                   <TableHead>Joined</TableHead>
-                  <TableHead className="w-[180px]">Change Role</TableHead>
+                  <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((u) => {
+                {paginatedUsers.map((u) => {
                   const config = roleConfig[u.role];
                   const Icon = config.icon;
                   const isCurrentUser = u.id === user?.id;
@@ -351,39 +301,27 @@ export default function UserManagement() {
                         {formatDistanceToNow(new Date(u.created_at), { addSuffix: true })}
                       </TableCell>
                       <TableCell>
-                        <Select
-                          value={u.role}
-                          onValueChange={(value: AppRole) => handleRoleChange(u.id, value, u.full_name || u.email || 'User')}
-                          disabled={isCurrentUser || updating === u.id}
-                        >
-                          <SelectTrigger className="w-[150px] bg-secondary">
-                            {updating === u.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <SelectValue />
-                            )}
-                          </SelectTrigger>
-                          <SelectContent className="bg-popover border-border">
-                            <SelectItem value="admin">
-                              <div className="flex items-center gap-2">
-                                <Shield className="h-4 w-4 text-destructive" />
-                                Admin
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="operator">
-                              <div className="flex items-center gap-2">
-                                <UserCog className="h-4 w-4 text-primary" />
-                                Operator
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="viewer">
-                              <div className="flex items-center gap-2">
-                                <Eye className="h-4 w-4 text-muted-foreground" />
-                                Viewer
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-popover border-border">
+                            <DropdownMenuItem onClick={() => handleEditUser(u)}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteUser(u)}
+                              className="text-destructive focus:text-destructive"
+                              disabled={isCurrentUser}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   );
@@ -450,32 +388,25 @@ export default function UserManagement() {
         </Card>
       </div>
 
-      {/* Confirmation Dialog */}
-      {/* Confirmation Dialog */}
-      <AlertDialog open={confirmDialog?.open} onOpenChange={(open) => !open && setConfirmDialog(null)}>
-        <AlertDialogContent className="bg-background border-border">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Role Change</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to change {confirmDialog?.userName}'s role to{' '}
-              <strong>{confirmDialog?.newRole ? roleConfig[confirmDialog.newRole].label : ''}</strong>?
-              This will immediately affect their permissions.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRoleChange}>
-              Confirm
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Create User Dialog */}
+      {/* Dialogs */}
       <CreateUserDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onUserCreated={fetchUsers}
+      />
+      
+      <EditUserDialog
+        user={selectedUser}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onUserUpdated={fetchUsers}
+      />
+      
+      <DeleteUserDialog
+        user={selectedUser}
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onUserDeleted={fetchUsers}
       />
     </DashboardLayout>
   );
