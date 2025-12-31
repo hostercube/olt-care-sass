@@ -4,37 +4,25 @@ import { logger } from '../utils/logger.js';
 /**
  * Execute Telnet commands on OLT
  * Enhanced for VSOL, DBC, CDATA, ECOM and other Chinese OLTs
- * Handles various login prompts, enable mode, and CLI modes
  * 
- * IMPORTANT: This client properly handles:
- * - Login sequence (username -> password)
- * - Enable mode with separate enable password
- * - Pagination (--More--)
- * - Command completion detection
- * - Port forwarding scenarios (e.g., 8045 -> 23)
+ * IMPORTANT: Uses prompt-based command execution - waits for each command
+ * to return a prompt before sending the next command.
  */
 export async function executeTelnetCommands(olt, commands) {
   return new Promise((resolve, reject) => {
-    const TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '180000'); // 3 minutes total timeout
-    const LOGIN_TIMEOUT = 30000; // 30 seconds for login
-    const COMMAND_OUTPUT_WAIT = 8000; // Wait 8 seconds for each command output
-    const POST_COMMANDS_WAIT = 10000; // Wait 10 seconds after all commands for remaining output
+    const TOTAL_TIMEOUT = 300000; // 5 minutes total timeout
+    const LOGIN_TIMEOUT = 30000;
+    const COMMAND_TIMEOUT = 30000; // 30 seconds per command
+    const PROMPT_CHECK_INTERVAL = 500; // Check for prompt every 500ms
     
     let output = '';
-    let loginStep = 0; 
-    // 0: waiting for login prompt
-    // 1: sent username, waiting for password
-    // 2: sent password, waiting for prompt
-    // 3: in user mode (>), sent enable
-    // 4: sent enable password
-    // 5: authenticated in enable mode (#)
-    // 6: sent terminal length 0
-    // 7: commands started
-    // 8: all commands sent, waiting for output
-    
+    let commandOutput = ''; // Output since last command
+    let loginStep = 0;
     let commandIndex = 0;
     let commandsSent = false;
     let finished = false;
+    let filteredCommands = [];
+    let lastDataTime = Date.now();
     
     const socket = new net.Socket();
     socket.setEncoding('utf8');
@@ -42,7 +30,7 @@ export async function executeTelnetCommands(olt, commands) {
     function finish(result, error = null) {
       if (finished) return;
       finished = true;
-      clearTimeout(timeout);
+      clearTimeout(totalTimeout);
       clearTimeout(loginTimeout);
       
       try {
@@ -50,8 +38,7 @@ export async function executeTelnetCommands(olt, commands) {
       } catch (e) {}
       
       if (error) {
-        if (output.length > 200) {
-          // Got significant data, return what we have
+        if (output.length > 500) {
           logger.warn(`Telnet error but returning partial output: ${output.length} chars`);
           resolve(output);
         } else {
@@ -62,17 +49,39 @@ export async function executeTelnetCommands(olt, commands) {
       }
     }
     
-    const timeout = setTimeout(() => {
+    const totalTimeout = setTimeout(() => {
       logger.warn(`Telnet total timeout for ${olt.ip_address}:${olt.port} - Output: ${output.length} chars`);
-      finish(output.length > 200 ? output : null, output.length <= 200 ? new Error('Telnet timeout') : null);
-    }, TIMEOUT);
+      // Log what we got
+      logRawOutput();
+      finish(output.length > 500 ? output : null, output.length <= 500 ? new Error('Telnet timeout') : null);
+    }, TOTAL_TIMEOUT);
     
     let loginTimeout = setTimeout(() => {
       if (loginStep < 5) {
-        logger.warn(`Telnet login timeout for ${olt.ip_address} at step ${loginStep}`);
+        logger.warn(`Telnet login timeout at step ${loginStep}`);
         finish(null, new Error('Telnet login timeout'));
       }
     }, LOGIN_TIMEOUT);
+    
+    function logRawOutput() {
+      logger.info(`=== RAW CLI OUTPUT START (${output.length} chars) ===`);
+      console.log(output);
+      logger.info(`=== RAW CLI OUTPUT END ===`);
+    }
+    
+    function isPrompt(text) {
+      const lastLine = text.split('\n').pop()?.trim() || '';
+      // Check for common OLT prompts: hostname#, hostname>, OLT#, etc.
+      return /[\w\-\(\)\/]+[#>]\s*$/.test(lastLine) && lastLine.length < 80;
+    }
+    
+    function hasError(text) {
+      const lower = text.toLowerCase();
+      return lower.includes('invalid') || 
+             lower.includes('unknown command') ||
+             lower.includes('command not found') ||
+             lower.includes('% unrecognized');
+    }
     
     socket.on('connect', () => {
       logger.info(`Telnet connected to ${olt.ip_address}:${olt.port}`);
@@ -81,14 +90,23 @@ export async function executeTelnetCommands(olt, commands) {
     socket.on('data', (data) => {
       const chunk = data.toString();
       output += chunk;
+      commandOutput += chunk;
+      lastDataTime = Date.now();
       
       const lowerOutput = output.toLowerCase();
       const lastLine = output.split('\n').pop()?.trim() || '';
       const lastLineLower = lastLine.toLowerCase();
       
-      // Handle login sequence
+      // Handle --More-- prompts immediately
+      if (chunk.toLowerCase().includes('--more--') || 
+          chunk.toLowerCase().includes('-- more --') ||
+          chunk.toLowerCase().includes('press any key')) {
+        socket.write(' ');
+        return;
+      }
+      
+      // Login state machine
       if (loginStep === 0) {
-        // Wait for login prompt
         if (lowerOutput.includes('login:') || 
             lowerOutput.includes('username') || 
             lowerOutput.includes('user:') ||
@@ -101,10 +119,10 @@ export async function executeTelnetCommands(olt, commands) {
         }
       }
       
-      if (loginStep === 1) {
-        // Wait for password prompt after sending username
-        if (lowerOutput.includes('password') && 
-            (lowerOutput.lastIndexOf('password') > lowerOutput.lastIndexOf('login'))) {
+      if (loginStep === 1 && lowerOutput.includes('password')) {
+        const lastPassIdx = lowerOutput.lastIndexOf('password');
+        const lastLoginIdx = Math.max(lowerOutput.lastIndexOf('login'), lowerOutput.lastIndexOf('username'));
+        if (lastPassIdx > lastLoginIdx) {
           loginStep = 2;
           setTimeout(() => {
             socket.write(olt.password_encrypted + '\r\n');
@@ -114,27 +132,20 @@ export async function executeTelnetCommands(olt, commands) {
       }
       
       if (loginStep === 2) {
-        // Check login result
         if (lastLineLower.match(/[\w\-]+>\s*$/)) {
-          // User mode - need to enable
           loginStep = 3;
           setTimeout(() => {
             socket.write('enable\r\n');
             logger.debug(`Sent enable command`);
           }, 500);
         } else if (lastLineLower.match(/[\w\-]+#\s*$/)) {
-          // Already in privileged mode
           enterPrivilegedMode();
-        } else if (lowerOutput.includes('invalid') || 
-                   lowerOutput.includes('failed') || 
-                   lowerOutput.includes('incorrect') ||
-                   lowerOutput.includes('denied')) {
-          finish(null, new Error('Login failed - invalid credentials'));
+        } else if (lowerOutput.includes('invalid') || lowerOutput.includes('failed')) {
+          finish(null, new Error('Login failed'));
         }
       }
       
       if (loginStep === 3) {
-        // Sent enable, check for password prompt or direct entry
         if (lastLineLower.includes('password')) {
           loginStep = 4;
           setTimeout(() => {
@@ -146,20 +157,8 @@ export async function executeTelnetCommands(olt, commands) {
         }
       }
       
-      if (loginStep === 4) {
-        // Sent enable password, check for privileged prompt
-        if (lastLineLower.match(/[\w\-]+#\s*$/)) {
-          enterPrivilegedMode();
-        }
-      }
-      
-      // Handle More prompts during command execution
-      if (loginStep >= 6) {
-        if (lowerOutput.includes('--more--') || 
-            lowerOutput.includes('-- more --') ||
-            lowerOutput.includes('press any key')) {
-          socket.write(' '); // Send space to continue
-        }
+      if (loginStep === 4 && lastLineLower.match(/[\w\-]+#\s*$/)) {
+        enterPrivilegedMode();
       }
     });
     
@@ -173,9 +172,7 @@ export async function executeTelnetCommands(olt, commands) {
       setTimeout(() => {
         socket.write('terminal length 0\r\n');
         loginStep = 6;
-        logger.debug(`Sent: terminal length 0`);
         
-        // Start sending commands after a delay
         setTimeout(() => {
           startSendingCommands();
         }, 2000);
@@ -185,37 +182,80 @@ export async function executeTelnetCommands(olt, commands) {
     function startSendingCommands() {
       if (commandsSent) return;
       commandsSent = true;
-      loginStep = 7;
       
-      // Filter out commands we already sent
-      const filteredCommands = commands.filter(cmd => {
+      // Filter commands
+      filteredCommands = commands.filter(cmd => {
         const lower = cmd.toLowerCase().trim();
         return lower !== 'terminal length 0' && lower !== 'enable';
       });
       
-      logger.info(`Starting to send ${filteredCommands.length} commands to ${olt.name}`);
+      logger.info(`Sending ${filteredCommands.length} commands to ${olt.name}`);
+      commandIndex = 0;
+      commandOutput = '';
       
-      // Send all commands with delays between them
-      filteredCommands.forEach((cmd, index) => {
+      sendNextCommand();
+    }
+    
+    function sendNextCommand() {
+      if (finished) return;
+      
+      if (commandIndex >= filteredCommands.length) {
+        // All commands sent, wait a bit then finish
+        logger.info(`All commands sent to ${olt.name}, waiting for final output...`);
         setTimeout(() => {
-          logger.debug(`Sending command [${index + 1}/${filteredCommands.length}]: ${cmd}`);
-          socket.write(cmd + '\r\n');
-          
-          // After last command, wait for output then finish
-          if (index === filteredCommands.length - 1) {
-            loginStep = 8;
-            // Wait for all command output to arrive
-            setTimeout(() => {
-              finishSession();
-            }, POST_COMMANDS_WAIT);
-          }
-        }, index * COMMAND_OUTPUT_WAIT);
-      });
-      
-      // If no commands to send, finish immediately
-      if (filteredCommands.length === 0) {
-        setTimeout(finishSession, 2000);
+          finishSession();
+        }, 5000);
+        return;
       }
+      
+      const cmd = filteredCommands[commandIndex];
+      logger.debug(`[${commandIndex + 1}/${filteredCommands.length}] Sending: ${cmd}`);
+      
+      commandOutput = '';
+      socket.write(cmd + '\r\n');
+      
+      // Wait for command to complete (prompt appears) or timeout
+      waitForCommandComplete(cmd);
+    }
+    
+    function waitForCommandComplete(cmd) {
+      let elapsed = 0;
+      let lastLength = 0;
+      let stableCount = 0;
+      
+      const checkInterval = setInterval(() => {
+        if (finished) {
+          clearInterval(checkInterval);
+          return;
+        }
+        
+        elapsed += PROMPT_CHECK_INTERVAL;
+        
+        // Check if output is stable (no new data for 2+ checks) and has a prompt
+        if (commandOutput.length === lastLength) {
+          stableCount++;
+        } else {
+          stableCount = 0;
+          lastLength = commandOutput.length;
+        }
+        
+        // If stable for 1.5s and we see a prompt, move to next command
+        if (stableCount >= 3 && isPrompt(commandOutput)) {
+          clearInterval(checkInterval);
+          commandIndex++;
+          setTimeout(sendNextCommand, 500);
+          return;
+        }
+        
+        // Timeout for this command
+        if (elapsed >= COMMAND_TIMEOUT) {
+          clearInterval(checkInterval);
+          logger.warn(`Command timeout: ${cmd}`);
+          commandIndex++;
+          setTimeout(sendNextCommand, 500);
+          return;
+        }
+      }, PROMPT_CHECK_INTERVAL);
     }
     
     function finishSession() {
@@ -223,12 +263,10 @@ export async function executeTelnetCommands(olt, commands) {
       
       logger.info(`Telnet session complete for ${olt.name}, output length: ${output.length}`);
       
-      // Log the FULL raw output for debugging - this is critical for fixing parsers
-      logger.info(`=== RAW CLI OUTPUT START ===`);
-      console.log(output);
-      logger.info(`=== RAW CLI OUTPUT END ===`);
+      // Log full raw output for debugging
+      logRawOutput();
       
-      // Send exit commands
+      // Send exit
       socket.write('exit\r\n');
       setTimeout(() => {
         socket.write('quit\r\n');
@@ -244,26 +282,26 @@ export async function executeTelnetCommands(olt, commands) {
     });
     
     socket.on('close', () => {
-      logger.debug(`Telnet connection closed for ${olt.ip_address}, output: ${output.length} chars`);
+      logger.debug(`Telnet connection closed, output: ${output.length} chars`);
       if (!finished) {
         finish(output);
       }
     });
     
     socket.on('timeout', () => {
-      logger.warn(`Telnet socket timeout for ${olt.ip_address}`);
+      logger.warn(`Telnet socket timeout`);
       finish(null, new Error('Telnet socket timeout'));
     });
     
-    socket.setTimeout(TIMEOUT);
+    socket.setTimeout(TOTAL_TIMEOUT);
     
-    logger.debug(`Connecting Telnet to ${olt.ip_address}:${olt.port} as ${olt.username}`);
+    logger.debug(`Connecting Telnet to ${olt.ip_address}:${olt.port}`);
     socket.connect(olt.port, olt.ip_address);
   });
 }
 
 /**
- * Test if Telnet port is open and responsive
+ * Test if Telnet port is open
  */
 export async function testTelnetPort(host, port, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
