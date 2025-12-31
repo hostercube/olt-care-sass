@@ -29,7 +29,10 @@ import {
   Minus,
   Loader2,
   Save,
-  Edit3
+  Edit3,
+  Thermometer,
+  AlertTriangle,
+  Ruler
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -276,7 +279,7 @@ export function ONUDetailsModal({ onu, open, onOpenChange, onUpdate }: ONUDetail
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="text-center p-4 rounded-lg bg-muted/50">
                     <div className={cn('text-2xl font-bold', rxQuality.color)}>
                       {onu.rx_power !== null ? `${onu.rx_power} dBm` : 'N/A'}
@@ -291,6 +294,30 @@ export function ONUDetailsModal({ onu, open, onOpenChange, onUpdate }: ONUDetail
                       {onu.tx_power !== null ? `${onu.tx_power} dBm` : 'N/A'}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">TX Power</div>
+                  </div>
+                  <div className="text-center p-4 rounded-lg bg-muted/50">
+                    {(() => {
+                      const temp = (onu as any).temperature;
+                      const isCritical = temp !== null && temp > 60;
+                      const isWarning = temp !== null && temp > 50;
+                      return (
+                        <>
+                          <div className={cn('text-2xl font-bold flex items-center justify-center gap-1', 
+                            isCritical ? 'text-destructive' : isWarning ? 'text-warning' : 'text-foreground'
+                          )}>
+                            <Thermometer className="h-5 w-5" />
+                            {temp !== null && temp !== undefined ? `${temp.toFixed(1)}°C` : 'N/A'}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">Temperature</div>
+                          {isCritical && (
+                            <Badge variant="destructive" className="mt-2 text-xs gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              Critical
+                            </Badge>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="text-center p-4 rounded-lg bg-muted/50">
                     <div className="flex items-center justify-center gap-2 text-2xl font-bold">
@@ -308,6 +335,17 @@ export function ONUDetailsModal({ onu, open, onOpenChange, onUpdate }: ONUDetail
                     <div className="text-xs text-muted-foreground mt-1">Signal Trend</div>
                   </div>
                 </div>
+                
+                {/* Offline Reason Section */}
+                {(onu as any).offline_reason && (
+                  <div className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                      <span className="font-medium text-sm text-destructive">Last Offline Reason</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">{(onu as any).offline_reason}</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

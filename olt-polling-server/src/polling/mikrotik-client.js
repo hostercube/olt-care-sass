@@ -185,83 +185,128 @@ function normalizeMac(mac) {
 
 /**
  * Make a call to MikroTik API
- * Tries REST API first (RouterOS 7.x), falls back to plain API
+ * For REST API (RouterOS 7.x), the configured port IS the REST API port
+ * For Plain API, use port 8728 as default
  */
 async function callMikroTikAPI(mikrotik, endpoint) {
   const { ip, port = 8728, username, password } = mikrotik;
   
-  // Try REST API first (RouterOS 7.x with www-ssl or www enabled)
-  try {
-    const restResult = await callMikroTikREST(mikrotik, endpoint);
-    if (restResult && restResult.length >= 0) {
-      logger.debug(`MikroTik REST API success for ${endpoint}`);
-      return restResult;
-    }
-  } catch (err) {
-    logger.debug(`REST API failed for ${endpoint}: ${err.message}`);
-  }
+  // Log which MikroTik we're calling
+  logger.info(`MikroTik API call to ${ip}:${port} - endpoint: ${endpoint}`);
   
-  // Fall back to plain API connection
-  try {
-    const plainResult = await callMikroTikPlainAPI(mikrotik, endpoint);
-    logger.debug(`MikroTik Plain API success for ${endpoint}`);
-    return plainResult;
-  } catch (err) {
-    logger.debug(`Plain API failed for ${endpoint}: ${err.message}`);
-    throw err;
+  // Determine if this is likely a REST API port or Plain API port
+  // Standard Plain API ports are 8728 (unencrypted) and 8729 (SSL)
+  const isPlainAPIPort = [8728, 8729].includes(port) || port === 23;
+  
+  if (!isPlainAPIPort) {
+    // Custom port (like 8090) - try REST API first on this port
+    try {
+      logger.debug(`Trying REST API on custom port ${port}...`);
+      const restResult = await callMikroTikREST(mikrotik, endpoint, port);
+      if (restResult && restResult.length >= 0) {
+        logger.info(`MikroTik REST API success on port ${port} - got ${restResult.length} items`);
+        return restResult;
+      }
+    } catch (err) {
+      logger.debug(`REST API failed on port ${port}: ${err.message}`);
+    }
+    
+    // Try Plain API on port 8728 as fallback
+    try {
+      logger.debug(`Trying Plain API on default port 8728...`);
+      const plainResult = await callMikroTikPlainAPI({ ...mikrotik, port: 8728 }, endpoint);
+      logger.info(`MikroTik Plain API success - got ${plainResult.length} items`);
+      return plainResult;
+    } catch (err) {
+      logger.warn(`Plain API fallback failed: ${err.message}`);
+      throw err;
+    }
+  } else {
+    // Standard Plain API port (8728/8729)
+    try {
+      logger.debug(`Trying Plain API on port ${port}...`);
+      const plainResult = await callMikroTikPlainAPI(mikrotik, endpoint);
+      logger.info(`MikroTik Plain API success - got ${plainResult.length} items`);
+      return plainResult;
+    } catch (err) {
+      logger.debug(`Plain API failed: ${err.message}`);
+      
+      // Fallback to REST on port 443
+      try {
+        logger.debug(`Trying REST API on port 443 as fallback...`);
+        const restResult = await callMikroTikREST(mikrotik, endpoint, 443);
+        if (restResult && restResult.length >= 0) {
+          logger.info(`MikroTik REST API fallback success - got ${restResult.length} items`);
+          return restResult;
+        }
+      } catch (restErr) {
+        logger.debug(`REST API fallback failed: ${restErr.message}`);
+      }
+      throw err;
+    }
   }
 }
 
 /**
  * Call MikroTik REST API (RouterOS 7.1+)
- * REST API typically runs on 443 (HTTPS) or 80 (HTTP), separate from API port
+ * REST API can run on custom ports (like 8090) when port forwarding is used
  */
-async function callMikroTikREST(mikrotik, endpoint) {
+async function callMikroTikREST(mikrotik, endpoint, restPort = null) {
   const { ip, username, password, port = 8728 } = mikrotik;
 
+  // Use provided restPort or calculate from configured port
+  const actualPort = restPort || ([8728, 8729].includes(port) ? 443 : port);
+
   // RouterOS REST paths do NOT use "/print" suffix.
-  // Our internal endpoints use API-style paths like "/ppp/active/print".
-  // For REST, translate to "/ppp/active" etc.
   const restEndpoint = endpoint.replace(/\/print$/, '');
 
-  // REST API is typically on port 443 (HTTPS) or 80 (HTTP)
-  // Custom ports > 1024 (except API ports) might be for REST API with port forwarding
-  // API ports (8728/8729) mean we should try 443 for REST
-  const restPort = [8728, 8729].includes(port) ? 443 : (port > 1024 ? port : 443);
+  // Try HTTPS first, then HTTP if that fails
+  const protocols = ['https', 'http'];
+  let lastError = null;
+  
+  for (const protocol of protocols) {
+    const url = `${protocol}://${ip}:${actualPort}/rest${restEndpoint}`;
+    const auth = Buffer.from(`${username}:${password}`).toString('base64');
 
-  const url = `https://${ip}:${restPort}/rest${restEndpoint}`;
-  const auth = Buffer.from(`${username}:${password}`).toString('base64');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), MIKROTIK_TIMEOUT);
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MIKROTIK_TIMEOUT);
+    try {
+      const options = {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      };
+      
+      // Add agent for HTTPS
+      if (protocol === 'https') {
+        const https = await import('https');
+        options.agent = new https.Agent({ rejectUnauthorized: false });
+      }
 
-  try {
-    // Dynamic import for https agent
-    const https = await import('https');
-    const agent = new https.Agent({ rejectUnauthorized: false });
+      logger.debug(`REST API request: ${url}`);
+      const response = await fetch(url, options);
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-      agent: agent,
-    });
+      clearTimeout(timeout);
 
-    clearTimeout(timeout);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const data = await response.json();
+      logger.debug(`REST API response: ${JSON.stringify(data).slice(0, 200)}...`);
+      return Array.isArray(data) ? data : [data];
+    } catch (error) {
+      clearTimeout(timeout);
+      lastError = error;
+      logger.debug(`REST API ${protocol}://${ip}:${actualPort} failed: ${error.message}`);
     }
-
-    const data = await response.json();
-    return Array.isArray(data) ? data : [data];
-  } catch (error) {
-    clearTimeout(timeout);
-    throw error;
   }
+  
+  throw lastError || new Error('REST API failed');
 }
 
 /**
