@@ -50,6 +50,53 @@ export type Database = {
         }
         Relationships: []
       }
+      olt_debug_logs: {
+        Row: {
+          commands_sent: string[] | null
+          connection_method: string | null
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          id: string
+          olt_id: string | null
+          olt_name: string
+          parsed_count: number | null
+          raw_output: string | null
+        }
+        Insert: {
+          commands_sent?: string[] | null
+          connection_method?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          olt_id?: string | null
+          olt_name: string
+          parsed_count?: number | null
+          raw_output?: string | null
+        }
+        Update: {
+          commands_sent?: string[] | null
+          connection_method?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          olt_id?: string | null
+          olt_name?: string
+          parsed_count?: number | null
+          raw_output?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "olt_debug_logs_olt_id_fkey"
+            columns: ["olt_id"]
+            isOneToOne: false
+            referencedRelation: "olts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       olts: {
         Row: {
           active_ports: number

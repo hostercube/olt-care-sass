@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { StatusIndicator } from '@/components/dashboard/StatusIndicator';
 import { ONUTable } from '@/components/dashboard/ONUTable';
 import { ONUStatsWidget } from '@/components/dashboard/ONUStatsWidget';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   ArrowLeft, 
   Server, 
@@ -18,12 +20,30 @@ import {
   Router as RouterIcon,
   Signal,
   RefreshCw,
-  Loader2
+  Loader2,
+  Bug,
+  ChevronDown,
+  Terminal,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+interface DebugLog {
+  id: string;
+  olt_id: string;
+  olt_name: string;
+  created_at: string;
+  raw_output: string | null;
+  parsed_count: number;
+  connection_method: string | null;
+  commands_sent: string[] | null;
+  error_message: string | null;
+  duration_ms: number | null;
+}
 
 export default function OLTDetails() {
   const { id } = useParams<{ id: string }>();
@@ -32,6 +52,9 @@ export default function OLTDetails() {
   const { onus, loading: onusLoading } = useONUs();
   const [powerHistory, setPowerHistory] = useState<any[]>([]);
   const [polling, setPolling] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [loadingDebug, setLoadingDebug] = useState(false);
 
   const olt = olts.find(o => o.id === id);
   const oltONUs = onus.filter(onu => onu.olt_id === id).map(onu => ({
@@ -79,6 +102,35 @@ export default function OLTDetails() {
 
   const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
 
+  // Fetch debug logs from database
+  const fetchDebugLogs = async () => {
+    if (!id) return;
+    
+    setLoadingDebug(true);
+    try {
+      const { data, error } = await supabase
+        .from('olt_debug_logs')
+        .select('*')
+        .eq('olt_id', id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      if (error) throw error;
+      setDebugLogs((data as DebugLog[]) || []);
+    } catch (error) {
+      console.error('Failed to fetch debug logs:', error);
+    } finally {
+      setLoadingDebug(false);
+    }
+  };
+
+  // Fetch debug logs when debug panel opens
+  useEffect(() => {
+    if (debugOpen && id) {
+      fetchDebugLogs();
+    }
+  }, [debugOpen, id]);
+
   const handlePollNow = async () => {
     if (!olt) return;
     
@@ -96,6 +148,10 @@ export default function OLTDetails() {
 
       if (response.ok) {
         toast.success('Poll initiated successfully');
+        // Refresh debug logs after polling
+        setTimeout(() => {
+          if (debugOpen) fetchDebugLogs();
+        }, 2000);
       } else {
         toast.error('Failed to poll OLT');
       }
@@ -344,6 +400,102 @@ export default function OLTDetails() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Debug Panel */}
+        <Collapsible open={debugOpen} onOpenChange={setDebugOpen}>
+          <Card variant="glass">
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/20 transition-colors">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <Bug className="h-5 w-5 text-warning" />
+                    CLI Debug Logs
+                    {debugLogs.length > 0 && (
+                      <Badge variant="outline" className="ml-2">{debugLogs.length}</Badge>
+                    )}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {loadingDebug && <Loader2 className="h-4 w-4 animate-spin" />}
+                    <ChevronDown className={`h-5 w-5 transition-transform ${debugOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-0">
+                {debugLogs.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    <Terminal className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No debug logs available. Click "Poll Now" to generate logs.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {debugLogs.map((log) => (
+                      <div key={log.id} className="border border-border rounded-lg overflow-hidden">
+                        <div className="bg-muted/30 p-3 flex flex-wrap items-center gap-3 text-sm">
+                          <div className="flex items-center gap-2">
+                            {log.error_message ? (
+                              <AlertCircle className="h-4 w-4 text-destructive" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4 text-success" />
+                            )}
+                            <span className="font-medium">
+                              {format(new Date(log.created_at), 'MMM dd, HH:mm:ss')}
+                            </span>
+                          </div>
+                          <Badge variant="outline">{log.connection_method || 'unknown'}</Badge>
+                          <Badge variant={log.parsed_count > 0 ? 'success' : 'destructive'}>
+                            {log.parsed_count} ONUs parsed
+                          </Badge>
+                          {log.duration_ms && (
+                            <span className="text-muted-foreground">{(log.duration_ms / 1000).toFixed(1)}s</span>
+                          )}
+                        </div>
+                        
+                        {log.error_message && (
+                          <div className="bg-destructive/10 p-3 border-b border-border">
+                            <p className="text-sm text-destructive font-medium">Error: {log.error_message}</p>
+                          </div>
+                        )}
+                        
+                        {log.commands_sent && log.commands_sent.length > 0 && (
+                          <div className="p-3 border-b border-border">
+                            <p className="text-xs text-muted-foreground mb-1">Commands sent:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {log.commands_sent.map((cmd, i) => (
+                                <code key={i} className="text-xs bg-muted px-1.5 py-0.5 rounded">{cmd}</code>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="p-3">
+                          <p className="text-xs text-muted-foreground mb-2">Raw CLI Output ({log.raw_output?.length || 0} chars):</p>
+                          <ScrollArea className="h-[300px] w-full">
+                            <pre className="text-xs font-mono bg-background/50 p-3 rounded-lg whitespace-pre-wrap break-all">
+                              {log.raw_output || 'No output captured'}
+                            </pre>
+                          </ScrollArea>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <div className="mt-4 flex justify-end">
+                  <Button variant="outline" size="sm" onClick={fetchDebugLogs} disabled={loadingDebug}>
+                    {loadingDebug ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Refresh Logs
+                  </Button>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
 
         {/* ONU Table */}
         <ONUTable 
