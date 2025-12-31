@@ -22,10 +22,16 @@ const deviceConnectionCache = new Map();
  */
 function normalizeMac(mac) {
   if (!mac) return null;
-  // Remove any separators and convert to uppercase
-  const cleaned = mac.replace(/[:-]/g, '').toUpperCase();
-  if (cleaned.length !== 12) return mac?.toUpperCase();
-  // Add colons
+
+  // Extract first MAC-like pattern from any string (e.g. "AA:BB:CC:DD:EE:FF", "aabb.ccdd.eeff", "AA:BB:...@pppoe")
+  const raw = String(mac).trim();
+  const match = raw.match(/([0-9A-Fa-f]{2}([:\-\.]?)){5}[0-9A-Fa-f]{2}/);
+  const candidate = match ? match[0] : raw;
+
+  // Remove separators and convert to uppercase
+  const cleaned = candidate.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+  if (cleaned.length !== 12) return raw.toUpperCase();
+
   return cleaned.match(/.{2}/g).join(':');
 }
 
@@ -76,37 +82,37 @@ async function detectRouterOSVersion(mikrotik) {
     }
   }
   
-  // Strategy 2: Try Plain API on port 8728 (RouterOS 6.x standard)
-  // But if the user specified a custom port, they likely want to use it for Plain API
-  const plainApiPort = (port !== 8728 && port !== 8729 && port !== 80 && port !== 443 && port !== 8090) ? port : 8728;
-  try {
-    const result = await tryPlainAPIVersion(ip, plainApiPort, username, password);
-    if (result) {
-      const connectionInfo = { ...result, timestamp: Date.now() };
-      deviceConnectionCache.set(cacheKey, connectionInfo);
-      logger.info(`RouterOS detected via Plain API on port ${plainApiPort}: v${result.version} (method: ${result.method})`);
-      return connectionInfo;
-    }
-  } catch (err) {
-    logger.debug(`Plain API detection on port ${plainApiPort} failed: ${err.message}`);
-  }
-  
-  // Strategy 3: If user port is different, try Plain API on standard 8728
-  if (plainApiPort !== 8728) {
+  // Strategy 2: Try Plain API (RouterOS 6.x standard is 8728, but many setups use custom forwarded ports)
+  // We always try the user-provided port first (unless it's a typical web port), then fall back to 8728/8729.
+  const candidatePlainPorts = Array.from(
+    new Set(
+      [
+        // prefer user-configured port
+        port && ![80, 443].includes(port) ? port : null,
+        // fallbacks
+        8728,
+        8729,
+      ].filter((p) => typeof p === 'number')
+    )
+  );
+
+  for (const plainPort of candidatePlainPorts) {
     try {
-      const result = await tryPlainAPIVersion(ip, 8728, username, password);
+      const result = await tryPlainAPIVersion(ip, plainPort, username, password);
       if (result) {
         const connectionInfo = { ...result, timestamp: Date.now() };
         deviceConnectionCache.set(cacheKey, connectionInfo);
-        logger.info(`RouterOS detected via Plain API on port 8728: v${result.version}`);
+        logger.info(
+          `RouterOS detected via Plain API on port ${plainPort}: v${result.version} (method: ${result.method})`
+        );
         return connectionInfo;
       }
     } catch (err) {
-      logger.debug(`Plain API on port 8728 failed: ${err.message}`);
+      logger.debug(`Plain API detection on port ${plainPort} failed: ${err.message}`);
     }
   }
-  
-  // Strategy 4: Try REST API on standard ports (80, 443)
+
+  // Strategy 3: Try REST API on standard ports (80, 443)
   for (const restPort of [443, 80]) {
     const protocol = restPort === 443 ? 'https' : 'http';
     try {
@@ -121,10 +127,11 @@ async function detectRouterOSVersion(mikrotik) {
       logger.debug(`REST ${protocol} on port ${restPort} failed: ${err.message}`);
     }
   }
-  
+
   // Fallback: assume v6 Plain API
   logger.warn(`Could not detect RouterOS version for ${ip}, assuming v6 Plain API`);
-  const fallback = { version: '6.x', majorVersion: 6, method: 'plain', port: 8728 };
+  const fallbackPort = port && ![80, 443].includes(port) ? port : 8728;
+  const fallback = { version: '6.x', majorVersion: 6, method: 'plain', port: fallbackPort };
   deviceConnectionCache.set(cacheKey, { ...fallback, timestamp: Date.now() });
   return fallback;
 }
