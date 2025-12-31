@@ -18,7 +18,7 @@ import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
 import { pollOLT, testOLTConnection, testAllProtocols } from './polling/olt-poller.js';
-import { testMikrotikConnection } from './polling/mikrotik-client.js';
+import { testMikrotikConnection, fetchAllMikroTikData } from './polling/mikrotik-client.js';
 import { logger } from './utils/logger.js';
 
 const app = express();
@@ -154,7 +154,102 @@ app.post('/test-all-protocols', async (req, res) => {
   }
 });
 
-// Poll specific OLT (with /api prefix for frontend compatibility)
+// Test MikroTik connection and fetch data summary
+app.post('/api/test-mikrotik', async (req, res) => {
+  const { mikrotik } = req.body;
+  
+  try {
+    if (!mikrotik || !mikrotik.ip) {
+      return res.status(400).json({ error: 'MikroTik configuration required' });
+    }
+    
+    logger.info(`Testing MikroTik and fetching data: ${mikrotik.ip}:${mikrotik.port}`);
+    
+    // First test connection
+    const connectionResult = await testMikrotikConnection(mikrotik);
+    
+    if (!connectionResult.success) {
+      return res.json({
+        success: false,
+        error: connectionResult.error,
+        connection: connectionResult,
+        data: null
+      });
+    }
+    
+    // If connection successful, fetch data
+    const data = await fetchAllMikroTikData(mikrotik);
+    
+    res.json({
+      success: true,
+      connection: connectionResult,
+      data: {
+        pppoe_count: data.pppoe.length,
+        arp_count: data.arp.length,
+        dhcp_count: data.dhcp.length,
+        secrets_count: data.secrets.length,
+        // Sample data (first 5 of each)
+        pppoe_sample: data.pppoe.slice(0, 5),
+        arp_sample: data.arp.slice(0, 5),
+        dhcp_sample: data.dhcp.slice(0, 5),
+        secrets_sample: data.secrets.slice(0, 5).map(s => ({ ...s, pppoe_password: '***' })),
+      }
+    });
+  } catch (error) {
+    logger.error('MikroTik test error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+});
+
+// Also without /api prefix
+app.post('/test-mikrotik', async (req, res) => {
+  const { mikrotik } = req.body;
+  
+  try {
+    if (!mikrotik || !mikrotik.ip) {
+      return res.status(400).json({ error: 'MikroTik configuration required' });
+    }
+    
+    logger.info(`Testing MikroTik and fetching data: ${mikrotik.ip}:${mikrotik.port}`);
+    
+    const connectionResult = await testMikrotikConnection(mikrotik);
+    
+    if (!connectionResult.success) {
+      return res.json({
+        success: false,
+        error: connectionResult.error,
+        connection: connectionResult,
+        data: null
+      });
+    }
+    
+    const data = await fetchAllMikroTikData(mikrotik);
+    
+    res.json({
+      success: true,
+      connection: connectionResult,
+      data: {
+        pppoe_count: data.pppoe.length,
+        arp_count: data.arp.length,
+        dhcp_count: data.dhcp.length,
+        secrets_count: data.secrets.length,
+        pppoe_sample: data.pppoe.slice(0, 5),
+        arp_sample: data.arp.slice(0, 5),
+        dhcp_sample: data.dhcp.slice(0, 5),
+        secrets_sample: data.secrets.slice(0, 5).map(s => ({ ...s, pppoe_password: '***' })),
+      }
+    });
+  } catch (error) {
+    logger.error('MikroTik test error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+});
 app.post('/api/poll/:oltId', async (req, res) => {
   const { oltId } = req.params;
   
