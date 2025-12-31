@@ -371,7 +371,7 @@ export default function OLTDetails() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-5">
+              <div className="grid gap-4 md:grid-cols-6">
                 <div className="p-3 rounded-lg bg-muted/30">
                   <p className="text-sm text-muted-foreground">IP Address</p>
                   <p className="font-mono font-medium">{olt.mikrotik_ip}</p>
@@ -406,6 +406,14 @@ export default function OLTDetails() {
                   <p className="text-sm text-muted-foreground">Method</p>
                   <p className="font-mono font-medium text-sm">
                     {mikrotikTestResult?.connection?.method || `API Port ${olt.mikrotik_port || 8728}`}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/30">
+                  <p className="text-sm text-muted-foreground">RouterOS</p>
+                  <p className="font-mono font-medium text-sm">
+                    {mikrotikTestResult?.success
+                      ? mikrotikTestResult?.connection?.version || 'Unknown'
+                      : '—'}
                   </p>
                 </div>
               </div>

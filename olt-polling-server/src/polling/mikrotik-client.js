@@ -422,23 +422,24 @@ export async function fetchMikroTikIdentity(mikrotik) {
  * Main API call function - auto-detects version and uses appropriate method
  */
 async function callMikroTikAPI(mikrotik, endpoint) {
-  const { ip, port = 8728, username, password } = mikrotik;
-  
+  const { ip, port = 8728 } = mikrotik;
+
   // Detect version and best connection method
   const connectionInfo = await detectRouterOSVersion(mikrotik);
-  
-  logger.debug(`MikroTik API call to ${ip}:${connectionInfo.port || port} using ${connectionInfo.method} (v${connectionInfo.version}) - endpoint: ${endpoint}`);
-  
+
+  logger.debug(
+    `MikroTik API call to ${ip}:${connectionInfo.port || port} using ${connectionInfo.method} (v${connectionInfo.version}) - endpoint: ${endpoint}`
+  );
+
   try {
     if (connectionInfo.method === 'rest') {
       return await callMikroTikREST(mikrotik, endpoint, connectionInfo);
-    } else {
-      return await callMikroTikPlainAPI(mikrotik, endpoint, connectionInfo);
     }
+
+    return await callMikroTikPlainAPI(mikrotik, endpoint, connectionInfo);
   } catch (error) {
     logger.warn(`MikroTik API call failed for ${endpoint}: ${error.message}`);
     return [];
-  }
   }
 }
 
