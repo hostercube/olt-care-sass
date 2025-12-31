@@ -17,6 +17,9 @@ const CONNECTION_TIMEOUT = 15000;
 /**
  * OLT Brand Protocol Configuration
  * Defines primary and fallback connection methods for each brand
+ * 
+ * IMPORTANT: VSOL and Chinese OLTs require Telnet/SSH CLI access for ONU data.
+ * Web interfaces are only for status checking, not for ONU polling.
  */
 const OLT_PROTOCOL_CONFIG = {
   ZTE: { 
@@ -34,12 +37,13 @@ const OLT_PROTOCOL_CONFIG = {
     hint: 'SSH port 22 (CLI commands)'
   },
   VSOL: { 
-    primary: 'http', 
-    fallback: 'telnet', 
-    defaultPort: 8085,
+    // VSOL requires Telnet CLI for ONU data - HTTP only for connection test
+    primary: 'telnet', 
+    fallback: 'ssh', 
+    defaultPort: 23,
     webPorts: [80, 8080, 8085, 8086, 443],
     telnetPort: 23,
-    hint: 'Web API port 8085 or Telnet port 23'
+    hint: 'Telnet port 23 (CLI commands for ONU data)'
   },
   BDCOM: { 
     primary: 'telnet', 
@@ -110,22 +114,23 @@ function getConnectionType(port, brand) {
   if (port === 23) return 'telnet';
   if (port === 161) return 'snmp';
   
-  // HTTP API ports - common web interface ports (NOT custom telnet ports)
+  // For VSOL and Chinese OLTs, ALWAYS use Telnet/CLI for ONU data
+  // HTTP ports only check connectivity, but don't provide ONU data via API
+  if (['VSOL', 'DBC', 'CDATA', 'ECOM'].includes(brand)) {
+    // For any port (including HTTP ports like 8080, 8045), try Telnet first
+    // because these OLTs require CLI commands for ONU data
+    logger.info(`${brand} OLT detected - using CLI-first strategy (Telnet/SSH) for ONU data`);
+    return 'cli_first_for_data';
+  }
+  
+  // HTTP API ports - common web interface ports
   const httpPorts = [80, 443, 8080, 8041, 8085, 8086, 8088, 8090];
   if (httpPorts.includes(port)) {
-    // For HTTP ports, use http_first with brand-specific fallback
     return `http_first_${config.fallback || 'telnet'}`;
   }
   
   // SSH-first for major brands (ZTE, Huawei, Nokia)
   if (['ZTE', 'Huawei', 'Nokia'].includes(brand)) return 'ssh_first';
-  
-  // For non-standard ports on Chinese OLT brands, try Telnet first on the given port
-  // This handles port forwarding scenarios (e.g., 8045 -> 23 on local OLT)
-  if (['VSOL', 'DBC', 'CDATA', 'ECOM'].includes(brand) && port > 1024) {
-    // Use telnet_first_custom - will try Telnet on the provided port
-    return 'telnet_first_custom';
-  }
   
   // BDCOM uses EPON, prefer Telnet
   if (brand === 'BDCOM') return 'telnet_first';
@@ -133,7 +138,7 @@ function getConnectionType(port, brand) {
   // Fiberhome - Telnet first
   if (brand === 'Fiberhome') return 'telnet_first';
   
-  // Default: auto detect - try Telnet on given port -> HTTP -> SSH
+  // Default: auto detect
   return 'auto_detect';
 }
 
@@ -250,6 +255,90 @@ export async function pollOLT(supabase, olt) {
           throw new Error(errorMsg);
         }
       }
+    } else if (connectionType === 'cli_first_for_data') {
+      // Special handling for VSOL and Chinese OLTs
+      // These OLTs require CLI (Telnet/SSH) commands to get ONU data
+      // HTTP API only provides connection status, not ONU details
+      const config = OLT_PROTOCOL_CONFIG[olt.brand] || OLT_PROTOCOL_CONFIG.Other;
+      const telnetPort = config.telnetPort || 23;
+      const errors = [];
+      let cliSuccess = false;
+      
+      logger.info(`CLI-first strategy for ${olt.brand} OLT ${olt.name} - ONU data requires Telnet/SSH CLI`);
+      
+      // Priority order for CLI access:
+      // 1. Telnet on configured port (if port forwarded, e.g., 8045 -> 23)
+      // 2. Telnet on standard port 23
+      // 3. SSH on port 22
+      const portsToTry = [
+        { port: olt.port, method: 'Telnet', desc: `configured port ${olt.port}` },
+        { port: telnetPort, method: 'Telnet', desc: `standard Telnet port ${telnetPort}` },
+        { port: 22, method: 'SSH', desc: 'SSH port 22' }
+      ].filter((p, i, arr) => arr.findIndex(x => x.port === p.port && x.method === p.method) === i);
+      
+      for (const attempt of portsToTry) {
+        if (cliSuccess) break;
+        
+        try {
+          if (attempt.method === 'Telnet') {
+            logger.info(`Trying Telnet CLI on ${attempt.desc} for ${olt.name}`);
+            const telnetOlt = { ...olt, port: attempt.port };
+            output = await executeTelnetCommands(telnetOlt, commands);
+            
+            if (output && output.length > 50) {
+              logger.debug(`Telnet output length: ${output.length} chars`);
+              logger.debug(`Telnet output sample: ${output.substring(0, 500)}...`);
+              
+              onus = parseOLTOutput(olt.brand, output);
+              if (onus.length > 0) {
+                cliSuccess = true;
+                logger.info(`Telnet on port ${attempt.port} successful: Found ${onus.length} ONUs`);
+              } else {
+                logger.warn(`Telnet on port ${attempt.port}: Got output but no ONUs parsed. Output sample: ${output.substring(0, 300)}`);
+                errors.push(`Telnet:${attempt.port} (no ONUs parsed from output)`);
+              }
+            } else {
+              errors.push(`Telnet:${attempt.port} (insufficient data: ${output?.length || 0} chars)`);
+            }
+          } else if (attempt.method === 'SSH') {
+            logger.info(`Trying SSH CLI on ${attempt.desc} for ${olt.name}`);
+            const sshOlt = { ...olt, port: attempt.port };
+            output = await executeSSHCommands(sshOlt);
+            
+            if (output && output.length > 50) {
+              logger.debug(`SSH output length: ${output.length} chars`);
+              onus = parseOLTOutput(olt.brand, output);
+              if (onus.length > 0) {
+                cliSuccess = true;
+                logger.info(`SSH on port ${attempt.port} successful: Found ${onus.length} ONUs`);
+              } else {
+                errors.push(`SSH:${attempt.port} (no ONUs parsed)`);
+              }
+            } else {
+              errors.push(`SSH:${attempt.port} (insufficient data)`);
+            }
+          }
+        } catch (err) {
+          errors.push(`${attempt.method}:${attempt.port} (${err.message})`);
+          logger.warn(`${attempt.method} on port ${attempt.port} failed: ${err.message}`);
+        }
+      }
+      
+      if (!cliSuccess && onus.length === 0) {
+        // Log detailed error for debugging
+        const errorMsg = `ONU data polling failed for ${olt.name}. CLI methods tried: ${errors.join(', ')}. ` +
+          `${olt.brand} OLTs require Telnet port 23 or SSH port 22 access for ONU data. ` +
+          `Please ensure CLI access is enabled and ports are reachable from the VPS.`;
+        logger.error(errorMsg);
+        
+        // Still update status to show OLT is reachable (if we got any connection)
+        // but log that no ONU data was retrieved
+        if (errors.some(e => e.includes('no ONUs parsed'))) {
+          logger.warn(`OLT ${olt.name} is reachable but no ONU data could be parsed. Check if ONUs are registered.`);
+        } else {
+          throw new Error(errorMsg);
+        }
+      }
     } else {
       // Standard connection types
       switch (connectionType) {
@@ -302,54 +391,6 @@ export async function pollOLT(supabase, olt) {
           onus = parseOLTOutput(olt.brand, output);
           break;
           
-        case 'telnet_first_custom':
-          // Try Telnet on the provided port first (for port forwarding scenarios like 8045->23)
-          // This is the most common case for Chinese OLTs behind NAT
-          try {
-            logger.info(`Trying Telnet first on custom port ${olt.port} for ${olt.name}`);
-            output = await executeTelnetCommands(olt, commands);
-            if (output && output.length > 100) {
-              onus = parseOLTOutput(olt.brand, output);
-              logger.info(`Successfully parsed ${onus.length} ONUs via Telnet on port ${olt.port}`);
-            } else {
-              throw new Error('Telnet returned insufficient data');
-            }
-          } catch (telnetError) {
-            logger.warn(`Telnet on port ${olt.port} failed for ${olt.name}: ${telnetError.message}`);
-            
-            // Try standard Telnet port 23 as second option
-            try {
-              logger.info(`Trying standard Telnet port 23 for ${olt.name}`);
-              const telnet23Olt = { ...olt, port: 23 };
-              output = await executeTelnetCommands(telnet23Olt, commands);
-              if (output && output.length > 100) {
-                onus = parseOLTOutput(olt.brand, output);
-                logger.info(`Successfully parsed ${onus.length} ONUs via Telnet on port 23`);
-              } else {
-                throw new Error('Telnet on port 23 returned insufficient data');
-              }
-            } catch (telnet23Error) {
-              logger.warn(`Telnet on port 23 failed for ${olt.name}: ${telnet23Error.message}`);
-              
-              // Try SSH on port 22 as last resort
-              try {
-                logger.info(`Trying SSH on port 22 for ${olt.name}`);
-                const sshOlt = { ...olt, port: 22 };
-                output = await executeSSHCommands(sshOlt);
-                if (output && output.length > 100) {
-                  onus = parseOLTOutput(olt.brand, output);
-                  logger.info(`Successfully parsed ${onus.length} ONUs via SSH on port 22`);
-                } else {
-                  throw new Error('SSH returned insufficient data');
-                }
-              } catch (sshError) {
-                // All CLI methods failed, throw comprehensive error
-                throw new Error(`All protocols failed - Telnet:${olt.port} (${telnetError.message}), Telnet:23 (${telnet23Error.message}), SSH:22 (${sshError.message})`);
-              }
-            }
-          }
-          break;
-          
         case 'ssh_first':
           // Try SSH first, fallback to Telnet
           try {
@@ -371,20 +412,20 @@ export async function pollOLT(supabase, olt) {
           
         case 'auto_detect':
         default:
-          // Auto-detect: Try HTTP -> Telnet -> SSH
+          // Auto-detect: Try Telnet -> SSH -> HTTP
           try {
-            logger.info(`Auto-detect: Trying HTTP API for ${olt.name}`);
-            const autoApiResponse = await executeAPICommands(olt);
-            onus = parseAPIResponse(olt.brand, autoApiResponse);
-          } catch (httpErr) {
-            logger.warn(`HTTP failed for ${olt.name}: ${httpErr.message}, trying Telnet...`);
+            logger.info(`Auto-detect: Trying Telnet for ${olt.name}`);
+            output = await executeTelnetCommands(olt, commands);
+            onus = parseOLTOutput(olt.brand, output);
+          } catch (telnetErr) {
+            logger.warn(`Telnet failed for ${olt.name}: ${telnetErr.message}, trying SSH...`);
             try {
-              output = await executeTelnetCommands(olt, commands);
-              onus = parseOLTOutput(olt.brand, output);
-            } catch (telnetErr) {
-              logger.warn(`Telnet failed for ${olt.name}: ${telnetErr.message}, trying SSH...`);
               output = await executeSSHCommands(olt);
               onus = parseOLTOutput(olt.brand, output);
+            } catch (sshErr) {
+              logger.warn(`SSH failed for ${olt.name}: ${sshErr.message}, trying HTTP...`);
+              const autoApiResponse = await executeAPICommands(olt);
+              onus = parseAPIResponse(olt.brand, autoApiResponse);
             }
           }
           break;
@@ -599,28 +640,32 @@ function getOLTCommands(brand) {
         'show gpon onu list'
       ];
     case 'VSOL':
-      // VSOL EPON/GPON OLT CLI commands - comprehensive list
+      // VSOL EPON/GPON OLT CLI commands - comprehensive list for all models
+      // These commands work on most VSOL V1600 series and similar Chinese OLTs
       return [
-        'terminal length 0',
-        'enable',
-        'configure terminal',
-        // ONU status commands
-        'show onu status',
-        'show onu status all',
-        'show onu opm-diag all',      // Optical power diagnosis for all ONUs
-        'show onu optical-info all',
-        // EPON specific
-        'show epon onu status',
-        'show epon onu-info',
-        // GPON specific
-        'show gpon onu state',
-        'show gpon onu list',
-        'show gpon onu optical-info',
-        // General ONU info
-        'show onu info',
-        'show onu info all',
-        'show onu list',
-        'show onu running-status'
+        'terminal length 0',           // Disable pagination
+        'enable',                       // Enter privileged mode
+        // EPON ONU commands (most common for VSOL)
+        'show epon onu-information',    // Main ONU info command
+        'show epon active onu',         // Active ONU list
+        'show epon optical-transceiver-diagnosis interface EPON0/1', // Optical power PON 1
+        'show epon optical-transceiver-diagnosis interface EPON0/2', // Optical power PON 2
+        'show epon optical-transceiver-diagnosis interface EPON0/3', // Optical power PON 3
+        'show epon optical-transceiver-diagnosis interface EPON0/4', // Optical power PON 4
+        'show epon onu ctc optical-transceiver-diagnosis',  // CTC optical info
+        // GPON ONU commands
+        'show gpon onu state',          // GPON ONU state
+        'show gpon onu list',           // GPON ONU list  
+        'show gpon optical-info',       // GPON optical info
+        // Generic ONU commands
+        'show onu status',              // ONU status
+        'show onu status all',          // All ONU status
+        'show onu opm-diag all',        // Optical power diagnosis
+        'show onu optical-info all',    // All optical info
+        'show onu running-status',      // Running status
+        'show onu information',         // ONU information
+        'show onu list',                // ONU list
+        'show onu register-info'        // Register info
       ];
     case 'DBC':
       return [

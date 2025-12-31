@@ -2,13 +2,16 @@ import { logger } from '../../utils/logger.js';
 
 /**
  * Parse VSOL OLT CLI output to extract ONU information
- * Supports VSOL EPON/GPON OLT series with multiple output formats
+ * Supports VSOL EPON/GPON OLT series (V1600, V1601, V1602, etc.)
  * 
- * Common VSOL CLI output formats:
- * - show onu status all
- * - show onu optical-info all
- * - show onu info all
+ * Common VSOL EPON CLI output formats:
+ * - show epon onu-information
+ * - show epon active onu  
+ * - show epon optical-transceiver-diagnosis
+ * 
+ * Common VSOL GPON CLI output formats:
  * - show gpon onu state
+ * - show gpon onu list
  */
 export function parseVSOLOutput(output) {
   const onus = [];
@@ -16,9 +19,9 @@ export function parseVSOLOutput(output) {
   
   const onuMap = new Map();
   let currentPonPort = null;
-  let inOnuSection = false;
   
-  logger.debug(`VSOL parser processing ${lines.length} lines of output`);
+  logger.info(`VSOL parser processing ${lines.length} lines of output`);
+  logger.debug(`VSOL output first 500 chars: ${output.substring(0, 500)}`);
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -29,75 +32,106 @@ export function parseVSOLOutput(output) {
         trimmedLine.startsWith('---') || 
         trimmedLine.startsWith('===') ||
         trimmedLine.startsWith('***') ||
-        trimmedLine.length < 3) {
+        trimmedLine.startsWith('#') ||
+        trimmedLine.includes('terminal length') ||
+        trimmedLine.includes('show ') ||
+        trimmedLine.length < 5) {
       continue;
     }
     
-    // Detect PON port context from headers
-    // Format: "PON port 1/1" or "EPON port 0/1" or "gpon-onu 1/1"
-    let ponMatch = trimmedLine.match(/(?:PON|EPON|GPON|pon|epon|gpon)[\s-]*(?:port|onu)?\s*[:=]?\s*(\d+\/\d+(?:\/\d+)?)/i);
+    // Detect PON port context from various formats
+    // EPON0/1, EPON0/2, PON 1/1, gpon-onu 0/1, etc.
+    let ponMatch = trimmedLine.match(/(?:EPON|GPON|PON)[\s\-]*(\d+\/\d+(?:\/\d+)?)/i);
     if (ponMatch) {
       currentPonPort = ponMatch[1];
-      inOnuSection = true;
+      logger.debug(`Detected PON port: ${currentPonPort}`);
+    }
+    
+    // Pattern 1: VSOL EPON onu-information format
+    // EPON0/1:1    00:11:22:33:44:55    Online    VSOL
+    // or: EPON0/1:1   001122334455   Online   VSOL   -21.5   2.1
+    const eponInfoMatch = trimmedLine.match(/EPON(\d+\/\d+):(\d+)\s+([0-9A-Fa-f:]{12,17})\s+(\w+)(?:\s+\S+)?(?:\s+([-\d.]+))?(?:\s+([-\d.]+))?/i);
+    if (eponInfoMatch) {
+      const ponPort = eponInfoMatch[1];
+      const onuIndex = parseInt(eponInfoMatch[2]);
+      const macAddress = formatMac(eponInfoMatch[3]);
+      const status = parseStatus(eponInfoMatch[4]);
+      const rxPower = eponInfoMatch[5] ? parseFloat(eponInfoMatch[5]) : null;
+      const txPower = eponInfoMatch[6] ? parseFloat(eponInfoMatch[6]) : null;
+      const key = `${ponPort}:${onuIndex}`;
+      
+      logger.debug(`Parsed EPON ONU: ${key} MAC=${macAddress} Status=${status}`);
+      
+      onuMap.set(key, {
+        pon_port: ponPort,
+        onu_index: onuIndex,
+        status: status,
+        serial_number: macAddress.replace(/:/g, ''),
+        name: null,
+        rx_power: rxPower,
+        tx_power: txPower,
+        mac_address: macAddress,
+        router_name: null
+      });
       continue;
     }
     
-    // Pattern 1: Table format with headers (very common in VSOL)
-    // Index  MAC/SN           Status    RxPower   TxPower
-    // 1      VSOL12345678     online    -21.5     2.1
-    const tableMatch = trimmedLine.match(/^(\d+)\s+([A-Za-z0-9]{8,20})\s+(online|offline|dying[-_]?gasp|los|unknown)\s*([-\d.]+)?\s*([-\d.]+)?/i);
-    if (tableMatch) {
-      const onuIndex = parseInt(tableMatch[1]);
-      const serialOrMac = tableMatch[2].toUpperCase();
-      const status = parseStatus(tableMatch[3]);
-      const rxPower = tableMatch[4] ? parseFloat(tableMatch[4]) : null;
-      const txPower = tableMatch[5] ? parseFloat(tableMatch[5]) : null;
-      const ponPort = currentPonPort || 'default';
+    // Pattern 2: VSOL active ONU format  
+    // 0/1:1  Online  00:11:22:33:44:55
+    const activeOnuMatch = trimmedLine.match(/(\d+\/\d+):(\d+)\s+(\w+)\s+([0-9A-Fa-f:]{12,17})/i);
+    if (activeOnuMatch) {
+      const ponPort = activeOnuMatch[1];
+      const onuIndex = parseInt(activeOnuMatch[2]);
+      const status = parseStatus(activeOnuMatch[3]);
+      const macAddress = formatMac(activeOnuMatch[4]);
       const key = `${ponPort}:${onuIndex}`;
       
       onuMap.set(key, {
         pon_port: ponPort,
         onu_index: onuIndex,
         status: status,
-        serial_number: serialOrMac,
+        serial_number: macAddress.replace(/:/g, ''),
         name: null,
-        rx_power: rxPower,
-        tx_power: txPower,
-        mac_address: isMacAddress(serialOrMac) ? formatMac(serialOrMac) : null,
+        rx_power: null,
+        tx_power: null,
+        mac_address: macAddress,
         router_name: null
       });
       continue;
     }
     
-    // Pattern 2: PON x/x ONU x format (explicit PON port in line)
-    // PON 1/1  ONU 1  VSOL1234567890  online  -20.5  2.1
-    let match = trimmedLine.match(/PON\s+(\d+\/\d+)\s+ONU\s+(\d+)\s+(\S+)\s+(\w+)(?:\s+([-\d.]+))?(?:\s+([-\d.]+))?/i);
-    if (match) {
-      const ponPort = match[1];
-      const onuIndex = parseInt(match[2]);
-      const serialNumber = match[3].toUpperCase();
-      const status = parseStatus(match[4]);
-      const rxPower = match[5] ? parseFloat(match[5]) : null;
-      const txPower = match[6] ? parseFloat(match[6]) : null;
+    // Pattern 3: Simple table format with index first
+    // 1   00:11:22:33:44:55   Online   -21.5   2.1
+    // or: 1   001122334455   Online   -21.5
+    const simpleTableMatch = trimmedLine.match(/^(\d+)\s+([0-9A-Fa-f:]{12,17})\s+(\w+)(?:\s+([-\d.]+))?(?:\s+([-\d.]+))?/);
+    if (simpleTableMatch) {
+      const onuIndex = parseInt(simpleTableMatch[1]);
+      const macAddress = formatMac(simpleTableMatch[2]);
+      const status = parseStatus(simpleTableMatch[3]);
+      const rxPower = simpleTableMatch[4] ? parseFloat(simpleTableMatch[4]) : null;
+      const txPower = simpleTableMatch[5] ? parseFloat(simpleTableMatch[5]) : null;
+      const ponPort = currentPonPort || '0/1';
       const key = `${ponPort}:${onuIndex}`;
+      
+      logger.debug(`Parsed simple table ONU: ${key} MAC=${macAddress}`);
       
       onuMap.set(key, {
         pon_port: ponPort,
         onu_index: onuIndex,
         status: status,
-        serial_number: serialNumber,
+        serial_number: macAddress.replace(/:/g, ''),
         name: null,
         rx_power: rxPower,
         tx_power: txPower,
-        mac_address: isMacAddress(serialNumber) ? formatMac(serialNumber) : null,
+        mac_address: macAddress,
         router_name: null
       });
       continue;
     }
     
-    // Pattern 3: x/x/x format (slot/pon/onu)
+    // Pattern 4: x/x/x format (slot/pon/onu)
     // 0/1/1   1   VSOL1234567890   online   -20.5   2.1
-    match = trimmedLine.match(/(\d+\/\d+\/\d+)\s+(\d+)\s+(\S+)\s+(\w+)(?:\s+([-\d.]+))?(?:\s+([-\d.]+))?/);
+    let match = trimmedLine.match(/(\d+\/\d+\/\d+)\s+(\d+)\s+(\S+)\s+(\w+)(?:\s+([-\d.]+))?(?:\s+([-\d.]+))?/);
     if (match) {
       const ponPort = match[1];
       const onuIndex = parseInt(match[2]);
@@ -267,6 +301,71 @@ export function parseVSOLOutput(output) {
         if (onu && !onu.router_name) {
           onu.router_name = routerName;
         }
+      }
+      continue;
+    }
+    
+    // Pattern 11: VSOL optical-transceiver-diagnosis output
+    // EPON0/1:1  -21.5  2.1  OK
+    // or: 0/1:1  RxPower:-21.5(dBm) TxPower:2.1(dBm)
+    const opticalDiagMatch = trimmedLine.match(/(?:EPON)?(\d+\/\d+):(\d+)\s+([-\d.]+)(?:\s*\(dBm\))?\s+([-\d.]+)/i);
+    if (opticalDiagMatch) {
+      const ponPort = opticalDiagMatch[1];
+      const onuIndex = parseInt(opticalDiagMatch[2]);
+      const rxPower = parseFloat(opticalDiagMatch[3]);
+      const txPower = parseFloat(opticalDiagMatch[4]);
+      const key = `${ponPort}:${onuIndex}`;
+      
+      // Update existing ONU or create new one
+      if (onuMap.has(key)) {
+        const onu = onuMap.get(key);
+        onu.rx_power = rxPower;
+        onu.tx_power = txPower;
+      } else {
+        onuMap.set(key, {
+          pon_port: ponPort,
+          onu_index: onuIndex,
+          status: 'online', // If we can read optical, it's online
+          serial_number: null,
+          name: null,
+          rx_power: rxPower,
+          tx_power: txPower,
+          mac_address: null,
+          router_name: null
+        });
+      }
+      logger.debug(`Parsed optical power for ${key}: RX=${rxPower} TX=${txPower}`);
+      continue;
+    }
+    
+    // Pattern 12: Generic line with MAC address anywhere - fallback pattern
+    const genericMacMatch = trimmedLine.match(/([0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2})/);
+    if (genericMacMatch && onuMap.size === 0) {
+      // If we found a MAC but haven't matched any patterns yet, try to extract more info
+      const macAddress = formatMac(genericMacMatch[1]);
+      const statusMatch = trimmedLine.match(/(online|offline|up|down|active|inactive)/i);
+      const status = statusMatch ? parseStatus(statusMatch[1]) : 'online';
+      
+      // Try to find index
+      const indexMatch = trimmedLine.match(/:(\d+)/) || trimmedLine.match(/^(\d+)/);
+      const onuIndex = indexMatch ? parseInt(indexMatch[1]) : onuMap.size + 1;
+      
+      const ponPort = currentPonPort || '0/1';
+      const key = `${ponPort}:${onuIndex}`;
+      
+      if (!onuMap.has(key)) {
+        logger.debug(`Fallback pattern matched MAC: ${macAddress}`);
+        onuMap.set(key, {
+          pon_port: ponPort,
+          onu_index: onuIndex,
+          status: status,
+          serial_number: macAddress.replace(/:/g, ''),
+          name: null,
+          rx_power: null,
+          tx_power: null,
+          mac_address: macAddress,
+          router_name: null
+        });
       }
       continue;
     }
