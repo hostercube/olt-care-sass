@@ -16,14 +16,30 @@ cd /var/www
 git clone https://github.com/YOUR_REPO/olt-monitoring.git olt.isppoint.com
 cd olt.isppoint.com
 
-# 3. Install & build frontend
+# 3. Create frontend .env (YOUR Supabase credentials)
+cat > .env << 'EOF'
+VITE_SUPABASE_URL=https://srofhdgdraihxgpmpdye.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyb2ZoZGdkcmFpaHhncG1wZHllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwODI1MDUsImV4cCI6MjA4MjY1ODUwNX0.EYIvK99xo_mCNdNslb5sWNEGAm5-kBz5Dfr0878J0kw
+VITE_POLLING_SERVER_URL=https://olt.isppoint.com/olt-polling-server
+EOF
+
+# 4. Install & build frontend
 npm install
 npm run build
 
-# 4. Configure & start polling server
+# 5. Configure polling server .env
 cd olt-polling-server
-cp .env.example .env
-nano .env  # Add your Supabase service key
+cat > .env << 'EOF'
+SUPABASE_URL=https://srofhdgdraihxgpmpdye.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyb2ZoZGdkcmFpaHhncG1wZHllIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzA4MjUwNSwiZXhwIjoyMDgyNjU4NTA1fQ.59U6UuXchMAcd86IzPE-zlJumn-ajx18BjVZGLD6NYs
+PORT=3001
+NODE_ENV=production
+POLLING_INTERVAL_MS=60000
+SSH_TIMEOUT_MS=60000
+API_TIMEOUT_MS=30000
+EOF
+
+# 6. Start polling server
 npm install
 mkdir -p logs
 pm2 start ecosystem.config.cjs
@@ -80,9 +96,9 @@ pm2 logs olt-polling-server --lines 30
 
 ### Backend: `olt-polling-server/.env`
 ```bash
-# Supabase (REQUIRED!)
-SUPABASE_URL=https://qsewotfkllgthwwnuyot.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key-here
+# YOUR Supabase Project (from supabase.com dashboard)
+SUPABASE_URL=https://srofhdgdraihxgpmpdye.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyb2ZoZGdkcmFpaHhncG1wZHllIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzA4MjUwNSwiZXhwIjoyMDgyNjU4NTA1fQ.59U6UuXchMAcd86IzPE-zlJumn-ajx18BjVZGLD6NYs
 
 # Server
 PORT=3001
@@ -94,7 +110,13 @@ SSH_TIMEOUT_MS=60000
 API_TIMEOUT_MS=30000
 ```
 
-### Frontend: Build uses Supabase from Lovable Cloud (auto-configured)
+### Frontend: `.env` (for VPS build)
+Create this file in your project root before running `npm run build`:
+```bash
+VITE_SUPABASE_URL=https://srofhdgdraihxgpmpdye.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyb2ZoZGdkcmFpaHhncG1wZHllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwODI1MDUsImV4cCI6MjA4MjY1ODUwNX0.EYIvK99xo_mCNdNslb5sWNEGAm5-kBz5Dfr0878J0kw
+VITE_POLLING_SERVER_URL=https://olt.isppoint.com/olt-polling-server
+```
 
 ---
 
