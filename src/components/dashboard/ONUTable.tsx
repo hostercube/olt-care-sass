@@ -42,6 +42,7 @@ interface ONUTableProps {
   onus: ONUWithOLTName[];
   title?: string;
   showFilters?: boolean;
+  onRefresh?: () => void;
 }
 
 function getPowerIcon(power: number | null) {
@@ -61,7 +62,7 @@ function getPowerColor(power: number | null) {
 type StatusFilter = 'all' | 'online' | 'offline' | 'warning';
 type DateFilter = 'all' | '1h' | '24h' | '7d' | '30d';
 
-export function ONUTable({ onus, title = 'ONU Devices', showFilters = true }: ONUTableProps) {
+export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRefresh }: ONUTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedONU, setSelectedONU] = useState<ONUWithOLTName | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -445,7 +446,11 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true }: ON
       <ONUDetailsModal 
         onu={selectedONU} 
         open={detailsOpen} 
-        onOpenChange={setDetailsOpen} 
+        onOpenChange={setDetailsOpen}
+        onUpdate={() => {
+          setDetailsOpen(false);
+          onRefresh?.();
+        }}
       />
     </>
   );

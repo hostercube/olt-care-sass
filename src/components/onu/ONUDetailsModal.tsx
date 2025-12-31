@@ -8,10 +8,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { StatusIndicator } from '@/components/dashboard/StatusIndicator';
 import type { Tables } from '@/integrations/supabase/types';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow, format } from 'date-fns';
+import { toast } from 'sonner';
 import { 
   Activity, 
   Wifi, 
@@ -23,7 +27,9 @@ import {
   TrendingDown,
   TrendingUp,
   Minus,
-  Loader2
+  Loader2,
+  Save,
+  Edit3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -43,6 +49,7 @@ interface ONUDetailsModalProps {
   onu: ONUWithOLTName | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onUpdate?: () => void;
 }
 
 interface PowerReading {
@@ -57,13 +64,25 @@ interface TimelineEvent {
   timestamp: string;
 }
 
-export function ONUDetailsModal({ onu, open, onOpenChange }: ONUDetailsModalProps) {
+export function ONUDetailsModal({ onu, open, onOpenChange, onUpdate }: ONUDetailsModalProps) {
   const [powerReadings, setPowerReadings] = useState<PowerReading[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  
+  // Edit form state
+  const [editName, setEditName] = useState('');
+  const [editRouterName, setEditRouterName] = useState('');
+  const [editPppoeUsername, setEditPppoeUsername] = useState('');
+  const [editSerialNumber, setEditSerialNumber] = useState('');
 
   useEffect(() => {
     if (onu && open) {
       fetchPowerHistory();
+      // Initialize edit form with current values
+      setEditName(onu.name || '');
+      setEditRouterName(onu.router_name || '');
+      setEditPppoeUsername(onu.pppoe_username || '');
+      setEditSerialNumber(onu.serial_number || '');
     }
   }, [onu, open]);
 
@@ -85,6 +104,34 @@ export function ONUDetailsModal({ onu, open, onOpenChange }: ONUDetailsModalProp
       console.error('Error fetching power history:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    if (!onu) return;
+    
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('onus')
+        .update({
+          name: editName,
+          router_name: editRouterName || null,
+          pppoe_username: editPppoeUsername || null,
+          serial_number: editSerialNumber || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', onu.id);
+
+      if (error) throw error;
+      
+      toast.success('ONU details updated successfully');
+      onUpdate?.();
+    } catch (err) {
+      console.error('Error updating ONU:', err);
+      toast.error('Failed to update ONU details');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -148,8 +195,12 @@ export function ONUDetailsModal({ onu, open, onOpenChange }: ONUDetailsModalProp
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3 bg-muted">
+          <TabsList className="grid w-full grid-cols-4 bg-muted">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="edit" className="gap-1">
+              <Edit3 className="h-3 w-3" />
+              Edit
+            </TabsTrigger>
             <TabsTrigger value="power">Power History</TabsTrigger>
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
           </TabsList>
@@ -256,6 +307,93 @@ export function ONUDetailsModal({ onu, open, onOpenChange }: ONUDetailsModalProp
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">Signal Trend</div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Edit Tab */}
+          <TabsContent value="edit" className="mt-4">
+            <Card variant="glass">
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Edit3 className="h-4 w-4 text-primary" />
+                  Edit ONU Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-name">ONU Name</Label>
+                    <Input
+                      id="edit-name"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Enter ONU name"
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-router">Router Name</Label>
+                    <Input
+                      id="edit-router"
+                      value={editRouterName}
+                      onChange={(e) => setEditRouterName(e.target.value)}
+                      placeholder="Enter router name"
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-pppoe">PPPoE Username</Label>
+                    <Input
+                      id="edit-pppoe"
+                      value={editPppoeUsername}
+                      onChange={(e) => setEditPppoeUsername(e.target.value)}
+                      placeholder="Enter PPPoE username"
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-serial">Serial Number</Label>
+                    <Input
+                      id="edit-serial"
+                      value={editSerialNumber}
+                      onChange={(e) => setEditSerialNumber(e.target.value)}
+                      placeholder="Enter serial number"
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                </div>
+                
+                <div className="pt-4 border-t border-border">
+                  <div className="text-sm text-muted-foreground mb-4">
+                    <strong>Read-only fields (from OLT):</strong>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div>MAC Address: <span className="font-mono">{onu.mac_address || 'N/A'}</span></div>
+                      <div>PON Port: <span className="font-mono">{onu.pon_port}</span></div>
+                      <div>ONU Index: <span className="font-mono">{onu.onu_index}</span></div>
+                      <div>RX Power: <span className="font-mono">{onu.rx_power !== null ? `${onu.rx_power} dBm` : 'N/A'}</span></div>
+                      <div>TX Power: <span className="font-mono">{onu.tx_power !== null ? `${onu.tx_power} dBm` : 'N/A'}</span></div>
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    onClick={handleSaveChanges} 
+                    disabled={saving}
+                    className="w-full"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
                 </div>
               </CardContent>
             </Card>

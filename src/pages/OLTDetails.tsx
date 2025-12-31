@@ -49,7 +49,7 @@ export default function OLTDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { olts, loading: oltsLoading } = useOLTs();
-  const { onus, loading: onusLoading } = useONUs();
+  const { onus, loading: onusLoading, refetch: refetchONUs } = useONUs();
   const [powerHistory, setPowerHistory] = useState<any[]>([]);
   const [polling, setPolling] = useState(false);
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
@@ -619,6 +619,7 @@ export default function OLTDetails() {
           onus={oltONUs} 
           title={`ONUs on ${olt.name}`}
           showFilters={true}
+          onRefresh={refetchONUs}
         />
       </div>
     </DashboardLayout>
