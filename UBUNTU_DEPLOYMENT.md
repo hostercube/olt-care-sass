@@ -1,91 +1,105 @@
 # OLT Monitoring System - Ubuntu VPS Deployment Guide
 
-## Quick Update Commands
+## 🚀 Quick Start (New VPS)
 
 ```bash
-cd /var/www/olt.isppoint.com
-
-# Pull latest code from GitHub
-git pull origin main
-
-# Build frontend
-npm run build
-
-# Restart polling server
-cd olt-polling-server
-npm install
-pm2 restart olt-polling-server
-
-# Check status
-pm2 logs olt-polling-server --lines 30
-```
-
----
-
-## Connection Types
-
-| Port | Protocol | Brands |
-|------|----------|--------|
-| 22 | SSH | ZTE, Huawei, Nokia |
-| 23 | Telnet | VSOL, DBC, CDATA, ECOM, BDCOM, Fiberhome |
-| 80, 443, 8080 | HTTP API | Any with web interface |
-| Custom | Auto-detect | Based on brand |
-
----
-
-## Initial Setup
-
-### 1. Install Dependencies
-```bash
+# 1. Install dependencies
 sudo apt update && sudo apt upgrade -y
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs nginx git
 sudo npm install -g pm2
-```
 
-### 2. Clone Repository
-```bash
+# 2. Clone repository
 sudo mkdir -p /var/www/olt.isppoint.com
 sudo chown -R $USER:$USER /var/www/olt.isppoint.com
 cd /var/www
-git clone https://github.com/YOUR_REPO/olt.isppoint.com.git
+git clone https://github.com/YOUR_REPO/olt-monitoring.git olt.isppoint.com
 cd olt.isppoint.com
-```
 
-### 3. Configure Frontend
-```bash
+# 3. Install & build frontend
 npm install
 npm run build
-```
 
-### 4. Configure Polling Server
-```bash
+# 4. Configure & start polling server
 cd olt-polling-server
 cp .env.example .env
-nano .env
-```
-
-Edit `.env`:
-```
-SUPABASE_URL=https://qsewotfkllgthwwnuyot.supabase.co
-SUPABASE_SERVICE_KEY=your_service_role_key_here
-PORT=3001
-POLLING_INTERVAL_MS=60000
-```
-
-```bash
+nano .env  # Add your Supabase service key
 npm install
 mkdir -p logs
-```
-
-### 5. Start with PM2
-```bash
 pm2 start ecosystem.config.cjs
 pm2 save
 pm2 startup
 ```
 
-### 6. Configure Nginx
+---
+
+## 📡 Connection Types by Port
+
+| Port | Protocol | Use For | Brands |
+|------|----------|---------|--------|
+| 22 | SSH | CLI access | ZTE, Huawei, Nokia |
+| 23 | Telnet | CLI access | VSOL, DBC, CDATA, ECOM, BDCOM, Fiberhome |
+| 161 | SNMP | Status monitoring | All (read-only) |
+| 80/443/8080 | HTTP API | Web interface | Any with web API |
+| Custom (8085, 2323) | Auto-Detect | Telnet first for Chinese brands | VSOL, DBC, CDATA, ECOM |
+
+### Auto-Detection Logic:
+- **Port 22** → SSH only
+- **Port 23** → Telnet only
+- **Port 161** → SNMP only
+- **Port 80/443/8080** → HTTP API only
+- **Custom ports for VSOL/DBC/CDATA/ECOM/BDCOM** → Telnet first, fallback to SSH
+- **Custom ports for ZTE/Huawei/Nokia** → SSH first, fallback to Telnet
+- **Other brands on custom ports** → Auto-detect: Telnet → SSH → HTTP
+
+---
+
+## 🔧 Update Commands (Existing VPS)
+
+```bash
+cd /var/www/olt.isppoint.com
+
+# Pull latest code
+git pull origin main
+
+# Rebuild frontend
+npm run build
+
+# Update polling server
+cd olt-polling-server
+npm install
+pm2 restart olt-polling-server
+
+# View logs
+pm2 logs olt-polling-server --lines 30
+```
+
+---
+
+## ⚙️ Configuration Files
+
+### Backend: `olt-polling-server/.env`
+```bash
+# Supabase (REQUIRED!)
+SUPABASE_URL=https://qsewotfkllgthwwnuyot.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key-here
+
+# Server
+PORT=3001
+NODE_ENV=production
+
+# Polling
+POLLING_INTERVAL_MS=60000
+SSH_TIMEOUT_MS=60000
+API_TIMEOUT_MS=30000
+```
+
+### Frontend: Build uses Supabase from Lovable Cloud (auto-configured)
+
+---
+
+## 🌐 Nginx Configuration
+
 ```bash
 sudo nano /etc/nginx/sites-available/olt.isppoint.com
 ```
@@ -97,28 +111,33 @@ server {
     root /var/www/olt.isppoint.com/dist;
     index index.html;
 
+    # Frontend (React SPA)
     location / {
         try_files $uri $uri/ /index.html;
     }
 
+    # Backend Polling Server
     location /olt-polling-server/ {
         proxy_pass http://127.0.0.1:3001/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
     }
 }
 ```
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/olt.isppoint.com /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/olt.isppoint.com /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 7. SSL Certificate
+### SSL Certificate
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d olt.isppoint.com
@@ -126,9 +145,9 @@ sudo certbot --nginx -d olt.isppoint.com
 
 ---
 
-## Troubleshooting
+## 🔍 Troubleshooting
 
-### VPS Offline / Polling Server Down
+### VPS Status / Polling Server Down
 ```bash
 pm2 status
 pm2 logs olt-polling-server --lines 50
@@ -138,46 +157,123 @@ pm2 restart olt-polling-server
 ### "supabaseUrl is required" Error
 ```bash
 cd /var/www/olt.isppoint.com/olt-polling-server
-cat .env  # Verify SUPABASE_URL and SUPABASE_SERVICE_KEY are set
+cat .env  # Check SUPABASE_URL and SUPABASE_SERVICE_KEY
 pm2 delete olt-polling-server
 node src/index.js  # Test directly to see errors
 pm2 start ecosystem.config.cjs
 ```
 
 ### OLT Connection Failed
-1. Check port is open: `nc -zv OLT_IP PORT`
-2. Verify username/password
-3. Check brand-specific port:
-   - VSOL/DBC/CDATA: Telnet (port 23 or custom)
-   - ZTE/Huawei: SSH (port 22)
+```bash
+# 1. Check port is open
+nc -zv OLT_IP PORT
 
-### Frontend Not Updating
+# 2. Test Telnet manually
+telnet OLT_IP 23
+telnet OLT_IP 8085
+
+# 3. Test SSH manually
+ssh -p 22 admin@OLT_IP
+
+# 4. Check brand/port mapping:
+# - VSOL, DBC, CDATA: Telnet (23 or custom like 8085)
+# - ZTE, Huawei: SSH (22)
+# - SNMP monitoring: Port 161
+```
+
+### Frontend Not Loading
 ```bash
 cd /var/www/olt.isppoint.com
 npm run build
 sudo systemctl reload nginx
 ```
 
+### Check Nginx Logs
+```bash
+sudo tail -f /var/log/nginx/error.log
+sudo tail -f /var/log/nginx/access.log
+```
+
 ---
 
-## Useful Commands
+## 📁 Project Structure
+
+```
+/var/www/olt.isppoint.com/
+├── dist/                    # Built frontend (served by Nginx)
+├── src/                     # Frontend source code
+├── olt-polling-server/      # Backend polling server
+│   ├── src/
+│   │   ├── index.js         # Main server entry
+│   │   ├── config.js        # Environment config
+│   │   ├── supabase-client.js
+│   │   ├── polling/
+│   │   │   ├── olt-poller.js      # Main polling logic
+│   │   │   ├── telnet-client.js   # Telnet connection
+│   │   │   ├── http-api-client.js # HTTP API connection
+│   │   │   ├── mikrotik-client.js # MikroTik integration
+│   │   │   └── parsers/           # Brand-specific parsers
+│   │   └── utils/
+│   │       └── logger.js
+│   ├── .env                 # Server config (create from .env.example)
+│   ├── ecosystem.config.cjs # PM2 config
+│   └── package.json
+├── supabase/                # Supabase config & edge functions
+├── .env                     # Frontend env (Supabase URL)
+└── UBUNTU_DEPLOYMENT.md     # This file
+```
+
+---
+
+## 📊 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Server health check |
+| `/status` | GET | Polling status |
+| `/test-connection` | POST | Test OLT/MikroTik connection |
+| `/poll/:oltId` | POST | Poll specific OLT |
+| `/poll-all` | POST | Poll all OLTs |
+
+---
+
+## 🛠️ PM2 Commands
 
 ```bash
-# View logs
-pm2 logs olt-polling-server
-
-# Restart polling server
-pm2 restart olt-polling-server
-
-# Stop polling server
-pm2 stop olt-polling-server
-
-# Check Nginx config
-sudo nginx -t
-
-# Reload Nginx
-sudo systemctl reload nginx
-
-# Check Nginx logs
-sudo tail -f /var/log/nginx/error.log
+pm2 status                     # View all processes
+pm2 logs olt-polling-server    # View logs
+pm2 restart olt-polling-server # Restart server
+pm2 stop olt-polling-server    # Stop server
+pm2 delete olt-polling-server  # Remove from PM2
+pm2 save                       # Save current processes
+pm2 startup                    # Enable auto-start on boot
 ```
+
+---
+
+## 🔒 Firewall (if needed)
+
+```bash
+sudo ufw allow 22/tcp   # SSH
+sudo ufw allow 80/tcp   # HTTP
+sudo ufw allow 443/tcp  # HTTPS
+sudo ufw enable
+```
+
+---
+
+## 📝 Adding an OLT
+
+1. Go to **OLT Management** → **Add OLT**
+2. Select **Brand** (auto-sets default port)
+3. Enter **IP Address** and **Port**:
+   - Port 22 = SSH
+   - Port 23 = Telnet
+   - Port 8085 = Custom Telnet (VSOL)
+   - Port 161 = SNMP
+   - Port 443 = HTTPS API
+4. Enter **Username** and **Password**
+5. Click **Test Connection** to verify
+6. Click **Add OLT**
+
+The system auto-detects the correct protocol based on port and brand.

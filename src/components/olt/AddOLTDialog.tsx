@@ -69,13 +69,13 @@ const brandConnectionInfo: Record<string, { defaultPort: number; protocol: strin
   ZTE: { defaultPort: 22, protocol: 'SSH', hint: 'SSH পোর্ট 22' },
   Huawei: { defaultPort: 22, protocol: 'SSH', hint: 'SSH পোর্ট 22' },
   Nokia: { defaultPort: 22, protocol: 'SSH', hint: 'SSH পোর্ট 22' },
-  VSOL: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
-  DBC: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
-  CDATA: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
-  ECOM: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
-  BDCOM: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23 বা custom' },
+  VSOL: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom (8085)' },
+  DBC: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom' },
+  CDATA: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom' },
+  ECOM: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom' },
+  BDCOM: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet 23 বা custom' },
   Fiberhome: { defaultPort: 23, protocol: 'Telnet', hint: 'Telnet পোর্ট 23' },
-  Other: { defaultPort: 22, protocol: 'SSH/Telnet', hint: 'SSH 22, Telnet 23, API 443' },
+  Other: { defaultPort: 23, protocol: 'Auto', hint: 'SSH 22, Telnet 23, SNMP 161, API 443' },
 };
 
 export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
@@ -108,8 +108,9 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
   const getConnectionType = (port: number) => {
     if (port === 22) return 'SSH';
     if (port === 23) return 'Telnet';
+    if (port === 161) return 'SNMP';
     if ([80, 443, 8080, 8041].includes(port)) return 'HTTP API';
-    return 'Auto (Telnet/SSH)';
+    return 'Auto-Detect (Telnet/SSH/HTTP)';
   };
 
   // Update port when brand changes

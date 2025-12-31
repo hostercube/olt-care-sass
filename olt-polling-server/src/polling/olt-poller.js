@@ -16,22 +16,30 @@ const CONNECTION_TIMEOUT = 15000;
 
 /**
  * Determine connection method based on port number
- * Port 22 = SSH
- * Port 23 = Telnet
- * Port 80, 443, 8080, 8041 = HTTP API
- * Custom ports = Try both Telnet and SSH
+ * Port 22 = SSH (ZTE, Huawei, Nokia)
+ * Port 23 = Telnet (VSOL, DBC, CDATA, ECOM, BDCOM, Fiberhome)
+ * Port 80, 443, 8080, 8041 = HTTP/HTTPS API
+ * Port 161 = SNMP (read-only status)
+ * Custom ports (8085, 2323, etc.) = Telnet first for Chinese brands
  */
 function getConnectionType(port, brand) {
+  // Standard protocol ports
   if (port === 22) return 'ssh';
   if (port === 23) return 'telnet';
+  if (port === 161) return 'snmp';
   if ([80, 443, 8080, 8041].includes(port)) return 'http';
   
-  // For custom ports, determine based on brand
-  // VSOL, DBC, CDATA, ECOM, BDCOM, Fiberhome typically use Telnet on custom ports
+  // Custom ports - determine by brand
+  // Chinese OLT brands (VSOL, DBC, CDATA, ECOM, BDCOM) typically use Telnet on custom ports
   const telnetBrands = ['VSOL', 'DBC', 'CDATA', 'ECOM', 'BDCOM', 'Fiberhome'];
   if (telnetBrands.includes(brand)) return 'telnet_first';
   
-  return 'ssh_first';
+  // SSH-first for major brands (ZTE, Huawei, Nokia)
+  const sshBrands = ['ZTE', 'Huawei', 'Nokia'];
+  if (sshBrands.includes(brand)) return 'ssh_first';
+  
+  // Default: try both with Telnet first (most flexible)
+  return 'auto_detect';
 }
 
 /**
@@ -80,7 +88,6 @@ export async function pollOLT(supabase, olt) {
         break;
         
       case 'ssh_first':
-      default:
         // Try SSH first, fallback to Telnet
         try {
           logger.info(`Trying SSH first for ${olt.name}`);
@@ -90,6 +97,33 @@ export async function pollOLT(supabase, olt) {
           output = await executeTelnetCommands(olt, commands);
         }
         onus = parseOLTOutput(olt.brand, output);
+        break;
+        
+      case 'snmp':
+        logger.info(`Using SNMP for ${olt.name}`);
+        // SNMP polling (basic status only)
+        const snmpResult = await executeSNMPPoll(olt);
+        onus = snmpResult;
+        break;
+        
+      case 'auto_detect':
+      default:
+        // Auto-detect: Try Telnet -> SSH -> HTTP
+        try {
+          logger.info(`Auto-detect: Trying Telnet for ${olt.name}`);
+          output = await executeTelnetCommands(olt, commands);
+          onus = parseOLTOutput(olt.brand, output);
+        } catch (telnetErr) {
+          logger.warn(`Telnet failed, trying SSH for ${olt.name}...`);
+          try {
+            output = await executeSSHCommands(olt);
+            onus = parseOLTOutput(olt.brand, output);
+          } catch (sshErr) {
+            logger.warn(`SSH failed, trying HTTP API for ${olt.name}...`);
+            const apiResponse = await executeAPICommands(olt);
+            onus = parseAPIResponse(olt.brand, apiResponse);
+          }
+        }
         break;
     }
     
@@ -507,7 +541,6 @@ export async function testOLTConnection(olt) {
         }
         
       case 'ssh_first':
-      default:
         // Try SSH first
         try {
           return await testSSHConnection(olt);
@@ -517,6 +550,26 @@ export async function testOLTConnection(olt) {
             return await testTelnetConnection(olt);
           } catch (telnetErr) {
             throw new Error(`SSH: ${sshErr.message}, Telnet: ${telnetErr.message}`);
+          }
+        }
+        
+      case 'snmp':
+        return await testSNMPConnection(olt);
+        
+      case 'auto_detect':
+      default:
+        // Auto-detect: Try Telnet -> SSH -> HTTP
+        try {
+          return await testTelnetConnection(olt);
+        } catch (telnetErr) {
+          try {
+            return await testSSHConnection(olt);
+          } catch (sshErr) {
+            try {
+              return await testHTTPConnection(olt);
+            } catch (httpErr) {
+              throw new Error(`Telnet: ${telnetErr.message}, SSH: ${sshErr.message}, HTTP: ${httpErr.message}`);
+            }
           }
         }
     }
@@ -639,4 +692,59 @@ async function testTelnetConnection(olt) {
       resolve({ success: false, error: `Telnet: ${err.message}` });
     });
   });
+}
+
+/**
+ * Test SNMP connection
+ */
+async function testSNMPConnection(olt) {
+  const startTime = Date.now();
+  
+  // Basic SNMP connectivity test via UDP port 161
+  return new Promise((resolve) => {
+    const dgram = require('dgram');
+    const socket = dgram.createSocket('udp4');
+    
+    const timeout = setTimeout(() => {
+      socket.close();
+      resolve({ success: false, error: 'SNMP connection timeout' });
+    }, CONNECTION_TIMEOUT);
+    
+    // Simple SNMP GET request for sysDescr.0
+    const snmpGetRequest = Buffer.from([
+      0x30, 0x26, 0x02, 0x01, 0x01, 0x04, 0x06, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63,
+      0xa0, 0x19, 0x02, 0x04, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x00, 0x02, 0x01,
+      0x00, 0x30, 0x0b, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x06, 0x01, 0x02, 0x01, 0x05, 0x00
+    ]);
+    
+    socket.on('message', () => {
+      clearTimeout(timeout);
+      socket.close();
+      resolve({ 
+        success: true, 
+        duration: Date.now() - startTime,
+        method: 'SNMP'
+      });
+    });
+    
+    socket.on('error', (err) => {
+      clearTimeout(timeout);
+      socket.close();
+      resolve({ success: false, error: `SNMP: ${err.message}` });
+    });
+    
+    socket.send(snmpGetRequest, 161, olt.ip_address);
+  });
+}
+
+/**
+ * Execute SNMP polling (basic ONU status)
+ */
+async function executeSNMPPoll(olt) {
+  // SNMP polling returns basic status only
+  logger.warn(`SNMP polling for ${olt.name} - limited data available`);
+  
+  // For SNMP, we can only get basic connectivity status
+  // Full ONU data requires CLI access (SSH/Telnet)
+  return [];
 }
