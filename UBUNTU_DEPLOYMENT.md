@@ -1,5 +1,15 @@
 # OLT Monitoring System - Ubuntu VPS Deployment Guide
 
+## ⚠️ IMPORTANT: Before You Start
+
+### 1. Run Supabase Setup SQL
+Before deploying, run the `supabase-setup.sql` file in your Supabase SQL Editor:
+- Go to: https://supabase.com/dashboard/project/srofhdgdraihxgpmpdye/sql
+- Copy the entire content of `supabase-setup.sql` and run it
+- This creates all required tables with MikroTik integration columns
+
+---
+
 ## 🚀 Quick Start (New VPS)
 
 ```bash
