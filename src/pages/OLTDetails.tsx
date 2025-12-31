@@ -371,10 +371,14 @@ export default function OLTDetails() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-5">
                 <div className="p-3 rounded-lg bg-muted/30">
                   <p className="text-sm text-muted-foreground">IP Address</p>
-                  <p className="font-mono font-medium">{olt.mikrotik_ip}:{olt.mikrotik_port || 8728}</p>
+                  <p className="font-mono font-medium">{olt.mikrotik_ip}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/30">
+                  <p className="text-sm text-muted-foreground">API Port</p>
+                  <p className="font-mono font-medium">{olt.mikrotik_port || 8728}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/30">
                   <p className="text-sm text-muted-foreground">Username</p>
@@ -384,9 +388,15 @@ export default function OLTDetails() {
                   <p className="text-sm text-muted-foreground">Status</p>
                   {mikrotikTestResult ? (
                     mikrotikTestResult.success ? (
-                      <Badge variant="success">Connected</Badge>
+                      <Badge variant="success" className="flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Connected
+                      </Badge>
                     ) : (
-                      <Badge variant="destructive">Failed</Badge>
+                      <Badge variant="destructive" className="flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Failed
+                      </Badge>
                     )
                   ) : (
                     <Badge variant="outline">Not Tested</Badge>
@@ -395,7 +405,7 @@ export default function OLTDetails() {
                 <div className="p-3 rounded-lg bg-muted/30">
                   <p className="text-sm text-muted-foreground">Method</p>
                   <p className="font-mono font-medium text-sm">
-                    {mikrotikTestResult?.connection?.method || 'API Port 8728'}
+                    {mikrotikTestResult?.connection?.method || `API Port ${olt.mikrotik_port || 8728}`}
                   </p>
                 </div>
               </div>
