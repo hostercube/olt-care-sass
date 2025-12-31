@@ -1,9 +1,10 @@
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ONUTable } from '@/components/dashboard/ONUTable';
 import { PowerHistoryChart } from '@/components/onu/PowerHistoryChart';
+import { ONUUptimeStats } from '@/components/onu/ONUUptimeStats';
 import { useONUs, useOLTs } from '@/hooks/useOLTData';
 import { StatsCard } from '@/components/dashboard/StatsCard';
-import { Router, Wifi, WifiOff, Zap, Loader2 } from 'lucide-react';
+import { Router, Wifi, WifiOff, Zap, Loader2, Clock, BarChart3 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function ONUDevices() {
@@ -71,11 +72,21 @@ export default function ONUDevices() {
           />
         </div>
 
-        {/* Tabs for Devices and Power History */}
+        {/* Tabs for Devices, Power History, and Uptime Stats */}
         <Tabs defaultValue="devices" className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2 bg-muted">
-            <TabsTrigger value="devices">Device List</TabsTrigger>
-            <TabsTrigger value="power">Power History</TabsTrigger>
+          <TabsList className="grid w-full max-w-lg grid-cols-3 bg-muted">
+            <TabsTrigger value="devices" className="gap-2">
+              <Router className="h-4 w-4" />
+              Devices
+            </TabsTrigger>
+            <TabsTrigger value="power" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Power History
+            </TabsTrigger>
+            <TabsTrigger value="uptime" className="gap-2">
+              <Clock className="h-4 w-4" />
+              Uptime Stats
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="devices" className="mt-4">
@@ -84,6 +95,10 @@ export default function ONUDevices() {
           
           <TabsContent value="power" className="mt-4">
             <PowerHistoryChart />
+          </TabsContent>
+          
+          <TabsContent value="uptime" className="mt-4">
+            <ONUUptimeStats />
           </TabsContent>
         </Tabs>
       </div>

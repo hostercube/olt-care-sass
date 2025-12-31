@@ -4,9 +4,11 @@ import { OLTOverviewCard } from '@/components/dashboard/OLTOverviewCard';
 import { AlertsWidget } from '@/components/dashboard/AlertsWidget';
 import { ONUTable } from '@/components/dashboard/ONUTable';
 import { ONUStatsWidget } from '@/components/dashboard/ONUStatsWidget';
+import { LiveStatusWidget } from '@/components/dashboard/LiveStatusWidget';
 import { useOLTs, useONUs, useAlerts, useDashboardStats } from '@/hooks/useOLTData';
-import { Server, Router, AlertTriangle, Zap, Wifi, Loader2 } from 'lucide-react';
+import { Server, Router, AlertTriangle, Zap, Wifi, Loader2, Activity } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function Dashboard() {
   const stats = useDashboardStats();
@@ -80,49 +82,69 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* OLT Overview */}
-        <div>
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Wifi className="h-5 w-5 text-primary" />
-            OLT Status Overview
-          </h2>
-          {olts.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {olts.map((olt) => (
-                <OLTOverviewCard key={olt.id} olt={olt} />
-              ))}
+        {/* Tabs for Overview and Live Status */}
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2 bg-muted">
+            <TabsTrigger value="overview" className="gap-2">
+              <Server className="h-4 w-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="live" className="gap-2">
+              <Activity className="h-4 w-4" />
+              Live Status
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="overview" className="mt-4 space-y-6">
+            {/* OLT Overview */}
+            <div>
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Wifi className="h-5 w-5 text-primary" />
+                OLT Status Overview
+              </h2>
+              {olts.length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  {olts.map((olt) => (
+                    <OLTOverviewCard key={olt.id} olt={olt} />
+                  ))}
+                </div>
+              ) : (
+                <Card variant="glass">
+                  <CardContent className="p-8 text-center">
+                    <Server className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold">No OLTs configured</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Add your first OLT to start monitoring your network.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-          ) : (
-            <Card variant="glass">
-              <CardContent className="p-8 text-center">
-                <Server className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold">No OLTs configured</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Add your first OLT to start monitoring your network.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
 
-        {/* Alerts, ONU Stats and Activity */}
-        <div className="grid gap-6 lg:grid-cols-4">
-          <div className="lg:col-span-2">
-            <ONUTable onus={onusWithOltName.slice(0, 10)} title="Recent ONU Activity" showFilters={false} />
-          </div>
-          <div>
-            <ONUStatsWidget
-              totalONUs={stats.totalONUs}
-              onlineONUs={stats.onlineONUs}
-              offlineONUs={stats.offlineONUs}
-              lowSignalONUs={lowSignalONUs}
-              avgRxPower={avgRxPower}
-            />
-          </div>
-          <div>
-            <AlertsWidget alerts={alerts} maxItems={4} />
-          </div>
-        </div>
+            {/* Alerts, ONU Stats and Activity */}
+            <div className="grid gap-6 lg:grid-cols-4">
+              <div className="lg:col-span-2">
+                <ONUTable onus={onusWithOltName.slice(0, 10)} title="Recent ONU Activity" showFilters={false} />
+              </div>
+              <div>
+                <ONUStatsWidget
+                  totalONUs={stats.totalONUs}
+                  onlineONUs={stats.onlineONUs}
+                  offlineONUs={stats.offlineONUs}
+                  lowSignalONUs={lowSignalONUs}
+                  avgRxPower={avgRxPower}
+                />
+              </div>
+              <div>
+                <AlertsWidget alerts={alerts} maxItems={4} />
+              </div>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="live" className="mt-4">
+            <LiveStatusWidget />
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );
