@@ -28,6 +28,10 @@ export function parseVSOLOutput(output) {
   
   logger.info(`VSOL parser processing ${lines.length} lines of output`);
   
+  // Detect GPON vs EPON mode
+  let isGpon = false;
+  let detectedCommands = [];
+  
   // First pass: collect all data
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -38,22 +42,43 @@ export function parseVSOLOutput(output) {
       continue;
     }
     
+    // Detect mode from prompts
+    if (trimmedLine.toLowerCase().includes('gpon-olt') || trimmedLine.toLowerCase().includes('gpon_olt')) {
+      isGpon = true;
+    }
+    
+    // Capture available commands from help output
+    if (trimmedLine.startsWith('show ') && !trimmedLine.includes('%') && !trimmedLine.includes('Unknown')) {
+      detectedCommands.push(trimmedLine);
+    }
+    
     // Skip command echoes and prompts
     if (trimmedLine.startsWith('epon-olt#') || 
         trimmedLine.startsWith('epon-olt>') ||
         trimmedLine.startsWith('epon-olt(config)#') ||
+        trimmedLine.startsWith('gpon-olt#') ||
+        trimmedLine.startsWith('gpon-olt>') ||
+        trimmedLine.startsWith('gpon-olt(config)#') ||
         trimmedLine.includes('% Unknown command') ||
         trimmedLine.includes('% Incomplete command') ||
         trimmedLine.startsWith('Building configuration')) {
       continue;
     }
     
-    // Pattern 1: Interface EPON context line
-    // "interface epon 0/1" or "interface epon 0/2"
-    const interfaceMatch = trimmedLine.match(/^interface\s+epon\s+(\d+\/\d+)/i);
+    // Pattern 1: Interface EPON/GPON context line
+    // "interface epon 0/1" or "interface gpon 0/1"
+    const interfaceMatch = trimmedLine.match(/^interface\s+(?:epon|gpon)\s+(\d+\/\d+)/i);
     if (interfaceMatch) {
       currentPonPort = interfaceMatch[1];
       logger.debug(`Detected PON port context: ${currentPonPort}`);
+      continue;
+    }
+    
+    // Pattern 1b: Interface in config-pon context
+    // "config-pon-0/1" prompt or "config-gpon-0/1"
+    const ponContextMatch = trimmedLine.match(/config-(?:pon|gpon|epon)-(\d+\/\d+)/i);
+    if (ponContextMatch) {
+      currentPonPort = ponContextMatch[1];
       continue;
     }
     
@@ -318,8 +343,11 @@ export function parseVSOLOutput(output) {
     onus.push(onu);
   }
   
-  logger.info(`VSOL parser found ${onus.length} ONUs from ${lines.length} lines`);
+  logger.info(`VSOL parser found ${onus.length} ONUs from ${lines.length} lines (mode: ${isGpon ? 'GPON' : 'EPON'})`);
   logger.info(`VSOL parser: ${inactiveONUs.size} ONUs marked as offline, ${opmDiagData.size} with optical data`);
+  if (detectedCommands.length > 0) {
+    logger.info(`VSOL detected available commands: ${detectedCommands.slice(0, 5).join(', ')}`);
+  }
   
   if (onus.length > 0 && onus.length <= 5) {
     logger.debug(`Parsed ONUs: ${JSON.stringify(onus)}`);
