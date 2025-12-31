@@ -15,6 +15,7 @@ import Alerts from "./pages/Alerts";
 import Monitoring from "./pages/Monitoring";
 import Settings from "./pages/Settings";
 import UserManagement from "./pages/UserManagement";
+import DebugLogs from "./pages/DebugLogs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -67,6 +68,11 @@ const App = () => (
               <Route path="/users" element={
                 <ProtectedRoute>
                   <UserManagement />
+                </ProtectedRoute>
+              } />
+              <Route path="/debug" element={
+                <ProtectedRoute>
+                  <DebugLogs />
                 </ProtectedRoute>
               } />
               <Route path="*" element={<NotFound />} />

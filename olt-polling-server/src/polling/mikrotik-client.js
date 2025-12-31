@@ -476,65 +476,122 @@ function decodeLength(buffer, offset) {
  * 
  * IMPORTANT: PPPoE caller-id in MikroTik contains the ONU MAC address
  * This is the PRIMARY way to link ONU devices to their PPPoE sessions
+ * 
+ * FALLBACK: If no MAC match, try ONU serial or index based matching
  */
 export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, pppSecretsData = []) {
-  // Try to match by MAC address
+  // Try to match by MAC address first
   const macAddress = onu.mac_address?.toUpperCase();
-  
-  if (!macAddress) return onu;
+  const serialNumber = onu.serial_number?.toUpperCase();
+  const onuIndex = onu.onu_index;
+  const ponPort = onu.pon_port;
   
   // Normalize MAC for comparison (remove colons/dashes, uppercase)
-  const macNormalized = macAddress.replace(/[:-]/g, '').toUpperCase();
+  const macNormalized = macAddress?.replace(/[:-]/g, '').toUpperCase();
   
   // Log for debugging
-  logger.debug(`Matching ONU MAC ${macAddress} (normalized: ${macNormalized}) with ${pppoeData.length} PPPoE sessions`);
+  logger.debug(`Matching ONU: MAC=${macAddress || 'N/A'}, Serial=${serialNumber || 'N/A'}, Index=${onuIndex}, PON=${ponPort}`);
+  logger.debug(`Available PPPoE sessions: ${pppoeData.length}, Secrets: ${pppSecretsData.length}`);
   
-  // Find PPPoE session by caller-id (which contains MAC) - this is the PRIMARY match
   let pppoeSession = null;
+  let pppSecret = null;
+  let matchMethod = null;
   
-  // Method 1: Direct MAC match on caller-id field
-  for (const session of pppoeData) {
-    const callerId = session.mac_address; // Already normalized in fetchMikroTikPPPoE
-    const callerIdNorm = callerId?.replace(/[:-]/g, '').toUpperCase();
+  // ============= METHOD 1: Direct MAC match on caller-id field =============
+  if (macNormalized && macNormalized.length >= 6) {
+    for (const session of pppoeData) {
+      const callerId = session.mac_address; // Already normalized in fetchMikroTikPPPoE
+      const callerIdNorm = callerId?.replace(/[:-]/g, '').toUpperCase();
+      
+      if (callerIdNorm && callerIdNorm === macNormalized) {
+        pppoeSession = session;
+        matchMethod = 'exact-mac';
+        logger.debug(`PPPoE match (exact MAC): ${session.pppoe_username} for MAC ${macAddress}`);
+        break;
+      }
+    }
     
-    if (callerIdNorm && callerIdNorm === macNormalized) {
-      pppoeSession = session;
-      logger.debug(`PPPoE match found (exact): ${session.pppoe_username} for MAC ${macAddress}`);
-      break;
+    // Method 1b: Partial MAC match (for cases where caller-id has extra chars)
+    if (!pppoeSession) {
+      for (const session of pppoeData) {
+        const callerId = session.mac_address;
+        const callerIdNorm = callerId?.replace(/[:-]/g, '').toUpperCase();
+        
+        if (callerIdNorm && (
+          macNormalized.includes(callerIdNorm) || 
+          callerIdNorm.includes(macNormalized) ||
+          // Check last 6 chars (last 3 bytes of MAC) which are usually unique
+          (macNormalized.length >= 6 && callerIdNorm.length >= 6 && 
+           macNormalized.slice(-6) === callerIdNorm.slice(-6))
+        )) {
+          pppoeSession = session;
+          matchMethod = 'partial-mac';
+          logger.debug(`PPPoE match (partial MAC): ${session.pppoe_username} for MAC ${macAddress}`);
+          break;
+        }
+      }
     }
   }
   
-  // Method 2: Partial MAC match (for cases where caller-id has extra chars)
-  if (!pppoeSession) {
-    for (const session of pppoeData) {
-      const callerId = session.mac_address;
-      const callerIdNorm = callerId?.replace(/[:-]/g, '').toUpperCase();
+  // ============= METHOD 2: Serial number in PPP secrets comment =============
+  if (!pppoeSession && serialNumber) {
+    // Check if serial appears in PPP secrets comment or username
+    for (const secret of pppSecretsData) {
+      const comment = secret.comment?.toUpperCase() || '';
+      const username = secret.pppoe_username?.toUpperCase() || '';
       
-      if (callerIdNorm && (
-        macNormalized.includes(callerIdNorm) || 
-        callerIdNorm.includes(macNormalized) ||
-        // Check last 6 chars (last 3 bytes of MAC) which are usually unique
-        (macNormalized.length >= 6 && callerIdNorm.length >= 6 && 
-         macNormalized.slice(-6) === callerIdNorm.slice(-6))
-      )) {
-        pppoeSession = session;
-        logger.debug(`PPPoE match found (partial): ${session.pppoe_username} for MAC ${macAddress}`);
+      if (comment.includes(serialNumber) || serialNumber.includes(username.slice(-8))) {
+        pppSecret = secret;
+        matchMethod = 'serial-in-comment';
+        logger.debug(`PPP Secret match (serial in comment): ${secret.pppoe_username} for serial ${serialNumber}`);
+        // Find active session for this secret
+        pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
         break;
       }
     }
   }
   
-  // Method 3: Check PPP secrets by caller-id
-  let pppSecret = null;
-  for (const secret of pppSecretsData) {
-    const callerId = secret.caller_id;
-    const callerIdNorm = callerId?.replace(/[:-]/g, '').toUpperCase();
+  // ============= METHOD 3: ONU index/PON port pattern in username =============
+  if (!pppoeSession && ponPort && onuIndex !== undefined) {
+    // Many ISPs use patterns like: user_pon1_onu5, pon1-5, 1-5, etc.
+    const patterns = [
+      `${ponPort}-${onuIndex}`,           // 1-5
+      `${ponPort}_${onuIndex}`,           // 1_5
+      `pon${ponPort}-${onuIndex}`,        // pon1-5
+      `pon${ponPort}_${onuIndex}`,        // pon1_5
+      `p${ponPort}o${onuIndex}`,          // p1o5
+    ];
     
-    if (callerIdNorm && (callerIdNorm === macNormalized || 
-        macNormalized.includes(callerIdNorm) || callerIdNorm.includes(macNormalized))) {
-      pppSecret = secret;
-      logger.debug(`PPP Secret match found: ${secret.pppoe_username} for MAC ${macAddress}`);
-      break;
+    for (const session of pppoeData) {
+      const username = session.pppoe_username?.toLowerCase() || '';
+      for (const pattern of patterns) {
+        if (username.includes(pattern.toLowerCase())) {
+          pppoeSession = session;
+          matchMethod = 'pon-onu-pattern';
+          logger.debug(`PPPoE match (PON/ONU pattern): ${session.pppoe_username} for PON ${ponPort} ONU ${onuIndex}`);
+          break;
+        }
+      }
+      if (pppoeSession) break;
+    }
+  }
+  
+  // ============= METHOD 4: Check PPP secrets by caller-id =============
+  if (!pppSecret) {
+    for (const secret of pppSecretsData) {
+      const callerId = secret.caller_id;
+      const callerIdNorm = callerId?.replace(/[:-]/g, '').toUpperCase();
+      
+      if (macNormalized && callerIdNorm && (
+        callerIdNorm === macNormalized || 
+        macNormalized.includes(callerIdNorm) || 
+        callerIdNorm.includes(macNormalized)
+      )) {
+        pppSecret = secret;
+        matchMethod = matchMethod || 'secret-caller-id';
+        logger.debug(`PPP Secret match (caller-id): ${secret.pppoe_username} for MAC ${macAddress}`);
+        break;
+      }
     }
   }
   
@@ -545,21 +602,25 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   
   // Find ARP entry
   let arpEntry = null;
-  for (const entry of arpData) {
-    const arpMac = entry.mac_address?.replace(/[:-]/g, '').toUpperCase();
-    if (arpMac && arpMac === macNormalized) {
-      arpEntry = entry;
-      break;
+  if (macNormalized) {
+    for (const entry of arpData) {
+      const arpMac = entry.mac_address?.replace(/[:-]/g, '').toUpperCase();
+      if (arpMac && arpMac === macNormalized) {
+        arpEntry = entry;
+        break;
+      }
     }
   }
   
   // Find DHCP lease
   let dhcpLease = null;
-  for (const lease of dhcpData) {
-    const leaseMac = lease.mac_address?.replace(/[:-]/g, '').toUpperCase();
-    if (leaseMac && leaseMac === macNormalized) {
-      dhcpLease = lease;
-      break;
+  if (macNormalized) {
+    for (const lease of dhcpData) {
+      const leaseMac = lease.mac_address?.replace(/[:-]/g, '').toUpperCase();
+      if (leaseMac && leaseMac === macNormalized) {
+        dhcpLease = lease;
+        break;
+      }
     }
   }
   
@@ -586,14 +647,14 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   
   // Log enrichment result
   if (enrichedPppoeUsername || routerName) {
-    logger.info(`MikroTik enriched ONU ${onu.mac_address}: PPPoE=${enrichedPppoeUsername || 'N/A'}, Router=${routerName || 'N/A'}`);
+    logger.info(`MikroTik enriched ONU ${onu.mac_address || onu.serial_number}: PPPoE=${enrichedPppoeUsername || 'N/A'}, Router=${routerName || 'N/A'}, Method=${matchMethod || 'none'}`);
   }
   
   return {
     ...onu,
     pppoe_username: enrichedPppoeUsername || onu.pppoe_username,
     router_name: routerName || onu.router_name,
-    mac_address: macAddress,
+    mac_address: macAddress || onu.mac_address,
     // Status can be inferred from PPPoE session (if active, ONU is online)
     status: pppoeSession ? 'online' : onu.status,
   };

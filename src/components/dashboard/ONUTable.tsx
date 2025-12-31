@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { StatusIndicator } from './StatusIndicator';
 import type { Tables } from '@/integrations/supabase/types';
 import { formatDistanceToNow, isAfter, subDays, subHours } from 'date-fns';
-import { Search, Filter, Download, MoreHorizontal, Signal, SignalLow, SignalZero, X, ChevronDown } from 'lucide-react';
+import { Search, Filter, Download, MoreHorizontal, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { ONUDetailsModal } from '@/components/onu/ONUDetailsModal';
+import { PowerBadge } from '@/components/onu/PowerBadge';
 
 type ONUWithOLTName = Tables<'onus'> & { oltName?: string };
 
@@ -43,20 +44,6 @@ interface ONUTableProps {
   title?: string;
   showFilters?: boolean;
   onRefresh?: () => void;
-}
-
-function getPowerIcon(power: number | null) {
-  if (power === null) return SignalZero;
-  if (power >= -20) return Signal;
-  if (power >= -25) return SignalLow;
-  return SignalZero;
-}
-
-function getPowerColor(power: number | null) {
-  if (power === null) return 'text-muted-foreground';
-  if (power >= -20) return 'text-success';
-  if (power >= -25) return 'text-warning';
-  return 'text-destructive';
 }
 
 type StatusFilter = 'all' | 'online' | 'offline' | 'warning';
@@ -361,9 +348,6 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   </TableRow>
                 ) : (
                   filteredONUs.map((onu) => {
-                    const PowerIcon = getPowerIcon(onu.rx_power);
-                    const powerColor = getPowerColor(onu.rx_power);
-                    
                     return (
                       <TableRow 
                         key={onu.id} 
@@ -379,17 +363,12 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                         <TableCell className="font-mono text-xs">{onu.pppoe_username || 'N/A'}</TableCell>
                         <TableCell className="font-mono text-xs">{onu.mac_address || 'N/A'}</TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-center gap-1">
-                            <PowerIcon className={cn('h-4 w-4', powerColor)} />
-                            <span className={cn('font-mono text-sm', powerColor)}>
-                              {onu.rx_power !== null ? `${onu.rx_power} dBm` : 'N/A'}
-                            </span>
+                          <div className="flex items-center justify-center">
+                            <PowerBadge power={onu.rx_power} type="rx" />
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
-                          <span className="font-mono text-sm text-muted-foreground">
-                            {onu.tx_power !== null ? `${onu.tx_power} dBm` : 'N/A'}
-                          </span>
+                          <PowerBadge power={onu.tx_power} type="tx" showIcon={false} />
                         </TableCell>
                         <TableCell className="text-center">
                           <StatusIndicator status={onu.status} size="sm" />
