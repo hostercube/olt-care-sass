@@ -37,46 +37,206 @@ export async function executeAPICommands(olt) {
 
 /**
  * VSOL OLT HTTP API
+ * VSOL uses various web interfaces depending on model
  */
 async function fetchVSOLAPI(olt) {
   const baseUrl = `http://${olt.ip_address}:${olt.port}`;
   
-  // Login first
-  const loginResponse = await apiRequest(`${baseUrl}/cgi-bin/login.cgi`, {
-    method: 'POST',
-    body: new URLSearchParams({
-      username: olt.username,
-      password: olt.password_encrypted,
-    }),
-    credentials: olt,
-  });
+  logger.info(`Attempting VSOL API connection to ${baseUrl}`);
   
-  // Get session cookie from login
-  const sessionCookie = loginResponse.headers?.get('set-cookie') || '';
+  // Try multiple authentication and API endpoints
+  const authEndpoints = [
+    { url: '/cgi-bin/login.cgi', method: 'POST', type: 'form' },
+    { url: '/login.cgi', method: 'POST', type: 'form' },
+    { url: '/api/login', method: 'POST', type: 'json' },
+    { url: '/goform/login', method: 'POST', type: 'form' },
+  ];
   
-  // Fetch ONU status
-  const onuStatusResponse = await apiRequest(`${baseUrl}/cgi-bin/onu_status.cgi`, {
-    method: 'GET',
-    headers: {
-      'Cookie': sessionCookie,
-    },
-  });
+  let sessionCookie = '';
+  let authToken = '';
+  let loginSuccess = false;
   
-  // Fetch optical info
-  const opticalResponse = await apiRequest(`${baseUrl}/cgi-bin/onu_optical.cgi`, {
-    method: 'GET',
-    headers: {
-      'Cookie': sessionCookie,
-    },
-  });
+  // Try each authentication method
+  for (const auth of authEndpoints) {
+    try {
+      let body;
+      let headers = {};
+      
+      if (auth.type === 'form') {
+        body = new URLSearchParams({
+          username: olt.username,
+          password: olt.password_encrypted,
+        }).toString();
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      } else {
+        body = JSON.stringify({
+          username: olt.username,
+          password: olt.password_encrypted,
+        });
+        headers['Content-Type'] = 'application/json';
+      }
+      
+      const loginResponse = await apiRequestWithCookies(`${baseUrl}${auth.url}`, {
+        method: auth.method,
+        headers,
+        body,
+      });
+      
+      if (loginResponse.cookies) {
+        sessionCookie = loginResponse.cookies;
+      }
+      if (loginResponse.data?.token) {
+        authToken = loginResponse.data.token;
+      }
+      
+      loginSuccess = true;
+      logger.info(`VSOL login successful via ${auth.url}`);
+      break;
+    } catch (err) {
+      logger.debug(`VSOL auth endpoint ${auth.url} failed: ${err.message}`);
+    }
+  }
+  
+  // If no auth worked, try with Basic Auth
+  if (!loginSuccess) {
+    logger.info('VSOL: Trying Basic Auth');
+    const basicAuth = Buffer.from(`${olt.username}:${olt.password_encrypted}`).toString('base64');
+    sessionCookie = '';
+    authToken = '';
+    
+    // Build common headers for Basic Auth
+    const basicHeaders = {
+      'Authorization': `Basic ${basicAuth}`,
+    };
+    
+    // Try to fetch ONU data with various endpoints
+    const dataEndpoints = [
+      '/cgi-bin/onu_status.cgi',
+      '/onu_status.cgi',
+      '/api/onu/status',
+      '/api/gpon/onu',
+      '/goform/getOnuList',
+      '/cgi-bin/gpon_onu.cgi',
+    ];
+    
+    for (const endpoint of dataEndpoints) {
+      try {
+        const response = await apiRequest(`${baseUrl}${endpoint}`, {
+          method: 'GET',
+          headers: basicHeaders,
+        });
+        
+        // Check if response is HTML (login page)
+        if (typeof response === 'string' && response.includes('<!DOCTYPE')) {
+          logger.debug(`Endpoint ${endpoint} returned HTML login page, skipping`);
+          continue;
+        }
+        
+        logger.info(`VSOL data fetch successful via ${endpoint}`);
+        return {
+          raw: JSON.stringify(response),
+          parsed: { onuStatus: response },
+        };
+      } catch (err) {
+        logger.debug(`VSOL data endpoint ${endpoint} failed: ${err.message}`);
+      }
+    }
+    
+    throw new Error('VSOL: All API endpoints failed. The OLT may require Telnet/SSH access instead.');
+  }
+  
+  // Build headers for authenticated requests
+  const authHeaders = {};
+  if (sessionCookie) {
+    authHeaders['Cookie'] = sessionCookie;
+  }
+  if (authToken) {
+    authHeaders['Authorization'] = `Bearer ${authToken}`;
+  }
+  
+  // Try to fetch ONU data
+  const dataEndpoints = [
+    '/cgi-bin/onu_status.cgi',
+    '/onu_status.cgi',
+    '/api/onu/status',
+    '/api/gpon/onu',
+    '/goform/getOnuList',
+  ];
+  
+  let onuData = null;
+  for (const endpoint of dataEndpoints) {
+    try {
+      const response = await apiRequest(`${baseUrl}${endpoint}`, {
+        method: 'GET',
+        headers: authHeaders,
+      });
+      
+      // Check if response is HTML (login page)
+      if (typeof response === 'string' && response.includes('<!DOCTYPE')) {
+        logger.debug(`Endpoint ${endpoint} returned HTML, skipping`);
+        continue;
+      }
+      
+      onuData = response;
+      logger.info(`VSOL ONU data fetch successful via ${endpoint}`);
+      break;
+    } catch (err) {
+      logger.debug(`VSOL endpoint ${endpoint} failed: ${err.message}`);
+    }
+  }
+  
+  if (!onuData) {
+    throw new Error('VSOL: Could not fetch ONU data from any endpoint');
+  }
   
   return {
-    raw: JSON.stringify({ status: onuStatusResponse, optical: opticalResponse }),
-    parsed: {
-      onuStatus: onuStatusResponse,
-      opticalInfo: opticalResponse,
-    },
+    raw: JSON.stringify(onuData),
+    parsed: { onuStatus: onuData },
   };
+}
+
+/**
+ * Make HTTP API request with cookie handling
+ */
+async function apiRequestWithCookies(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      redirect: 'manual',
+    });
+    
+    clearTimeout(timeout);
+    
+    const cookies = response.headers.get('set-cookie') || '';
+    
+    // Accept 200, 302 (redirect after login), or other success codes
+    if (response.status >= 400) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    let data;
+    
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+    
+    return { data, cookies };
+  } catch (error) {
+    clearTimeout(timeout);
+    
+    if (error.name === 'AbortError') {
+      throw new Error('API request timeout');
+    }
+    
+    throw error;
+  }
 }
 
 /**
