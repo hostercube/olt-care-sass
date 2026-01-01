@@ -27,37 +27,13 @@ export function DeleteOLTDialog({ oltId, oltName, open, onOpenChange, onDeleted 
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      // Get all ONU IDs for this OLT to delete power readings
-      const { data: onus } = await supabase
-        .from('onus')
-        .select('id')
-        .eq('olt_id', oltId);
-      
-      const onuIds = onus?.map(o => o.id) || [];
-      
-      // Delete power readings for all ONUs
-      if (onuIds.length > 0) {
-        await supabase
-          .from('power_readings')
-          .delete()
-          .in('onu_id', onuIds);
-      }
-
-      // Delete alerts associated with this OLT
+      // Delete alerts associated with this OLT (not cascaded automatically)
       await supabase
         .from('alerts')
         .delete()
         .eq('device_id', oltId);
 
-      // Delete all ONUs associated with this OLT
-      const { error: onuError } = await supabase
-        .from('onus')
-        .delete()
-        .eq('olt_id', oltId);
-
-      if (onuError) throw onuError;
-
-      // Then delete the OLT itself
+      // Delete the OLT - cascading deletes will handle ONUs, power_readings, status_history, debug_logs
       const { error: oltError } = await supabase
         .from('olts')
         .delete()

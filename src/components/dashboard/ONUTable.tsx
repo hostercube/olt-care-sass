@@ -479,11 +479,19 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <TableHead className="font-semibold">
                     <div className="flex items-center gap-1">
                       PPPoE
-                      {onus.length > 0 && (
-                        <Badge variant={onus.filter(o => o.pppoe_username).length === onus.length ? 'success' : 'warning'} className="text-[10px] px-1 py-0 h-4">
-                          {onus.filter(o => o.pppoe_username && o.pppoe_username.trim() !== '').length}/{onus.length}
-                        </Badge>
-                      )}
+                      {onus.length > 0 && (() => {
+                        const matched = onus.filter(o => o.pppoe_username && o.pppoe_username.trim() !== '').length;
+                        const notMatched = onus.length - matched;
+                        return (
+                          <Badge 
+                            variant={matched === onus.length ? 'success' : matched > 0 ? 'warning' : 'destructive'} 
+                            className="text-[10px] px-1 py-0 h-4"
+                            title={`${matched} matched, ${notMatched} not matched`}
+                          >
+                            {matched}/{onus.length}
+                          </Badge>
+                        );
+                      })()}
                     </div>
                   </TableHead>
                   <TableHead className="font-semibold">MAC Address</TableHead>
