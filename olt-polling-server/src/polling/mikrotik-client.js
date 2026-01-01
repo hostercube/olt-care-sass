@@ -1626,3 +1626,68 @@ export function clearMikroTikCache(ip, port) {
   deviceConnectionCache.delete(cacheKey);
   logger.info(`Cleared MikroTik connection cache for ${cacheKey}`);
 }
+
+/**
+ * Fetch system health metrics (CPU, RAM, uptime) from MikroTik
+ * Returns: { cpu: number, memory: number, uptime: string, freeMemory: number, totalMemory: number }
+ */
+export async function fetchMikroTikHealth(mikrotik) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    logger.debug('MikroTik not configured, skipping health fetch...');
+    return null;
+  }
+
+  try {
+    const resource = await callMikroTikAPI(mikrotik, '/system/resource/print');
+    
+    if (!resource || resource.length === 0) {
+      return null;
+    }
+    
+    const data = Array.isArray(resource) ? resource[0] : resource;
+    
+    // Parse memory values (they come as strings like "1073741824")
+    const freeMemory = parseInt(data['free-memory'] || data['free-hdd-space'] || 0);
+    const totalMemory = parseInt(data['total-memory'] || data['total-hdd-space'] || 1);
+    const memoryPercent = totalMemory > 0 ? Math.round(((totalMemory - freeMemory) / totalMemory) * 100) : 0;
+    
+    // CPU load
+    const cpuLoad = parseInt(data['cpu-load'] || 0);
+    
+    // Uptime (comes as string like "1w2d3h4m5s")
+    const uptime = data.uptime || 'unknown';
+    
+    // Parse uptime to seconds
+    let uptimeSeconds = 0;
+    const uptimeStr = uptime.toString();
+    const weekMatch = uptimeStr.match(/(\d+)w/);
+    const dayMatch = uptimeStr.match(/(\d+)d/);
+    const hourMatch = uptimeStr.match(/(\d+)h/);
+    const minMatch = uptimeStr.match(/(\d+)m/);
+    const secMatch = uptimeStr.match(/(\d+)s/);
+    
+    if (weekMatch) uptimeSeconds += parseInt(weekMatch[1]) * 7 * 24 * 3600;
+    if (dayMatch) uptimeSeconds += parseInt(dayMatch[1]) * 24 * 3600;
+    if (hourMatch) uptimeSeconds += parseInt(hourMatch[1]) * 3600;
+    if (minMatch) uptimeSeconds += parseInt(minMatch[1]) * 60;
+    if (secMatch) uptimeSeconds += parseInt(secMatch[1]);
+    
+    const result = {
+      cpu: cpuLoad,
+      memory: memoryPercent,
+      uptime: uptime,
+      uptimeSeconds: uptimeSeconds,
+      freeMemory: freeMemory,
+      totalMemory: totalMemory,
+      version: data.version,
+      boardName: data['board-name'],
+      platform: data.platform,
+    };
+    
+    logger.debug(`MikroTik health: CPU=${cpuLoad}%, Memory=${memoryPercent}%, Uptime=${uptime}`);
+    return result;
+  } catch (error) {
+    logger.error(`Failed to fetch MikroTik health from ${mikrotik.ip}:${mikrotik.port}:`, error.message);
+    return null;
+  }
+}

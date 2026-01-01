@@ -18,7 +18,7 @@ import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
 import { pollOLT, testOLTConnection, testAllProtocols } from './polling/olt-poller.js';
-import { testMikrotikConnection, fetchAllMikroTikData, enrichONUWithMikroTikData, bulkTagPPPSecrets, clearMikroTikCache } from './polling/mikrotik-client.js';
+import { testMikrotikConnection, fetchAllMikroTikData, enrichONUWithMikroTikData, bulkTagPPPSecrets, clearMikroTikCache, fetchMikroTikHealth } from './polling/mikrotik-client.js';
 import { rebootONU, deauthorizeONU, executeBulkOperation } from './onu-commands.js';
 import { logger } from './utils/logger.js';
 
@@ -42,6 +42,125 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     supabase: process.env.SUPABASE_URL ? 'configured' : 'missing'
   });
+});
+
+// ============= DEVICE HEALTH METRICS ENDPOINT =============
+// Fetches CPU, RAM, uptime from all configured MikroTik devices
+app.get('/api/device-health', async (req, res) => {
+  try {
+    // Fetch all OLTs with MikroTik configuration
+    const { data: olts, error } = await supabase
+      .from('olts')
+      .select('*');
+    
+    if (error) throw error;
+    
+    const devices = [];
+    const healthRecords = [];
+    
+    for (const olt of olts) {
+      // Add OLT entry (no health metrics available for OLTs directly)
+      devices.push({
+        id: olt.id,
+        name: olt.name,
+        type: 'olt',
+        status: olt.status,
+        lastPolled: olt.last_polled,
+        ip: olt.ip_address,
+      });
+      
+      // Fetch MikroTik health if configured
+      if (olt.mikrotik_ip && olt.mikrotik_username) {
+        const mikrotik = {
+          ip: olt.mikrotik_ip,
+          port: olt.mikrotik_port || 8728,
+          username: olt.mikrotik_username,
+          password: olt.mikrotik_password_encrypted,
+        };
+        
+        try {
+          const health = await fetchMikroTikHealth(mikrotik);
+          
+          if (health) {
+            const deviceId = `${olt.id}-mt`;
+            devices.push({
+              id: deviceId,
+              name: `${olt.name} MikroTik`,
+              type: 'mikrotik',
+              status: 'online',
+              ip: olt.mikrotik_ip,
+              cpu: health.cpu,
+              memory: health.memory,
+              uptime: health.uptime,
+              uptimeSeconds: health.uptimeSeconds,
+              version: health.version,
+              boardName: health.boardName,
+              freeMemory: health.freeMemory,
+              totalMemory: health.totalMemory,
+            });
+            
+            // Prepare record for database
+            healthRecords.push({
+              device_id: olt.id,
+              device_type: 'mikrotik',
+              device_name: `${olt.name} MikroTik`,
+              cpu_percent: health.cpu,
+              memory_percent: health.memory,
+              uptime_seconds: health.uptimeSeconds,
+              free_memory_bytes: health.freeMemory,
+              total_memory_bytes: health.totalMemory,
+            });
+          } else {
+            devices.push({
+              id: `${olt.id}-mt`,
+              name: `${olt.name} MikroTik`,
+              type: 'mikrotik',
+              status: 'unknown',
+              ip: olt.mikrotik_ip,
+            });
+          }
+        } catch (mtErr) {
+          logger.warn(`Failed to get health for MikroTik ${olt.mikrotik_ip}: ${mtErr.message}`);
+          devices.push({
+            id: `${olt.id}-mt`,
+            name: `${olt.name} MikroTik`,
+            type: 'mikrotik',
+            status: 'offline',
+            ip: olt.mikrotik_ip,
+            error: mtErr.message,
+          });
+        }
+      }
+    }
+    
+    // Save health records to database (for historical tracking)
+    if (healthRecords.length > 0) {
+      const { error: insertError } = await supabase
+        .from('device_health_history')
+        .insert(healthRecords);
+      
+      if (insertError) {
+        logger.warn(`Failed to save health history: ${insertError.message}`);
+      } else {
+        logger.debug(`Saved ${healthRecords.length} health records`);
+      }
+    }
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      devices,
+    });
+  } catch (error) {
+    logger.error('Device health fetch error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Also without /api prefix
+app.get('/device-health', async (req, res) => {
+  req.url = '/api/device-health';
+  app.handle(req, res);
 });
 
 // Get polling status

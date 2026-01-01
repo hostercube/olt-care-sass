@@ -50,6 +50,45 @@ export type Database = {
         }
         Relationships: []
       }
+      device_health_history: {
+        Row: {
+          cpu_percent: number | null
+          device_id: string
+          device_name: string
+          device_type: string
+          free_memory_bytes: number | null
+          id: string
+          memory_percent: number | null
+          recorded_at: string
+          total_memory_bytes: number | null
+          uptime_seconds: number | null
+        }
+        Insert: {
+          cpu_percent?: number | null
+          device_id: string
+          device_name: string
+          device_type: string
+          free_memory_bytes?: number | null
+          id?: string
+          memory_percent?: number | null
+          recorded_at?: string
+          total_memory_bytes?: number | null
+          uptime_seconds?: number | null
+        }
+        Update: {
+          cpu_percent?: number | null
+          device_id?: string
+          device_name?: string
+          device_type?: string
+          free_memory_bytes?: number | null
+          id?: string
+          memory_percent?: number | null
+          recorded_at?: string
+          total_memory_bytes?: number | null
+          uptime_seconds?: number | null
+        }
+        Relationships: []
+      }
       olt_debug_logs: {
         Row: {
           commands_sent: string[] | null
