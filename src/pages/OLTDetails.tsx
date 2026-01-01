@@ -60,10 +60,8 @@ export default function OLTDetails() {
   const [loadingDebug, setLoadingDebug] = useState(false);
   const [mikrotikTesting, setMikrotikTesting] = useState(false);
   const [mikrotikTestResult, setMikrotikTestResult] = useState<any>(null);
-  const [reenriching, setReenriching] = useState(false);
-  const [bulkTagging, setBulkTagging] = useState(false);
-  const [forceBulkTagging, setForceBulkTagging] = useState(false);
-  const [bulkTagResult, setBulkTagResult] = useState<any>(null);
+  const [fullSyncing, setFullSyncing] = useState(false);
+  const [fullSyncResult, setFullSyncResult] = useState<any>(null);
 
   const olt = olts.find(o => o.id === id);
   const oltONUs = onus.filter(onu => onu.olt_id === id).map(onu => ({
@@ -245,91 +243,41 @@ export default function OLTDetails() {
   const pppoeNotMatchedONUs = oltONUs.length - pppoeMatchedONUs;
   const pppoeCoveragePercent = oltONUs.length > 0 ? Math.round((pppoeMatchedONUs / oltONUs.length) * 100) : 0;
 
-  // Re-enrich handler
-  const handleReenrich = async () => {
+  // Full Sync handler - combines resync + force re-tag + re-enrich into one action
+  const handleFullSync = async () => {
     if (!olt || !pollingServerUrl) return;
     
-    setReenriching(true);
+    setFullSyncing(true);
+    setFullSyncResult(null);
     try {
-      const response = await fetch(`${pollingServerUrl}/api/reenrich/${olt.id}`, {
+      const response = await fetch(`${pollingServerUrl}/api/full-sync/${olt.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-
       const data = await response.json();
+      setFullSyncResult(data.results);
       if (data.success) {
-        toast.success(`Re-enriched ${data.enriched_count}/${data.total_onus} ONUs with PPPoE data`);
+        const enriched = data.results?.reenrich?.enriched || 0;
+        const tagged = data.results?.bulkTag?.tagged || 0;
+        toast.success(`Full Sync complete! Tagged: ${tagged}, Enriched: ${enriched} ONUs`);
         refetchONUs();
+        setTimeout(() => { if (debugOpen) fetchDebugLogs(); }, 2000);
       } else {
-        toast.error(`Re-enrich failed: ${data.error}`);
+        toast.error(`Full Sync failed: ${data.error}`);
       }
-    } catch (error) {
-      toast.error('Failed to re-enrich PPPoE data');
+    } catch (error: any) {
+      toast.error('Failed to run Full Sync');
     } finally {
-      setReenriching(false);
+      setFullSyncing(false);
     }
   };
 
-  // Bulk tag PPP secrets handler
-  const handleBulkTag = async () => {
-    if (!olt || !pollingServerUrl) return;
+  // Keep handleBulkTag and handleForceBulkTag for DataQualityPanel compatibility
+  const handleReenrich = async () => {};
+  const handleBulkTag = async () => handleFullSync();
+  const handleForceBulkTag = async () => handleFullSync();
 
-    setBulkTagging(true);
-    setBulkTagResult(null);
-    try {
-      const response = await fetch(`${pollingServerUrl}/api/mikrotik/bulk-tag/${olt.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'append', target: 'both' }),
-      });
 
-      const data = await response.json();
-      setBulkTagResult(data);
-      if (data.success) {
-        toast.success(`Tagged ${data.tagged} PPP secrets with ONU identifiers. Skipped: ${data.skipped}, Failed: ${data.failed}`);
-        if (data.tagged === 0 && data.skipped > 0) {
-          toast.info('If tags are wrong/missing, use “Force Re-Tag” to overwrite existing tags.');
-        }
-        // Re-enrich after tagging for immediate effect
-        if (data.tagged > 0) {
-          setTimeout(() => handleReenrich(), 1000);
-        }
-      } else {
-        toast.error(`Bulk tagging failed: ${data.error}`);
-      }
-    } catch (error) {
-      toast.error('Failed to bulk tag PPP secrets');
-    } finally {
-      setBulkTagging(false);
-    }
-  };
-
-  const handleForceBulkTag = async () => {
-    if (!olt || !pollingServerUrl) return;
-
-    setForceBulkTagging(true);
-    setBulkTagResult(null);
-    try {
-      const response = await fetch(`${pollingServerUrl}/api/mikrotik/bulk-tag/${olt.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'overwrite', target: 'comment' }),
-      });
-
-      const data = await response.json();
-      setBulkTagResult(data);
-      if (data.success) {
-        toast.success(`Force Re-Tag done: ${data.tagged} updated. Skipped: ${data.skipped}, Failed: ${data.failed}`);
-        setTimeout(() => handleReenrich(), 1000);
-      } else {
-        toast.error(`Force Re-Tag failed: ${data.error}`);
-      }
-    } catch (error) {
-      toast.error('Failed to force re-tag PPP secrets');
-    } finally {
-      setForceBulkTagging(false);
-    }
-  };
 
   return (
     <DashboardLayout 
@@ -462,58 +410,72 @@ export default function OLTDetails() {
                 </CardTitle>
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button
-                    variant="outline"
+                    variant="default"
                     size="sm"
-                    onClick={handleBulkTag}
-                    disabled={bulkTagging || forceBulkTagging || !pollingServerUrl || oltONUs.length === 0}
-                    title="Append ONU identifiers into MikroTik PPP secrets (safe mode)"
+                    onClick={handleFullSync}
+                    disabled={fullSyncing || !pollingServerUrl || oltONUs.length === 0}
+                    title="Poll OLT + Force Re-Tag + Re-enrich (all-in-one sync)"
                   >
-                    {bulkTagging ? (
+                    {fullSyncing ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Tagging...
+                        Full Sync...
                       </>
                     ) : (
                       <>
-                        <Tag className="h-4 w-4 mr-2" />
-                        Bulk Tag Secrets
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Full Sync
                       </>
                     )}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleForceBulkTag}
-                    disabled={forceBulkTagging || bulkTagging || !pollingServerUrl || oltONUs.length === 0}
-                    title="Overwrite comment tags (use if tags are wrong/missing)"
+                    onClick={async () => {
+                      if (!pollingServerUrl) {
+                        toast.error('Polling server not configured');
+                        return;
+                      }
+                      setMikrotikTesting(true);
+                      setMikrotikTestResult(null);
+                      try {
+                        const response = await fetch(`${pollingServerUrl}/api/test-mikrotik`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            mikrotik: {
+                              ip: olt.mikrotik_ip,
+                              port: olt.mikrotik_port || 8728,
+                              username: olt.mikrotik_username,
+                              password: olt.mikrotik_password_encrypted,
+                            }
+                          }),
+                        });
+                        const data = await response.json();
+                        setMikrotikTestResult(data);
+                        if (data.success) {
+                          toast.success(`MikroTik connected! Found ${data.data?.pppoe_count || 0} PPPoE sessions`);
+                        } else {
+                          toast.error(`MikroTik failed: ${data.error}`);
+                        }
+                      } catch (error: any) {
+                        setMikrotikTestResult({ success: false, error: error.message });
+                        toast.error('Failed to test MikroTik connection');
+                      } finally {
+                        setMikrotikTesting(false);
+                      }
+                    }}
+                    disabled={mikrotikTesting}
                   >
-                    {forceBulkTagging ? (
+                    {mikrotikTesting ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Re-Tagging...
+                        Testing...
                       </>
                     ) : (
                       <>
-                        <Tag className="h-4 w-4 mr-2" />
-                        Force Re-Tag
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleReenrich}
-                    disabled={reenriching || !pollingServerUrl}
-                  >
-                    {reenriching ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Re-enriching...
-                      </>
-                    ) : (
-                      <>
-                        <Database className="h-4 w-4 mr-2" />
-                        Re-enrich PPPoE
+                        <Network className="h-4 w-4 mr-2" />
+                        Test Connection
                       </>
                     )}
                   </Button>
@@ -592,16 +554,15 @@ export default function OLTDetails() {
                   />
                 </div>
                 {/* Low coverage help tip */}
-                {pppoeCoveragePercent < 50 && oltONUs.length > 0 && !bulkTagResult?.tagged && (
+                {pppoeCoveragePercent < 50 && oltONUs.length > 0 && !fullSyncResult?.bulkTag?.tagged && (
                   <div className="mt-3 p-2 rounded bg-warning/10 border border-warning/20 text-xs text-warning">
-                    <strong>Tip:</strong> ONU MAC ≠ Router MAC. Use <strong>"Bulk Tag Secrets"</strong> to automatically write ONU identifiers into MikroTik PPP secrets for better matching.
+                    <strong>Tip:</strong> Use <strong>"Full Sync"</strong> to automatically fix Router Name and PPPoE username mismatches.
                   </div>
                 )}
-                {/* Bulk tag result summary */}
-                {bulkTagResult && (
-                  <div className={`mt-3 p-2 rounded text-xs ${bulkTagResult.tagged > 0 ? 'bg-success/10 border border-success/20 text-success' : 'bg-muted/30 border border-border text-muted-foreground'}`}>
-                    <strong>Bulk Tag Result:</strong> {bulkTagResult.tagged} tagged, {bulkTagResult.skipped} skipped, {bulkTagResult.failed} failed
-                    {bulkTagResult.tagged > 0 && <span className="ml-2">✓ Re-enriching...</span>}
+                {/* Full sync result summary */}
+                {fullSyncResult && (
+                  <div className="mt-3 p-2 rounded text-xs bg-success/10 border border-success/20 text-success">
+                    <strong>Full Sync Result:</strong> Tagged: {fullSyncResult.bulkTag?.tagged || 0}, Enriched: {fullSyncResult.reenrich?.enriched || 0}
                   </div>
                 )}
               </div>
