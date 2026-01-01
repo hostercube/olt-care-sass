@@ -1128,6 +1128,129 @@ async function pollAllOLTs() {
   }
 }
 
+// ============= DATABASE CLEANUP ENDPOINT =============
+// Removes duplicate ONU records (keeps most recently updated for each olt_id + pon_port + onu_index)
+app.post('/api/cleanup-duplicates', async (req, res) => {
+  const { oltId, dryRun = true } = req.body;
+  
+  try {
+    logger.info(`ONU cleanup requested (dryRun=${dryRun}, oltId=${oltId || 'all'})`);
+    
+    // Find duplicates by grouping on olt_id + pon_port + onu_index
+    let query = supabase.from('onus').select('*');
+    if (oltId) {
+      query = query.eq('olt_id', oltId);
+    }
+    
+    const { data: allONUs, error } = await query;
+    if (error) throw error;
+    
+    // Group by hardware identity
+    const groups = {};
+    for (const onu of allONUs) {
+      const key = `${onu.olt_id}|${onu.pon_port}|${onu.onu_index}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(onu);
+    }
+    
+    // Find groups with more than one entry
+    const duplicateGroups = Object.entries(groups).filter(([_, arr]) => arr.length > 1);
+    
+    // For each group, keep the most recently updated, delete the rest
+    const toDelete = [];
+    for (const [key, onus] of duplicateGroups) {
+      // Sort by updated_at descending
+      onus.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      // Keep first, mark rest for deletion
+      for (let i = 1; i < onus.length; i++) {
+        toDelete.push(onus[i]);
+      }
+    }
+    
+    logger.info(`Found ${duplicateGroups.length} duplicate groups, ${toDelete.length} records to delete`);
+    
+    if (!dryRun && toDelete.length > 0) {
+      const ids = toDelete.map(o => o.id);
+      const { error: deleteError } = await supabase
+        .from('onus')
+        .delete()
+        .in('id', ids);
+      
+      if (deleteError) throw deleteError;
+      logger.info(`Deleted ${ids.length} duplicate ONU records`);
+    }
+    
+    // Also check for PPPoE username duplicates (same username on multiple ONUs)
+    const pppoeGroups = {};
+    for (const onu of allONUs) {
+      if (!onu.pppoe_username || onu.pppoe_username.trim() === '') continue;
+      if (!pppoeGroups[onu.pppoe_username]) pppoeGroups[onu.pppoe_username] = [];
+      pppoeGroups[onu.pppoe_username].push(onu);
+    }
+    
+    const pppoeDuplicates = Object.entries(pppoeGroups)
+      .filter(([_, arr]) => arr.length > 1)
+      .map(([username, onus]) => ({ username, count: onus.length, onus: onus.map(o => ({ id: o.id, name: o.name, pon_port: o.pon_port, onu_index: o.onu_index })) }));
+    
+    res.json({
+      success: true,
+      dryRun,
+      duplicateGroupsCount: duplicateGroups.length,
+      recordsDeleted: dryRun ? 0 : toDelete.length,
+      recordsToDelete: toDelete.map(o => ({ id: o.id, name: o.name, pon_port: o.pon_port, onu_index: o.onu_index, pppoe_username: o.pppoe_username })),
+      pppoeDuplicates,
+      pppoeDuplicateCount: pppoeDuplicates.length,
+    });
+  } catch (error) {
+    logger.error('Cleanup error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/cleanup-duplicates', async (req, res) => {
+  req.url = '/api/cleanup-duplicates';
+  req.body = req.body || {};
+  app.handle(req, res);
+});
+
+// ============= CLEAR PPPOE DATA ENDPOINT =============
+// Clears pppoe_username, router_name, router_mac from ONUs (for re-enrichment)
+app.post('/api/clear-pppoe/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+  
+  try {
+    logger.info(`Clearing PPPoE data for OLT: ${oltId}`);
+    
+    const { data, error } = await supabase
+      .from('onus')
+      .update({
+        pppoe_username: null,
+        router_name: null,
+        router_mac: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('olt_id', oltId)
+      .select('id');
+    
+    if (error) throw error;
+    
+    logger.info(`Cleared PPPoE data for ${data?.length || 0} ONUs`);
+    
+    res.json({
+      success: true,
+      clearedCount: data?.length || 0,
+    });
+  } catch (error) {
+    logger.error('Clear PPPoE error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/clear-pppoe/:oltId', async (req, res) => {
+  req.url = `/api/clear-pppoe/${req.params.oltId}`;
+  app.handle(req, res);
+});
+
 // Schedule polling based on interval
 const intervalMinutes = Math.floor(parseInt(process.env.POLLING_INTERVAL_MS || '60000') / 60000);
 const cronExpression = `*/${Math.max(1, intervalMinutes)} * * * *`;
