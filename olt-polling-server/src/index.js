@@ -786,20 +786,45 @@ app.post('/reenrich/:oltId', async (req, res) => {
     
     if (onuError) throw onuError;
     
+    // For VSOL: build OLT MAC table from latest raw CLI output
+    let oltMacTable = [];
+    if (olt.brand === 'VSOL') {
+      const { data: logRow, error: logError } = await supabase
+        .from('olt_debug_logs')
+        .select('raw_output')
+        .eq('olt_id', oltId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!logError && logRow?.raw_output) {
+        oltMacTable = parseVSOLMacTable(logRow.raw_output);
+      }
+    }
+    
+    // STRICT 1:1 enforcement
+    const usedMatches = new Set();
+    
     let enrichedCount = 0;
     const matchMethods = {};
     
     for (const onu of existingONUs || []) {
-      const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
+      const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets, usedMatches, oltMacTable);
+      const enrichedRouterMac = enriched.router_mac || null;
+      
+      // Mark as used
+      if (enriched.pppoe_username) usedMatches.add(enriched.pppoe_username.toLowerCase());
       
       if (enriched.pppoe_username !== onu.pppoe_username || 
-          enriched.router_name !== onu.router_name) {
+          enriched.router_name !== onu.router_name ||
+          enrichedRouterMac !== (onu.router_mac || null)) {
         enrichedCount++;
         await supabase
           .from('onus')
           .update({
             pppoe_username: enriched.pppoe_username,
             router_name: enriched.router_name,
+            router_mac: enrichedRouterMac,
             updated_at: new Date().toISOString(),
           })
           .eq('id', onu.id);
