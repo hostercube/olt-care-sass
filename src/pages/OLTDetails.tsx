@@ -456,9 +456,18 @@ export default function OLTDetails() {
                 <div className="p-3 rounded-lg bg-muted/30">
                   <p className="text-sm text-muted-foreground">Detected Port</p>
                   <p className="font-mono font-medium text-sm">
-                    {mikrotikTestResult?.success
-                      ? mikrotikTestResult?.connection?.port || 'N/A'
-                      : '—'}
+                    {mikrotikTestResult?.success ? (
+                      <span className={
+                        mikrotikTestResult?.connection?.detectedPort !== (olt.mikrotik_port || 8728)
+                          ? 'text-warning font-bold'
+                          : 'text-success'
+                      }>
+                        {mikrotikTestResult?.connection?.detectedPort || mikrotikTestResult?.connection?.port || 'N/A'}
+                        {mikrotikTestResult?.connection?.protocol && (
+                          <span className="text-muted-foreground ml-1">({mikrotikTestResult.connection.protocol})</span>
+                        )}
+                      </span>
+                    ) : '—'}
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/30">
@@ -499,8 +508,25 @@ export default function OLTDetails() {
                 </div>
               </div>
 
-              {/* Port Warning */}
-              {olt.mikrotik_port && [8090, 23].includes(olt.mikrotik_port) && (
+              {/* Port Mismatch Warning */}
+              {mikrotikTestResult?.success && 
+               mikrotikTestResult?.connection?.detectedPort && 
+               mikrotikTestResult.connection.detectedPort !== (olt.mikrotik_port || 8728) && (
+                <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
+                  <p className="text-sm text-warning font-medium flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Port Mismatch Detected
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Configured port <strong>{olt.mikrotik_port || 8728}</strong> didn't work. 
+                    Actually connected on port <strong>{mikrotikTestResult.connection.detectedPort}</strong>.
+                    Consider updating your configuration to use this port for faster connections.
+                  </p>
+                </div>
+              )}
+
+              {/* Port Warning - only show if not tested or failed */}
+              {olt.mikrotik_port && [8090, 23].includes(olt.mikrotik_port) && !mikrotikTestResult?.success && (
                 <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
                   <p className="text-sm text-warning font-medium flex items-center gap-2">
                     <AlertCircle className="h-4 w-4" />
@@ -508,8 +534,8 @@ export default function OLTDetails() {
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Port {olt.mikrotik_port} is typically Telnet, not MikroTik API. 
-                    Use port <strong>8728</strong> (Plain API) or <strong>8729</strong> (API-SSL) instead.
-                    Check MikroTik → IP → Services for correct API port.
+                    The system will also try default API ports (8728, 8729).
+                    For direct API access, check MikroTik → IP → Services.
                   </p>
                 </div>
               )}
