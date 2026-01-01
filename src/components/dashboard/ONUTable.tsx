@@ -476,7 +476,16 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <TableHead className="font-semibold">PON Port</TableHead>
                   <TableHead className="font-semibold">ONU Name</TableHead>
                   <TableHead className="font-semibold">Router</TableHead>
-                  <TableHead className="font-semibold">PPPoE</TableHead>
+                  <TableHead className="font-semibold">
+                    <div className="flex items-center gap-1">
+                      PPPoE
+                      {onus.length > 0 && (
+                        <Badge variant={onus.filter(o => o.pppoe_username).length === onus.length ? 'success' : 'warning'} className="text-[10px] px-1 py-0 h-4">
+                          {onus.filter(o => o.pppoe_username && o.pppoe_username.trim() !== '').length}/{onus.length}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableHead>
                   <TableHead className="font-semibold">MAC Address</TableHead>
                   <TableHead className="font-semibold text-center">RX Power</TableHead>
                   <TableHead className="font-semibold text-center">TX Power</TableHead>
@@ -521,7 +530,9 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                           <span className="font-medium">{onu.name}</span>
                         </TableCell>
                         <TableCell className="text-sm">{onu.router_name || 'N/A'}</TableCell>
-                        <TableCell className="font-mono text-xs">{onu.pppoe_username || 'N/A'}</TableCell>
+                        <TableCell className={`font-mono text-xs ${onu.pppoe_username ? 'text-success' : 'text-destructive'}`}>
+                          {onu.pppoe_username || <span className="text-destructive">Not matched</span>}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">{onu.mac_address || 'N/A'}</TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center">

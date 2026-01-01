@@ -18,7 +18,7 @@ import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
 import { pollOLT, testOLTConnection, testAllProtocols } from './polling/olt-poller.js';
-import { testMikrotikConnection, fetchAllMikroTikData } from './polling/mikrotik-client.js';
+import { testMikrotikConnection, fetchAllMikroTikData, enrichONUWithMikroTikData } from './polling/mikrotik-client.js';
 import { rebootONU, deauthorizeONU, executeBulkOperation } from './onu-commands.js';
 import { logger } from './utils/logger.js';
 
@@ -294,6 +294,169 @@ app.post('/poll/:oltId', async (req, res) => {
     res.json({ success: true, result });
   } catch (error) {
     logger.error(`Poll error for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============= RE-ENRICH PPPoE ONLY =============
+// Re-runs MikroTik enrichment without full OLT poll
+app.post('/api/reenrich/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+  
+  try {
+    const { data: olt, error: oltError } = await supabase
+      .from('olts')
+      .select('*')
+      .eq('id', oltId)
+      .single();
+    
+    if (oltError || !olt) {
+      return res.status(404).json({ error: 'OLT not found' });
+    }
+    
+    if (!olt.mikrotik_ip || !olt.mikrotik_username) {
+      return res.status(400).json({ error: 'MikroTik not configured for this OLT' });
+    }
+    
+    logger.info(`Re-enriching PPPoE data for OLT: ${olt.name}`);
+    
+    const mikrotik = {
+      ip: olt.mikrotik_ip,
+      port: olt.mikrotik_port || 8728,
+      username: olt.mikrotik_username,
+      password: olt.mikrotik_password_encrypted,
+    };
+    
+    // Fetch MikroTik data
+    const { pppoe, arp, dhcp, secrets } = await fetchAllMikroTikData(mikrotik);
+    
+    logger.info(`MikroTik data: ${pppoe.length} PPPoE, ${arp.length} ARP, ${dhcp.length} DHCP, ${secrets.length} secrets`);
+    
+    // Fetch existing ONUs for this OLT
+    const { data: existingONUs, error: onuError } = await supabase
+      .from('onus')
+      .select('*')
+      .eq('olt_id', oltId);
+    
+    if (onuError) throw onuError;
+    
+    let enrichedCount = 0;
+    const updates = [];
+    
+    for (const onu of existingONUs || []) {
+      const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
+      
+      if (enriched.pppoe_username !== onu.pppoe_username || 
+          enriched.router_name !== onu.router_name) {
+        enrichedCount++;
+        updates.push({
+          id: onu.id,
+          pppoe_username: enriched.pppoe_username,
+          router_name: enriched.router_name,
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
+    
+    // Batch update enriched ONUs
+    for (const update of updates) {
+      await supabase
+        .from('onus')
+        .update({
+          pppoe_username: update.pppoe_username,
+          router_name: update.router_name,
+          updated_at: update.updated_at,
+        })
+        .eq('id', update.id);
+    }
+    
+    logger.info(`Re-enrichment complete: ${enrichedCount}/${existingONUs?.length || 0} ONUs updated`);
+    
+    res.json({
+      success: true,
+      total_onus: existingONUs?.length || 0,
+      enriched_count: enrichedCount,
+      mikrotik_data: {
+        pppoe_count: pppoe.length,
+        arp_count: arp.length,
+        dhcp_count: dhcp.length,
+        secrets_count: secrets.length,
+      }
+    });
+  } catch (error) {
+    logger.error(`Re-enrich error for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/reenrich/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+  
+  try {
+    const { data: olt, error: oltError } = await supabase
+      .from('olts')
+      .select('*')
+      .eq('id', oltId)
+      .single();
+    
+    if (oltError || !olt) {
+      return res.status(404).json({ error: 'OLT not found' });
+    }
+    
+    if (!olt.mikrotik_ip || !olt.mikrotik_username) {
+      return res.status(400).json({ error: 'MikroTik not configured for this OLT' });
+    }
+    
+    logger.info(`Re-enriching PPPoE data for OLT: ${olt.name}`);
+    
+    const mikrotik = {
+      ip: olt.mikrotik_ip,
+      port: olt.mikrotik_port || 8728,
+      username: olt.mikrotik_username,
+      password: olt.mikrotik_password_encrypted,
+    };
+    
+    const { pppoe, arp, dhcp, secrets } = await fetchAllMikroTikData(mikrotik);
+    
+    const { data: existingONUs, error: onuError } = await supabase
+      .from('onus')
+      .select('*')
+      .eq('olt_id', oltId);
+    
+    if (onuError) throw onuError;
+    
+    let enrichedCount = 0;
+    
+    for (const onu of existingONUs || []) {
+      const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
+      
+      if (enriched.pppoe_username !== onu.pppoe_username || 
+          enriched.router_name !== onu.router_name) {
+        enrichedCount++;
+        await supabase
+          .from('onus')
+          .update({
+            pppoe_username: enriched.pppoe_username,
+            router_name: enriched.router_name,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', onu.id);
+      }
+    }
+    
+    res.json({
+      success: true,
+      total_onus: existingONUs?.length || 0,
+      enriched_count: enrichedCount,
+      mikrotik_data: {
+        pppoe_count: pppoe.length,
+        arp_count: arp.length,
+        dhcp_count: dhcp.length,
+        secrets_count: secrets.length,
+      }
+    });
+  } catch (error) {
+    logger.error(`Re-enrich error for OLT ${oltId}:`, error);
     res.status(500).json({ error: error.message });
   }
 });
