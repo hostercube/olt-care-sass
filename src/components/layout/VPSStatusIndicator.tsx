@@ -3,6 +3,13 @@ import { Shield, ServerOff, Loader2, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
+// Extend window type for log throttling
+declare global {
+  interface Window {
+    __lastVPSLogTime?: number;
+  }
+}
+
 interface VPSStatus {
   status: 'online' | 'offline' | 'checking';
   lastPollTime: string | null;
@@ -63,7 +70,12 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
         }));
       }
     } catch (error: any) {
-      console.warn('VPS status check failed:', error);
+      // Only log once per minute to avoid console spam
+      const now = Date.now();
+      if (!window.__lastVPSLogTime || now - window.__lastVPSLogTime > 60000) {
+        console.warn('VPS status check failed:', error);
+        window.__lastVPSLogTime = now;
+      }
       setVpsStatus(prev => ({ 
         ...prev, 
         status: 'offline',
