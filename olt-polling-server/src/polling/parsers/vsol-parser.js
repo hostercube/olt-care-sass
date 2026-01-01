@@ -670,7 +670,20 @@ export function parseVSOLMacTable(output) {
       });
       continue;
     }
-    
+
+    // Pattern 1b (VSOL Web UI / some firmware): Port column includes ONU index
+    // 104  60:32:B1:0B:48:97  Dynamic  EPON0/4:1
+    const fullMatchWithIndexInPort = trimmedLine.match(/(\d+)\s+([0-9A-Fa-f:.-]{12,17})\s+\w+\s+(?:EPON)?(\d+\/\d+):(\d+)/i);
+    if (fullMatchWithIndexInPort) {
+      macTable.push({
+        vlan: parseInt(fullMatchWithIndexInPort[1]),
+        mac_address: formatMac(fullMatchWithIndexInPort[2]),
+        pon_port: fullMatchWithIndexInPort[3],
+        onu_index: parseInt(fullMatchWithIndexInPort[4]),
+      });
+      continue;
+    }
+
     // Pattern 2: Format with ONU-ID first (in interface context)
     // ONU-ID  VLAN  MAC-Address        Type
     // 1       100   00:11:22:33:44:55  Dynamic
@@ -684,7 +697,7 @@ export function parseVSOLMacTable(output) {
       });
       continue;
     }
-    
+
     // Pattern 3: Simple format
     // EPON0/1:1  00:11:22:33:44:55  100
     const simpleMatch = trimmedLine.match(/(?:EPON)?(\d+\/\d+):(\d+)\s+([0-9A-Fa-f:.-]{12,17})/i);
@@ -729,7 +742,7 @@ function parseStatus(statusStr) {
  */
 function formatMac(mac) {
   if (!mac) return null;
-  const cleaned = mac.replace(/[:-]/g, '').toUpperCase();
-  if (cleaned.length !== 12) return mac.toUpperCase();
+  const cleaned = String(mac).replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+  if (cleaned.length !== 12) return String(mac).toUpperCase();
   return cleaned.match(/.{2}/g).join(':');
 }
