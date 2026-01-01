@@ -209,6 +209,7 @@ export type Database = {
           onu_index: number
           pon_port: string
           pppoe_username: string | null
+          router_mac: string | null
           router_name: string | null
           rx_power: number | null
           serial_number: string | null
@@ -230,6 +231,7 @@ export type Database = {
           onu_index: number
           pon_port: string
           pppoe_username?: string | null
+          router_mac?: string | null
           router_name?: string | null
           rx_power?: number | null
           serial_number?: string | null
@@ -251,6 +253,7 @@ export type Database = {
           onu_index?: number
           pon_port?: string
           pppoe_username?: string | null
+          router_mac?: string | null
           router_name?: string | null
           rx_power?: number | null
           serial_number?: string | null

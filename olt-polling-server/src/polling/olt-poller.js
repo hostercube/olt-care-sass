@@ -855,7 +855,7 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
   // Fetch existing ONUs for this OLT with fields we might update
   const { data: existingONUs } = await supabase
     .from('onus')
-    .select('id, serial_number, status, name, router_name, mac_address, pppoe_username, last_offline')
+    .select('id, serial_number, status, name, router_name, router_mac, mac_address, pppoe_username, last_offline')
     .eq('olt_id', oltId);
 
   const existingMap = new Map(existingONUs?.map((o) => [o.serial_number, o]) || []);
@@ -936,6 +936,11 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
       // Update PPPoE username if we have a new one
       if (onu.pppoe_username && onu.pppoe_username !== existing.pppoe_username) {
         updateData.pppoe_username = onu.pppoe_username;
+      }
+
+      // Update router MAC if we have a new one (from PPPoE session caller-id)
+      if (onu.router_mac && onu.router_mac !== existing.router_mac) {
+        updateData.router_mac = onu.router_mac;
       }
 
       if (wasOffline && isNowOnline) {
@@ -1029,6 +1034,7 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
           tx_power: onu.tx_power,
           mac_address: onu.mac_address,
           router_name: onu.router_name,
+          router_mac: onu.router_mac,
           pppoe_username: onu.pppoe_username,
           temperature: onu.temperature || null,
           distance: onu.distance || null,

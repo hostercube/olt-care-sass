@@ -229,8 +229,12 @@ export function ONUDetailsModal({ onu, open, onOpenChange, onUpdate }: ONUDetail
                     <span className="font-medium text-sm">{onu.router_name || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground text-sm">MAC Address</span>
+                    <span className="text-muted-foreground text-sm">ONU MAC</span>
                     <span className="font-mono text-sm">{onu.mac_address || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground text-sm">Router MAC</span>
+                    <span className="font-mono text-sm">{(onu as any).router_mac || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground text-sm">Serial Number</span>

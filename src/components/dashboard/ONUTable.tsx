@@ -225,7 +225,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
 
   const handleBulkExport = () => {
     const selectedOnuData = filteredONUs.filter(onu => selectedONUs.has(onu.id));
-    const headers = ['OLT', 'PON Port', 'ONU Name', 'Router Name', 'PPPoE Username', 'MAC Address', 'Serial Number', 'RX Power', 'TX Power', 'Status', 'Last Online'];
+    const headers = ['OLT', 'PON Port', 'ONU Name', 'Router Name', 'PPPoE Username', 'ONU MAC', 'Router MAC', 'Serial Number', 'RX Power', 'TX Power', 'Status', 'Last Online'];
     const rows = selectedOnuData.map(onu => [
       onu.oltName || 'Unknown',
       onu.pon_port,
@@ -233,6 +233,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
       onu.router_name || '',
       onu.pppoe_username || '',
       onu.mac_address || '',
+      (onu as any).router_mac || '',
       onu.serial_number || '',
       onu.rx_power?.toString() || '',
       onu.tx_power?.toString() || '',
@@ -256,7 +257,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
   };
 
   const handleExportCSV = () => {
-    const headers = ['OLT', 'PON Port', 'ONU Name', 'Router Name', 'PPPoE Username', 'MAC Address', 'Serial Number', 'RX Power', 'TX Power', 'Status', 'Last Online'];
+    const headers = ['OLT', 'PON Port', 'ONU Name', 'Router Name', 'PPPoE Username', 'ONU MAC', 'Router MAC', 'Serial Number', 'RX Power', 'TX Power', 'Status', 'Last Online'];
     const rows = filteredONUs.map(onu => [
       onu.oltName || 'Unknown',
       onu.pon_port,
@@ -264,6 +265,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
       onu.router_name || '',
       onu.pppoe_username || '',
       onu.mac_address || '',
+      (onu as any).router_mac || '',
       onu.serial_number || '',
       onu.rx_power?.toString() || '',
       onu.tx_power?.toString() || '',
@@ -494,7 +496,8 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                       })()}
                     </div>
                   </TableHead>
-                  <TableHead className="font-semibold">MAC Address</TableHead>
+                  <TableHead className="font-semibold">ONU MAC</TableHead>
+                  <TableHead className="font-semibold">Router MAC</TableHead>
                   <TableHead className="font-semibold text-center">RX Power</TableHead>
                   <TableHead className="font-semibold text-center">TX Power</TableHead>
                   <TableHead className="font-semibold text-center">Temp</TableHead>
@@ -507,7 +510,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
               <TableBody>
                 {paginatedONUs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={16} className="text-center py-8 text-muted-foreground">
                       No ONU devices found
                     </TableCell>
                   </TableRow>
@@ -542,6 +545,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                           {onu.pppoe_username || <span className="text-destructive">Not matched</span>}
                         </TableCell>
                         <TableCell className="font-mono text-xs">{onu.mac_address || 'N/A'}</TableCell>
+                        <TableCell className="font-mono text-xs">{(onu as any).router_mac || 'N/A'}</TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center">
                             <PowerBadge power={onu.rx_power} type="rx" />
