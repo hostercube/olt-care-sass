@@ -329,8 +329,26 @@ app.post('/api/resync/:oltId', async (req, res) => {
 
 // ============= FULL SYNC (RESYNC + FORCE RE-TAG + RE-ENRICH) =============
 // Combines all sync operations into one button
+// Supports Server-Sent Events for progress updates when Accept: text/event-stream
+
 app.post('/api/full-sync/:oltId', async (req, res) => {
   const { oltId } = req.params;
+  const useSSE = req.headers.accept === 'text/event-stream';
+
+  // SSE helper
+  const sendProgress = (step, status, detail = '') => {
+    if (useSSE) {
+      res.write(`data: ${JSON.stringify({ step, status, detail })}\n\n`);
+    }
+    logger.info(`FULL SYNC [${step}]: ${status}${detail ? ' - ' + detail : ''}`);
+  };
+
+  if (useSSE) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+  }
 
   try {
     const { data: olt, error } = await supabase
@@ -340,10 +358,16 @@ app.post('/api/full-sync/:oltId', async (req, res) => {
       .single();
 
     if (error || !olt) {
-      return res.status(404).json({ error: 'OLT not found' });
+      if (useSSE) {
+        sendProgress('error', 'failed', 'OLT not found');
+        res.end();
+      } else {
+        res.status(404).json({ error: 'OLT not found' });
+      }
+      return;
     }
 
-    logger.info(`FULL SYNC started for OLT: ${olt.name}`);
+    sendProgress('polling', 'started', `Polling OLT: ${olt.name}`);
     const results = { resync: null, bulkTag: null, reenrich: null };
 
     // Step 1: Clear cache and poll
@@ -352,10 +376,12 @@ app.post('/api/full-sync/:oltId', async (req, res) => {
     }
     const pollResult = await pollOLT(supabase, olt);
     results.resync = { success: true, onuCount: pollResult?.onuCount || 0 };
-    logger.info(`FULL SYNC Step 1 (Resync): ${results.resync.onuCount} ONUs`);
+    sendProgress('polling', 'completed', `Found ${results.resync.onuCount} ONUs`);
 
     // Step 2: Force re-tag (overwrite mode on comment)
     if (olt.mikrotik_ip && olt.mikrotik_username) {
+      sendProgress('tagging', 'started', 'Tagging PPP secrets...');
+      
       const mikrotik = {
         ip: olt.mikrotik_ip,
         port: olt.mikrotik_port || 8728,
@@ -371,11 +397,15 @@ app.post('/api/full-sync/:oltId', async (req, res) => {
       if (onus && onus.length > 0) {
         const tagResult = await bulkTagPPPSecrets(mikrotik, onus, { mode: 'overwrite', target: 'comment' });
         results.bulkTag = { tagged: tagResult.tagged || 0, skipped: tagResult.skipped || 0 };
-        logger.info(`FULL SYNC Step 2 (Bulk Tag): ${results.bulkTag.tagged} tagged`);
+        sendProgress('tagging', 'completed', `Tagged ${results.bulkTag.tagged} secrets`);
+      } else {
+        sendProgress('tagging', 'skipped', 'No ONUs found');
       }
 
       // Step 3: Re-enrich
+      sendProgress('enriching', 'started', 'Fetching MikroTik data...');
       const { pppoe, arp, dhcp, secrets } = await fetchAllMikroTikData(mikrotik);
+      
       const { data: existingONUs } = await supabase
         .from('onus')
         .select('*')
@@ -404,14 +434,28 @@ app.post('/api/full-sync/:oltId', async (req, res) => {
         }
       }
       results.reenrich = { enriched: enrichedCount, total: existingONUs?.length || 0 };
-      logger.info(`FULL SYNC Step 3 (Re-enrich): ${enrichedCount} ONUs enriched`);
+      sendProgress('enriching', 'completed', `Enriched ${enrichedCount} of ${existingONUs?.length || 0} ONUs`);
+    } else {
+      sendProgress('tagging', 'skipped', 'MikroTik not configured');
+      sendProgress('enriching', 'skipped', 'MikroTik not configured');
     }
 
-    logger.info(`FULL SYNC complete for OLT: ${olt.name}`);
-    res.json({ success: true, results });
+    sendProgress('complete', 'success', `Full sync complete`);
+
+    if (useSSE) {
+      res.write(`data: ${JSON.stringify({ step: 'done', results })}\n\n`);
+      res.end();
+    } else {
+      res.json({ success: true, results });
+    }
   } catch (error) {
     logger.error(`Full sync error for OLT ${oltId}:`, error);
-    res.status(500).json({ error: error.message });
+    if (useSSE) {
+      sendProgress('error', 'failed', error.message);
+      res.end();
+    } else {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 

@@ -61,6 +61,8 @@ export default function OLTDetails() {
   const [mikrotikTesting, setMikrotikTesting] = useState(false);
   const [mikrotikTestResult, setMikrotikTestResult] = useState<any>(null);
   const [fullSyncing, setFullSyncing] = useState(false);
+  const [fullSyncStep, setFullSyncStep] = useState<string>('');
+  const [fullSyncProgress, setFullSyncProgress] = useState<{ step: string; status: string; detail: string }[]>([]);
   const [fullSyncResult, setFullSyncResult] = useState<any>(null);
 
   const olt = olts.find(o => o.id === id);
@@ -243,32 +245,72 @@ export default function OLTDetails() {
   const pppoeNotMatchedONUs = oltONUs.length - pppoeMatchedONUs;
   const pppoeCoveragePercent = oltONUs.length > 0 ? Math.round((pppoeMatchedONUs / oltONUs.length) * 100) : 0;
 
-  // Full Sync handler - combines resync + force re-tag + re-enrich into one action
+  // Full Sync handler with SSE progress - combines resync + force re-tag + re-enrich into one action
   const handleFullSync = async () => {
     if (!olt || !pollingServerUrl) return;
     
     setFullSyncing(true);
     setFullSyncResult(null);
+    setFullSyncProgress([]);
+    setFullSyncStep('');
+    
     try {
+      // Use SSE for progress updates
       const response = await fetch(`${pollingServerUrl}/api/full-sync/${olt.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
       });
-      const data = await response.json();
-      setFullSyncResult(data.results);
-      if (data.success) {
-        const enriched = data.results?.reenrich?.enriched || 0;
-        const tagged = data.results?.bulkTag?.tagged || 0;
-        toast.success(`Full Sync complete! Tagged: ${tagged}, Enriched: ${enriched} ONUs`);
-        refetchONUs();
-        setTimeout(() => { if (debugOpen) fetchDebugLogs(); }, 2000);
-      } else {
-        toast.error(`Full Sync failed: ${data.error}`);
+      
+      if (!response.ok) {
+        throw new Error('Full sync request failed');
       }
+      
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const text = decoder.decode(value);
+          const lines = text.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                
+                if (data.step === 'done') {
+                  setFullSyncResult(data.results);
+                  const enriched = data.results?.reenrich?.enriched || 0;
+                  const tagged = data.results?.bulkTag?.tagged || 0;
+                  toast.success(`Full Sync complete! Tagged: ${tagged}, Enriched: ${enriched} ONUs`);
+                } else if (data.step === 'error') {
+                  toast.error(`Full Sync failed: ${data.detail}`);
+                } else {
+                  // Update progress
+                  setFullSyncStep(data.step);
+                  setFullSyncProgress(prev => [...prev, data]);
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+      }
+      
+      refetchONUs();
+      setTimeout(() => { if (debugOpen) fetchDebugLogs(); }, 2000);
     } catch (error: any) {
       toast.error('Failed to run Full Sync');
     } finally {
       setFullSyncing(false);
+      setFullSyncStep('');
     }
   };
 
@@ -409,25 +451,54 @@ export default function OLTDetails() {
                   MikroTik Configuration
                 </CardTitle>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={handleFullSync}
-                    disabled={fullSyncing || !pollingServerUrl || oltONUs.length === 0}
-                    title="Poll OLT + Force Re-Tag + Re-enrich (all-in-one sync)"
-                  >
-                    {fullSyncing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Full Sync...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Full Sync
-                      </>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleFullSync}
+                      disabled={fullSyncing || !pollingServerUrl || oltONUs.length === 0}
+                      title="Poll OLT + Force Re-Tag + Re-enrich (all-in-one sync)"
+                      className="min-w-[140px]"
+                    >
+                      {fullSyncing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {fullSyncStep === 'polling' && 'Polling...'}
+                          {fullSyncStep === 'tagging' && 'Tagging...'}
+                          {fullSyncStep === 'enriching' && 'Enriching...'}
+                          {fullSyncStep === 'complete' && 'Finishing...'}
+                          {!fullSyncStep && 'Starting...'}
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Full Sync
+                        </>
+                      )}
+                    </Button>
+                    {fullSyncing && fullSyncProgress.length > 0 && (
+                      <div className="flex items-center gap-1">
+                        {['polling', 'tagging', 'enriching'].map((step, idx) => {
+                          const stepData = fullSyncProgress.find(p => p.step === step);
+                          const isActive = fullSyncStep === step;
+                          const isComplete = stepData?.status === 'completed';
+                          const isSkipped = stepData?.status === 'skipped';
+                          return (
+                            <div 
+                              key={step}
+                              className={`w-2 h-2 rounded-full transition-colors ${
+                                isComplete ? 'bg-success' :
+                                isSkipped ? 'bg-muted-foreground' :
+                                isActive ? 'bg-primary animate-pulse' :
+                                'bg-muted'
+                              }`}
+                              title={`${step}: ${stepData?.status || 'pending'}`}
+                            />
+                          );
+                        })}
+                      </div>
                     )}
-                  </Button>
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"

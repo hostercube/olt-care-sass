@@ -276,21 +276,35 @@ export async function fetchMikroTikPPPoE(mikrotik) {
     
     // Transform to our format - caller-id is the ONU MAC address
     const result = sessions.map(session => {
-      // caller-id typically contains the MAC address of the connecting device (ONU)
+      // caller-id typically contains the MAC address of the connecting device (router behind ONU)
       const callerId = session['caller-id'] || '';
       const macAddress = normalizeMac(callerId);
+      const pppoeUsername = session.name || session.user;
+      
+      // IMPORTANT: Only use comment as router_name if it exists and is NOT the same as username
+      // DO NOT fall back to session.name (which is the PPPoE username)
+      let routerName = null;
+      if (session.comment && session.comment.trim().length > 0) {
+        const comment = session.comment.trim();
+        // Skip if comment is same as username or looks like metadata
+        const looksLikeUsername = comment.toLowerCase() === pppoeUsername?.toLowerCase();
+        const looksLikeMetadata = comment.includes('[ONU:') || comment.includes('SN=') || comment.includes('MAC=');
+        if (!looksLikeUsername && !looksLikeMetadata) {
+          routerName = comment;
+        }
+      }
       
       const mapped = {
-        pppoe_username: session.name || session.user,
-        mac_address: macAddress,  // This is the ONU MAC from caller-id
+        pppoe_username: pppoeUsername,
+        mac_address: macAddress,  // This is the router MAC from caller-id
         ip_address: session.address,
         uptime: session.uptime,
         service: session.service,
-        router_name: session.comment || session.name,
+        router_name: routerName,  // Only set if we have a valid device name, NOT username
         raw_caller_id: callerId,
       };
       
-      logger.debug(`PPPoE session: ${mapped.pppoe_username}, caller-id: ${callerId} -> MAC: ${macAddress}`);
+      logger.debug(`PPPoE session: ${mapped.pppoe_username}, caller-id: ${callerId} -> MAC: ${macAddress}, router: ${routerName || 'N/A'}`);
       return mapped;
     });
     
@@ -372,17 +386,31 @@ export async function fetchMikroTikPPPSecrets(mikrotik) {
     
     logger.debug(`MikroTik PPP Secrets: Got ${secrets.length} secrets`);
     
-    return secrets.map(secret => ({
-      pppoe_username: secret.name,
-      pppoe_password: secret.password,
-      profile: secret.profile,
-      service: secret.service,
-      caller_id: normalizeMac(secret['caller-id']),
-      comment: secret.comment,
-      router_name: secret.comment || secret.name,
-      remote_address: secret['remote-address'],
-      local_address: secret['local-address'],
-    }));
+    return secrets.map(secret => {
+      const pppoeUsername = secret.name;
+      // Only use comment as router_name if it's NOT the same as username and not metadata
+      let routerName = null;
+      if (secret.comment && secret.comment.trim().length > 0) {
+        const comment = secret.comment.trim();
+        const looksLikeUsername = comment.toLowerCase() === pppoeUsername?.toLowerCase();
+        const looksLikeMetadata = comment.includes('[ONU:') || comment.includes('SN=') || comment.includes('MAC=');
+        if (!looksLikeUsername && !looksLikeMetadata) {
+          routerName = comment;
+        }
+      }
+      
+      return {
+        pppoe_username: pppoeUsername,
+        pppoe_password: secret.password,
+        profile: secret.profile,
+        service: secret.service,
+        caller_id: normalizeMac(secret['caller-id']),
+        comment: secret.comment,
+        router_name: routerName,  // Only valid device names, NOT fallback to username
+        remote_address: secret['remote-address'],
+        local_address: secret['local-address'],
+      };
+    });
   } catch (error) {
     logger.error(`Failed to fetch MikroTik PPP secrets:`, error.message);
     return [];
@@ -968,11 +996,22 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // Determine router name
-  // Priority: DHCP hostname (by router MAC) > PPPoE session name > Skip usernames
-  // IMPORTANT: Router MAC (caller-id) != ONU MAC. DHCP lookup must use router MAC!
+  // Priority: DHCP hostname (by router MAC) > ARP comment > PPP secret comment
+  // NEVER use PPPoE username as router name!
+  // IMPORTANT: If current router_name looks like a PPPoE username, clear it
   let routerName = onu.router_name;
   
-  // First, get the router MAC from PPPoE session for DHCP lookup
+  // Check if existing router_name looks like a PPPoE username (should be cleared)
+  const enrichedPppoeUsername = pppoeSession?.pppoe_username || pppSecret?.pppoe_username || onu.pppoe_username;
+  if (routerName && enrichedPppoeUsername) {
+    const routerNameLower = routerName.toLowerCase();
+    const usernameLower = enrichedPppoeUsername.toLowerCase();
+    // If router_name equals pppoe_username, it's wrong - clear it
+    if (routerNameLower === usernameLower) {
+      logger.debug(`Clearing bad router_name "${routerName}" (matches PPPoE username "${enrichedPppoeUsername}")`);
+      routerName = null;
+    }
+  }
   const routerMacForDhcp = pppoeSession?.mac_address?.replace(/[:-]/g, '').toUpperCase() 
     || pppSecret?.caller_id?.replace(/[:-]/g, '').toUpperCase();
   
@@ -1051,8 +1090,6 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // DO NOT fall back to PPPoE username - it's not a router name!
-
-  const enrichedPppoeUsername = pppoeSession?.pppoe_username || pppSecret?.pppoe_username || onu.pppoe_username;
   
   // Router MAC - from PPPoE session caller-id (this is the CPE/router MAC, NOT the ONU MAC)
   let routerMac = null;
