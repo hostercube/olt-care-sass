@@ -26,6 +26,8 @@ interface SystemSettings {
   oltUnreachableAlerts: boolean;
   emailNotifications: boolean;
   notificationEmail: string;
+  webhookNotifications: boolean;
+  webhookUrl: string;
 
   // Integrations (MikroTik)
   mikrotikMatchExactMac: boolean;
@@ -56,6 +58,8 @@ const defaultSettings: SystemSettings = {
   oltUnreachableAlerts: true,
   emailNotifications: false,
   notificationEmail: '',
+  webhookNotifications: false,
+  webhookUrl: '',
   mikrotikMatchExactMac: true,
   mikrotikMatchLast6Mac: true,
   mikrotikMatchSerialOrComment: true,
