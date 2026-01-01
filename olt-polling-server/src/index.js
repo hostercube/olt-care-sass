@@ -327,6 +327,100 @@ app.post('/api/resync/:oltId', async (req, res) => {
   }
 });
 
+// ============= FULL SYNC (RESYNC + FORCE RE-TAG + RE-ENRICH) =============
+// Combines all sync operations into one button
+app.post('/api/full-sync/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+
+  try {
+    const { data: olt, error } = await supabase
+      .from('olts')
+      .select('*')
+      .eq('id', oltId)
+      .single();
+
+    if (error || !olt) {
+      return res.status(404).json({ error: 'OLT not found' });
+    }
+
+    logger.info(`FULL SYNC started for OLT: ${olt.name}`);
+    const results = { resync: null, bulkTag: null, reenrich: null };
+
+    // Step 1: Clear cache and poll
+    if (olt.mikrotik_ip) {
+      clearMikroTikCache(olt.mikrotik_ip, olt.mikrotik_port || 8728);
+    }
+    const pollResult = await pollOLT(supabase, olt);
+    results.resync = { success: true, onuCount: pollResult?.onuCount || 0 };
+    logger.info(`FULL SYNC Step 1 (Resync): ${results.resync.onuCount} ONUs`);
+
+    // Step 2: Force re-tag (overwrite mode on comment)
+    if (olt.mikrotik_ip && olt.mikrotik_username) {
+      const mikrotik = {
+        ip: olt.mikrotik_ip,
+        port: olt.mikrotik_port || 8728,
+        username: olt.mikrotik_username,
+        password: olt.mikrotik_password_encrypted,
+      };
+
+      const { data: onus } = await supabase
+        .from('onus')
+        .select('*')
+        .eq('olt_id', oltId);
+
+      if (onus && onus.length > 0) {
+        const tagResult = await bulkTagPPPSecrets(mikrotik, onus, { mode: 'overwrite', target: 'comment' });
+        results.bulkTag = { tagged: tagResult.tagged || 0, skipped: tagResult.skipped || 0 };
+        logger.info(`FULL SYNC Step 2 (Bulk Tag): ${results.bulkTag.tagged} tagged`);
+      }
+
+      // Step 3: Re-enrich
+      const { pppoe, arp, dhcp, secrets } = await fetchAllMikroTikData(mikrotik);
+      const { data: existingONUs } = await supabase
+        .from('onus')
+        .select('*')
+        .eq('olt_id', oltId);
+
+      let enrichedCount = 0;
+      if (existingONUs) {
+        for (const onu of existingONUs) {
+          const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
+          const enrichedRouterMac = enriched.router_mac || null;
+
+          if (enriched.pppoe_username !== onu.pppoe_username || 
+              enriched.router_name !== onu.router_name ||
+              enrichedRouterMac !== (onu.router_mac || null)) {
+            enrichedCount++;
+            await supabase
+              .from('onus')
+              .update({
+                pppoe_username: enriched.pppoe_username,
+                router_name: enriched.router_name,
+                router_mac: enrichedRouterMac,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', onu.id);
+          }
+        }
+      }
+      results.reenrich = { enriched: enrichedCount, total: existingONUs?.length || 0 };
+      logger.info(`FULL SYNC Step 3 (Re-enrich): ${enrichedCount} ONUs enriched`);
+    }
+
+    logger.info(`FULL SYNC complete for OLT: ${olt.name}`);
+    res.json({ success: true, results });
+  } catch (error) {
+    logger.error(`Full sync error for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/full-sync/:oltId', async (req, res) => {
+  // Redirect to /api version
+  req.url = `/api/full-sync/${req.params.oltId}`;
+  app.handle(req, res);
+});
+
 app.post('/resync/:oltId', async (req, res) => {
   const { oltId } = req.params;
 

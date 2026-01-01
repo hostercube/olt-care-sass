@@ -968,11 +968,34 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // Determine router name
-  // Priority: DHCP hostname > PPPoE session name (if it's a device name) > Skip bad values
-  // IMPORTANT: Avoid using PPPoE username or metadata comments as router name
+  // Priority: DHCP hostname (by router MAC) > PPPoE session name > Skip usernames
+  // IMPORTANT: Router MAC (caller-id) != ONU MAC. DHCP lookup must use router MAC!
   let routerName = onu.router_name;
   
-  // DHCP hostname is the most reliable source for actual device names (TP-Link, Tenda, etc)
+  // First, get the router MAC from PPPoE session for DHCP lookup
+  const routerMacForDhcp = pppoeSession?.mac_address?.replace(/[:-]/g, '').toUpperCase() 
+    || pppSecret?.caller_id?.replace(/[:-]/g, '').toUpperCase();
+  
+  // DHCP hostname lookup - use ROUTER MAC, not ONU MAC!
+  // This is how we get TP-Link, Tenda, NATIS, etc. device names
+  let routerDhcpLease = null;
+  if (routerMacForDhcp) {
+    for (const lease of dhcpData) {
+      const leaseMac = lease.mac_address?.replace(/[:-]/g, '').toUpperCase();
+      if (leaseMac && leaseMac === routerMacForDhcp) {
+        routerDhcpLease = lease;
+        break;
+      }
+    }
+  }
+  
+  // DHCP hostname from router MAC is the most reliable source for device names
+  if (!routerName && routerDhcpLease?.hostname && routerDhcpLease.hostname.length > 1) {
+    routerName = routerDhcpLease.hostname;
+    logger.debug(`Router name from DHCP (router MAC ${routerMacForDhcp}): ${routerName}`);
+  }
+  
+  // Fallback: DHCP hostname from ONU MAC (less reliable but might work)
   if (!routerName && dhcpLease?.hostname && dhcpLease.hostname.length > 1) {
     routerName = dhcpLease.hostname;
   }
@@ -988,7 +1011,28 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
     }
   }
   
-  // ARP comment - only use if it looks like a device name
+  // ARP entry lookup by router MAC for comments
+  let routerArpEntry = null;
+  if (routerMacForDhcp) {
+    for (const entry of arpData) {
+      const arpMac = entry.mac_address?.replace(/[:-]/g, '').toUpperCase();
+      if (arpMac && arpMac === routerMacForDhcp) {
+        routerArpEntry = entry;
+        break;
+      }
+    }
+  }
+  
+  // ARP comment from router MAC - only use if it looks like a device name
+  if (!routerName && routerArpEntry?.comment && routerArpEntry.comment.length > 2) {
+    const arpComment = routerArpEntry.comment;
+    const looksLikeMetadata = arpComment.includes('[ONU:') || arpComment.includes('SN=') || arpComment.includes('MAC=');
+    if (!looksLikeMetadata) {
+      routerName = arpComment;
+    }
+  }
+  
+  // Fallback ARP comment from ONU MAC
   if (!routerName && arpEntry?.comment && arpEntry.comment.length > 2) {
     const arpComment = arpEntry.comment;
     const looksLikeMetadata = arpComment.includes('[ONU:') || arpComment.includes('SN=') || arpComment.includes('MAC=');
