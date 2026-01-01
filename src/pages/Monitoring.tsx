@@ -35,9 +35,26 @@ const powerData = generatePowerData();
 
 export default function Monitoring() {
   const { olts, loading: oltsLoading } = useOLTs();
-  const { onus, loading: onusLoading } = useONUs();
+  const { onus: rawOnus, loading: onusLoading } = useONUs();
   
   const loading = oltsLoading || onusLoading;
+  
+  // Deduplicate ONUs by olt_id + pon_port + onu_index
+  const onus = useMemo(() => {
+    const byKey = new Map<string, typeof rawOnus[number]>();
+    for (const onu of rawOnus) {
+      const key = `${onu.olt_id}|${onu.pon_port}|${onu.onu_index}`;
+      const prev = byKey.get(key);
+      if (!prev) {
+        byKey.set(key, onu);
+        continue;
+      }
+      const prevTime = prev.updated_at ? new Date(prev.updated_at).getTime() : 0;
+      const curTime = onu.updated_at ? new Date(onu.updated_at).getTime() : 0;
+      if (curTime >= prevTime) byKey.set(key, onu);
+    }
+    return Array.from(byKey.values());
+  }, [rawOnus]);
   
   // Filter states
   const [selectedOLT, setSelectedOLT] = useState<string>('all');
