@@ -584,6 +584,9 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <TableHead className="font-semibold text-center">Distance</TableHead>
                   <TableHead className="font-semibold text-center">Status</TableHead>
                   <TableHead className="font-semibold">Offline Reason</TableHead>
+                  <TableHead className="font-semibold">Last Register</TableHead>
+                  <TableHead className="font-semibold">Last Deregister</TableHead>
+                  <TableHead className="font-semibold">Alive Time</TableHead>
                   <TableHead className="font-semibold">
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
@@ -596,7 +599,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
               <TableBody>
                 {paginatedONUs.length === 0 ? (
                 <TableRow>
-                    <TableCell colSpan={18} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={21} className="text-center py-8 text-muted-foreground">
                       No ONU devices found
                     </TableCell>
                   </TableRow>
@@ -671,6 +674,45 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground cursor-help">
+                                  {onu.last_online 
+                                    ? formatDistanceToNow(new Date(onu.last_online), { addSuffix: true })
+                                    : 'N/A'}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">
+                                  {onu.last_online ? new Date(onu.last_online).toLocaleString() : 'Never registered'}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-muted-foreground cursor-help">
+                                  {onu.last_offline 
+                                    ? formatDistanceToNow(new Date(onu.last_offline), { addSuffix: true })
+                                    : 'N/A'}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">
+                                  {onu.last_offline ? new Date(onu.last_offline).toLocaleString() : 'Never deregistered'}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                        <TableCell className="text-xs font-mono">
+                          {(onu as any).alive_time || 'N/A'}
                         </TableCell>
                         <TableCell className="text-xs">
                           <TooltipProvider>
