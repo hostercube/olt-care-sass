@@ -846,6 +846,34 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // ======================================================================
+  // METHOD B2: Reverse lookup - find ONU from PPPoE session's router MAC via OLT MAC table
+  // For each PPPoE session, check if its caller-id (router MAC) appears in OLT MAC table for this ONU
+  // ======================================================================
+  if (!pppoeSession && oltMacTable.length > 0) {
+    for (const session of pppoeData) {
+      if (isAlreadyMatched(session.pppoe_username)) continue;
+      
+      const sessionRouterMac = session.mac_address?.replace(/[:-]/g, '').toUpperCase();
+      if (!sessionRouterMac) continue;
+      
+      // Check if this router MAC is in the OLT MAC table for our ONU
+      const matchingEntry = oltMacTable.find(entry => {
+        const entryMac = entry.mac_address?.replace(/[:-]/g, '').toUpperCase();
+        const entryPon = normalizePonPort(entry.pon_port);
+        return entryMac === sessionRouterMac && entryPon === ponNormalized && entry.onu_index === onuIndex;
+      });
+      
+      if (matchingEntry) {
+        pppoeSession = session;
+        pppSecret = pppSecretsData.find(s => s.pppoe_username === session.pppoe_username);
+        matchMethod = 'mac-table-reverse';
+        logger.info(`✅ MAC TABLE REVERSE: PPPoE ${session.pppoe_username} router MAC ${sessionRouterMac} -> ONU ${ponPort}:${onuIndex}`);
+        break;
+      }
+    }
+  }
+  
+  // ======================================================================
   // METHOD 1: ONU MAC/Serial in PPP Secret caller-id (direct hardware match)
   // ======================================================================
   if (!pppoeSession && (macNormalized || serialNormalized)) {
@@ -978,6 +1006,50 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
         pppSecret = pppSecretsData.find(s => s.pppoe_username === session.pppoe_username);
         matchMethod = 'session-caller-id-exact';
         logger.info(`SESSION MATCH: Active session ${session.pppoe_username} has caller-id matching ONU MAC ${macNormalized}`);
+        break;
+      }
+    }
+  }
+  
+  // ======================================================================
+  // METHOD 6: Last 6 chars of MAC matching (fallback for partial matches)
+  // Some ISPs store only last 6 chars in secrets or comments
+  // ======================================================================
+  if (!pppoeSession && macLast6) {
+    for (const secret of pppSecretsData) {
+      if (isAlreadyMatched(secret.pppoe_username)) continue;
+      
+      const comment = (secret.comment || '').toUpperCase().replace(/[:-]/g, '');
+      const callerId = (secret.caller_id || '').replace(/[:-]/g, '').toUpperCase();
+      const secretName = (secret.pppoe_username || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      
+      // Check if last 6 chars of ONU MAC appear in comment, caller-id, or username
+      if (comment.includes(macLast6) || callerId.endsWith(macLast6) || secretName.includes(macLast6)) {
+        pppSecret = secret;
+        matchMethod = 'mac-last6-match';
+        pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
+        logger.info(`LAST6 MATCH: ONU MAC last 6 "${macLast6}" found for ${secret.pppoe_username}`);
+        break;
+      }
+    }
+  }
+  
+  // ======================================================================
+  // METHOD 7: Serial number last 6 chars matching
+  // ======================================================================
+  if (!pppoeSession && serialLast6 && serialLast6 !== macLast6) {
+    for (const secret of pppSecretsData) {
+      if (isAlreadyMatched(secret.pppoe_username)) continue;
+      
+      const comment = (secret.comment || '').toUpperCase().replace(/[:-]/g, '');
+      const callerId = (secret.caller_id || '').replace(/[:-]/g, '').toUpperCase();
+      const secretName = (secret.pppoe_username || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      
+      if (comment.includes(serialLast6) || callerId.endsWith(serialLast6) || secretName.includes(serialLast6)) {
+        pppSecret = secret;
+        matchMethod = 'serial-last6-match';
+        pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
+        logger.info(`SERIAL LAST6 MATCH: Serial last 6 "${serialLast6}" found for ${secret.pppoe_username}`);
         break;
       }
     }
