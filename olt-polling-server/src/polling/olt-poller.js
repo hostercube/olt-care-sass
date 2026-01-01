@@ -2,7 +2,7 @@ import { Client } from 'ssh2';
 import { logger } from '../utils/logger.js';
 import { parseZTEOutput } from './parsers/zte-parser.js';
 import { parseHuaweiOutput } from './parsers/huawei-parser.js';
-import { parseVSOLOutput } from './parsers/vsol-parser.js';
+import { parseVSOLOutput, parseVSOLMacTable } from './parsers/vsol-parser.js';
 import { parseDBCOutput } from './parsers/dbc-parser.js';
 import { parseCDATAOutput } from './parsers/cdata-parser.js';
 import { parseECOMOutput } from './parsers/ecom-parser.js';
@@ -341,32 +341,44 @@ export async function pollOLT(supabase, olt) {
         
         logger.info(`MikroTik data: ${pppoe.length} PPPoE sessions, ${arp.length} ARP entries, ${dhcp.length} DHCP leases, ${secrets.length} PPP secrets`);
         
-        // Log some sample data for debugging
+        // Log sample data for debugging
         if (pppoe.length > 0) {
           logger.debug(`Sample PPPoE sessions: ${JSON.stringify(pppoe.slice(0, 3))}`);
+        }
+        
+        // Parse MAC table from OLT output for advanced matching
+        // This allows us to match PPPoE caller-id (router MAC) to specific ONU
+        let oltMacTable = [];
+        if (rawOutput && (olt.brand === 'VSOL' || olt.brand === 'Fiberhome')) {
+          oltMacTable = parseVSOLMacTable(rawOutput);
+          if (oltMacTable.length > 0) {
+            logger.info(`OLT MAC table: ${oltMacTable.length} entries found - enables caller-id -> ONU matching`);
+            logger.debug(`Sample MAC table: ${JSON.stringify(oltMacTable.slice(0, 5))}`);
+          }
         }
         
         // Count how many ONUs get enriched
         let enrichedCount = 0;
         
-        // Track which PPPoE usernames have been matched to prevent duplicates
+        // Track which PPPoE usernames have been matched to prevent duplicates (1:1 enforcement)
         const usedMatches = new Set();
         
         // Enrich ONU data with MikroTik info (router name, MAC, PPPoE username)
         // Pass usedMatches to prevent the same PPPoE user from being assigned to multiple ONUs
+        // Pass oltMacTable to enable caller-id -> ONU matching via MAC table lookup
         onus = onus.map(onu => {
-          const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets, usedMatches);
+          const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets, usedMatches, oltMacTable);
           if (enriched.pppoe_username !== onu.pppoe_username || enriched.router_name !== onu.router_name) {
             enrichedCount++;
           }
-          // Mark this PPPoE username as used so it won't be matched to another ONU
+          // Mark this PPPoE username as used so it won't be matched to another ONU (1:1 enforcement)
           if (enriched.pppoe_username) {
             usedMatches.add(enriched.pppoe_username.toLowerCase());
           }
           return enriched;
         });
         
-        logger.info(`MikroTik enrichment: ${enrichedCount} of ${onus.length} ONUs got PPPoE/router data`);
+        logger.info(`MikroTik enrichment: ${enrichedCount} of ${onus.length} ONUs got PPPoE/router data (1:1 strict matching)`);
       } catch (mikrotikErr) {
         logger.warn(`MikroTik data fetch failed (non-critical): ${mikrotikErr.message}`);
         // Continue without MikroTik data - ONU data from OLT is still valid
@@ -676,6 +688,12 @@ function getOLTCommands(brand, mode = 'GPON') {
         // Distance info (if supported)
         'show epon onu distance',
         'show onu distance all',
+        // MAC table for caller-id matching
+        'show mac address-table',
+        'show epon mac-address interface epon 0/1',
+        'show epon mac-address interface epon 0/2',
+        'show epon mac-address interface epon 0/3',
+        'show epon mac-address interface epon 0/4',
         'exit'
       ],
       GPON: [

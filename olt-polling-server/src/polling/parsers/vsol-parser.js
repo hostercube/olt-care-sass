@@ -626,6 +626,84 @@ export function parseVSOLOutput(output) {
 }
 
 /**
+ * Parse MAC table output from VSOL OLT
+ * This shows which MAC addresses are seen on each PON port + ONU index
+ * 
+ * Formats:
+ * show mac address-table
+ * VLAN  MAC Address        Type      Port      ONU-ID
+ * 100   00:11:22:33:44:55  Dynamic   EPON0/1   1
+ * 
+ * show epon mac-address interface epon 0/1
+ * ONU-ID  VLAN  MAC-Address        Type
+ * 1       100   00:11:22:33:44:55  Dynamic
+ * 
+ * @returns {Array} Array of { pon_port, onu_index, mac_address, vlan }
+ */
+export function parseVSOLMacTable(output) {
+  const macTable = [];
+  const lines = output.split('\n');
+  let currentPonPort = null;
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine || trimmedLine.length < 10) continue;
+    
+    // Detect PON port context from command echo
+    // "show epon mac-address interface epon 0/1"
+    const interfaceMatch = trimmedLine.match(/(?:show\s+epon\s+mac-address\s+interface\s+epon|interface\s+epon)\s+(\d+\/\d+)/i);
+    if (interfaceMatch) {
+      currentPonPort = interfaceMatch[1];
+      continue;
+    }
+    
+    // Pattern 1: Full format with Port column
+    // VLAN  MAC Address        Type      Port      ONU-ID
+    // 100   00:11:22:33:44:55  Dynamic   EPON0/1   1
+    const fullMatch = trimmedLine.match(/(\d+)\s+([0-9A-Fa-f:.-]{12,17})\s+\w+\s+(?:EPON)?(\d+\/\d+)\s+(\d+)/i);
+    if (fullMatch) {
+      macTable.push({
+        vlan: parseInt(fullMatch[1]),
+        mac_address: formatMac(fullMatch[2]),
+        pon_port: fullMatch[3],
+        onu_index: parseInt(fullMatch[4]),
+      });
+      continue;
+    }
+    
+    // Pattern 2: Format with ONU-ID first (in interface context)
+    // ONU-ID  VLAN  MAC-Address        Type
+    // 1       100   00:11:22:33:44:55  Dynamic
+    const onuFirstMatch = trimmedLine.match(/^(\d+)\s+(\d+)\s+([0-9A-Fa-f:.-]{12,17})\s+\w+/i);
+    if (onuFirstMatch && currentPonPort) {
+      macTable.push({
+        onu_index: parseInt(onuFirstMatch[1]),
+        vlan: parseInt(onuFirstMatch[2]),
+        mac_address: formatMac(onuFirstMatch[3]),
+        pon_port: currentPonPort,
+      });
+      continue;
+    }
+    
+    // Pattern 3: Simple format
+    // EPON0/1:1  00:11:22:33:44:55  100
+    const simpleMatch = trimmedLine.match(/(?:EPON)?(\d+\/\d+):(\d+)\s+([0-9A-Fa-f:.-]{12,17})/i);
+    if (simpleMatch) {
+      macTable.push({
+        pon_port: simpleMatch[1],
+        onu_index: parseInt(simpleMatch[2]),
+        mac_address: formatMac(simpleMatch[3]),
+        vlan: null,
+      });
+      continue;
+    }
+  }
+  
+  logger.debug(`VSOL MAC table parser found ${macTable.length} entries`);
+  return macTable;
+}
+
+/**
  * Parse ONU status string to standard status
  */
 function parseStatus(statusStr) {
