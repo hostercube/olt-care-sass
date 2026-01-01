@@ -27,6 +27,9 @@ export function parseVSOLOutput(output) {
   const opmDiagData = new Map(); // Store optical power data
   const deregisterData = new Map(); // Store offline reasons
   const distanceData = new Map(); // Store distance info
+  const lastRegisterData = new Map(); // Store last register time
+  const lastDeregisterData = new Map(); // Store last deregister time
+  const aliveTimeData = new Map(); // Store alive/uptime
   
   logger.info(`VSOL parser processing ${lines.length} lines of output`);
   
@@ -566,6 +569,94 @@ export function parseVSOLOutput(output) {
       }
       continue;
     }
+
+    // Pattern 13: ONU Status table row from V-SOL web UI / CLI
+    // Format: EPON0/1:1  Online  4c:d7:c8:80:3c:06  2638  1705  2000/04/30 20:41:43  2000/04/30 20:41:41  Power Off  5 06:10:57
+    // Columns: ONU ID  Status  MAC Address  Description  Distance(m)  RTT(TQ)  Last Register Time  Last Deregister Time  Deregister Reason  Alive Time
+    const onuStatusRowMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+(Online|Offline|Active|Inactive|LOS|Deactive)\s+([0-9a-fA-F:.-]{12,17})\s+(?:\S+\s+)?(\d+)\s+\d+\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+([\w\s]+?)\s+(\d+\s+\d{2}:\d{2}:\d{2})/i);
+    if (onuStatusRowMatch) {
+      const ponPort = onuStatusRowMatch[1];
+      const onuIndex = parseInt(onuStatusRowMatch[2]);
+      const status = parseStatus(onuStatusRowMatch[3]);
+      const macAddress = formatMac(onuStatusRowMatch[4]);
+      const distance = parseInt(onuStatusRowMatch[5]);
+      const lastRegisterTime = onuStatusRowMatch[6].replace(/\//g, '-'); // Convert to ISO format
+      const lastDeregisterTime = onuStatusRowMatch[7].replace(/\//g, '-');
+      const deregisterReason = onuStatusRowMatch[8].trim();
+      const aliveTime = onuStatusRowMatch[9].trim();
+      const key = `${ponPort}:${onuIndex}`;
+      
+      // Update or create ONU entry
+      if (onuMap.has(key)) {
+        const onu = onuMap.get(key);
+        onu.status = status;
+        if (!onu.mac_address) onu.mac_address = macAddress;
+      } else {
+        onuMap.set(key, {
+          pon_port: ponPort,
+          onu_index: onuIndex,
+          status: status,
+          serial_number: macAddress.replace(/:/g, ''),
+          name: `ONU-${ponPort}:${onuIndex}`,
+          rx_power: null,
+          tx_power: null,
+          mac_address: macAddress,
+          router_name: null
+        });
+      }
+      
+      distanceData.set(key, distance);
+      lastRegisterData.set(key, lastRegisterTime);
+      lastDeregisterData.set(key, lastDeregisterTime);
+      deregisterData.set(key, deregisterReason);
+      aliveTimeData.set(key, aliveTime);
+      
+      logger.debug(`ONU status row parsed: ${key} status=${status} distance=${distance}m lastReg=${lastRegisterTime} deregReason=${deregisterReason}`);
+      continue;
+    }
+
+    // Pattern 13b: Simpler ONU status row without RTT column
+    // EPON0/1:1  Online  4c:d7:c8:80:3c:06  2638  2000/04/30 20:41:43  2000/04/30 20:41:41  Power Off  5 06:10:57
+    const onuStatusRowSimpleMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+(Online|Offline|Active|Inactive|LOS|Deactive)\s+([0-9a-fA-F:.-]{12,17})\s+(\d+)\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+([\w\s]+?)\s+(\d+\s+\d{2}:\d{2}:\d{2})/i);
+    if (onuStatusRowSimpleMatch) {
+      const ponPort = onuStatusRowSimpleMatch[1];
+      const onuIndex = parseInt(onuStatusRowSimpleMatch[2]);
+      const status = parseStatus(onuStatusRowSimpleMatch[3]);
+      const macAddress = formatMac(onuStatusRowSimpleMatch[4]);
+      const distance = parseInt(onuStatusRowSimpleMatch[5]);
+      const lastRegisterTime = onuStatusRowSimpleMatch[6].replace(/\//g, '-');
+      const lastDeregisterTime = onuStatusRowSimpleMatch[7].replace(/\//g, '-');
+      const deregisterReason = onuStatusRowSimpleMatch[8].trim();
+      const aliveTime = onuStatusRowSimpleMatch[9].trim();
+      const key = `${ponPort}:${onuIndex}`;
+      
+      if (onuMap.has(key)) {
+        const onu = onuMap.get(key);
+        onu.status = status;
+        if (!onu.mac_address) onu.mac_address = macAddress;
+      } else {
+        onuMap.set(key, {
+          pon_port: ponPort,
+          onu_index: onuIndex,
+          status: status,
+          serial_number: macAddress.replace(/:/g, ''),
+          name: `ONU-${ponPort}:${onuIndex}`,
+          rx_power: null,
+          tx_power: null,
+          mac_address: macAddress,
+          router_name: null
+        });
+      }
+      
+      distanceData.set(key, distance);
+      lastRegisterData.set(key, lastRegisterTime);
+      lastDeregisterData.set(key, lastDeregisterTime);
+      deregisterData.set(key, deregisterReason);
+      aliveTimeData.set(key, aliveTime);
+      
+      logger.debug(`ONU status row (simple) parsed: ${key} status=${status} distance=${distance}m`);
+      continue;
+    }
   }
   
   // Second pass: Mark inactive ONUs as offline
@@ -604,6 +695,25 @@ export function parseVSOLOutput(output) {
       onuMap.get(key).distance = distance;
     }
   }
+
+  // Sixth pass: Merge last register/deregister time data
+  for (const [key, lastRegister] of lastRegisterData) {
+    if (onuMap.has(key)) {
+      onuMap.get(key).last_register_time = lastRegister;
+    }
+  }
+  for (const [key, lastDeregister] of lastDeregisterData) {
+    if (onuMap.has(key)) {
+      onuMap.get(key).last_deregister_time = lastDeregister;
+    }
+  }
+
+  // Seventh pass: Merge alive time data
+  for (const [key, aliveTime] of aliveTimeData) {
+    if (onuMap.has(key)) {
+      onuMap.get(key).alive_time = aliveTime;
+    }
+  }
   
   // Convert map to array
   for (const [key, onu] of onuMap) {
@@ -611,7 +721,7 @@ export function parseVSOLOutput(output) {
   }
   
   logger.info(`VSOL parser found ${onus.length} ONUs from ${lines.length} lines (mode: ${isGpon ? 'GPON' : 'EPON'})`);
-  logger.info(`VSOL parser: ${inactiveONUs.size} ONUs marked as offline, ${opmDiagData.size} with optical data`);
+  logger.info(`VSOL parser: ${inactiveONUs.size} ONUs marked as offline, ${opmDiagData.size} with optical data, ${lastRegisterData.size} with register times`);
   if (detectedCommands.length > 0) {
     logger.info(`VSOL detected available commands: ${detectedCommands.slice(0, 5).join(', ')}`);
   }
