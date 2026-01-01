@@ -9,7 +9,7 @@ interface SystemSettings {
   timezone: string;
   autoRefresh: boolean;
   showOfflineFirst: boolean;
-  
+
   // Polling
   oltPollInterval: number;
   onuPollInterval: number;
@@ -17,7 +17,7 @@ interface SystemSettings {
   storePowerHistory: boolean;
   historyRetention: number;
   apiServerUrl: string;
-  
+
   // Alerts
   rxPowerThreshold: number;
   offlineThreshold: number;
@@ -26,7 +26,12 @@ interface SystemSettings {
   oltUnreachableAlerts: boolean;
   emailNotifications: boolean;
   notificationEmail: string;
-  
+
+  // Integrations (MikroTik)
+  mikrotikMatchExactMac: boolean;
+  mikrotikMatchLast6Mac: boolean;
+  mikrotikMatchSerialOrComment: boolean;
+
   // Security
   twoFactorAuth: boolean;
   sessionTimeout: number;
@@ -51,6 +56,9 @@ const defaultSettings: SystemSettings = {
   oltUnreachableAlerts: true,
   emailNotifications: false,
   notificationEmail: '',
+  mikrotikMatchExactMac: true,
+  mikrotikMatchLast6Mac: true,
+  mikrotikMatchSerialOrComment: true,
   twoFactorAuth: false,
   sessionTimeout: 30,
   allowUserRegistration: true,

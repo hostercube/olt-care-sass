@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Server, Loader2, Mail, UserPlus } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 
@@ -254,6 +254,37 @@ export default function Settings() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <Separator />
+
+                <div className="space-y-3 p-4 rounded-lg bg-muted/30 border border-border">
+                  <div className="flex items-center gap-2">
+                    <Network className="h-4 w-4 text-primary" />
+                    <Label className="text-sm font-medium">MikroTik PPPoE Matching Rules</Label>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Exact MAC match</Label>
+                      <p className="text-sm text-muted-foreground">Match ONU MAC with PPP Active caller-id exactly</p>
+                    </div>
+                    <Switch checked={settings.mikrotikMatchExactMac} onCheckedChange={(checked) => updateSetting('mikrotikMatchExactMac', checked)} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Last-6 MAC match</Label>
+                      <p className="text-sm text-muted-foreground">Fallback match using last 6 hex of MAC</p>
+                    </div>
+                    <Switch checked={settings.mikrotikMatchLast6Mac} onCheckedChange={(checked) => updateSetting('mikrotikMatchLast6Mac', checked)} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Serial / Comment match</Label>
+                      <p className="text-sm text-muted-foreground">Match ONU serial with PPP secret comment/username</p>
+                    </div>
+                    <Switch checked={settings.mikrotikMatchSerialOrComment} onCheckedChange={(checked) => updateSetting('mikrotikMatchSerialOrComment', checked)} />
+                  </div>
+                </div>
+
                 <Separator />
                 <div className="flex items-center justify-between p-3 rounded-lg bg-success/10 border border-success/20">
                   <div className="flex items-center gap-2">
