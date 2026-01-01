@@ -679,45 +679,59 @@ app.post('/api/reenrich/:oltId', async (req, res) => {
     
     if (onuError) throw onuError;
     
+    // For VSOL: build OLT MAC table from latest raw CLI output
+    let oltMacTable = [];
+    if (olt.brand === 'VSOL') {
+      const { data: logRow, error: logError } = await supabase
+        .from('olt_debug_logs')
+        .select('raw_output')
+        .eq('olt_id', oltId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!logError && logRow?.raw_output) {
+        oltMacTable = parseVSOLMacTable(logRow.raw_output);
+        logger.info(`OLT MAC table loaded: ${oltMacTable.length} entries for VSOL matching`);
+      }
+    }
+    
+    // STRICT 1:1 enforcement - prevents same PPPoE being assigned to multiple ONUs
+    const usedMatches = new Set();
+    
     let enrichedCount = 0;
-    const updates = [];
     const matchMethods = {};
     
-     for (const onu of existingONUs || []) {
-       const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
-       const enrichedRouterMac = enriched.router_mac || null;
+    for (const onu of existingONUs || []) {
+      const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets, usedMatches, oltMacTable);
+      const enrichedRouterMac = enriched.router_mac || null;
+      
+      // Mark as used to enforce 1:1
+      if (enriched.pppoe_username) usedMatches.add(enriched.pppoe_username.toLowerCase());
 
-       if (enriched.pppoe_username !== onu.pppoe_username || 
-           enriched.router_name !== onu.router_name ||
-           enrichedRouterMac !== (onu.router_mac || null)) {
-         enrichedCount++;
-         updates.push({
-           id: onu.id,
-           pppoe_username: enriched.pppoe_username,
-           router_name: enriched.router_name,
-           router_mac: enrichedRouterMac,
-           updated_at: new Date().toISOString(),
-         });
-         
-         // Track match methods
-         if (enriched.match_method) {
-           matchMethods[enriched.match_method] = (matchMethods[enriched.match_method] || 0) + 1;
-         }
-       }
-     }
+      if (enriched.pppoe_username !== onu.pppoe_username || 
+          enriched.router_name !== onu.router_name ||
+          enrichedRouterMac !== (onu.router_mac || null)) {
+        enrichedCount++;
+        
+        await supabase
+          .from('onus')
+          .update({
+            pppoe_username: enriched.pppoe_username,
+            router_name: enriched.router_name,
+            router_mac: enrichedRouterMac,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', onu.id);
+        
+        // Track match methods
+        if (enriched.match_method) {
+          matchMethods[enriched.match_method] = (matchMethods[enriched.match_method] || 0) + 1;
+        }
+      }
+    }
     
-     // Batch update enriched ONUs
-     for (const update of updates) {
-       await supabase
-         .from('onus')
-         .update({
-           pppoe_username: update.pppoe_username,
-           router_name: update.router_name,
-           router_mac: update.router_mac,
-           updated_at: update.updated_at,
-         })
-         .eq('id', update.id);
-     }
+    logger.info(`Re-enrich complete: ${enrichedCount}/${existingONUs?.length || 0} ONUs, Methods: ${JSON.stringify(matchMethods)}`);
     
     logger.info(`Re-enrichment complete: ${enrichedCount}/${existingONUs?.length || 0} ONUs updated`);
     
