@@ -720,34 +720,36 @@ function decodePlainLength(buffer, offset) {
 /**
  * Match ONU data with MikroTik PPPoE/DHCP data
  * 
- * CRITICAL MATCHING STRATEGY (100% Accuracy):
+ * ==========================================
+ * 🔥 100% ACCURATE MATCHING STRATEGY
+ * ==========================================
  * 
- * The key insight is:
- * - ONU MAC: Hardware MAC of the ONU device (parsed from OLT CLI)
- * - Router MAC: CPE/Router MAC behind the ONU (from PPPoE caller-id/last-caller-id)
+ * KEY INSIGHT (Based on real ISP workflows):
  * 
- * MATCHING METHODS (in priority order):
+ * 1. ONU MAC = Hardware MAC of the ONU device itself
+ * 2. Router MAC (CPE) = MAC of customer's router BEHIND the ONU
+ * 3. PPPoE Caller-ID = Usually the Router MAC (not ONU MAC!)
  * 
- * METHOD 0 (BEST): caller-id/last-caller-id from PPPoE session matches OLT MAC table
- *   - MikroTik PPPoE session has caller-id (router MAC behind ONU)
- *   - OLT MAC table shows which PON port + ONU index this MAC is connected to
- *   - This is 100% accurate because it's the live network path
+ * MATCHING METHODS (Priority Order):
  * 
- * METHOD 1: ONU MAC matches PPP secret caller-id
- *   - Some ISPs store the ONU MAC in PPP secret caller-id field
- *   - Direct match = high confidence
+ * METHOD A (BEST - Direct ONU MAC Match):
+ *   - If ONU has built-in router/PPPoE client
+ *   - PPPoE caller-id = ONU MAC
+ *   - Match: ONU.mac == PPPoE.caller_id
  * 
- * METHOD 2: Serial number in PPP secret name/comment
- *   - Common practice to store ONU info in secret comments
+ * METHOD B (BEST - OLT MAC Table Lookup):
+ *   - OLT MAC table shows which MACs are seen on each ONU
+ *   - PPPoE caller-id (router MAC) found in OLT MAC table for this ONU
+ *   - Match: OLT_MAC_TABLE[PON:ONU_INDEX].mac == PPPoE.caller_id
+ * 
+ * METHOD C (Metadata Match):
+ *   - ISP stores ONU info in PPP secret comments
  *   - e.g., comment = "[ONU:0/4:39] SN=VSOL12345678"
- * 
- * METHOD 3: PON port + ONU index pattern in secret name/comment
- *   - e.g., username = "pon04_user39" or comment = "PON 0/4 ONU 39"
  * 
  * 1:1 ENFORCEMENT:
  * - usedMatches tracks which PPPoE usernames are already assigned
- * - Once a PPPoE user is matched to an ONU, it cannot be matched to another
- * - This prevents the same customer showing on multiple ONU slots
+ * - Once matched, a PPPoE user cannot be assigned to another ONU
+ * - Prevents duplicate customer data on multiple ONUs
  */
 export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, pppSecretsData = [], usedMatches = new Set(), oltMacTable = []) {
   const macAddress = onu.mac_address?.toUpperCase();
@@ -775,9 +777,44 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   const onuNameClean = onuName.replace(/[^A-Z0-9]/g, '').toLowerCase();
   
   // ======================================================================
-  // METHOD 0 (HIGHEST PRIORITY): Match via OLT MAC table lookup
-  // If we have MAC table data from OLT, find PPPoE sessions whose caller-id
-  // (router MAC) appears in this ONU's MAC table entry
+  // METHOD A (HIGHEST PRIORITY): Direct ONU MAC = PPPoE Caller-ID
+  // This is the EXACT logic ChatGPT described: ONU.mac == PPPoE.caller_id
+  // Works when ONU itself initiates PPPoE (built-in router or bridge mode)
+  // ======================================================================
+  if (!pppoeSession && macNormalized) {
+    for (const session of pppoeData) {
+      if (isAlreadyMatched(session.pppoe_username)) continue;
+      
+      // Get caller-id from active session
+      const sessionCallerMac = session.mac_address?.replace(/[:-]/g, '').toUpperCase() || '';
+      const rawCallerId = session.raw_caller_id?.replace(/[:-]/g, '').toUpperCase() || '';
+      
+      // EXACT MATCH: ONU MAC == PPPoE caller-id
+      if (sessionCallerMac === macNormalized || rawCallerId === macNormalized) {
+        pppoeSession = session;
+        pppSecret = pppSecretsData.find(s => s.pppoe_username === session.pppoe_username);
+        matchMethod = 'onu-mac-equals-caller-id';
+        logger.info(`✅ DIRECT MATCH: ONU MAC ${macNormalized} == PPPoE caller-id -> ${session.pppoe_username}`);
+        break;
+      }
+      
+      // Also check if serial number matches (for EPON where serial = MAC)
+      if (serialNormalized && (sessionCallerMac === serialNormalized || rawCallerId === serialNormalized)) {
+        pppoeSession = session;
+        pppSecret = pppSecretsData.find(s => s.pppoe_username === session.pppoe_username);
+        matchMethod = 'serial-equals-caller-id';
+        logger.info(`✅ SERIAL MATCH: ONU Serial ${serialNormalized} == PPPoE caller-id -> ${session.pppoe_username}`);
+        break;
+      }
+    }
+  }
+  
+  // ======================================================================
+  // METHOD B: OLT MAC Table Lookup (Router behind ONU)
+  // When customer has a separate router behind the ONU:
+  // - OLT MAC table shows router MAC on this ONU's port
+  // - PPPoE caller-id = router MAC
+  // - Match via: OLT_MAC_TABLE[ONU] contains PPPoE.caller_id
   // ======================================================================
   if (!pppoeSession && oltMacTable.length > 0) {
     // Find MAC table entries for this ONU's PON port and index
@@ -787,10 +824,12 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
     });
     
     if (onuMacEntries.length > 0) {
-      // Get all MACs seen on this ONU
+      // Get all MACs seen on this ONU (these are routers/devices behind the ONU)
       const onuConnectedMacs = new Set(onuMacEntries.map(e => e.mac_address?.replace(/[:-]/g, '').toUpperCase()));
       
-      // Find PPPoE session whose caller-id matches any MAC on this ONU
+      logger.debug(`ONU ${ponPort}:${onuIndex} has ${onuConnectedMacs.size} connected devices in MAC table`);
+      
+      // Find PPPoE session whose caller-id matches any MAC connected to this ONU
       for (const session of pppoeData) {
         if (isAlreadyMatched(session.pppoe_username)) continue;
         
@@ -799,7 +838,7 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
           pppoeSession = session;
           pppSecret = pppSecretsData.find(s => s.pppoe_username === session.pppoe_username);
           matchMethod = 'mac-table-lookup';
-          logger.info(`MAC TABLE MATCH: ONU ${ponPort}:${onuIndex} <- PPPoE ${session.pppoe_username} via router MAC ${sessionCallerMac}`);
+          logger.info(`✅ MAC TABLE MATCH: ONU ${ponPort}:${onuIndex} <- Router MAC ${sessionCallerMac} <- PPPoE ${session.pppoe_username}`);
           break;
         }
       }

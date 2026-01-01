@@ -357,11 +357,20 @@ export async function pollOLT(supabase, olt) {
           }
         }
         
-        // Count how many ONUs get enriched
+        // Count how many ONUs get enriched and track match methods
         let enrichedCount = 0;
+        const matchMethodStats = {};
         
         // Track which PPPoE usernames have been matched to prevent duplicates (1:1 enforcement)
         const usedMatches = new Set();
+        
+        // Log summary of available data for matching
+        logger.info(`=== MATCHING DATA AVAILABLE ===`);
+        logger.info(`ONU count: ${onus.length}`);
+        logger.info(`PPPoE sessions: ${pppoe.length} (active connections with caller-id)`);
+        logger.info(`PPP secrets: ${secrets.length} (stored credentials)`);
+        logger.info(`OLT MAC table: ${oltMacTable.length} entries`);
+        logger.info(`================================`);
         
         // Enrich ONU data with MikroTik info (router name, MAC, PPPoE username)
         // Pass usedMatches to prevent the same PPPoE user from being assigned to multiple ONUs
@@ -371,6 +380,10 @@ export async function pollOLT(supabase, olt) {
           if (enriched.pppoe_username !== onu.pppoe_username || enriched.router_name !== onu.router_name) {
             enrichedCount++;
           }
+          // Track match method statistics
+          if (enriched.match_method) {
+            matchMethodStats[enriched.match_method] = (matchMethodStats[enriched.match_method] || 0) + 1;
+          }
           // Mark this PPPoE username as used so it won't be matched to another ONU (1:1 enforcement)
           if (enriched.pppoe_username) {
             usedMatches.add(enriched.pppoe_username.toLowerCase());
@@ -378,7 +391,18 @@ export async function pollOLT(supabase, olt) {
           return enriched;
         });
         
-        logger.info(`MikroTik enrichment: ${enrichedCount} of ${onus.length} ONUs got PPPoE/router data (1:1 strict matching)`);
+        // Log enrichment summary
+        logger.info(`=== ENRICHMENT RESULT ===`);
+        logger.info(`Total ONUs: ${onus.length}`);
+        logger.info(`Enriched: ${enrichedCount} ONUs got PPPoE/router data`);
+        logger.info(`Unique PPPoE users matched: ${usedMatches.size} (1:1 strict)`);
+        if (Object.keys(matchMethodStats).length > 0) {
+          logger.info(`Match methods used:`);
+          for (const [method, count] of Object.entries(matchMethodStats)) {
+            logger.info(`  - ${method}: ${count} ONUs`);
+          }
+        }
+        logger.info(`=========================`);
       } catch (mikrotikErr) {
         logger.warn(`MikroTik data fetch failed (non-critical): ${mikrotikErr.message}`);
         // Continue without MikroTik data - ONU data from OLT is still valid
