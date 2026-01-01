@@ -6,8 +6,9 @@ import { ONUTable } from '@/components/dashboard/ONUTable';
 import { ONUStatsWidget } from '@/components/dashboard/ONUStatsWidget';
 import { LiveStatusWidget } from '@/components/dashboard/LiveStatusWidget';
 import { DataQualityWidget } from '@/components/dashboard/DataQualityWidget';
+import { DeviceHealthWidget } from '@/components/dashboard/DeviceHealthWidget';
 import { useOLTs, useONUs, useAlerts, useDashboardStats } from '@/hooks/useOLTData';
-import { Server, Router, AlertTriangle, Zap, Wifi, Loader2, Activity } from 'lucide-react';
+import { Server, Router, AlertTriangle, Zap, Wifi, Loader2, Activity, Cpu } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -83,9 +84,9 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Tabs for Overview and Live Status */}
+        {/* Tabs for Overview, Live Status, and Device Health */}
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2 bg-muted">
+          <TabsList className="grid w-full max-w-lg grid-cols-3 bg-muted">
             <TabsTrigger value="overview" className="gap-2">
               <Server className="h-4 w-4" />
               Overview
@@ -93,6 +94,10 @@ export default function Dashboard() {
             <TabsTrigger value="live" className="gap-2">
               <Activity className="h-4 w-4" />
               Live Status
+            </TabsTrigger>
+            <TabsTrigger value="health" className="gap-2">
+              <Cpu className="h-4 w-4" />
+              Device Health
             </TabsTrigger>
           </TabsList>
           
@@ -147,6 +152,52 @@ export default function Dashboard() {
           
           <TabsContent value="live" className="mt-4">
             <LiveStatusWidget />
+          </TabsContent>
+          
+          <TabsContent value="health" className="mt-4">
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <DeviceHealthWidget olts={olts} />
+              </div>
+              <div className="space-y-6">
+                <Card variant="glass">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Cpu className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold">Resource Impact</h3>
+                    </div>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Connection Type</span>
+                        <span className="font-medium">Read-only CLI</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Session Duration</span>
+                        <span className="font-medium">&lt; 10 seconds</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">CPU Impact</span>
+                        <span className="font-medium text-success">Minimal</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">RAM Impact</span>
+                        <span className="font-medium text-success">Minimal</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-4">
+                      Polling uses lightweight, read-only CLI commands and disconnects immediately after data collection.
+                    </p>
+                  </CardContent>
+                </Card>
+                <ONUStatsWidget
+                  totalONUs={stats.totalONUs}
+                  onlineONUs={stats.onlineONUs}
+                  offlineONUs={stats.offlineONUs}
+                  lowSignalONUs={lowSignalONUs}
+                  avgRxPower={avgRxPower}
+                />
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
