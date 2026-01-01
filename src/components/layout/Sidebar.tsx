@@ -13,6 +13,7 @@ import {
   Activity,
   Users,
   Terminal,
+  Database,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +34,7 @@ const navItems: NavItem[] = [
   { title: 'ONU Devices', href: '/onus', icon: Router },
   { title: 'Alerts', href: '/alerts', icon: Bell, badge: 2 },
   { title: 'Monitoring', href: '/monitoring', icon: Activity },
+  { title: 'DB Integrity', href: '/integrity', icon: Database },
   { title: 'Debug Logs', href: '/debug', icon: Terminal },
   { title: 'User Management', href: '/users', icon: Users, adminOnly: true },
   { title: 'Settings', href: '/settings', icon: Settings },

@@ -16,6 +16,7 @@ import Monitoring from "./pages/Monitoring";
 import Settings from "./pages/Settings";
 import UserManagement from "./pages/UserManagement";
 import DebugLogs from "./pages/DebugLogs";
+import DatabaseIntegrity from "./pages/DatabaseIntegrity";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -73,6 +74,11 @@ const App = () => (
               <Route path="/debug" element={
                 <ProtectedRoute>
                   <DebugLogs />
+                </ProtectedRoute>
+              } />
+              <Route path="/integrity" element={
+                <ProtectedRoute>
+                  <DatabaseIntegrity />
                 </ProtectedRoute>
               } />
               <Route path="*" element={<NotFound />} />

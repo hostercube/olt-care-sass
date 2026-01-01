@@ -861,6 +861,7 @@ function getONUKey(oltId, onu) {
 /**
  * Sync parsed ONUs to database with proper deduplication
  * Uses olt_id + pon_port + onu_index as the unique key (not serial_number)
+ * Includes automatic duplicate detection and cleanup
  */
 async function syncONUsToDatabase(supabase, oltId, onus) {
   // Load system notification settings once per sync
@@ -898,11 +899,54 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
   // Fetch existing ONUs for this OLT - use pon_port + onu_index as key
   const { data: existingONUs } = await supabase
     .from('onus')
-    .select('id, serial_number, pon_port, onu_index, status, name, router_name, router_mac, mac_address, pppoe_username, last_offline')
+    .select('id, serial_number, pon_port, onu_index, status, name, router_name, router_mac, mac_address, pppoe_username, last_offline, updated_at')
     .eq('olt_id', oltId);
 
-  // Map by pon_port:onu_index (unique per OLT)
-  const existingMap = new Map(existingONUs?.map((o) => [`${o.pon_port}:${o.onu_index}`, o]) || []);
+  // AUTOMATIC DUPLICATE DETECTION AND CLEANUP
+  // Group existing ONUs by pon_port:onu_index to find duplicates
+  const existingByKey = new Map();
+  for (const onu of existingONUs || []) {
+    const key = `${onu.pon_port}:${onu.onu_index}`;
+    if (!existingByKey.has(key)) {
+      existingByKey.set(key, []);
+    }
+    existingByKey.get(key).push(onu);
+  }
+
+  // Find and delete duplicates (keep the most recently updated one)
+  let duplicatesDeleted = 0;
+  for (const [key, group] of existingByKey) {
+    if (group.length > 1) {
+      // Sort by updated_at descending, keep the newest
+      group.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      const idsToDelete = group.slice(1).map(o => o.id);
+      
+      if (idsToDelete.length > 0) {
+        const { error } = await supabase
+          .from('onus')
+          .delete()
+          .in('id', idsToDelete);
+        
+        if (!error) {
+          duplicatesDeleted += idsToDelete.length;
+          logger.info(`Auto-deleted ${idsToDelete.length} duplicate ONUs for key ${key}`);
+        } else {
+          logger.warn(`Failed to delete duplicates for key ${key}: ${error.message}`);
+        }
+      }
+    }
+  }
+
+  if (duplicatesDeleted > 0) {
+    logger.info(`Automatic cleanup: Deleted ${duplicatesDeleted} duplicate ONU records`);
+  }
+
+  // Rebuild the map with only the kept entries (one per key)
+  const existingMap = new Map();
+  for (const [key, group] of existingByKey) {
+    // After deletion, only the first (newest) remains
+    existingMap.set(key, group[0]);
+  }
 
   // Preload recent alerts to avoid spamming duplicates
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
