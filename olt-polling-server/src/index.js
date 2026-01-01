@@ -342,6 +342,7 @@ app.post('/api/reenrich/:oltId', async (req, res) => {
     
     let enrichedCount = 0;
     const updates = [];
+    const matchMethods = {};
     
     for (const onu of existingONUs || []) {
       const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
@@ -355,6 +356,11 @@ app.post('/api/reenrich/:oltId', async (req, res) => {
           router_name: enriched.router_name,
           updated_at: new Date().toISOString(),
         });
+        
+        // Track match methods
+        if (enriched.match_method) {
+          matchMethods[enriched.match_method] = (matchMethods[enriched.match_method] || 0) + 1;
+        }
       }
     }
     
@@ -376,11 +382,23 @@ app.post('/api/reenrich/:oltId', async (req, res) => {
       success: true,
       total_onus: existingONUs?.length || 0,
       enriched_count: enrichedCount,
+      match_methods: matchMethods,
       mikrotik_data: {
         pppoe_count: pppoe.length,
         arp_count: arp.length,
         dhcp_count: dhcp.length,
         secrets_count: secrets.length,
+        pppoe_sample: pppoe.slice(0, 6).map(s => ({
+          pppoe_username: s.pppoe_username,
+          mac_address: s.mac_address,
+          ip_address: s.ip_address,
+        })),
+        secrets_sample: secrets.slice(0, 6).map(s => ({
+          pppoe_username: s.pppoe_username,
+          caller_id: s.caller_id,
+          comment: s.comment,
+          password: '***masked***',
+        })),
       }
     });
   } catch (error) {
@@ -426,6 +444,7 @@ app.post('/reenrich/:oltId', async (req, res) => {
     if (onuError) throw onuError;
     
     let enrichedCount = 0;
+    const matchMethods = {};
     
     for (const onu of existingONUs || []) {
       const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
@@ -441,6 +460,10 @@ app.post('/reenrich/:oltId', async (req, res) => {
             updated_at: new Date().toISOString(),
           })
           .eq('id', onu.id);
+          
+        if (enriched.match_method) {
+          matchMethods[enriched.match_method] = (matchMethods[enriched.match_method] || 0) + 1;
+        }
       }
     }
     
@@ -448,11 +471,23 @@ app.post('/reenrich/:oltId', async (req, res) => {
       success: true,
       total_onus: existingONUs?.length || 0,
       enriched_count: enrichedCount,
+      match_methods: matchMethods,
       mikrotik_data: {
         pppoe_count: pppoe.length,
         arp_count: arp.length,
         dhcp_count: dhcp.length,
         secrets_count: secrets.length,
+        pppoe_sample: pppoe.slice(0, 6).map(s => ({
+          pppoe_username: s.pppoe_username,
+          mac_address: s.mac_address,
+          ip_address: s.ip_address,
+        })),
+        secrets_sample: secrets.slice(0, 6).map(s => ({
+          pppoe_username: s.pppoe_username,
+          caller_id: s.caller_id,
+          comment: s.comment,
+          password: '***masked***',
+        })),
       }
     });
   } catch (error) {
