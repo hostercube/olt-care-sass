@@ -26,7 +26,8 @@ import {
   Terminal,
   AlertCircle,
   CheckCircle,
-  Database
+  Database,
+  Tag
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -59,6 +60,8 @@ export default function OLTDetails() {
   const [mikrotikTesting, setMikrotikTesting] = useState(false);
   const [mikrotikTestResult, setMikrotikTestResult] = useState<any>(null);
   const [reenriching, setReenriching] = useState(false);
+  const [bulkTagging, setBulkTagging] = useState(false);
+  const [bulkTagResult, setBulkTagResult] = useState<any>(null);
 
   const olt = olts.find(o => o.id === id);
   const oltONUs = onus.filter(onu => onu.olt_id === id).map(onu => ({
@@ -233,6 +236,37 @@ export default function OLTDetails() {
     }
   };
 
+  // Bulk tag PPP secrets handler
+  const handleBulkTag = async () => {
+    if (!olt || !pollingServerUrl) return;
+    
+    setBulkTagging(true);
+    setBulkTagResult(null);
+    try {
+      const response = await fetch(`${pollingServerUrl}/api/mikrotik/bulk-tag/${olt.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'append', target: 'both' }),
+      });
+
+      const data = await response.json();
+      setBulkTagResult(data);
+      if (data.success) {
+        toast.success(`Tagged ${data.tagged} PPP secrets with ONU identifiers. Skipped: ${data.skipped}, Failed: ${data.failed}`);
+        // Re-enrich after tagging for immediate effect
+        if (data.tagged > 0) {
+          setTimeout(() => handleReenrich(), 1000);
+        }
+      } else {
+        toast.error(`Bulk tagging failed: ${data.error}`);
+      }
+    } catch (error) {
+      toast.error('Failed to bulk tag PPP secrets');
+    } finally {
+      setBulkTagging(false);
+    }
+  };
+
   return (
     <DashboardLayout 
       title={olt.name} 
@@ -349,7 +383,26 @@ export default function OLTDetails() {
                   <Network className="h-5 w-5 text-primary" />
                   MikroTik Configuration
                 </CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkTag}
+                    disabled={bulkTagging || !pollingServerUrl || oltONUs.length === 0}
+                    title="Write ONU MAC/serial into MikroTik PPP secrets for better matching"
+                  >
+                    {bulkTagging ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Tagging...
+                      </>
+                    ) : (
+                      <>
+                        <Tag className="h-4 w-4 mr-2" />
+                        Bulk Tag Secrets
+                      </>
+                    )}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -443,9 +496,16 @@ export default function OLTDetails() {
                   />
                 </div>
                 {/* Low coverage help tip */}
-                {pppoeCoveragePercent < 50 && oltONUs.length > 0 && (
+                {pppoeCoveragePercent < 50 && oltONUs.length > 0 && !bulkTagResult?.tagged && (
                   <div className="mt-3 p-2 rounded bg-warning/10 border border-warning/20 text-xs text-warning">
-                    <strong>Tip:</strong> ONU MAC ≠ Router MAC. To enable matching, add ONU serial/MAC to PPP secret's <code className="bg-muted px-1 rounded">caller-id</code> or <code className="bg-muted px-1 rounded">comment</code> field in MikroTik.
+                    <strong>Tip:</strong> ONU MAC ≠ Router MAC. Use <strong>"Bulk Tag Secrets"</strong> to automatically write ONU identifiers into MikroTik PPP secrets for better matching.
+                  </div>
+                )}
+                {/* Bulk tag result summary */}
+                {bulkTagResult && (
+                  <div className={`mt-3 p-2 rounded text-xs ${bulkTagResult.tagged > 0 ? 'bg-success/10 border border-success/20 text-success' : 'bg-muted/30 border border-border text-muted-foreground'}`}>
+                    <strong>Bulk Tag Result:</strong> {bulkTagResult.tagged} tagged, {bulkTagResult.skipped} skipped, {bulkTagResult.failed} failed
+                    {bulkTagResult.tagged > 0 && <span className="ml-2">✓ Re-enriching...</span>}
                   </div>
                 )}
               </div>

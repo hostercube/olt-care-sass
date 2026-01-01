@@ -1044,6 +1044,433 @@ export async function fetchAllMikroTikData(mikrotik) {
 }
 
 /**
+ * Update a PPP Secret in MikroTik (set comment and/or caller-id)
+ * 
+ * @param {object} mikrotik - MikroTik connection config
+ * @param {string} secretId - The .id of the PPP secret to update (e.g., "*1A")
+ * @param {object} updates - Fields to update: { comment?: string, callerId?: string }
+ * @returns {Promise<{ success: boolean, error?: string }>}
+ */
+export async function updatePPPSecret(mikrotik, secretId, updates) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return { success: false, error: 'Missing MikroTik credentials' };
+  }
+
+  if (!secretId) {
+    return { success: false, error: 'Missing secret ID' };
+  }
+
+  try {
+    const connectionInfo = await detectRouterOSVersion(mikrotik);
+    logger.info(`Updating PPP secret ${secretId} via ${connectionInfo.method} API`);
+
+    if (connectionInfo.method === 'rest') {
+      return await updatePPPSecretREST(mikrotik, secretId, updates, connectionInfo);
+    } else {
+      return await updatePPPSecretPlain(mikrotik, secretId, updates, connectionInfo);
+    }
+  } catch (error) {
+    logger.error(`Failed to update PPP secret ${secretId}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update PPP Secret via REST API (RouterOS 7+)
+ */
+async function updatePPPSecretREST(mikrotik, secretId, updates, connectionInfo) {
+  const { ip, username, password } = mikrotik;
+  const { port, protocol } = connectionInfo;
+
+  const url = `${protocol}://${ip}:${port}/rest/ppp/secret/${encodeURIComponent(secretId)}`;
+  const auth = Buffer.from(`${username}:${password}`).toString('base64');
+
+  const body = {};
+  if (updates.comment !== undefined) body.comment = updates.comment;
+  if (updates.callerId !== undefined) body['caller-id'] = updates.callerId;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MIKROTIK_TIMEOUT);
+
+  try {
+    const options = {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    };
+
+    if (protocol === 'https') {
+      const https = await import('https');
+      options.agent = new https.Agent({ rejectUnauthorized: false });
+    }
+
+    logger.debug(`REST API PATCH: ${url} with body:`, body);
+    const response = await fetch(url, options);
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorBody}`);
+    }
+
+    logger.info(`PPP secret ${secretId} updated successfully via REST`);
+    return { success: true };
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Update PPP Secret via Plain API (RouterOS 6.x)
+ */
+async function updatePPPSecretPlain(mikrotik, secretId, updates, connectionInfo) {
+  const net = await import('net');
+  const { ip, username, password } = mikrotik;
+  const port = connectionInfo?.port || mikrotik.port || 8728;
+
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let buffer = Buffer.alloc(0);
+    let loginComplete = false;
+    let commandSent = false;
+
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error('MikroTik API timeout'));
+    }, MIKROTIK_TIMEOUT);
+
+    socket.connect(port, ip, () => {
+      logger.debug(`Plain API connected to ${ip}:${port} for PPP secret update`);
+      sendPlainCommand(socket, ['/login', `=name=${username}`, `=password=${password}`]);
+    });
+
+    socket.on('data', (data) => {
+      buffer = Buffer.concat([buffer, data]);
+
+      while (buffer.length > 0) {
+        const parsed = parsePlainSentence(buffer);
+        if (!parsed) break;
+
+        const { sentence, bytesRead } = parsed;
+        buffer = buffer.slice(bytesRead);
+
+        if (sentence.length === 0) continue;
+
+        const reply = sentence[0];
+
+        if (reply === '!done') {
+          if (!loginComplete) {
+            loginComplete = true;
+            // Build the set command
+            const cmd = ['/ppp/secret/set', `=.id=${secretId}`];
+            if (updates.comment !== undefined) cmd.push(`=comment=${updates.comment}`);
+            if (updates.callerId !== undefined) cmd.push(`=caller-id=${updates.callerId}`);
+            logger.debug(`Plain API set command:`, cmd);
+            sendPlainCommand(socket, cmd);
+            commandSent = true;
+          } else {
+            clearTimeout(timeout);
+            socket.end();
+            logger.info(`PPP secret ${secretId} updated successfully via Plain API`);
+            resolve({ success: true });
+          }
+        } else if (reply === '!trap') {
+          const errorMsg = sentence.find(s => s.startsWith('=message='));
+          clearTimeout(timeout);
+          socket.destroy();
+          reject(new Error(errorMsg ? errorMsg.substring(9) : 'Unknown MikroTik error'));
+        } else if (reply === '!fatal') {
+          clearTimeout(timeout);
+          socket.destroy();
+          reject(new Error('MikroTik API fatal error'));
+        }
+      }
+    });
+
+    socket.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    socket.on('close', () => {
+      clearTimeout(timeout);
+    });
+  });
+}
+
+/**
+ * Fetch all PPP Secrets with their IDs for bulk operations
+ */
+export async function fetchPPPSecretsWithIds(mikrotik) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return [];
+  }
+
+  try {
+    const secrets = await callMikroTikAPI(mikrotik, '/ppp/secret/print');
+
+    logger.debug(`MikroTik PPP Secrets with IDs: Got ${secrets.length} secrets`);
+
+    return secrets.map(secret => ({
+      id: secret['.id'],
+      pppoe_username: secret.name,
+      profile: secret.profile,
+      service: secret.service,
+      caller_id: normalizeMac(secret['caller-id']),
+      comment: secret.comment || '',
+      remote_address: secret['remote-address'],
+      local_address: secret['local-address'],
+    }));
+  } catch (error) {
+    logger.error(`Failed to fetch MikroTik PPP secrets with IDs:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Bulk tag PPP secrets with ONU identifiers for better matching
+ * 
+ * @param {object} mikrotik - MikroTik connection config
+ * @param {array} onus - Array of ONU objects with mac_address, serial_number, pppoe_username, pon_port, onu_index
+ * @param {object} options - { mode: 'append'|'overwrite'|'empty_only', target: 'comment'|'caller-id'|'both' }
+ * @returns {Promise<{ success: boolean, results: array, tagged: number, failed: number, skipped: number }>}
+ */
+export async function bulkTagPPPSecrets(mikrotik, onus, options = {}) {
+  const { mode = 'append', target = 'both' } = options;
+
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return { success: false, error: 'Missing MikroTik credentials', results: [] };
+  }
+
+  logger.info(`Starting bulk PPP secret tagging for ${onus.length} ONUs (mode: ${mode}, target: ${target})`);
+
+  // Fetch all PPP secrets with IDs
+  const secrets = await fetchPPPSecretsWithIds(mikrotik);
+  if (secrets.length === 0) {
+    return { success: false, error: 'No PPP secrets found in MikroTik', results: [] };
+  }
+
+  logger.info(`Found ${secrets.length} PPP secrets to process`);
+
+  const results = [];
+  let tagged = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const onu of onus) {
+    const mac = onu.mac_address?.toUpperCase()?.replace(/[:-]/g, '') || '';
+    const serial = onu.serial_number?.toUpperCase()?.replace(/[:-]/g, '') || '';
+    const ponPort = onu.pon_port || '';
+    const onuIndex = onu.onu_index;
+
+    if (!mac && !serial) {
+      results.push({ onu_id: onu.id, onu_name: onu.name, status: 'skipped', reason: 'No MAC or serial' });
+      skipped++;
+      continue;
+    }
+
+    // Try to find matching PPP secret using existing enrichment logic
+    let matchedSecret = null;
+    let matchMethod = null;
+
+    // Try different matching strategies
+    // 1. Direct PPPoE username match
+    if (onu.pppoe_username) {
+      matchedSecret = secrets.find(s => s.pppoe_username?.toLowerCase() === onu.pppoe_username?.toLowerCase());
+      if (matchedSecret) matchMethod = 'pppoe-username';
+    }
+
+    // 2. ONU index pattern in secret name
+    if (!matchedSecret && onuIndex !== undefined) {
+      const patterns = [
+        new RegExp(`(^|[^0-9])${onuIndex}($|[^0-9])`),
+        new RegExp(`onu[_-]?${onuIndex}$`, 'i'),
+        new RegExp(`^${onuIndex}[_-]`),
+      ];
+      matchedSecret = secrets.find(s => {
+        const secretName = s.pppoe_username?.toLowerCase() || '';
+        const comment = s.comment?.toLowerCase() || '';
+        return patterns.some(p => p.test(secretName) || p.test(comment));
+      });
+      if (matchedSecret) matchMethod = 'onu-index';
+    }
+
+    // 3. Serial/MAC already in secret (just update if needed)
+    if (!matchedSecret && (serial || mac)) {
+      matchedSecret = secrets.find(s => {
+        const searchFields = `${s.pppoe_username}|${s.comment}|${s.caller_id}`.toUpperCase();
+        return (serial && searchFields.includes(serial.slice(-6))) || 
+               (mac && searchFields.includes(mac.slice(-6)));
+      });
+      if (matchedSecret) matchMethod = 'partial-identifier';
+    }
+
+    // 4. PON port + ONU index pattern
+    if (!matchedSecret && ponPort && onuIndex !== undefined) {
+      const ponNormalized = ponPort.replace(/[/:]/g, '');
+      const patterns = [
+        `${ponPort}:${onuIndex}`,
+        `${ponPort}_${onuIndex}`,
+        `${ponNormalized}${onuIndex}`,
+        `pon${ponNormalized}_${onuIndex}`,
+      ].map(p => p.toLowerCase());
+
+      matchedSecret = secrets.find(s => {
+        const searchStr = `${s.pppoe_username}|${s.comment}`.toLowerCase();
+        return patterns.some(p => searchStr.includes(p));
+      });
+      if (matchedSecret) matchMethod = 'pon-onu-pattern';
+    }
+
+    // 5. ONU name contains username or vice versa
+    if (!matchedSecret && onu.name && onu.name.length > 3 && !onu.name.startsWith('ONU-')) {
+      const onuNameClean = onu.name.replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+      if (onuNameClean.length >= 4) {
+        matchedSecret = secrets.find(s => {
+          const usernameClean = (s.pppoe_username || '').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+          return usernameClean.length >= 4 && (
+            usernameClean.startsWith(onuNameClean.substring(0, 4)) ||
+            onuNameClean.startsWith(usernameClean.substring(0, 4))
+          );
+        });
+        if (matchedSecret) matchMethod = 'name-fuzzy';
+      }
+    }
+
+    if (!matchedSecret) {
+      results.push({ 
+        onu_id: onu.id, 
+        onu_name: onu.name, 
+        status: 'no_match', 
+        reason: 'Could not find matching PPP secret' 
+      });
+      skipped++;
+      continue;
+    }
+
+    // Build the ONU tag
+    const tag = `[ONU: ${serial ? `SN=${serial}` : ''}${serial && mac ? ', ' : ''}${mac ? `MAC=${mac}` : ''}]`;
+
+    // Determine what to update
+    const updates = {};
+    let shouldUpdate = false;
+
+    // Handle comment field
+    if (target === 'comment' || target === 'both') {
+      const existingComment = matchedSecret.comment || '';
+      if (mode === 'append') {
+        if (!existingComment.includes('[ONU:')) {
+          updates.comment = existingComment ? `${existingComment} ${tag}` : tag;
+          shouldUpdate = true;
+        }
+      } else if (mode === 'overwrite') {
+        updates.comment = tag;
+        shouldUpdate = true;
+      } else if (mode === 'empty_only' && !existingComment) {
+        updates.comment = tag;
+        shouldUpdate = true;
+      }
+    }
+
+    // Handle caller-id field (only if empty or in 'both' mode)
+    if (target === 'caller-id' || target === 'both') {
+      const existingCallerId = matchedSecret.caller_id || '';
+      // For caller-id, use raw MAC format (XX:XX:XX:XX:XX:XX)
+      const macFormatted = mac ? mac.match(/.{2}/g)?.join(':') : null;
+
+      if (target === 'both') {
+        // Only fill caller-id if empty (to not break existing auth)
+        if (!existingCallerId && macFormatted) {
+          updates.callerId = macFormatted;
+          shouldUpdate = true;
+        }
+      } else if (target === 'caller-id') {
+        if (mode === 'overwrite' && macFormatted) {
+          updates.callerId = macFormatted;
+          shouldUpdate = true;
+        } else if (mode === 'empty_only' && !existingCallerId && macFormatted) {
+          updates.callerId = macFormatted;
+          shouldUpdate = true;
+        } else if (mode === 'append' && !existingCallerId && macFormatted) {
+          updates.callerId = macFormatted;
+          shouldUpdate = true;
+        }
+      }
+    }
+
+    if (!shouldUpdate) {
+      results.push({ 
+        onu_id: onu.id, 
+        onu_name: onu.name, 
+        pppoe: matchedSecret.pppoe_username,
+        status: 'skipped', 
+        reason: 'Already tagged or no update needed',
+        match_method: matchMethod
+      });
+      skipped++;
+      continue;
+    }
+
+    // Apply the update
+    try {
+      const updateResult = await updatePPPSecret(mikrotik, matchedSecret.id, updates);
+
+      if (updateResult.success) {
+        results.push({ 
+          onu_id: onu.id, 
+          onu_name: onu.name, 
+          pppoe: matchedSecret.pppoe_username,
+          secret_id: matchedSecret.id,
+          status: 'tagged', 
+          updates,
+          match_method: matchMethod
+        });
+        tagged++;
+        logger.info(`Tagged PPP secret ${matchedSecret.pppoe_username} for ONU ${onu.name} (${matchMethod})`);
+      } else {
+        results.push({ 
+          onu_id: onu.id, 
+          onu_name: onu.name, 
+          pppoe: matchedSecret.pppoe_username,
+          status: 'failed', 
+          error: updateResult.error,
+          match_method: matchMethod
+        });
+        failed++;
+      }
+    } catch (error) {
+      results.push({ 
+        onu_id: onu.id, 
+        onu_name: onu.name, 
+        status: 'failed', 
+        error: error.message 
+      });
+      failed++;
+    }
+  }
+
+  logger.info(`Bulk tagging complete: ${tagged} tagged, ${failed} failed, ${skipped} skipped`);
+
+  return {
+    success: true,
+    results,
+    tagged,
+    failed,
+    skipped,
+    total: onus.length,
+  };
+}
+
+/**
  * Test MikroTik connection
  */
 export async function testMikrotikConnection(mikrotik) {
