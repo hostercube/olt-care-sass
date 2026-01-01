@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Slider } from '@/components/ui/slider';
 import {
   Select,
   SelectContent,
@@ -127,36 +128,32 @@ export default function Settings() {
                 <CardDescription>Configure how often devices are polled</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>OLT Poll Interval</Label>
-                    <Select 
-                      value={String(settings.oltPollInterval)}
-                      onValueChange={(value) => updateSetting('oltPollInterval', parseInt(value))}
-                    >
-                      <SelectTrigger className="bg-secondary"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-popover border-border">
-                        <SelectItem value="1">1 minute</SelectItem>
-                        <SelectItem value="5">5 minutes</SelectItem>
-                        <SelectItem value="10">10 minutes</SelectItem>
-                        <SelectItem value="15">15 minutes</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>ONU Poll Interval</Label>
-                    <Select 
-                      value={String(settings.onuPollInterval)}
-                      onValueChange={(value) => updateSetting('onuPollInterval', parseInt(value))}
-                    >
-                      <SelectTrigger className="bg-secondary"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-popover border-border">
-                        <SelectItem value="1">1 minute</SelectItem>
-                        <SelectItem value="5">5 minutes</SelectItem>
-                        <SelectItem value="10">10 minutes</SelectItem>
-                        <SelectItem value="15">15 minutes</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label>Polling Interval</Label>
+                      <span className="text-sm font-medium text-primary">{settings.oltPollInterval} minute{settings.oltPollInterval > 1 ? 's' : ''}</span>
+                    </div>
+                    <Slider
+                      value={[settings.oltPollInterval]}
+                      onValueChange={(value) => {
+                        updateSetting('oltPollInterval', value[0]);
+                        updateSetting('onuPollInterval', value[0]);
+                      }}
+                      min={1}
+                      max={10}
+                      step={1}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>1 min (fast)</span>
+                      <span>5 min</span>
+                      <span>10 min (slow)</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Lower intervals provide faster updates but use more device resources. 
+                      1-2 minutes recommended for small networks, 5-10 for larger networks.
+                    </p>
                   </div>
                 </div>
                 <Separator />
