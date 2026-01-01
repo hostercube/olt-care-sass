@@ -18,7 +18,7 @@ import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
 import { pollOLT, testOLTConnection, testAllProtocols } from './polling/olt-poller.js';
-import { testMikrotikConnection, fetchAllMikroTikData, enrichONUWithMikroTikData } from './polling/mikrotik-client.js';
+import { testMikrotikConnection, fetchAllMikroTikData, enrichONUWithMikroTikData, bulkTagPPPSecrets } from './polling/mikrotik-client.js';
 import { rebootONU, deauthorizeONU, executeBulkOperation } from './onu-commands.js';
 import { logger } from './utils/logger.js';
 
@@ -609,6 +609,108 @@ app.post('/api/onu/bulk-deauthorize', async (req, res) => {
     res.json({ success: true, results });
   } catch (error) {
     logger.error('Bulk deauthorize error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============= BULK TAG PPP SECRETS =============
+// Write ONU MAC/serial into MikroTik PPP secrets for better matching
+app.post('/api/mikrotik/bulk-tag/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+  const { mode = 'append', target = 'both' } = req.body;
+  
+  try {
+    // Fetch OLT
+    const { data: olt, error: oltError } = await supabase
+      .from('olts')
+      .select('*')
+      .eq('id', oltId)
+      .single();
+    
+    if (oltError || !olt) {
+      return res.status(404).json({ error: 'OLT not found' });
+    }
+    
+    if (!olt.mikrotik_ip || !olt.mikrotik_username) {
+      return res.status(400).json({ error: 'MikroTik not configured for this OLT' });
+    }
+    
+    logger.info(`Bulk tagging PPP secrets for OLT: ${olt.name} (mode: ${mode}, target: ${target})`);
+    
+    const mikrotik = {
+      ip: olt.mikrotik_ip,
+      port: olt.mikrotik_port || 8728,
+      username: olt.mikrotik_username,
+      password: olt.mikrotik_password_encrypted,
+    };
+    
+    // Fetch all ONUs for this OLT
+    const { data: onus, error: onuError } = await supabase
+      .from('onus')
+      .select('*')
+      .eq('olt_id', oltId);
+    
+    if (onuError) throw onuError;
+    
+    if (!onus || onus.length === 0) {
+      return res.json({ success: false, error: 'No ONUs found for this OLT', results: [] });
+    }
+    
+    // Execute bulk tagging
+    const result = await bulkTagPPPSecrets(mikrotik, onus, { mode, target });
+    
+    res.json(result);
+  } catch (error) {
+    logger.error(`Bulk tag error for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Without /api prefix
+app.post('/mikrotik/bulk-tag/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+  const { mode = 'append', target = 'both' } = req.body;
+  
+  try {
+    const { data: olt, error: oltError } = await supabase
+      .from('olts')
+      .select('*')
+      .eq('id', oltId)
+      .single();
+    
+    if (oltError || !olt) {
+      return res.status(404).json({ error: 'OLT not found' });
+    }
+    
+    if (!olt.mikrotik_ip || !olt.mikrotik_username) {
+      return res.status(400).json({ error: 'MikroTik not configured for this OLT' });
+    }
+    
+    logger.info(`Bulk tagging PPP secrets for OLT: ${olt.name}`);
+    
+    const mikrotik = {
+      ip: olt.mikrotik_ip,
+      port: olt.mikrotik_port || 8728,
+      username: olt.mikrotik_username,
+      password: olt.mikrotik_password_encrypted,
+    };
+    
+    const { data: onus, error: onuError } = await supabase
+      .from('onus')
+      .select('*')
+      .eq('olt_id', oltId);
+    
+    if (onuError) throw onuError;
+    
+    if (!onus || onus.length === 0) {
+      return res.json({ success: false, error: 'No ONUs found for this OLT', results: [] });
+    }
+    
+    const result = await bulkTagPPPSecrets(mikrotik, onus, { mode, target });
+    
+    res.json(result);
+  } catch (error) {
+    logger.error(`Bulk tag error for OLT ${oltId}:`, error);
     res.status(500).json({ error: error.message });
   }
 });
