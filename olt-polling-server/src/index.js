@@ -18,7 +18,7 @@ import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
 import { pollOLT, testOLTConnection, testAllProtocols } from './polling/olt-poller.js';
-import { testMikrotikConnection, fetchAllMikroTikData, enrichONUWithMikroTikData, bulkTagPPPSecrets } from './polling/mikrotik-client.js';
+import { testMikrotikConnection, fetchAllMikroTikData, enrichONUWithMikroTikData, bulkTagPPPSecrets, clearMikroTikCache } from './polling/mikrotik-client.js';
 import { rebootONU, deauthorizeONU, executeBulkOperation } from './onu-commands.js';
 import { logger } from './utils/logger.js';
 
@@ -298,6 +298,62 @@ app.post('/poll/:oltId', async (req, res) => {
   }
 });
 
+// ============= RE-SYNC OLT (CLEAR CACHES + POLL) =============
+app.post('/api/resync/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+
+  try {
+    const { data: olt, error } = await supabase
+      .from('olts')
+      .select('*')
+      .eq('id', oltId)
+      .single();
+
+    if (error || !olt) {
+      return res.status(404).json({ error: 'OLT not found' });
+    }
+
+    // Clear MikroTik connection detection cache so we re-detect port/method freshly
+    if (olt.mikrotik_ip) {
+      clearMikroTikCache(olt.mikrotik_ip, olt.mikrotik_port || 8728);
+    }
+
+    logger.info(`Re-sync triggered for OLT: ${olt.name}`);
+    const result = await pollOLT(supabase, olt);
+    res.json({ success: true, result });
+  } catch (error) {
+    logger.error(`Re-sync error for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/resync/:oltId', async (req, res) => {
+  const { oltId } = req.params;
+
+  try {
+    const { data: olt, error } = await supabase
+      .from('olts')
+      .select('*')
+      .eq('id', oltId)
+      .single();
+
+    if (error || !olt) {
+      return res.status(404).json({ error: 'OLT not found' });
+    }
+
+    if (olt.mikrotik_ip) {
+      clearMikroTikCache(olt.mikrotik_ip, olt.mikrotik_port || 8728);
+    }
+
+    logger.info(`Re-sync triggered for OLT: ${olt.name}`);
+    const result = await pollOLT(supabase, olt);
+    res.json({ success: true, result });
+  } catch (error) {
+    logger.error(`Re-sync error for OLT ${oltId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============= RE-ENRICH PPPoE ONLY =============
 // Re-runs MikroTik enrichment without full OLT poll
 app.post('/api/reenrich/:oltId', async (req, res) => {
@@ -344,37 +400,41 @@ app.post('/api/reenrich/:oltId', async (req, res) => {
     const updates = [];
     const matchMethods = {};
     
-    for (const onu of existingONUs || []) {
-      const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
-      
-      if (enriched.pppoe_username !== onu.pppoe_username || 
-          enriched.router_name !== onu.router_name) {
-        enrichedCount++;
-        updates.push({
-          id: onu.id,
-          pppoe_username: enriched.pppoe_username,
-          router_name: enriched.router_name,
-          updated_at: new Date().toISOString(),
-        });
-        
-        // Track match methods
-        if (enriched.match_method) {
-          matchMethods[enriched.match_method] = (matchMethods[enriched.match_method] || 0) + 1;
-        }
-      }
-    }
+     for (const onu of existingONUs || []) {
+       const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
+       const enrichedRouterMac = enriched.router_mac || null;
+
+       if (enriched.pppoe_username !== onu.pppoe_username || 
+           enriched.router_name !== onu.router_name ||
+           enrichedRouterMac !== (onu.router_mac || null)) {
+         enrichedCount++;
+         updates.push({
+           id: onu.id,
+           pppoe_username: enriched.pppoe_username,
+           router_name: enriched.router_name,
+           router_mac: enrichedRouterMac,
+           updated_at: new Date().toISOString(),
+         });
+         
+         // Track match methods
+         if (enriched.match_method) {
+           matchMethods[enriched.match_method] = (matchMethods[enriched.match_method] || 0) + 1;
+         }
+       }
+     }
     
-    // Batch update enriched ONUs
-    for (const update of updates) {
-      await supabase
-        .from('onus')
-        .update({
-          pppoe_username: update.pppoe_username,
-          router_name: update.router_name,
-          updated_at: update.updated_at,
-        })
-        .eq('id', update.id);
-    }
+     // Batch update enriched ONUs
+     for (const update of updates) {
+       await supabase
+         .from('onus')
+         .update({
+           pppoe_username: update.pppoe_username,
+           router_name: update.router_name,
+           router_mac: update.router_mac,
+           updated_at: update.updated_at,
+         })
+         .eq('id', update.id);
+     }
     
     logger.info(`Re-enrichment complete: ${enrichedCount}/${existingONUs?.length || 0} ONUs updated`);
     

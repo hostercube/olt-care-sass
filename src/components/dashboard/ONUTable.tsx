@@ -90,13 +90,15 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
   // Apply all filters
   const filteredONUs = useMemo(() => {
     return onus.filter((onu) => {
-      // Search filter (MAC, PPPoE, Router Name, ONU Name)
+      // Search filter (MAC, PPPoE, Router Name, ONU Name, Router MAC)
       const searchLower = searchTerm.toLowerCase();
+      const routerMac = (onu as any).router_mac as string | undefined;
       const matchesSearch = !searchTerm || 
         onu.name.toLowerCase().includes(searchLower) ||
         (onu.router_name?.toLowerCase().includes(searchLower)) ||
         (onu.pppoe_username?.toLowerCase().includes(searchLower)) ||
         (onu.mac_address?.toLowerCase().includes(searchLower)) ||
+        (routerMac?.toLowerCase().includes(searchLower)) ||
         (onu.serial_number?.toLowerCase().includes(searchLower));
 
       // OLT filter
@@ -294,7 +296,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <div className="relative flex-1 md:flex-none">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Search MAC, PPPoE, Router..."
+                      placeholder="Search ONU MAC, Router MAC, PPPoE, Router..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="w-full md:w-72 pl-9 bg-secondary border-border"
