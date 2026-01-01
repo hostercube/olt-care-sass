@@ -5,6 +5,7 @@ import { AlertsWidget } from '@/components/dashboard/AlertsWidget';
 import { ONUTable } from '@/components/dashboard/ONUTable';
 import { ONUStatsWidget } from '@/components/dashboard/ONUStatsWidget';
 import { LiveStatusWidget } from '@/components/dashboard/LiveStatusWidget';
+import { DataQualityWidget } from '@/components/dashboard/DataQualityWidget';
 import { useOLTs, useONUs, useAlerts, useDashboardStats } from '@/hooks/useOLTData';
 import { Server, Router, AlertTriangle, Zap, Wifi, Loader2, Activity } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -121,8 +122,8 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Alerts, ONU Stats and Activity */}
-            <div className="grid gap-6 lg:grid-cols-4">
+            {/* Alerts, ONU Stats, Data Quality and Activity */}
+            <div className="grid gap-6 lg:grid-cols-5">
               <div className="lg:col-span-2">
                 <ONUTable onus={onusWithOltName.slice(0, 10)} title="Recent ONU Activity" showFilters={false} />
               </div>
@@ -134,6 +135,9 @@ export default function Dashboard() {
                   lowSignalONUs={lowSignalONUs}
                   avgRxPower={avgRxPower}
                 />
+              </div>
+              <div>
+                <DataQualityWidget onus={onus} />
               </div>
               <div>
                 <AlertsWidget alerts={alerts} maxItems={4} />
