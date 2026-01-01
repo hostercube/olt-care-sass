@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 
@@ -215,7 +215,21 @@ export default function Settings() {
                   <div className="space-y-2">
                     <Label>Notification Email</Label>
                     <Input type="email" placeholder="admin@yourisp.com" value={settings.notificationEmail} onChange={(e) => updateSetting('notificationEmail', e.target.value)} className="bg-secondary" />
-                    <p className="text-xs text-muted-foreground">Requires RESEND_API_KEY to be configured in secrets</p>
+                    <p className="text-xs text-muted-foreground">Requires RESEND_API_KEY to be configured in backend secrets</p>
+                  </div>
+                )}
+
+                <Separator />
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5"><Label className="flex items-center gap-2"><Webhook className="h-4 w-4" />Webhook Notifications</Label><p className="text-sm text-muted-foreground">Send alerts to your own webhook endpoint</p></div>
+                  <Switch checked={settings.webhookNotifications} onCheckedChange={(checked) => updateSetting('webhookNotifications', checked)} />
+                </div>
+                {settings.webhookNotifications && (
+                  <div className="space-y-2">
+                    <Label>Webhook URL</Label>
+                    <Input placeholder="https://your-server.com/webhook" value={settings.webhookUrl} onChange={(e) => updateSetting('webhookUrl', e.target.value)} className="bg-secondary" />
+                    <p className="text-xs text-muted-foreground">We will POST JSON for each offline / low-power alert.</p>
                   </div>
                 )}
               </CardContent>

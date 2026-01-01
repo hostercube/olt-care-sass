@@ -10,6 +10,7 @@ import { parseBDCOMOutput } from './parsers/bdcom-parser.js';
 import { executeTelnetCommands } from './telnet-client.js';
 import { executeAPICommands, parseAPIResponse } from './http-api-client.js';
 import { fetchAllMikroTikData, enrichONUWithMikroTikData } from './mikrotik-client.js';
+import { getAlertNotificationSettings, notifyAlert } from '../notifications/alert-notifier.js';
 import net from 'net';
 
 const SSH_TIMEOUT = parseInt(process.env.SSH_TIMEOUT_MS || '60000');
@@ -846,27 +847,65 @@ function parseOLTOutput(brand, output) {
  * Sync parsed ONUs to database
  */
 async function syncONUsToDatabase(supabase, oltId, onus) {
-  // Get existing ONUs for this OLT with all fields we might update
+  // Load system notification settings once per sync
+  const settings = await getAlertNotificationSettings(supabase);
+  const rxThreshold = settings.rxPowerThreshold;
+  const offlineDelayMinutes = settings.offlineThreshold;
+
+  // Fetch existing ONUs for this OLT with fields we might update
   const { data: existingONUs } = await supabase
     .from('onus')
-    .select('id, serial_number, status, name, router_name, mac_address, pppoe_username')
+    .select('id, serial_number, status, name, router_name, mac_address, pppoe_username, last_offline')
     .eq('olt_id', oltId);
-  
-  const existingMap = new Map(existingONUs?.map(o => [o.serial_number, o]) || []);
-  
+
+  const existingMap = new Map(existingONUs?.map((o) => [o.serial_number, o]) || []);
+
+  // Preload recent alerts to avoid spamming duplicates
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: recentAlerts } = await supabase
+    .from('alerts')
+    .select('device_id, type, created_at')
+    .gte('created_at', since)
+    .in('type', ['onu_offline', 'power_drop']);
+
+  const lastAlertMap = new Map();
+  for (const a of recentAlerts || []) {
+    const key = `${a.device_id}:${a.type}`;
+    const prev = lastAlertMap.get(key);
+    if (!prev || (a.created_at && a.created_at > prev)) lastAlertMap.set(key, a.created_at);
+  }
+
+  const createAlert = async ({ type, severity, title, message, device_id, device_name }) => {
+    const { error } = await supabase.from('alerts').insert({
+      type,
+      severity,
+      title,
+      message,
+      device_id,
+      device_name,
+    });
+
+    if (error) {
+      logger.warn(`Failed to insert alert (${type}) for device ${device_id}: ${error.message}`);
+      return;
+    }
+
+    await notifyAlert(supabase, settings, { type, severity, device_name, message });
+  };
+
   let updatedCount = 0;
   let insertedCount = 0;
-  
+
   for (const onu of onus) {
     const existing = existingMap.get(onu.serial_number);
-    
+
     if (existing) {
       // Update existing ONU
       const wasOffline = existing.status === 'offline';
       const isNowOnline = onu.status === 'online';
       const wasOnline = existing.status === 'online';
       const isNowOffline = onu.status === 'offline';
-      
+
       const updateData = {
         status: onu.status,
         rx_power: onu.rx_power,
@@ -876,76 +915,108 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
         temperature: onu.temperature || null,
         distance: onu.distance || null,
         offline_reason: onu.offline_reason || null,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
-      
+
       // Only update name if we have a new value and it's not a generated placeholder
       if (onu.name && !onu.name.startsWith('ONU-') && onu.name !== existing.name) {
         updateData.name = onu.name;
       }
-      
+
       // Update MAC address if we have a new one
       if (onu.mac_address && onu.mac_address !== existing.mac_address) {
         updateData.mac_address = onu.mac_address;
       }
-      
+
       // Update router name if we have a new one
       if (onu.router_name && onu.router_name !== existing.router_name) {
         updateData.router_name = onu.router_name;
       }
-      
+
       // Update PPPoE username if we have a new one
       if (onu.pppoe_username && onu.pppoe_username !== existing.pppoe_username) {
         updateData.pppoe_username = onu.pppoe_username;
       }
-      
+
       if (wasOffline && isNowOnline) {
         updateData.last_online = new Date().toISOString();
       }
+
       if (wasOnline && isNowOffline) {
         updateData.last_offline = new Date().toISOString();
-        
-        // Create alert for ONU going offline
-        await supabase.from('alerts').insert({
-          type: 'onu_offline',
-          severity: 'warning',
-          title: `ONU Offline: ${onu.name || onu.serial_number}`,
-          message: `ONU ${onu.serial_number} on port ${onu.pon_port} went offline`,
-          device_id: existing.id,
-          device_name: onu.name || onu.serial_number
-        });
       }
-      
-      await supabase
-        .from('onus')
-        .update(updateData)
-        .eq('id', existing.id);
-      
+
+      await supabase.from('onus').update(updateData).eq('id', existing.id);
       updatedCount++;
-      
-      // Record power reading
-      if (onu.rx_power !== null || onu.tx_power !== null) {
+
+      // Record power reading ONLY when we have both RX and TX (avoid wrong 0 values)
+      if (onu.rx_power !== null && onu.rx_power !== undefined && onu.tx_power !== null && onu.tx_power !== undefined) {
         await supabase.from('power_readings').insert({
           onu_id: existing.id,
-          rx_power: onu.rx_power || 0,
-          tx_power: onu.tx_power || 0
+          rx_power: Number(onu.rx_power),
+          tx_power: Number(onu.tx_power),
         });
       }
-      
-      // Check for low power alert
-      if (onu.rx_power && onu.rx_power < -28) {
-        await supabase.from('alerts').insert({
-          type: 'power_drop',
-          severity: 'warning',
-          title: `Low RX Power: ${onu.name || onu.serial_number}`,
-          message: `RX power is ${onu.rx_power} dBm (threshold: -28 dBm)`,
-          device_id: existing.id,
-          device_name: onu.name || onu.serial_number
-        });
+
+      // --- Alerts + notifications ---
+
+      // Offline alert with delay + dedupe
+      if (settings.onuOfflineAlerts) {
+        const now = Date.now();
+        const lastOfflineIso = (isNowOffline ? updateData.last_offline : existing.last_offline) || null;
+        const lastOfflineMs = lastOfflineIso ? new Date(lastOfflineIso).getTime() : null;
+        const offlineForMinutes = lastOfflineMs ? (now - lastOfflineMs) / 60000 : 0;
+
+        const shouldTriggerOfflineAlert =
+          (isNowOffline && offlineDelayMinutes <= 0) ||
+          (onu.status === 'offline' && lastOfflineMs && offlineForMinutes >= offlineDelayMinutes);
+
+        if (shouldTriggerOfflineAlert) {
+          const key = `${existing.id}:onu_offline`;
+          const lastAlertAt = lastAlertMap.get(key);
+
+          // If we already alerted after this offline started, do nothing
+          const alreadyAlerted =
+            lastAlertAt && lastOfflineIso && new Date(lastAlertAt).getTime() >= new Date(lastOfflineIso).getTime();
+
+          if (!alreadyAlerted) {
+            await createAlert({
+              type: 'onu_offline',
+              severity: 'warning',
+              title: `ONU Offline: ${onu.name || onu.serial_number}`,
+              message:
+                offlineDelayMinutes > 0
+                  ? `ONU ${onu.serial_number} on port ${onu.pon_port} is offline for ${Math.round(offlineForMinutes)} min (delay: ${offlineDelayMinutes} min)`
+                  : `ONU ${onu.serial_number} on port ${onu.pon_port} went offline`,
+              device_id: existing.id,
+              device_name: onu.name || onu.serial_number,
+            });
+          }
+        }
+      }
+
+      // Low power alert (settings-based threshold + dedupe)
+      if (settings.powerDropAlerts && onu.rx_power !== null && onu.rx_power !== undefined && Number(onu.rx_power) < rxThreshold) {
+        const key = `${existing.id}:power_drop`;
+        const lastAlertAt = lastAlertMap.get(key);
+
+        // Dedupe: at most once per 6 hours per ONU
+        const recentlyAlerted = lastAlertAt && Date.now() - new Date(lastAlertAt).getTime() < 6 * 60 * 60 * 1000;
+
+        if (!recentlyAlerted) {
+          await createAlert({
+            type: 'power_drop',
+            severity: 'warning',
+            title: `Low RX Power: ${onu.name || onu.serial_number}`,
+            message: `RX power is ${onu.rx_power} dBm (threshold: ${rxThreshold} dBm)`,
+            device_id: existing.id,
+            device_name: onu.name || onu.serial_number,
+          });
+        }
       }
     } else {
       // Insert new ONU with all available fields
-      const { data: newONU, error } = await supabase
+      const { error } = await supabase
         .from('onus')
         .insert({
           olt_id: oltId,
@@ -962,11 +1033,9 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
           temperature: onu.temperature || null,
           distance: onu.distance || null,
           offline_reason: onu.offline_reason || null,
-          last_online: onu.status === 'online' ? new Date().toISOString() : null
-        })
-        .select()
-        .single();
-      
+          last_online: onu.status === 'online' ? new Date().toISOString() : null,
+        });
+
       if (error) {
         logger.error(`Failed to insert ONU ${onu.serial_number}: ${error.message}`);
       } else {
@@ -975,7 +1044,7 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
       }
     }
   }
-  
+
   logger.info(`ONU sync complete for OLT ${oltId}: ${insertedCount} inserted, ${updatedCount} updated`);
 }
 
