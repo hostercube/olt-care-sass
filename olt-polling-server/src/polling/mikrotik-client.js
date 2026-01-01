@@ -987,14 +987,23 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   
   const enrichedPppoeUsername = pppoeSession?.pppoe_username || pppSecret?.pppoe_username || onu.pppoe_username;
   
-  if (enrichedPppoeUsername || routerName) {
-    logger.info(`MikroTik enriched ONU ${onu.mac_address || onu.serial_number}: PPPoE=${enrichedPppoeUsername || 'N/A'}, Router=${routerName || 'N/A'}, Method=${matchMethod || 'none'}`);
+  // Router MAC - from PPPoE session caller-id (this is the CPE/router MAC, NOT the ONU MAC)
+  let routerMac = null;
+  if (pppoeSession?.mac_address) {
+    routerMac = normalizeMac(pppoeSession.mac_address);
+  } else if (pppSecret?.caller_id) {
+    routerMac = normalizeMac(pppSecret.caller_id);
+  }
+  
+  if (enrichedPppoeUsername || routerName || routerMac) {
+    logger.info(`MikroTik enriched ONU ${onu.mac_address || onu.serial_number}: PPPoE=${enrichedPppoeUsername || 'N/A'}, Router=${routerName || 'N/A'}, RouterMAC=${routerMac || 'N/A'}, Method=${matchMethod || 'none'}`);
   }
   
   return {
     ...onu,
     pppoe_username: enrichedPppoeUsername || onu.pppoe_username,
     router_name: routerName || onu.router_name,
+    router_mac: routerMac || onu.router_mac,
     mac_address: macAddress || onu.mac_address,
     status: pppoeSession ? 'online' : onu.status,
     match_method: matchMethod || null,
