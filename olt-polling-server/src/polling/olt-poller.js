@@ -844,7 +844,16 @@ function parseOLTOutput(brand, output) {
 }
 
 /**
- * Sync parsed ONUs to database
+ * Generate a unique key for ONU deduplication
+ * Priority: olt_id + pon_port + onu_index (most reliable for uniqueness)
+ */
+function getONUKey(oltId, onu) {
+  return `${oltId}:${onu.pon_port}:${onu.onu_index}`;
+}
+
+/**
+ * Sync parsed ONUs to database with proper deduplication
+ * Uses olt_id + pon_port + onu_index as the unique key (not serial_number)
  */
 async function syncONUsToDatabase(supabase, oltId, onus) {
   // Load system notification settings once per sync
@@ -852,13 +861,41 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
   const rxThreshold = settings.rxPowerThreshold;
   const offlineDelayMinutes = settings.offlineThreshold;
 
-  // Fetch existing ONUs for this OLT with fields we might update
+  // Deduplicate incoming ONUs by pon_port + onu_index (keep most complete entry)
+  const onuMap = new Map();
+  for (const onu of onus) {
+    const key = `${onu.pon_port}:${onu.onu_index}`;
+    const existing = onuMap.get(key);
+    if (!existing) {
+      onuMap.set(key, onu);
+    } else {
+      // Merge: prefer non-null values from both
+      onuMap.set(key, {
+        ...existing,
+        ...onu,
+        rx_power: onu.rx_power ?? existing.rx_power,
+        tx_power: onu.tx_power ?? existing.tx_power,
+        temperature: onu.temperature ?? existing.temperature,
+        distance: onu.distance ?? existing.distance,
+        mac_address: onu.mac_address || existing.mac_address,
+        serial_number: onu.serial_number || existing.serial_number,
+        router_name: onu.router_name || existing.router_name,
+        router_mac: onu.router_mac || existing.router_mac,
+        pppoe_username: onu.pppoe_username || existing.pppoe_username,
+      });
+    }
+  }
+  const deduplicatedOnus = Array.from(onuMap.values());
+  logger.info(`Deduplicated ${onus.length} parsed ONUs to ${deduplicatedOnus.length} unique entries`);
+
+  // Fetch existing ONUs for this OLT - use pon_port + onu_index as key
   const { data: existingONUs } = await supabase
     .from('onus')
-    .select('id, serial_number, status, name, router_name, router_mac, mac_address, pppoe_username, last_offline')
+    .select('id, serial_number, pon_port, onu_index, status, name, router_name, router_mac, mac_address, pppoe_username, last_offline')
     .eq('olt_id', oltId);
 
-  const existingMap = new Map(existingONUs?.map((o) => [o.serial_number, o]) || []);
+  // Map by pon_port:onu_index (unique per OLT)
+  const existingMap = new Map(existingONUs?.map((o) => [`${o.pon_port}:${o.onu_index}`, o]) || []);
 
   // Preload recent alerts to avoid spamming duplicates
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -896,8 +933,9 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
   let updatedCount = 0;
   let insertedCount = 0;
 
-  for (const onu of onus) {
-    const existing = existingMap.get(onu.serial_number);
+  for (const onu of deduplicatedOnus) {
+    const key = `${onu.pon_port}:${onu.onu_index}`;
+    const existing = existingMap.get(key);
 
     if (existing) {
       // Update existing ONU
