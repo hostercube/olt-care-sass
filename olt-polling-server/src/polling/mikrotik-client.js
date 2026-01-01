@@ -754,7 +754,7 @@ function decodePlainLength(buffer, offset) {
 export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, pppSecretsData = [], usedMatches = new Set(), oltMacTable = []) {
   const macAddress = onu.mac_address?.toUpperCase();
   const serialNumber = onu.serial_number?.toUpperCase();
-  const onuIndex = onu.onu_index;
+  const onuIndex = parseInt(onu.onu_index) || onu.onu_index; // Ensure number for comparison
   const ponPort = onu.pon_port;
   const onuName = onu.name?.toUpperCase() || '';
   
@@ -763,6 +763,9 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   const macLast6 = macNormalized?.slice(-6);
   const serialLast6 = serialNormalized?.slice(-6);
   
+  // Debug log for matching analysis
+  logger.debug(`MATCHING ONU: PON=${ponPort}:${onuIndex} MAC=${macNormalized || 'N/A'} (MAC table entries: ${oltMacTable.length}, PPPoE sessions: ${pppoeData.length})`);
+  
   let pppoeSession = null;
   let pppSecret = null;
   let matchMethod = null;
@@ -770,8 +773,22 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   // Helper to check if a PPPoE username is already used by another ONU
   const isAlreadyMatched = (username) => usedMatches.has(username?.toLowerCase());
   
-  // Helper to normalize PON port for matching (e.g., "0/4" -> "04")
-  const normalizePonPort = (port) => String(port || '').replace(/[/:]/g, '');
+  // Helper to normalize PON port for matching
+  // Handles: "EPON0/4" -> "0/4", "0/4" -> "0/4", "GPON0/3" -> "0/3"
+  const normalizePonPort = (port) => {
+    if (!port) return '';
+    const portStr = String(port).trim();
+    // Remove EPON/GPON prefix and normalize
+    const cleaned = portStr.replace(/^(EPON|GPON)/i, '').trim();
+    return cleaned;
+  };
+  
+  // Helper for strict PON matching: compare normalized forms
+  const ponPortsMatch = (port1, port2) => {
+    const p1 = normalizePonPort(port1);
+    const p2 = normalizePonPort(port2);
+    return p1 === p2;
+  };
   const ponNormalized = normalizePonPort(ponPort);
   const onuIndexStr = String(onuIndex).padStart(2, '0');
   const onuNameClean = onuName.replace(/[^A-Z0-9]/g, '').toLowerCase();
@@ -820,7 +837,10 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
     // Find MAC table entries for this ONU's PON port and index
     const onuMacEntries = oltMacTable.filter(entry => {
       const entryPon = normalizePonPort(entry.pon_port);
-      return entryPon === ponNormalized && entry.onu_index === onuIndex;
+      const entryOnuIndex = parseInt(entry.onu_index) || entry.onu_index;
+      const ponMatch = entryPon === ponNormalized;
+      const indexMatch = entryOnuIndex === onuIndex;
+      return ponMatch && indexMatch;
     });
     
     if (onuMacEntries.length > 0) {
@@ -860,7 +880,8 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
       const matchingEntry = oltMacTable.find(entry => {
         const entryMac = entry.mac_address?.replace(/[:-]/g, '').toUpperCase();
         const entryPon = normalizePonPort(entry.pon_port);
-        return entryMac === sessionRouterMac && entryPon === ponNormalized && entry.onu_index === onuIndex;
+        const entryOnuIndex = parseInt(entry.onu_index) || entry.onu_index;
+        return entryMac === sessionRouterMac && entryPon === ponNormalized && entryOnuIndex === onuIndex;
       });
       
       if (matchingEntry) {

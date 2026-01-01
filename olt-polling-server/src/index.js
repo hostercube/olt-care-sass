@@ -544,6 +544,13 @@ app.post('/api/full-sync/:oltId', async (req, res) => {
 
         if (!logError && logRow?.raw_output) {
           oltMacTable = parseVSOLMacTable(logRow.raw_output);
+          logger.info(`VSOL MAC table loaded: ${oltMacTable.length} entries`);
+          if (oltMacTable.length > 0) {
+            // Show sample entries for debugging
+            logger.info(`MAC table sample: ${JSON.stringify(oltMacTable.slice(0, 5))}`);
+          }
+        } else {
+          logger.warn(`No MAC table data found in olt_debug_logs for OLT ${oltId}`);
         }
       }
 
@@ -692,7 +699,12 @@ app.post('/api/reenrich/:oltId', async (req, res) => {
 
       if (!logError && logRow?.raw_output) {
         oltMacTable = parseVSOLMacTable(logRow.raw_output);
-        logger.info(`OLT MAC table loaded: ${oltMacTable.length} entries for VSOL matching`);
+        logger.info(`VSOL MAC table loaded for re-enrich: ${oltMacTable.length} entries`);
+        if (oltMacTable.length > 0) {
+          logger.info(`MAC table sample: ${JSON.stringify(oltMacTable.slice(0, 5))}`);
+        }
+      } else {
+        logger.warn(`No MAC table data found in olt_debug_logs for OLT ${oltId} - MAC table matching disabled`);
       }
     }
     
