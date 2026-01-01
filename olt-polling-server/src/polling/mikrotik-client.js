@@ -46,92 +46,80 @@ async function detectRouterOSVersion(mikrotik) {
   // Check cache first (valid for 5 minutes)
   const cached = deviceConnectionCache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < 300000) {
-    logger.debug(`Using cached connection method for ${cacheKey}: ${cached.method} v${cached.version}`);
+    logger.debug(`Using cached connection method for ${cacheKey}: ${cached.method} v${cached.version} on port ${cached.port}`);
     return cached;
   }
   
-  logger.info(`Detecting RouterOS version for ${ip}:${port}...`);
+  logger.info(`Detecting RouterOS version for ${ip} (configured port: ${port})...`);
   
   const auth = Buffer.from(`${username}:${password}`).toString('base64');
   
-  // Strategy 1: Try REST API on custom port (RouterOS 7 with port forwarding)
-  // Custom ports like 8090 are typically REST API forwards
-  if (port !== 8728 && port !== 8729) {
-    try {
-      const result = await tryRESTAPI(ip, port, auth, 'http');
-      if (result) {
-        const connectionInfo = { ...result, timestamp: Date.now() };
-        deviceConnectionCache.set(cacheKey, connectionInfo);
-        logger.info(`RouterOS detected via REST HTTP: v${result.version} (method: ${result.method})`);
-        return connectionInfo;
-      }
-    } catch (err) {
-      logger.debug(`REST HTTP on port ${port} failed: ${err.message}`);
-    }
-    
-    try {
-      const result = await tryRESTAPI(ip, port, auth, 'https');
-      if (result) {
-        const connectionInfo = { ...result, timestamp: Date.now() };
-        deviceConnectionCache.set(cacheKey, connectionInfo);
-        logger.info(`RouterOS detected via REST HTTPS: v${result.version} (method: ${result.method})`);
-        return connectionInfo;
-      }
-    } catch (err) {
-      logger.debug(`REST HTTPS on port ${port} failed: ${err.message}`);
-    }
+  // Build ordered list of ports to try
+  // Priority: custom port first, then default API ports, then web ports
+  const customPort = port;
+  const isCustomPort = customPort && ![8728, 8729, 80, 443].includes(customPort);
+  
+  // Define all port/method combinations to try
+  const attempts = [];
+  
+  // 1. If custom port provided, try ALL methods on it first
+  if (isCustomPort) {
+    attempts.push({ type: 'rest', port: customPort, protocol: 'http', label: `Custom port ${customPort} REST HTTP` });
+    attempts.push({ type: 'rest', port: customPort, protocol: 'https', label: `Custom port ${customPort} REST HTTPS` });
+    attempts.push({ type: 'plain', port: customPort, label: `Custom port ${customPort} Plain API` });
   }
   
-  // Strategy 2: Try Plain API (RouterOS 6.x standard is 8728, but many setups use custom forwarded ports)
-  // We always try the user-provided port first (unless it's a typical web port), then fall back to 8728/8729.
-  const candidatePlainPorts = Array.from(
-    new Set(
-      [
-        // prefer user-configured port
-        port && ![80, 443].includes(port) ? port : null,
-        // fallbacks
-        8728,
-        8729,
-      ].filter((p) => typeof p === 'number')
-    )
-  );
-
-  for (const plainPort of candidatePlainPorts) {
+  // 2. Default API ports (Plain API - RouterOS 6.x standard)
+  attempts.push({ type: 'plain', port: 8728, label: 'Default Plain API 8728' });
+  attempts.push({ type: 'plain', port: 8729, label: 'Default Plain API-SSL 8729' });
+  
+  // 3. Standard REST ports (RouterOS 7.x)
+  attempts.push({ type: 'rest', port: 443, protocol: 'https', label: 'REST HTTPS 443' });
+  attempts.push({ type: 'rest', port: 80, protocol: 'http', label: 'REST HTTP 80' });
+  
+  // 4. If custom port was same as default, we already covered it, but add configured port to fallback
+  if (customPort === 8728 || customPort === 8729) {
+    // Already covered above
+  }
+  
+  for (const attempt of attempts) {
     try {
-      const result = await tryPlainAPIVersion(ip, plainPort, username, password);
+      logger.debug(`Trying ${attempt.label}...`);
+      
+      let result = null;
+      if (attempt.type === 'rest') {
+        result = await tryRESTAPI(ip, attempt.port, auth, attempt.protocol);
+      } else {
+        result = await tryPlainAPIVersion(ip, attempt.port, username, password);
+      }
+      
       if (result) {
-        const connectionInfo = { ...result, timestamp: Date.now() };
+        const connectionInfo = { 
+          ...result, 
+          timestamp: Date.now(),
+          configuredPort: customPort,
+          detectedPort: attempt.port,
+        };
         deviceConnectionCache.set(cacheKey, connectionInfo);
-        logger.info(
-          `RouterOS detected via Plain API on port ${plainPort}: v${result.version} (method: ${result.method})`
-        );
+        logger.info(`RouterOS detected via ${attempt.label}: v${result.version} (method: ${result.method})`);
         return connectionInfo;
       }
     } catch (err) {
-      logger.debug(`Plain API detection on port ${plainPort} failed: ${err.message}`);
+      logger.debug(`${attempt.label} failed: ${err.message}`);
     }
   }
 
-  // Strategy 3: Try REST API on standard ports (80, 443)
-  for (const restPort of [443, 80]) {
-    const protocol = restPort === 443 ? 'https' : 'http';
-    try {
-      const result = await tryRESTAPI(ip, restPort, auth, protocol);
-      if (result) {
-        const connectionInfo = { ...result, timestamp: Date.now() };
-        deviceConnectionCache.set(cacheKey, connectionInfo);
-        logger.info(`RouterOS detected via REST on standard port ${restPort}: v${result.version}`);
-        return connectionInfo;
-      }
-    } catch (err) {
-      logger.debug(`REST ${protocol} on port ${restPort} failed: ${err.message}`);
-    }
-  }
-
-  // Fallback: assume v6 Plain API
+  // Fallback: assume v6 Plain API on configured port or 8728
   logger.warn(`Could not detect RouterOS version for ${ip}, assuming v6 Plain API`);
-  const fallbackPort = port && ![80, 443].includes(port) ? port : 8728;
-  const fallback = { version: '6.x', majorVersion: 6, method: 'plain', port: fallbackPort };
+  const fallbackPort = isCustomPort ? customPort : 8728;
+  const fallback = { 
+    version: '6.x', 
+    majorVersion: 6, 
+    method: 'plain', 
+    port: fallbackPort,
+    configuredPort: customPort,
+    detectedPort: fallbackPort,
+  };
   deviceConnectionCache.set(cacheKey, { ...fallback, timestamp: Date.now() });
   return fallback;
 }
@@ -893,7 +881,7 @@ export async function fetchAllMikroTikData(mikrotik) {
   
   // First detect version to log it
   const connectionInfo = await detectRouterOSVersion(mikrotik);
-  logger.info(`MikroTik RouterOS version: ${connectionInfo.version}, using ${connectionInfo.method} API`);
+  logger.info(`MikroTik RouterOS version: ${connectionInfo.version}, using ${connectionInfo.method} API on port ${connectionInfo.detectedPort || connectionInfo.port}`);
   
   // Fetch all data in parallel
   const [pppoe, arp, dhcp, secrets] = await Promise.all([
@@ -928,6 +916,9 @@ export async function testMikrotikConnection(mikrotik) {
   const startTime = Date.now();
 
   try {
+    // Clear cache to force fresh detection
+    clearMikroTikCache(mikrotik.ip, mikrotik.port);
+    
     const connectionInfo = await detectRouterOSVersion(mikrotik);
     
     return { 
@@ -935,13 +926,16 @@ export async function testMikrotikConnection(mikrotik) {
       duration: Date.now() - startTime,
       method: `${connectionInfo.method === 'rest' ? 'REST' : 'Plain'} API`,
       version: connectionInfo.version,
-      port: connectionInfo.port,
+      configuredPort: connectionInfo.configuredPort || mikrotik.port,
+      detectedPort: connectionInfo.detectedPort || connectionInfo.port,
+      protocol: connectionInfo.protocol || 'tcp',
     };
   } catch (error) {
     return { 
       success: false, 
       error: error.message,
-      duration: Date.now() - startTime 
+      duration: Date.now() - startTime,
+      configuredPort: mikrotik.port,
     };
   }
 }
