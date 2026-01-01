@@ -18,6 +18,7 @@ import express from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
 import { pollOLT, testOLTConnection, testAllProtocols } from './polling/olt-poller.js';
+import { parseVSOLMacTable } from './polling/parsers/vsol-parser.js';
 import { testMikrotikConnection, fetchAllMikroTikData, enrichONUWithMikroTikData, bulkTagPPPSecrets, clearMikroTikCache, fetchMikroTikHealth } from './polling/mikrotik-client.js';
 import { rebootONU, deauthorizeONU, executeBulkOperation } from './onu-commands.js';
 import { logger } from './utils/logger.js';
@@ -524,21 +525,46 @@ app.post('/api/full-sync/:oltId', async (req, res) => {
       // Step 3: Re-enrich
       sendProgress('enriching', 'started', 'Fetching MikroTik data...');
       const { pppoe, arp, dhcp, secrets } = await fetchAllMikroTikData(mikrotik);
-      
+
       const { data: existingONUs } = await supabase
         .from('onus')
         .select('*')
         .eq('olt_id', oltId);
 
+      // For VSOL: build OLT MAC table from latest raw CLI output (needed for accurate router MAC mapping)
+      let oltMacTable = [];
+      if (olt.brand === 'VSOL') {
+        const { data: logRow, error: logError } = await supabase
+          .from('olt_debug_logs')
+          .select('raw_output')
+          .eq('olt_id', oltId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!logError && logRow?.raw_output) {
+          oltMacTable = parseVSOLMacTable(logRow.raw_output);
+        }
+      }
+
+      // STRICT 1:1 enforcement during re-enrich (prevents one PPPoE user being applied to multiple ONUs)
+      const usedMatches = new Set();
+
       let enrichedCount = 0;
       if (existingONUs) {
         for (const onu of existingONUs) {
-          const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
+          const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets, usedMatches, oltMacTable);
+
+          // Mark as used even if no DB update is needed
+          if (enriched.pppoe_username) usedMatches.add(enriched.pppoe_username.toLowerCase());
+
           const enrichedRouterMac = enriched.router_mac || null;
 
-          if (enriched.pppoe_username !== onu.pppoe_username || 
-              enriched.router_name !== onu.router_name ||
-              enrichedRouterMac !== (onu.router_mac || null)) {
+          if (
+            enriched.pppoe_username !== onu.pppoe_username ||
+            enriched.router_name !== onu.router_name ||
+            enrichedRouterMac !== (onu.router_mac || null)
+          ) {
             enrichedCount++;
             await supabase
               .from('onus')
