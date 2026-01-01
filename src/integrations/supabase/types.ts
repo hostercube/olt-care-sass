@@ -163,6 +163,44 @@ export type Database = {
         }
         Relationships: []
       }
+      onu_edit_history: {
+        Row: {
+          edited_at: string
+          edited_by: string | null
+          field_name: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          onu_id: string
+        }
+        Insert: {
+          edited_at?: string
+          edited_by?: string | null
+          field_name: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          onu_id: string
+        }
+        Update: {
+          edited_at?: string
+          edited_by?: string | null
+          field_name?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          onu_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onu_edit_history_onu_id_fkey"
+            columns: ["onu_id"]
+            isOneToOne: false
+            referencedRelation: "onus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       onu_status_history: {
         Row: {
           changed_at: string

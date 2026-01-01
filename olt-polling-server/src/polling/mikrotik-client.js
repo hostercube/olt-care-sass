@@ -968,27 +968,45 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // Determine router name
-  // IMPORTANT:
-  // - PPP secret comment often contains operational notes / [ONU: ...] tags, so it's NOT reliable as "router name".
-  // - Prefer DHCP hostname / PPPoE session router name first, then fall back carefully.
+  // Priority: DHCP hostname > PPPoE session name (if it's a device name) > Skip bad values
+  // IMPORTANT: Avoid using PPPoE username or metadata comments as router name
   let routerName = onu.router_name;
-  if (!routerName && dhcpLease?.hostname) {
+  
+  // DHCP hostname is the most reliable source for actual device names (TP-Link, Tenda, etc)
+  if (!routerName && dhcpLease?.hostname && dhcpLease.hostname.length > 1) {
     routerName = dhcpLease.hostname;
   }
+  
+  // PPPoE session router_name - only use if it looks like a device name, not a username
   if (!routerName && pppoeSession?.router_name && pppoeSession.router_name.length > 0) {
-    routerName = pppoeSession.router_name;
+    const sessionName = pppoeSession.router_name;
+    // Skip if it looks like a username (same as pppoe_username) or metadata
+    const looksLikeUsername = sessionName === pppoeSession.pppoe_username;
+    const looksLikeMetadata = sessionName.includes('[ONU:') || sessionName.includes('SN=') || sessionName.includes('MAC=');
+    if (!looksLikeUsername && !looksLikeMetadata) {
+      routerName = sessionName;
+    }
   }
-  if (!routerName && arpEntry?.comment && arpEntry.comment.length > 0) {
-    routerName = arpEntry.comment;
+  
+  // ARP comment - only use if it looks like a device name
+  if (!routerName && arpEntry?.comment && arpEntry.comment.length > 2) {
+    const arpComment = arpEntry.comment;
+    const looksLikeMetadata = arpComment.includes('[ONU:') || arpComment.includes('SN=') || arpComment.includes('MAC=');
+    if (!looksLikeMetadata) {
+      routerName = arpComment;
+    }
   }
+  
+  // PPP secret comment - strip tags and only use if it looks like a real name
   if (!routerName && pppSecret?.comment && pppSecret.comment.length > 0) {
-    // Strip our own tag if present and ignore comments that are only tags
     const cleaned = pppSecret.comment.replace(/\s*\[ONU:[^\]]*\]\s*/gi, ' ').trim();
-    if (cleaned && cleaned.length >= 2) routerName = cleaned;
+    // Only use if it's not the same as username and looks like a device name
+    if (cleaned && cleaned.length >= 2 && cleaned !== pppSecret.pppoe_username) {
+      routerName = cleaned;
+    }
   }
-  if (!routerName && (pppoeSession?.pppoe_username || pppSecret?.pppoe_username)) {
-    routerName = pppoeSession?.pppoe_username || pppSecret?.pppoe_username;
-  }
+  
+  // DO NOT fall back to PPPoE username - it's not a router name!
 
   const enrichedPppoeUsername = pppoeSession?.pppoe_username || pppSecret?.pppoe_username || onu.pppoe_username;
   
