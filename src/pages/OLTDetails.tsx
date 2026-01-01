@@ -28,10 +28,17 @@ import {
   CheckCircle,
   Database,
   Tag,
-  Trash2
+  Trash2,
+  HelpCircle
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { formatDistanceToNow, format } from 'date-fns';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { DatabaseCleanupPanel } from '@/components/onu/DatabaseCleanupPanel';
@@ -374,31 +381,54 @@ export default function OLTDetails() {
           </div>
           <div className="flex items-center gap-2">
             <StatusIndicator status={olt.status} size="md" showLabel />
-            <Button 
-              variant="outline" 
-              onClick={handlePollNow}
-              disabled={polling || !pollingServerUrl}
-            >
-              {polling ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Poll Now
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleResyncOLT}
-              disabled={resyncing || !pollingServerUrl}
-              title="Clear cached detection + force a fresh poll"
-            >
-              {resyncing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Re-sync OLT
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    onClick={handlePollNow}
+                    disabled={polling || !pollingServerUrl}
+                  >
+                    {polling ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Poll Now
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[300px]">
+                  <p className="font-semibold">🔄 Poll Now (OLT Data Only)</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    OLT থেকে শুধু ONU data (MAC, Power, Status) আপডেট করে। MikroTik data আনে না।
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    onClick={handleResyncOLT}
+                    disabled={resyncing || !pollingServerUrl}
+                  >
+                    {resyncing ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Re-sync OLT
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[300px]">
+                  <p className="font-semibold">🔁 Re-sync OLT (Fresh Detection)</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Cache clear করে fresh poll করে। নতুন ONU detect এবং old data fix করে।
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 
@@ -476,30 +506,47 @@ export default function OLTDetails() {
                 </CardTitle>
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={handleFullSync}
-                      disabled={fullSyncing || !pollingServerUrl || oltONUs.length === 0}
-                      title="Poll OLT + Force Re-Tag + Re-enrich (all-in-one sync)"
-                      className="min-w-[140px]"
-                    >
-                      {fullSyncing ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          {fullSyncStep === 'polling' && 'Polling...'}
-                          {fullSyncStep === 'tagging' && 'Tagging...'}
-                          {fullSyncStep === 'enriching' && 'Enriching...'}
-                          {fullSyncStep === 'complete' && 'Finishing...'}
-                          {!fullSyncStep && 'Starting...'}
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Full Sync
-                        </>
-                      )}
-                    </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={handleFullSync}
+                            disabled={fullSyncing || !pollingServerUrl || oltONUs.length === 0}
+                            className="min-w-[140px]"
+                          >
+                            {fullSyncing ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                {fullSyncStep === 'polling' && 'Polling...'}
+                                {fullSyncStep === 'tagging' && 'Tagging...'}
+                                {fullSyncStep === 'enriching' && 'Enriching...'}
+                                {fullSyncStep === 'complete' && 'Finishing...'}
+                                {!fullSyncStep && 'Starting...'}
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Full Sync
+                              </>
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[350px]">
+                          <p className="font-semibold">⚡ Full Sync (সম্পূর্ণ সিঙ্ক)</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            এটি সবচেয়ে গুরুত্বপূর্ণ ONU button। এটি ৩টি কাজ একসাথে করে:
+                          </p>
+                          <ol className="text-xs text-muted-foreground mt-1 list-decimal list-inside space-y-1">
+                            <li><strong>Poll OLT:</strong> ONU MAC, Power, Status আপডেট</li>
+                            <li><strong>Tag MikroTik:</strong> PPP Secret-এ ONU info লিখে</li>
+                            <li><strong>Enrich:</strong> PPPoE Username ও Router Name match করে</li>
+                          </ol>
+                          <p className="text-xs text-success mt-2">✅ 100% accurate mapping এর জন্য এটি use করুন</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     {fullSyncing && fullSyncProgress.length > 0 && (
                       <div className="flex items-center gap-1">
                         {['polling', 'tagging', 'enriching'].map((step, idx) => {
@@ -523,57 +570,69 @@ export default function OLTDetails() {
                       </div>
                     )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      if (!pollingServerUrl) {
-                        toast.error('Polling server not configured');
-                        return;
-                      }
-                      setMikrotikTesting(true);
-                      setMikrotikTestResult(null);
-                      try {
-                        const response = await fetch(`${pollingServerUrl}/api/test-mikrotik`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            mikrotik: {
-                              ip: olt.mikrotik_ip,
-                              port: olt.mikrotik_port || 8728,
-                              username: olt.mikrotik_username,
-                              password: olt.mikrotik_password_encrypted,
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            if (!pollingServerUrl) {
+                              toast.error('Polling server not configured');
+                              return;
                             }
-                          }),
-                        });
-                        const data = await response.json();
-                        setMikrotikTestResult(data);
-                        if (data.success) {
-                          toast.success(`MikroTik connected! Found ${data.data?.pppoe_count || 0} PPPoE sessions`);
-                        } else {
-                          toast.error(`MikroTik failed: ${data.error}`);
-                        }
-                      } catch (error: any) {
-                        setMikrotikTestResult({ success: false, error: error.message });
-                        toast.error('Failed to test MikroTik connection');
-                      } finally {
-                        setMikrotikTesting(false);
-                      }
-                    }}
-                    disabled={mikrotikTesting}
-                  >
-                    {mikrotikTesting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Testing...
-                      </>
-                    ) : (
-                      <>
-                        <Network className="h-4 w-4 mr-2" />
-                        Test Connection
-                      </>
-                    )}
-                  </Button>
+                            setMikrotikTesting(true);
+                            setMikrotikTestResult(null);
+                            try {
+                              const response = await fetch(`${pollingServerUrl}/api/test-mikrotik`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  mikrotik: {
+                                    ip: olt.mikrotik_ip,
+                                    port: olt.mikrotik_port || 8728,
+                                    username: olt.mikrotik_username,
+                                    password: olt.mikrotik_password_encrypted,
+                                  }
+                                }),
+                              });
+                              const data = await response.json();
+                              setMikrotikTestResult(data);
+                              if (data.success) {
+                                toast.success(`MikroTik connected! Found ${data.data?.pppoe_count || 0} PPPoE sessions`);
+                              } else {
+                                toast.error(`MikroTik failed: ${data.error}`);
+                              }
+                            } catch (error: any) {
+                              setMikrotikTestResult({ success: false, error: error.message });
+                              toast.error('Failed to test MikroTik connection');
+                            } finally {
+                              setMikrotikTesting(false);
+                            }
+                          }}
+                          disabled={mikrotikTesting}
+                        >
+                          {mikrotikTesting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Testing...
+                            </>
+                          ) : (
+                            <>
+                              <Network className="h-4 w-4 mr-2" />
+                              Test Connection
+                            </>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[300px]">
+                        <p className="font-semibold">🔌 Test MikroTik Connection</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          MikroTik API connection test করে। PPPoE sessions, DHCP leases, ARP দেখায়।
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </div>
             </CardHeader>
@@ -811,7 +870,7 @@ export default function OLTDetails() {
                       tick={{ fontSize: 12 }}
                       domain={[-35, -10]}
                     />
-                    <Tooltip 
+                    <RechartsTooltip 
                       contentStyle={{
                         backgroundColor: 'hsl(var(--popover))',
                         border: '1px solid hsl(var(--border))',
