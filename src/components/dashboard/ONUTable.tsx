@@ -115,7 +115,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
     return onus.filter((onu) => {
       // Search filter (MAC, PPPoE, Router Name, ONU Name, Router MAC)
       const searchLower = searchTerm.toLowerCase();
-      const routerMac = (onu as any).router_mac as string | undefined;
+      const routerMac = onu.router_mac || undefined;
       const matchesSearch = !searchTerm || 
         onu.name.toLowerCase().includes(searchLower) ||
         (onu.router_name?.toLowerCase().includes(searchLower)) ||
@@ -297,7 +297,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
       onu.router_name || '',
       onu.pppoe_username || '',
       onu.mac_address || '',
-      (onu as any).router_mac || '',
+      onu.router_mac || '',
       onu.serial_number || '',
       onu.rx_power?.toString() || '',
       onu.tx_power?.toString() || '',
@@ -329,7 +329,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
       onu.router_name || '',
       onu.pppoe_username || '',
       onu.mac_address || '',
-      (onu as any).router_mac || '',
+      onu.router_mac || '',
       onu.serial_number || '',
       onu.rx_power?.toString() || '',
       onu.tx_power?.toString() || '',

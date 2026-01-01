@@ -66,10 +66,32 @@ export default function OLTDetails() {
   const [fullSyncResult, setFullSyncResult] = useState<any>(null);
 
   const olt = olts.find(o => o.id === id);
-  const oltONUs = onus.filter(onu => onu.olt_id === id).map(onu => ({
-    ...onu,
-    oltName: olt?.name || 'Unknown OLT'
-  }));
+
+  const oltONUs = (() => {
+    const withName = onus
+      .filter((onu) => onu.olt_id === id)
+      .map((onu) => ({
+        ...onu,
+        oltName: olt?.name || 'Unknown OLT',
+      }));
+
+    // De-duplicate by hardware identity: olt_id + pon_port + onu_index
+    const byKey = new Map<string, (typeof withName)[number]>();
+    for (const onu of withName) {
+      const key = `${onu.olt_id}|${onu.pon_port}|${onu.onu_index}`;
+      const prev = byKey.get(key);
+      if (!prev) {
+        byKey.set(key, onu);
+        continue;
+      }
+
+      const prevTime = prev.updated_at ? new Date(prev.updated_at).getTime() : 0;
+      const curTime = onu.updated_at ? new Date(onu.updated_at).getTime() : 0;
+      if (curTime >= prevTime) byKey.set(key, onu);
+    }
+
+    return Array.from(byKey.values());
+  })();
 
   // Fetch power history for OLT ONUs
   useEffect(() => {
@@ -499,57 +521,6 @@ export default function OLTDetails() {
                       </div>
                     )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      if (!pollingServerUrl) {
-                        toast.error('Polling server not configured');
-                        return;
-                      }
-                      setMikrotikTesting(true);
-                      setMikrotikTestResult(null);
-                      try {
-                        const response = await fetch(`${pollingServerUrl}/api/test-mikrotik`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            mikrotik: {
-                              ip: olt.mikrotik_ip,
-                              port: olt.mikrotik_port || 8728,
-                              username: olt.mikrotik_username,
-                              password: olt.mikrotik_password_encrypted,
-                            }
-                          }),
-                        });
-                        const data = await response.json();
-                        setMikrotikTestResult(data);
-                        if (data.success) {
-                          toast.success(`MikroTik connected! Found ${data.data?.pppoe_count || 0} PPPoE sessions`);
-                        } else {
-                          toast.error(`MikroTik failed: ${data.error}`);
-                        }
-                      } catch (error: any) {
-                        setMikrotikTestResult({ success: false, error: error.message });
-                        toast.error('Failed to test MikroTik connection');
-                      } finally {
-                        setMikrotikTesting(false);
-                      }
-                    }}
-                    disabled={mikrotikTesting}
-                  >
-                    {mikrotikTesting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Testing...
-                      </>
-                    ) : (
-                      <>
-                        <Network className="h-4 w-4 mr-2" />
-                        Test Connection
-                      </>
-                    )}
-                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
