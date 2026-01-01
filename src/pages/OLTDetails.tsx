@@ -54,6 +54,7 @@ export default function OLTDetails() {
   const { onus, loading: onusLoading, refetch: refetchONUs } = useONUs();
   const [powerHistory, setPowerHistory] = useState<any[]>([]);
   const [polling, setPolling] = useState(false);
+  const [resyncing, setResyncing] = useState(false);
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
   const [debugOpen, setDebugOpen] = useState(false);
   const [loadingDebug, setLoadingDebug] = useState(false);
@@ -61,6 +62,7 @@ export default function OLTDetails() {
   const [mikrotikTestResult, setMikrotikTestResult] = useState<any>(null);
   const [reenriching, setReenriching] = useState(false);
   const [bulkTagging, setBulkTagging] = useState(false);
+  const [forceBulkTagging, setForceBulkTagging] = useState(false);
   const [bulkTagResult, setBulkTagResult] = useState<any>(null);
 
   const olt = olts.find(o => o.id === id);
@@ -169,6 +171,38 @@ export default function OLTDetails() {
     }
   };
 
+  const handleResyncOLT = async () => {
+    if (!olt) return;
+
+    if (!pollingServerUrl) {
+      toast.error('Polling server not configured');
+      return;
+    }
+
+    setResyncing(true);
+    try {
+      const response = await fetch(`${pollingServerUrl}/api/resync/${olt.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data?.success) {
+        toast.success('Re-sync started (fresh poll + cache cleared)');
+        refetchONUs();
+        setTimeout(() => {
+          if (debugOpen) fetchDebugLogs();
+        }, 2000);
+      } else {
+        toast.error(`Re-sync failed: ${data?.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      toast.error('Failed to connect to polling server');
+    } finally {
+      setResyncing(false);
+    }
+  };
+
   const loading = oltsLoading || onusLoading;
 
   if (loading) {
@@ -239,7 +273,7 @@ export default function OLTDetails() {
   // Bulk tag PPP secrets handler
   const handleBulkTag = async () => {
     if (!olt || !pollingServerUrl) return;
-    
+
     setBulkTagging(true);
     setBulkTagResult(null);
     try {
@@ -253,6 +287,9 @@ export default function OLTDetails() {
       setBulkTagResult(data);
       if (data.success) {
         toast.success(`Tagged ${data.tagged} PPP secrets with ONU identifiers. Skipped: ${data.skipped}, Failed: ${data.failed}`);
+        if (data.tagged === 0 && data.skipped > 0) {
+          toast.info('If tags are wrong/missing, use “Force Re-Tag” to overwrite existing tags.');
+        }
         // Re-enrich after tagging for immediate effect
         if (data.tagged > 0) {
           setTimeout(() => handleReenrich(), 1000);
@@ -264,6 +301,33 @@ export default function OLTDetails() {
       toast.error('Failed to bulk tag PPP secrets');
     } finally {
       setBulkTagging(false);
+    }
+  };
+
+  const handleForceBulkTag = async () => {
+    if (!olt || !pollingServerUrl) return;
+
+    setForceBulkTagging(true);
+    setBulkTagResult(null);
+    try {
+      const response = await fetch(`${pollingServerUrl}/api/mikrotik/bulk-tag/${olt.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'overwrite', target: 'comment' }),
+      });
+
+      const data = await response.json();
+      setBulkTagResult(data);
+      if (data.success) {
+        toast.success(`Force Re-Tag done: ${data.tagged} updated. Skipped: ${data.skipped}, Failed: ${data.failed}`);
+        setTimeout(() => handleReenrich(), 1000);
+      } else {
+        toast.error(`Force Re-Tag failed: ${data.error}`);
+      }
+    } catch (error) {
+      toast.error('Failed to force re-tag PPP secrets');
+    } finally {
+      setForceBulkTagging(false);
     }
   };
 
@@ -307,6 +371,19 @@ export default function OLTDetails() {
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
               Poll Now
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleResyncOLT}
+              disabled={resyncing || !pollingServerUrl}
+              title="Clear cached detection + force a fresh poll"
+            >
+              {resyncing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Re-sync OLT
             </Button>
           </div>
         </div>
@@ -388,8 +465,8 @@ export default function OLTDetails() {
                     variant="outline"
                     size="sm"
                     onClick={handleBulkTag}
-                    disabled={bulkTagging || !pollingServerUrl || oltONUs.length === 0}
-                    title="Write ONU MAC/serial into MikroTik PPP secrets for better matching"
+                    disabled={bulkTagging || forceBulkTagging || !pollingServerUrl || oltONUs.length === 0}
+                    title="Append ONU identifiers into MikroTik PPP secrets (safe mode)"
                   >
                     {bulkTagging ? (
                       <>
@@ -400,6 +477,25 @@ export default function OLTDetails() {
                       <>
                         <Tag className="h-4 w-4 mr-2" />
                         Bulk Tag Secrets
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleForceBulkTag}
+                    disabled={forceBulkTagging || bulkTagging || !pollingServerUrl || oltONUs.length === 0}
+                    title="Overwrite comment tags (use if tags are wrong/missing)"
+                  >
+                    {forceBulkTagging ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Re-Tagging...
+                      </>
+                    ) : (
+                      <>
+                        <Tag className="h-4 w-4 mr-2" />
+                        Force Re-Tag
                       </>
                     )}
                   </Button>

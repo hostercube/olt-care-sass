@@ -968,12 +968,12 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // Determine router name
+  // IMPORTANT:
+  // - PPP secret comment often contains operational notes / [ONU: ...] tags, so it's NOT reliable as "router name".
+  // - Prefer DHCP hostname / PPPoE session router name first, then fall back carefully.
   let routerName = onu.router_name;
   if (!routerName && dhcpLease?.hostname) {
     routerName = dhcpLease.hostname;
-  }
-  if (!routerName && pppSecret?.comment && pppSecret.comment.length > 0) {
-    routerName = pppSecret.comment;
   }
   if (!routerName && pppoeSession?.router_name && pppoeSession.router_name.length > 0) {
     routerName = pppoeSession.router_name;
@@ -981,10 +981,15 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   if (!routerName && arpEntry?.comment && arpEntry.comment.length > 0) {
     routerName = arpEntry.comment;
   }
+  if (!routerName && pppSecret?.comment && pppSecret.comment.length > 0) {
+    // Strip our own tag if present and ignore comments that are only tags
+    const cleaned = pppSecret.comment.replace(/\s*\[ONU:[^\]]*\]\s*/gi, ' ').trim();
+    if (cleaned && cleaned.length >= 2) routerName = cleaned;
+  }
   if (!routerName && (pppoeSession?.pppoe_username || pppSecret?.pppoe_username)) {
     routerName = pppoeSession?.pppoe_username || pppSecret?.pppoe_username;
   }
-  
+
   const enrichedPppoeUsername = pppoeSession?.pppoe_username || pppSecret?.pppoe_username || onu.pppoe_username;
   
   // Router MAC - from PPPoE session caller-id (this is the CPE/router MAC, NOT the ONU MAC)
