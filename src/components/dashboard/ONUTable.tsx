@@ -583,6 +583,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <TableHead className="font-semibold text-center">Temp</TableHead>
                   <TableHead className="font-semibold text-center">Distance</TableHead>
                   <TableHead className="font-semibold text-center">Status</TableHead>
+                  <TableHead className="font-semibold">Offline Reason</TableHead>
                   <TableHead className="font-semibold">
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
@@ -595,7 +596,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
               <TableBody>
                 {paginatedONUs.length === 0 ? (
                 <TableRow>
-                    <TableCell colSpan={17} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={18} className="text-center py-8 text-muted-foreground">
                       No ONU devices found
                     </TableCell>
                   </TableRow>
@@ -661,6 +662,15 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                         </TableCell>
                         <TableCell className="text-center">
                           <StatusIndicator status={onu.status} size="sm" />
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {onu.offline_reason ? (
+                            <Badge variant={onu.offline_reason === 'Power Off' ? 'destructive' : 'warning'} className="text-xs">
+                              {onu.offline_reason}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs">
                           <TooltipProvider>
