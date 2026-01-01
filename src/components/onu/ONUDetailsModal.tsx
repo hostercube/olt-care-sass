@@ -115,6 +115,22 @@ export function ONUDetailsModal({ onu, open, onOpenChange, onUpdate }: ONUDetail
     
     setSaving(true);
     try {
+      // Track changes for audit log
+      const changes: { field: string; oldValue: string; newValue: string }[] = [];
+      if (editName !== (onu.name || '')) {
+        changes.push({ field: 'name', oldValue: onu.name || '', newValue: editName });
+      }
+      if (editRouterName !== (onu.router_name || '')) {
+        changes.push({ field: 'router_name', oldValue: onu.router_name || '', newValue: editRouterName });
+      }
+      if (editPppoeUsername !== (onu.pppoe_username || '')) {
+        changes.push({ field: 'pppoe_username', oldValue: onu.pppoe_username || '', newValue: editPppoeUsername });
+      }
+      if (editSerialNumber !== (onu.serial_number || '')) {
+        changes.push({ field: 'serial_number', oldValue: onu.serial_number || '', newValue: editSerialNumber });
+      }
+
+      // Update ONU
       const { error } = await supabase
         .from('onus')
         .update({
@@ -127,6 +143,20 @@ export function ONUDetailsModal({ onu, open, onOpenChange, onUpdate }: ONUDetail
         .eq('id', onu.id);
 
       if (error) throw error;
+
+      // Save audit log entries
+      if (changes.length > 0) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const auditEntries = changes.map(change => ({
+          onu_id: onu.id,
+          field_name: change.field,
+          old_value: change.oldValue,
+          new_value: change.newValue,
+          edited_by: user?.id || null,
+        }));
+        
+        await supabase.from('onu_edit_history').insert(auditEntries);
+      }
       
       toast.success('ONU details updated successfully');
       onUpdate?.();

@@ -13,8 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatusIndicator } from './StatusIndicator';
 import type { Tables } from '@/integrations/supabase/types';
-import { formatDistanceToNow, isAfter, subDays, subHours } from 'date-fns';
-import { Search, Filter, Download, MoreHorizontal, X, RefreshCw, Power, Trash2 } from 'lucide-react';
+import { formatDistanceToNow, isAfter, subDays, subHours, differenceInMinutes } from 'date-fns';
+import { Search, Filter, Download, MoreHorizontal, X, RefreshCw, Power, Trash2, Clock, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -39,6 +39,13 @@ import { ONUDetailsModal } from '@/components/onu/ONUDetailsModal';
 import { PowerBadge } from '@/components/onu/PowerBadge';
 import { TablePagination } from '@/components/ui/table-pagination';
 import { useToast } from '@/hooks/use-toast';
+import { ONUColumnFilters } from '@/components/onu/ONUColumnFilters';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 type ONUWithOLTName = Tables<'onus'> & { oltName?: string };
 
@@ -47,12 +54,20 @@ interface ONUTableProps {
   title?: string;
   showFilters?: boolean;
   onRefresh?: () => void;
+  staleThresholdMinutes?: number; // Highlight rows not updated in X minutes
 }
 
 type StatusFilter = 'all' | 'online' | 'offline' | 'warning';
 type DateFilter = 'all' | '1h' | '24h' | '7d' | '30d';
 
-export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRefresh }: ONUTableProps) {
+interface ColumnFilters {
+  routerMac: Set<string>;
+  routerName: Set<string>;
+  onuMac: Set<string>;
+  pppoeUsername: Set<string>;
+}
+
+export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRefresh, staleThresholdMinutes = 15 }: ONUTableProps) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedONU, setSelectedONU] = useState<ONUWithOLTName | null>(null);
@@ -71,6 +86,14 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
   const [selectedPON, setSelectedPON] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  
+  // Column filters
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
+    routerMac: new Set(),
+    routerName: new Set(),
+    onuMac: new Set(),
+    pppoeUsername: new Set(),
+  });
 
   // Get unique OLTs and PON ports for filter dropdowns
   const uniqueOLTs = useMemo(() => {
@@ -131,9 +154,20 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
         }
       }
 
-      return matchesSearch && matchesOLT && matchesPON && matchesStatus && matchesDate;
+      // Column filters
+      const matchesRouterMac = columnFilters.routerMac.size === 0 || 
+        columnFilters.routerMac.has(routerMac || '');
+      const matchesRouterName = columnFilters.routerName.size === 0 || 
+        columnFilters.routerName.has(onu.router_name || '');
+      const matchesOnuMac = columnFilters.onuMac.size === 0 || 
+        columnFilters.onuMac.has(onu.mac_address || '');
+      const matchesPppoe = columnFilters.pppoeUsername.size === 0 || 
+        columnFilters.pppoeUsername.has(onu.pppoe_username || '');
+
+      return matchesSearch && matchesOLT && matchesPON && matchesStatus && matchesDate &&
+        matchesRouterMac && matchesRouterName && matchesOnuMac && matchesPppoe;
     });
-  }, [onus, searchTerm, selectedOLT, selectedPON, statusFilter, dateFilter]);
+  }, [onus, searchTerm, selectedOLT, selectedPON, statusFilter, dateFilter, columnFilters]);
 
   // Paginated data
   const paginatedONUs = useMemo(() => {
@@ -152,6 +186,12 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
     setSelectedPON('all');
     setStatusFilter('all');
     setDateFilter('all');
+    setColumnFilters({
+      routerMac: new Set(),
+      routerName: new Set(),
+      onuMac: new Set(),
+      pppoeUsername: new Set(),
+    });
     setCurrentPage(1);
   };
 
@@ -160,7 +200,29 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
     selectedPON !== 'all',
     statusFilter !== 'all',
     dateFilter !== 'all',
+    columnFilters.routerMac.size > 0,
+    columnFilters.routerName.size > 0,
+    columnFilters.onuMac.size > 0,
+    columnFilters.pppoeUsername.size > 0,
   ].filter(Boolean).length;
+  
+  // Calculate stale ONUs count
+  const staleONUsCount = useMemo(() => {
+    const now = new Date();
+    return onus.filter(onu => {
+      if (!onu.updated_at) return true;
+      const updatedAt = new Date(onu.updated_at);
+      return differenceInMinutes(now, updatedAt) > staleThresholdMinutes;
+    }).length;
+  }, [onus, staleThresholdMinutes]);
+
+  // Check if a row is stale
+  const isStaleRow = (onu: ONUWithOLTName) => {
+    if (!onu.updated_at) return true;
+    const now = new Date();
+    const updatedAt = new Date(onu.updated_at);
+    return differenceInMinutes(now, updatedAt) > staleThresholdMinutes;
+  };
 
   // Bulk selection handlers
   const handleSelectAll = (checked: boolean) => {
@@ -462,6 +524,21 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                 )}
               </div>
             )}
+            
+            {/* Column Filters */}
+            <ONUColumnFilters 
+              onus={onus} 
+              filters={columnFilters} 
+              onFiltersChange={setColumnFilters} 
+            />
+            
+            {/* Stale Data Indicator */}
+            {staleONUsCount > 0 && (
+              <div className="flex items-center gap-2 text-xs text-warning">
+                <Clock className="h-3 w-3" />
+                <span>{staleONUsCount} ONU(s) not updated in {staleThresholdMinutes}+ min</span>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -505,7 +582,12 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <TableHead className="font-semibold text-center">Temp</TableHead>
                   <TableHead className="font-semibold text-center">Distance</TableHead>
                   <TableHead className="font-semibold text-center">Status</TableHead>
-                  <TableHead className="font-semibold">Last Online</TableHead>
+                  <TableHead className="font-semibold">
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Updated
+                    </div>
+                  </TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -521,12 +603,15 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                     const isSelected = selectedONUs.has(onu.id);
                     const temp = (onu as any).temperature;
                     const distance = (onu as any).distance;
+                    const stale = isStaleRow(onu);
+                    const updatedAt = onu.updated_at ? new Date(onu.updated_at) : null;
                     return (
                       <TableRow 
                         key={onu.id} 
                         className={cn(
                           "hover:bg-muted/30 cursor-pointer",
-                          isSelected && "bg-primary/5"
+                          isSelected && "bg-primary/5",
+                          stale && "bg-warning/5 border-l-2 border-l-warning"
                         )}
                         onClick={() => handleViewDetails(onu)}
                       >
@@ -575,10 +660,29 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                         <TableCell className="text-center">
                           <StatusIndicator status={onu.status} size="sm" />
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {onu.last_online
-                            ? formatDistanceToNow(new Date(onu.last_online), { addSuffix: true })
-                            : 'Never'}
+                        <TableCell className="text-xs">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className={cn(
+                                  "flex items-center gap-1",
+                                  stale ? "text-warning" : "text-muted-foreground"
+                                )}>
+                                  {stale && <AlertTriangle className="h-3 w-3" />}
+                                  {updatedAt
+                                    ? formatDistanceToNow(updatedAt, { addSuffix: true })
+                                    : 'Never'}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="text-xs">
+                                  <p>Last updated: {updatedAt ? updatedAt.toLocaleString() : 'Never'}</p>
+                                  <p>Last online: {onu.last_online ? new Date(onu.last_online).toLocaleString() : 'Never'}</p>
+                                  {stale && <p className="text-warning">Data may be stale</p>}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
