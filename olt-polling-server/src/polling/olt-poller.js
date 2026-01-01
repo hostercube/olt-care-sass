@@ -348,13 +348,20 @@ export async function pollOLT(supabase, olt) {
         
         // Count how many ONUs get enriched
         let enrichedCount = 0;
-        const beforeOnus = JSON.stringify(onus.map(o => ({ mac: o.mac_address, pppoe: o.pppoe_username, router: o.router_name })));
+        
+        // Track which PPPoE usernames have been matched to prevent duplicates
+        const usedMatches = new Set();
         
         // Enrich ONU data with MikroTik info (router name, MAC, PPPoE username)
+        // Pass usedMatches to prevent the same PPPoE user from being assigned to multiple ONUs
         onus = onus.map(onu => {
-          const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets);
+          const enriched = enrichONUWithMikroTikData(onu, pppoe, arp, dhcp, secrets, usedMatches);
           if (enriched.pppoe_username !== onu.pppoe_username || enriched.router_name !== onu.router_name) {
             enrichedCount++;
+          }
+          // Mark this PPPoE username as used so it won't be matched to another ONU
+          if (enriched.pppoe_username) {
+            usedMatches.add(enriched.pppoe_username.toLowerCase());
           }
           return enriched;
         });

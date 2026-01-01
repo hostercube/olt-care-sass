@@ -730,7 +730,7 @@ function decodePlainLength(buffer, offset) {
  * 3. PON port + ONU index pattern in PPP secret
  * 4. Last 6 chars of serial matching caller-id (some ISPs use this)
  */
-export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, pppSecretsData = []) {
+export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, pppSecretsData = [], usedMatches = new Set()) {
   const macAddress = onu.mac_address?.toUpperCase();
   const serialNumber = onu.serial_number?.toUpperCase();
   const onuIndex = onu.onu_index;
@@ -748,6 +748,9 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   let pppSecret = null;
   let matchMethod = null;
   
+  // Helper to check if a PPPoE username is already used by another ONU
+  const isAlreadyMatched = (username) => usedMatches.has(username?.toLowerCase());
+  
   // Extract meaningful parts from ONU name for matching
   // e.g., "ONU-0/4:39" -> "39", "customer_john" -> "john"
   const onuNameClean = onuName.replace(/[^A-Z0-9]/g, '').toLowerCase();
@@ -755,25 +758,33 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   
   // ======================================================================
   // METHOD 1: ONU Index-based matching (most reliable for structured networks)
-  // Match PPP secret name or comment containing the ONU index
-  // e.g., ONU index 39 -> matches secret named "user39" or comment "ONU 39"
+  // Match PPP secret name or comment containing the ONU index AND PON port
+  // e.g., ONU index 39 on PON 0/4 -> matches secret named "pon04_user39" or comment "PON 0/4 ONU 39"
   // ======================================================================
-  if (!pppoeSession && onuIndex !== undefined) {
+  if (!pppoeSession && onuIndex !== undefined && ponPort) {
+    // Normalize PON port for matching (e.g., "0/4" -> "04", "0-4", etc.)
+    const ponNormalized = ponPort.replace(/[/:]/g, '');
+    
     for (const secret of pppSecretsData) {
+      if (isAlreadyMatched(secret.pppoe_username)) continue;
+      
       const secretName = secret.pppoe_username?.toLowerCase() || '';
       const comment = (secret.comment || '').toLowerCase();
+      const searchStr = `${secretName}|${comment}`;
       
-      // Look for ONU index in various patterns
-      const patterns = [
-        new RegExp(`(^|[^0-9])${onuIndex}($|[^0-9])`),  // exact index surrounded by non-digits
-        new RegExp(`onu[_-]?${onuIndex}$`, 'i'),         // ends with onuXX
-        new RegExp(`^${onuIndex}[_-]`),                   // starts with XX_
-      ];
+      // Look for patterns that include BOTH PON port AND ONU index (more specific = less false positives)
+      const specificPatterns = [
+        `${ponPort}:${onuIndex}`,           // 0/4:39
+        `${ponPort}_${onuIndex}`,           // 0/4_39
+        `${ponNormalized}_${onuIndex}`,     // 04_39
+        `pon${ponNormalized}_${onuIndex}`,  // pon04_39
+        `p${ponNormalized}o${onuIndex}`,    // p04o39
+      ].map(p => p.toLowerCase());
       
-      for (const pattern of patterns) {
-        if (pattern.test(secretName) || pattern.test(comment)) {
+      for (const pattern of specificPatterns) {
+        if (searchStr.includes(pattern)) {
           pppSecret = secret;
-          matchMethod = 'onu-index-pattern';
+          matchMethod = 'pon-onu-specific';
           pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
           break;
         }
@@ -787,6 +798,8 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   // ======================================================================
   if (!pppoeSession && (serialNormalized || macNormalized)) {
     for (const secret of pppSecretsData) {
+      if (isAlreadyMatched(secret.pppoe_username)) continue;
+      
       const secretName = secret.pppoe_username?.toUpperCase() || '';
       const comment = secret.comment?.toUpperCase() || '';
       const callerId = secret.caller_id?.replace(/[:-]/g, '').toUpperCase() || '';
@@ -824,6 +837,8 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   // ======================================================================
   if (!pppoeSession && onuName && onuName !== 'N/A' && !onuName.startsWith('ONU-')) {
     for (const secret of pppSecretsData) {
+      if (isAlreadyMatched(secret.pppoe_username)) continue;
+      
       const username = secret.pppoe_username?.toUpperCase() || '';
       const usernameClean = username.replace(/[^A-Z0-9]/g, '');
       
@@ -839,45 +854,16 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // ======================================================================
-  // METHOD 4: PON port + ONU index pattern in username/comment
-  // e.g., "0/4:39" matches secret named "pon04_39" or comment "PON 0/4 ONU 39"
+  // METHOD 4: PON port + ONU index pattern in username/comment (SKIP - merged into METHOD 1)
   // ======================================================================
-  if (!pppoeSession && ponPort && onuIndex !== undefined) {
-    // Normalize PON port for pattern matching
-    const ponNormalized = ponPort.replace(/[/:]/g, '');
-    const patterns = [
-      `${ponPort}:${onuIndex}`,
-      `${ponPort}_${onuIndex}`,
-      `${ponPort}-${onuIndex}`,
-      `${ponNormalized}${onuIndex}`,
-      `${ponNormalized}_${onuIndex}`,
-      `pon${ponNormalized}_${onuIndex}`,
-      `pon${ponNormalized}-${onuIndex}`,
-      `p${ponNormalized}o${onuIndex}`,
-    ].map(p => p.toLowerCase());
-    
-    for (const secret of pppSecretsData) {
-      const username = secret.pppoe_username?.toLowerCase() || '';
-      const comment = secret.comment?.toLowerCase() || '';
-      const searchStr = `${username}|${comment}`;
-      
-      for (const pattern of patterns) {
-        if (searchStr.includes(pattern)) {
-          pppSecret = secret;
-          matchMethod = 'pon-onu-pattern';
-          pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
-          break;
-        }
-      }
-      if (pppSecret) break;
-    }
-  }
   
   // ======================================================================
   // METHOD 5: Direct match on active PPPoE session's caller-id
   // ======================================================================
   if (!pppoeSession && macNormalized) {
     for (const session of pppoeData) {
+      if (isAlreadyMatched(session.pppoe_username)) continue;
+      
       const callerId = session.mac_address?.replace(/[:-]/g, '').toUpperCase() || '';
       
       if (callerId === macNormalized) {
@@ -889,83 +875,19 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // ======================================================================
-  // METHOD 6: Partial MAC match (last 6 chars)
+  // METHOD 6: Partial MAC match (last 6 chars) - DISABLED (too many false positives)
   // ======================================================================
-  if (!pppoeSession && macLast6) {
-    for (const session of pppoeData) {
-      const callerId = session.mac_address?.replace(/[:-]/g, '').toUpperCase() || '';
-      
-      if (callerId.length >= 6 && callerId.slice(-6) === macLast6) {
-        pppoeSession = session;
-        matchMethod = 'session-caller-id-last6';
-        break;
-      }
-    }
-    
-    // Also check secrets
-    if (!pppSecret) {
-      for (const secret of pppSecretsData) {
-        const callerId = secret.caller_id?.replace(/[:-]/g, '').toUpperCase() || '';
-        
-        if (callerId.length >= 6 && callerId.slice(-6) === macLast6) {
-          pppSecret = secret;
-          matchMethod = matchMethod || 'secret-caller-id-last6';
-          pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
-          break;
-        }
-      }
-    }
-  }
+  // Skipped: partial MAC matching causes incorrect associations
   
   // ======================================================================
-  // METHOD 7: Fuzzy name matching - ONU name contains part of username
-  // e.g., ONU "Sojib_PON4" matches PPPoE user "Sojibm"
+  // METHOD 7: Fuzzy name matching - DISABLED (too many false positives)
   // ======================================================================
-  if (!pppoeSession && onuName && onuName.length > 3 && !onuName.startsWith('ONU-')) {
-    // Extract alphanumeric parts from ONU name for fuzzy matching
-    const onuNameParts = onuName.replace(/[^A-Z0-9]/g, '').toLowerCase();
-    
-    if (onuNameParts.length >= 4) {
-      for (const secret of pppSecretsData) {
-        const username = secret.pppoe_username?.toLowerCase() || '';
-        
-        // Check if ONU name and username share significant overlap
-        if (username.length >= 4 && (
-          username.startsWith(onuNameParts.substring(0, 4)) ||
-          onuNameParts.startsWith(username.substring(0, 4))
-        )) {
-          pppSecret = secret;
-          matchMethod = 'fuzzy-name';
-          pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
-          break;
-        }
-      }
-    }
-  }
+  // Skipped: fuzzy matching causes same username to match multiple ONUs
   
   // ======================================================================
-  // METHOD 8: Sequential index matching - try to match by position
-  // If ONU index 1 on PON 0/4 and there's a PPP secret at position 1 for that port
+  // METHOD 8: Sequential index matching - DISABLED (unreliable)
   // ======================================================================
-  if (!pppoeSession && ponPort && onuIndex !== undefined) {
-    // Extract port number patterns
-    const portMatch = ponPort.match(/(\d+)[\/:](\d+)/);
-    if (portMatch) {
-      const slot = parseInt(portMatch[1]);
-      const port = parseInt(portMatch[2]);
-      
-      for (const secret of pppSecretsData) {
-        const comment = (secret.comment || '').toLowerCase();
-        // Check for patterns like "slot 0 port 4 onu 39" or "0-4-39"
-        if (comment.includes(`${slot}`) && comment.includes(`${port}`) && comment.includes(`${onuIndex}`)) {
-          pppSecret = secret;
-          matchMethod = 'comment-location';
-          pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
-          break;
-        }
-      }
-    }
-  }
+  // Skipped: comment-based location matching is unreliable
   
   if (!pppSecret && pppoeSession) {
     pppSecret = pppSecretsData.find(s => s.pppoe_username === pppoeSession.pppoe_username);

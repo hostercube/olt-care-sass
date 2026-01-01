@@ -25,11 +25,30 @@ export default function Dashboard() {
     return acc;
   }, {} as Record<string, string>);
 
-  // Add OLT name to each ONU
-  const onusWithOltName = onus.map(onu => ({
-    ...onu,
-    oltName: oltNameMap[onu.olt_id] || 'Unknown OLT'
-  }));
+  // Add OLT name to each ONU and deduplicate by olt_id + pon_port + onu_index
+  const onusWithOltName = (() => {
+    const withName = onus.map(onu => ({
+      ...onu,
+      oltName: oltNameMap[onu.olt_id] || 'Unknown OLT'
+    }));
+    
+    // Deduplicate by hardware identity: olt_id + pon_port + onu_index
+    const byKey = new Map<string, typeof withName[number]>();
+    for (const onu of withName) {
+      const key = `${onu.olt_id}|${onu.pon_port}|${onu.onu_index}`;
+      const prev = byKey.get(key);
+      if (!prev) {
+        byKey.set(key, onu);
+        continue;
+      }
+      // Keep the more recently updated one
+      const prevTime = prev.updated_at ? new Date(prev.updated_at).getTime() : 0;
+      const curTime = onu.updated_at ? new Date(onu.updated_at).getTime() : 0;
+      if (curTime >= prevTime) byKey.set(key, onu);
+    }
+    
+    return Array.from(byKey.values());
+  })();
 
   const loading = oltsLoading || onusLoading || alertsLoading;
 
