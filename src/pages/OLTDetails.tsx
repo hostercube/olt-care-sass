@@ -442,6 +442,12 @@ export default function OLTDetails() {
                     style={{ width: `${pppoeCoveragePercent}%` }}
                   />
                 </div>
+                {/* Low coverage help tip */}
+                {pppoeCoveragePercent < 50 && oltONUs.length > 0 && (
+                  <div className="mt-3 p-2 rounded bg-warning/10 border border-warning/20 text-xs text-warning">
+                    <strong>Tip:</strong> ONU MAC ≠ Router MAC. To enable matching, add ONU serial/MAC to PPP secret's <code className="bg-muted px-1 rounded">caller-id</code> or <code className="bg-muted px-1 rounded">comment</code> field in MikroTik.
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-4 md:grid-cols-7">

@@ -716,25 +716,46 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   const macLast6 = macNormalized?.slice(-6);
   const serialLast6 = serialNormalized?.slice(-6);
   
-  logger.debug(`Matching ONU: Name=${onuName}, MAC=${macAddress || 'N/A'}, Serial=${serialNumber || 'N/A'}, Index=${onuIndex}, PON=${ponPort}`);
-  logger.debug(`Available PPPoE sessions: ${pppoeData.length}, Secrets: ${pppSecretsData.length}, ARP: ${arpData.length}`);
-  
-  // Log sample data for debugging
-  if (pppSecretsData.length > 0 && pppSecretsData.length <= 5) {
-    logger.debug(`PPP Secrets sample: ${JSON.stringify(pppSecretsData.slice(0, 3).map(s => ({
-      name: s.pppoe_username,
-      caller_id: s.caller_id,
-      comment: s.comment?.substring(0, 30)
-    })))}`);
-  }
-  
   let pppoeSession = null;
   let pppSecret = null;
   let matchMethod = null;
   
+  // Extract meaningful parts from ONU name for matching
+  // e.g., "ONU-0/4:39" -> "39", "customer_john" -> "john"
+  const onuNameClean = onuName.replace(/[^A-Z0-9]/g, '').toLowerCase();
+  const onuIndexStr = String(onuIndex).padStart(2, '0');
+  
   // ======================================================================
-  // METHOD 1: Serial/MAC in PPP Secret name, comment, or caller-id
-  // This is the MOST RELIABLE for EPON where serial = MAC
+  // METHOD 1: ONU Index-based matching (most reliable for structured networks)
+  // Match PPP secret name or comment containing the ONU index
+  // e.g., ONU index 39 -> matches secret named "user39" or comment "ONU 39"
+  // ======================================================================
+  if (!pppoeSession && onuIndex !== undefined) {
+    for (const secret of pppSecretsData) {
+      const secretName = secret.pppoe_username?.toLowerCase() || '';
+      const comment = (secret.comment || '').toLowerCase();
+      
+      // Look for ONU index in various patterns
+      const patterns = [
+        new RegExp(`(^|[^0-9])${onuIndex}($|[^0-9])`),  // exact index surrounded by non-digits
+        new RegExp(`onu[_-]?${onuIndex}$`, 'i'),         // ends with onuXX
+        new RegExp(`^${onuIndex}[_-]`),                   // starts with XX_
+      ];
+      
+      for (const pattern of patterns) {
+        if (pattern.test(secretName) || pattern.test(comment)) {
+          pppSecret = secret;
+          matchMethod = 'onu-index-pattern';
+          pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
+          break;
+        }
+      }
+      if (pppSecret) break;
+    }
+  }
+  
+  // ======================================================================
+  // METHOD 2: Serial/MAC in PPP Secret name, comment, or caller-id
   // ======================================================================
   if (!pppoeSession && (serialNormalized || macNormalized)) {
     for (const secret of pppSecretsData) {
@@ -752,7 +773,6 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
       )) {
         pppSecret = secret;
         matchMethod = 'serial-in-secret';
-        logger.info(`PPP Secret match (serial in secret): ${secret.pppoe_username} for serial ${serialNumber}`);
         pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
         break;
       }
@@ -764,7 +784,6 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
       )) {
         pppSecret = secret;
         matchMethod = 'mac-in-secret';
-        logger.info(`PPP Secret match (MAC in secret): ${secret.pppoe_username} for MAC ${macAddress}`);
         pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
         break;
       }
@@ -772,25 +791,27 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // ======================================================================
-  // METHOD 2: ONU name contains PPPoE username or vice versa
+  // METHOD 3: ONU name contains PPPoE username or vice versa
   // e.g., ONU named "customer_john" matches PPPoE user "john"
   // ======================================================================
-  if (!pppoeSession && onuName && onuName !== 'N/A') {
+  if (!pppoeSession && onuName && onuName !== 'N/A' && !onuName.startsWith('ONU-')) {
     for (const secret of pppSecretsData) {
       const username = secret.pppoe_username?.toUpperCase() || '';
+      const usernameClean = username.replace(/[^A-Z0-9]/g, '');
       
-      if (username && (onuName.includes(username) || username.includes(onuName.replace(/[^A-Z0-9]/g, '')))) {
-        pppSecret = secret;
-        matchMethod = 'name-match';
-        logger.info(`PPP Secret match (name): ${secret.pppoe_username} for ONU ${onu.name}`);
-        pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
-        break;
+      if (usernameClean.length >= 3 && onuNameClean.length >= 3) {
+        if (onuNameClean.includes(usernameClean) || usernameClean.includes(onuNameClean)) {
+          pppSecret = secret;
+          matchMethod = 'name-match';
+          pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
+          break;
+        }
       }
     }
   }
   
   // ======================================================================
-  // METHOD 3: PON port + ONU index pattern in username/comment
+  // METHOD 4: PON port + ONU index pattern in username/comment
   // e.g., "0/4:39" matches secret named "pon04_39" or comment "PON 0/4 ONU 39"
   // ======================================================================
   if (!pppoeSession && ponPort && onuIndex !== undefined) {
@@ -816,7 +837,6 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
         if (searchStr.includes(pattern)) {
           pppSecret = secret;
           matchMethod = 'pon-onu-pattern';
-          logger.info(`PPP Secret match (PON/ONU pattern): ${secret.pppoe_username} for PON ${ponPort} ONU ${onuIndex}`);
           pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
           break;
         }
@@ -826,8 +846,7 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // ======================================================================
-  // METHOD 4: Direct match on active PPPoE session's caller-id
-  // (Less reliable for EPON but works if ISP binds ONU MAC as caller-id)
+  // METHOD 5: Direct match on active PPPoE session's caller-id
   // ======================================================================
   if (!pppoeSession && macNormalized) {
     for (const session of pppoeData) {
@@ -836,14 +855,13 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
       if (callerId === macNormalized) {
         pppoeSession = session;
         matchMethod = 'session-caller-id-exact';
-        logger.info(`PPPoE match (exact caller-id): ${session.pppoe_username} for MAC ${macAddress}`);
         break;
       }
     }
   }
   
   // ======================================================================
-  // METHOD 5: Partial MAC match (last 6 chars) - fallback
+  // METHOD 6: Partial MAC match (last 6 chars)
   // ======================================================================
   if (!pppoeSession && macLast6) {
     for (const session of pppoeData) {
@@ -852,7 +870,6 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
       if (callerId.length >= 6 && callerId.slice(-6) === macLast6) {
         pppoeSession = session;
         matchMethod = 'session-caller-id-last6';
-        logger.info(`PPPoE match (last 6 MAC): ${session.pppoe_username} for MAC ${macAddress}`);
         break;
       }
     }
@@ -865,7 +882,6 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
         if (callerId.length >= 6 && callerId.slice(-6) === macLast6) {
           pppSecret = secret;
           matchMethod = matchMethod || 'secret-caller-id-last6';
-          logger.info(`PPP Secret match (last 6 MAC): ${secret.pppoe_username} for MAC ${macAddress}`);
           pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
           break;
         }
@@ -874,7 +890,7 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
   }
   
   // ======================================================================
-  // METHOD 6: Fuzzy name matching - ONU name contains part of username
+  // METHOD 7: Fuzzy name matching - ONU name contains part of username
   // e.g., ONU "Sojib_PON4" matches PPPoE user "Sojibm"
   // ======================================================================
   if (!pppoeSession && onuName && onuName.length > 3 && !onuName.startsWith('ONU-')) {
@@ -892,7 +908,30 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
         )) {
           pppSecret = secret;
           matchMethod = 'fuzzy-name';
-          logger.info(`PPP Secret match (fuzzy name): ${secret.pppoe_username} for ONU ${onu.name}`);
+          pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
+          break;
+        }
+      }
+    }
+  }
+  
+  // ======================================================================
+  // METHOD 8: Sequential index matching - try to match by position
+  // If ONU index 1 on PON 0/4 and there's a PPP secret at position 1 for that port
+  // ======================================================================
+  if (!pppoeSession && ponPort && onuIndex !== undefined) {
+    // Extract port number patterns
+    const portMatch = ponPort.match(/(\d+)[\/:](\d+)/);
+    if (portMatch) {
+      const slot = parseInt(portMatch[1]);
+      const port = parseInt(portMatch[2]);
+      
+      for (const secret of pppSecretsData) {
+        const comment = (secret.comment || '').toLowerCase();
+        // Check for patterns like "slot 0 port 4 onu 39" or "0-4-39"
+        if (comment.includes(`${slot}`) && comment.includes(`${port}`) && comment.includes(`${onuIndex}`)) {
+          pppSecret = secret;
+          matchMethod = 'comment-location';
           pppoeSession = pppoeData.find(s => s.pppoe_username === secret.pppoe_username);
           break;
         }
