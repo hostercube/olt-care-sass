@@ -7,6 +7,7 @@ import { ONUStatsWidget } from '@/components/dashboard/ONUStatsWidget';
 import { LiveStatusWidget } from '@/components/dashboard/LiveStatusWidget';
 import { DataQualityWidget } from '@/components/dashboard/DataQualityWidget';
 import { DeviceHealthWidget } from '@/components/dashboard/DeviceHealthWidget';
+import { DeviceHealthChart } from '@/components/dashboard/DeviceHealthChart';
 import { useOLTs, useONUs, useAlerts, useDashboardStats } from '@/hooks/useOLTData';
 import { Server, Router, AlertTriangle, Zap, Wifi, Loader2, Activity, Cpu } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -154,7 +155,11 @@ export default function Dashboard() {
             <LiveStatusWidget />
           </TabsContent>
           
-          <TabsContent value="health" className="mt-4">
+          <TabsContent value="health" className="mt-4 space-y-6">
+            {/* Device Health Chart */}
+            <DeviceHealthChart />
+            
+            {/* Device Status and Info */}
             <div className="grid gap-6 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <DeviceHealthWidget olts={olts} />
