@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables } from '@/integrations/supabase/types';
+import { useTenantContext, useSuperAdmin } from '@/hooks/useSuperAdmin';
 
 export type ONURow = Tables<'onus'>;
 
@@ -12,15 +13,30 @@ export interface ONUWithOLTName extends ONURow {
  * Hook for real-time ONU data with Supabase subscriptions
  * Automatically updates when any ONU data changes in database
  * No duplicate entries - deduplicates by olt_id + pon_port + onu_index
+ * Supports tenant isolation
  */
 export function useRealtimeONUs(oltId?: string) {
   const [onus, setONUs] = useState<ONURow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const { tenantId, loading: tenantLoading } = useTenantContext();
+  const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
 
   const fetchONUs = useCallback(async () => {
+    if (tenantLoading || superAdminLoading) return;
+    
     try {
+      // First get tenant's OLT IDs if not super admin
+      let oltIds: string[] = [];
+      if (!isSuperAdmin && tenantId) {
+        const { data: tenantOlts } = await supabase
+          .from('olts')
+          .select('id')
+          .eq('tenant_id', tenantId);
+        oltIds = (tenantOlts || []).map(o => o.id);
+      }
+
       let query = supabase
         .from('onus')
         .select('*')
@@ -28,6 +44,13 @@ export function useRealtimeONUs(oltId?: string) {
 
       if (oltId) {
         query = query.eq('olt_id', oltId);
+      } else if (!isSuperAdmin && tenantId && oltIds.length > 0) {
+        query = query.in('olt_id', oltIds);
+      } else if (!isSuperAdmin && tenantId && oltIds.length === 0) {
+        setONUs([]);
+        setLastUpdate(new Date());
+        setLoading(false);
+        return;
       }
 
       const { data, error } = await query;
@@ -40,7 +63,7 @@ export function useRealtimeONUs(oltId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [oltId]);
+  }, [oltId, tenantId, tenantLoading, isSuperAdmin, superAdminLoading]);
 
   useEffect(() => {
     fetchONUs();
@@ -123,7 +146,7 @@ export function useRealtimeONUs(oltId?: string) {
 
   return { 
     onus: deduplicatedONUs, 
-    loading, 
+    loading: loading || tenantLoading || superAdminLoading, 
     error, 
     refetch: fetchONUs,
     lastUpdate,
@@ -134,18 +157,30 @@ export function useRealtimeONUs(oltId?: string) {
 
 /**
  * Hook for real-time OLT data with Supabase subscriptions
+ * Supports tenant isolation
  */
 export function useRealtimeOLTs() {
   const [olts, setOLTs] = useState<Tables<'olts'>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { tenantId, loading: tenantLoading } = useTenantContext();
+  const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
 
   const fetchOLTs = useCallback(async () => {
+    if (tenantLoading || superAdminLoading) return;
+    
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('olts')
         .select('*')
         .order('created_at', { ascending: false });
+
+      // Filter by tenant for non-super-admin users
+      if (!isSuperAdmin && tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setOLTs(data || []);
@@ -154,7 +189,7 @@ export function useRealtimeOLTs() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantId, tenantLoading, isSuperAdmin, superAdminLoading]);
 
   useEffect(() => {
     fetchOLTs();
@@ -188,5 +223,5 @@ export function useRealtimeOLTs() {
     };
   }, [fetchOLTs]);
 
-  return { olts, loading, error, refetch: fetchOLTs };
+  return { olts, loading: loading || tenantLoading || superAdminLoading, error, refetch: fetchOLTs };
 }
