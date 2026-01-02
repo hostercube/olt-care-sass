@@ -22,6 +22,7 @@ import {
   DollarSign,
   ClipboardList,
   History,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,6 +68,7 @@ const superAdminItems: NavItem[] = [
   { title: 'Packages', href: '/admin/packages', icon: Package },
   { title: 'Payments', href: '/admin/payments', icon: CreditCard },
   { title: 'Gateways', href: '/admin/gateways', icon: Cog },
+  { title: 'SMS Gateway', href: '/admin/sms-gateway', icon: MessageSquare },
 ];
 
 const tenantBillingItems: NavItem[] = [
