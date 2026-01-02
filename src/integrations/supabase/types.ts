@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          ip_address: string | null
+          tenant_id: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          ip_address?: string | null
+          tenant_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          ip_address?: string | null
+          tenant_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alerts: {
         Row: {
           created_at: string
@@ -23,6 +70,7 @@ export type Database = {
           is_read: boolean
           message: string
           severity: Database["public"]["Enums"]["alert_severity"]
+          tenant_id: string | null
           title: string
           type: Database["public"]["Enums"]["alert_type"]
         }
@@ -34,6 +82,7 @@ export type Database = {
           is_read?: boolean
           message: string
           severity: Database["public"]["Enums"]["alert_severity"]
+          tenant_id?: string | null
           title: string
           type: Database["public"]["Enums"]["alert_type"]
         }
@@ -45,10 +94,19 @@ export type Database = {
           is_read?: boolean
           message?: string
           severity?: Database["public"]["Enums"]["alert_severity"]
+          tenant_id?: string | null
           title?: string
           type?: Database["public"]["Enums"]["alert_type"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "alerts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       device_health_history: {
         Row: {
@@ -88,6 +146,82 @@ export type Database = {
           uptime_seconds?: number | null
         }
         Relationships: []
+      }
+      invoices: {
+        Row: {
+          amount: number
+          created_at: string
+          due_date: string
+          id: string
+          invoice_number: string
+          line_items: Json | null
+          notes: string | null
+          paid_at: string | null
+          payment_id: string | null
+          status: string
+          subscription_id: string | null
+          tax_amount: number | null
+          tenant_id: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          due_date: string
+          id?: string
+          invoice_number: string
+          line_items?: Json | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_id?: string | null
+          status?: string
+          subscription_id?: string | null
+          tax_amount?: number | null
+          tenant_id: string
+          total_amount: number
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          due_date?: string
+          id?: string
+          invoice_number?: string
+          line_items?: Json | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_id?: string | null
+          status?: string
+          subscription_id?: string | null
+          tax_amount?: number | null
+          tenant_id?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       olt_debug_logs: {
         Row: {
@@ -154,6 +288,7 @@ export type Database = {
           password_encrypted: string
           port: number
           status: Database["public"]["Enums"]["connection_status"]
+          tenant_id: string | null
           total_ports: number
           updated_at: string
           username: string
@@ -175,6 +310,7 @@ export type Database = {
           password_encrypted: string
           port?: number
           status?: Database["public"]["Enums"]["connection_status"]
+          tenant_id?: string | null
           total_ports?: number
           updated_at?: string
           username: string
@@ -196,11 +332,20 @@ export type Database = {
           password_encrypted?: string
           port?: number
           status?: Database["public"]["Enums"]["connection_status"]
+          tenant_id?: string | null
           total_ports?: number
           updated_at?: string
           username?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "olts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       onu_edit_history: {
         Row: {
@@ -364,6 +509,168 @@ export type Database = {
           },
         ]
       }
+      packages: {
+        Row: {
+          created_at: string
+          description: string | null
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          max_olts: number
+          max_onus: number | null
+          max_users: number
+          name: string
+          price_monthly: number
+          price_yearly: number
+          sort_order: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_olts?: number
+          max_onus?: number | null
+          max_users?: number
+          name: string
+          price_monthly?: number
+          price_yearly?: number
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_olts?: number
+          max_onus?: number | null
+          max_users?: number
+          name?: string
+          price_monthly?: number
+          price_yearly?: number
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payment_gateway_settings: {
+        Row: {
+          config: Json | null
+          created_at: string
+          display_name: string
+          gateway: Database["public"]["Enums"]["payment_method"]
+          id: string
+          instructions: string | null
+          is_enabled: boolean | null
+          sandbox_mode: boolean | null
+          sort_order: number | null
+          updated_at: string
+        }
+        Insert: {
+          config?: Json | null
+          created_at?: string
+          display_name: string
+          gateway: Database["public"]["Enums"]["payment_method"]
+          id?: string
+          instructions?: string | null
+          is_enabled?: boolean | null
+          sandbox_mode?: boolean | null
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Update: {
+          config?: Json | null
+          created_at?: string
+          display_name?: string
+          gateway?: Database["public"]["Enums"]["payment_method"]
+          id?: string
+          instructions?: string | null
+          is_enabled?: boolean | null
+          sandbox_mode?: boolean | null
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string | null
+          description: string | null
+          gateway_response: Json | null
+          id: string
+          invoice_number: string | null
+          notes: string | null
+          paid_at: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          status: Database["public"]["Enums"]["payment_status"]
+          subscription_id: string | null
+          tenant_id: string
+          transaction_id: string | null
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          gateway_response?: Json | null
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          status?: Database["public"]["Enums"]["payment_status"]
+          subscription_id?: string | null
+          tenant_id: string
+          transaction_id?: string | null
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          gateway_response?: Json | null
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          status?: Database["public"]["Enums"]["payment_status"]
+          subscription_id?: string | null
+          tenant_id?: string
+          transaction_id?: string | null
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       power_readings: {
         Row: {
           id: string
@@ -423,6 +730,149 @@ export type Database = {
         }
         Relationships: []
       }
+      sms_gateway_settings: {
+        Row: {
+          api_key: string | null
+          api_url: string | null
+          config: Json | null
+          created_at: string
+          id: string
+          is_enabled: boolean | null
+          provider: string
+          sender_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          api_key?: string | null
+          api_url?: string | null
+          config?: Json | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean | null
+          provider?: string
+          sender_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          api_key?: string | null
+          api_url?: string | null
+          config?: Json | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean | null
+          provider?: string
+          sender_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sms_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          message: string
+          phone_number: string
+          provider_response: Json | null
+          sent_at: string | null
+          status: string
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          message: string
+          phone_number: string
+          provider_response?: Json | null
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          message?: string
+          phone_number?: string
+          provider_response?: Json | null
+          sent_at?: string | null
+          status?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          amount: number
+          auto_renew: boolean | null
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"]
+          cancelled_at: string | null
+          cancelled_reason: string | null
+          created_at: string
+          ends_at: string
+          id: string
+          package_id: string
+          starts_at: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          auto_renew?: boolean | null
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"]
+          cancelled_at?: string | null
+          cancelled_reason?: string | null
+          created_at?: string
+          ends_at: string
+          id?: string
+          package_id: string
+          starts_at?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          auto_renew?: boolean | null
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"]
+          cancelled_at?: string | null
+          cancelled_reason?: string | null
+          created_at?: string
+          ends_at?: string
+          id?: string
+          package_id?: string
+          starts_at?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           id: string
@@ -441,6 +891,113 @@ export type Database = {
           key?: string
           updated_at?: string
           value?: Json
+        }
+        Relationships: []
+      }
+      tenant_users: {
+        Row: {
+          created_at: string
+          id: string
+          is_owner: boolean | null
+          role: Database["public"]["Enums"]["app_role"]
+          tenant_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_owner?: boolean | null
+          role?: Database["public"]["Enums"]["app_role"]
+          tenant_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_owner?: boolean | null
+          role?: Database["public"]["Enums"]["app_role"]
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_users_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          address: string | null
+          company_name: string | null
+          created_at: string
+          custom_domain: string | null
+          email: string
+          features: Json | null
+          id: string
+          logo_url: string | null
+          max_olts: number | null
+          max_users: number | null
+          name: string
+          notes: string | null
+          owner_user_id: string | null
+          phone: string | null
+          status: Database["public"]["Enums"]["tenant_status"]
+          subdomain: string | null
+          suspended_at: string | null
+          suspended_reason: string | null
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          company_name?: string | null
+          created_at?: string
+          custom_domain?: string | null
+          email: string
+          features?: Json | null
+          id?: string
+          logo_url?: string | null
+          max_olts?: number | null
+          max_users?: number | null
+          name: string
+          notes?: string | null
+          owner_user_id?: string | null
+          phone?: string | null
+          status?: Database["public"]["Enums"]["tenant_status"]
+          subdomain?: string | null
+          suspended_at?: string | null
+          suspended_reason?: string | null
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          company_name?: string | null
+          created_at?: string
+          custom_domain?: string | null
+          email?: string
+          features?: Json | null
+          id?: string
+          logo_url?: string | null
+          max_olts?: number | null
+          max_users?: number | null
+          name?: string
+          notes?: string | null
+          owner_user_id?: string | null
+          phone?: string | null
+          status?: Database["public"]["Enums"]["tenant_status"]
+          subdomain?: string | null
+          suspended_at?: string | null
+          suspended_reason?: string | null
+          trial_ends_at?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -467,6 +1024,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_tenant_id: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -475,6 +1033,8 @@ export type Database = {
         Returns: boolean
       }
       is_authenticated: { Args: never; Returns: boolean }
+      is_super_admin: { Args: never; Returns: boolean }
+      is_tenant_active: { Args: { _tenant_id: string }; Returns: boolean }
     }
     Enums: {
       alert_severity: "critical" | "warning" | "info"
@@ -483,7 +1043,8 @@ export type Database = {
         | "power_drop"
         | "olt_unreachable"
         | "high_latency"
-      app_role: "admin" | "operator" | "viewer"
+      app_role: "admin" | "operator" | "viewer" | "super_admin"
+      billing_cycle: "monthly" | "yearly"
       connection_status: "online" | "offline" | "warning" | "unknown"
       olt_brand:
         | "ZTE"
@@ -497,6 +1058,10 @@ export type Database = {
         | "CDATA"
         | "ECOM"
       olt_mode: "EPON" | "GPON"
+      payment_method: "sslcommerz" | "bkash" | "rocket" | "nagad" | "manual"
+      payment_status: "pending" | "completed" | "failed" | "refunded"
+      subscription_status: "active" | "expired" | "cancelled" | "pending"
+      tenant_status: "active" | "suspended" | "trial" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -631,7 +1196,8 @@ export const Constants = {
         "olt_unreachable",
         "high_latency",
       ],
-      app_role: ["admin", "operator", "viewer"],
+      app_role: ["admin", "operator", "viewer", "super_admin"],
+      billing_cycle: ["monthly", "yearly"],
       connection_status: ["online", "offline", "warning", "unknown"],
       olt_brand: [
         "ZTE",
@@ -646,6 +1212,10 @@ export const Constants = {
         "ECOM",
       ],
       olt_mode: ["EPON", "GPON"],
+      payment_method: ["sslcommerz", "bkash", "rocket", "nagad", "manual"],
+      payment_status: ["pending", "completed", "failed", "refunded"],
+      subscription_status: ["active", "expired", "cancelled", "pending"],
+      tenant_status: ["active", "suspended", "trial", "cancelled"],
     },
   },
 } as const

@@ -156,7 +156,10 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
         .eq('key', 'apiServerUrl')
         .single();
 
-      const apiUrl = settingsData?.value?.value || settingsData?.value || '';
+      const rawValue = settingsData?.value;
+      const apiUrl = typeof rawValue === 'object' && rawValue !== null && 'value' in rawValue 
+        ? String((rawValue as { value: unknown }).value) 
+        : typeof rawValue === 'string' ? rawValue : '';
       if (!apiUrl) {
         throw new Error('Polling server URL not configured. Please configure it in Settings → Polling.');
       }

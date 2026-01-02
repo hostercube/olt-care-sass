@@ -1,0 +1,4 @@
+-- ============================================
+-- PART 1: Add super_admin to app_role enum first
+-- ============================================
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'super_admin';
