@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger.js';
+import { getMacVendor } from './parsers/vsol-parser.js';
 
 /**
  * MikroTik RouterOS API Client
@@ -1163,6 +1164,16 @@ export function enrichONUWithMikroTikData(onu, pppoeData, arpData, dhcpData, ppp
     const cleaned = pppSecret.comment.replace(/\s*\[ONU:[^\]]*\]\s*/gi, ' ').trim();
     if (cleaned.length >= 2 && cleaned.toLowerCase() !== pppSecret.pppoe_username?.toLowerCase()) {
       routerName = cleaned;
+    }
+  }
+  
+  // FINAL FALLBACK: MAC Vendor lookup from router MAC
+  // This gives us the vendor name like "TP-Link", "Xiaomi", "Huawei" based on OUI
+  if (!routerName && routerMacFromSession) {
+    const vendorName = getMacVendor(routerMacFromSession);
+    if (vendorName) {
+      routerName = vendorName;
+      logger.debug(`Router name from MAC vendor: ${routerName} (MAC: ${routerMacFromSession})`);
     }
   }
   
