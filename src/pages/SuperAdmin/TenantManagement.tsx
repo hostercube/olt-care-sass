@@ -114,7 +114,7 @@ export default function TenantManagement() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Tenant Management" subtitle="Manage ISP owner accounts">
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>

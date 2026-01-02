@@ -133,10 +133,47 @@ export function usePayments() {
     }
   };
 
+  const createPayment = async (paymentData: {
+    tenant_id: string;
+    amount: number;
+    payment_method: PaymentMethod;
+    transaction_id?: string;
+    invoice_number?: string;
+    status?: PaymentStatus;
+    description?: string;
+  }) => {
+    try {
+      const { error } = await supabase
+        .from('payments')
+        .insert({
+          ...paymentData,
+          currency: 'BDT',
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Payment Submitted',
+        description: 'Your payment has been submitted for verification',
+      });
+
+      await fetchPayments();
+    } catch (error: any) {
+      console.error('Error creating payment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to submit payment',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
   return {
     payments,
     loading,
     fetchPayments,
+    createPayment,
     verifyPayment,
     rejectPayment,
     refundPayment,

@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function GatewaySettings() {
   const { gateways, loading: gatewaysLoading, updateGateway } = usePaymentGateways();
-  const { settings: smsSettings, loading: smsLoading, updateSettings: updateSMSSettings, testSMS } = useSMSGateway();
+  const { settings: smsSettings, loading: smsLoading, updateSettings: updateSMSSettings, sendTestSMS } = useSMSGateway();
   const { toast } = useToast();
 
   const [paymentConfigs, setPaymentConfigs] = useState<Record<string, any>>({});
@@ -70,7 +70,7 @@ export default function GatewaySettings() {
   const handleTestSMS = async () => {
     const phone = prompt('Enter phone number to test:');
     if (phone) {
-      await testSMS(phone, 'This is a test message from OLT Care SaaS');
+      await sendTestSMS(phone, 'This is a test message from OLT Care SaaS');
       toast({
         title: 'Test SMS Sent',
         description: `Test message sent to ${phone}`,
@@ -190,7 +190,7 @@ export default function GatewaySettings() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Gateway Settings" subtitle="Configure payment and SMS gateways">
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Gateway Settings</h1>
