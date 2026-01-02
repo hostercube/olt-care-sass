@@ -125,48 +125,92 @@ export default function Settings() {
             <Card variant="glass">
               <CardHeader>
                 <CardTitle className="text-lg">Polling Configuration</CardTitle>
-                <CardDescription>Configure how often devices are polled</CardDescription>
+                <CardDescription>Configure how devices are polled - optimized to minimize OLT/MikroTik load</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-4">
+                {/* Polling Mode Selection */}
+                <div className="space-y-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                  <Label className="text-sm font-medium">Polling Mode</Label>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Choose how the system collects data from OLT and MikroTik devices
+                  </p>
+                  <Select 
+                    value={settings.pollingMode} 
+                    onValueChange={(value: 'on_demand' | 'light_cron' | 'full_cron') => updateSetting('pollingMode', value)}
+                  >
+                    <SelectTrigger className="bg-secondary">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      <SelectItem value="on_demand">
+                        <div className="flex flex-col">
+                          <span className="font-medium">On-Demand Only (Recommended)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="light_cron">
+                        <div className="flex flex-col">
+                          <span className="font-medium">Light Cron (Status Only)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="full_cron">
+                        <div className="flex flex-col">
+                          <span className="font-medium">Full Cron (Complete Data)</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {settings.pollingMode === 'on_demand' && (
+                    <div className="mt-2 p-2 rounded bg-success/10 border border-success/20 text-xs text-success">
+                      ✓ Best for OLT/MikroTik performance. Data fetched only when you view ONU page.
+                    </div>
+                  )}
+                  {settings.pollingMode === 'light_cron' && (
+                    <div className="mt-2 p-2 rounded bg-warning/10 border border-warning/20 text-xs text-warning">
+                      ⚡ Light polling every {settings.cronIntervalMinutes} min - fetches only status/DBM.
+                    </div>
+                  )}
+                  {settings.pollingMode === 'full_cron' && (
+                    <div className="mt-2 p-2 rounded bg-destructive/10 border border-destructive/20 text-xs text-destructive">
+                      ⚠ Full data fetch every {settings.cronIntervalMinutes} min - may impact OLT/MikroTik CPU.
+                    </div>
+                  )}
+                </div>
+
+                {/* Cron Interval - only show if cron mode selected */}
+                {(settings.pollingMode === 'light_cron' || settings.pollingMode === 'full_cron') && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label>Polling Interval</Label>
-                      <span className="text-sm font-medium text-primary">{settings.oltPollInterval} minute{settings.oltPollInterval > 1 ? 's' : ''}</span>
+                      <Label>Cron Poll Interval</Label>
+                      <span className="text-sm font-medium text-primary">{settings.cronIntervalMinutes} minutes</span>
                     </div>
-                    <Slider
-                      value={[settings.oltPollInterval]}
-                      onValueChange={(value) => {
-                        updateSetting('oltPollInterval', value[0]);
-                        updateSetting('onuPollInterval', value[0]);
-                      }}
-                      min={1}
-                      max={10}
-                      step={1}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>1 min (fast)</span>
-                      <span>5 min</span>
-                      <span>10 min (slow)</span>
-                    </div>
+                    <Select 
+                      value={String(settings.cronIntervalMinutes)} 
+                      onValueChange={(value) => updateSetting('cronIntervalMinutes', parseInt(value))}
+                    >
+                      <SelectTrigger className="bg-secondary">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        <SelectItem value="5">5 minutes</SelectItem>
+                        <SelectItem value="10">10 minutes (Recommended)</SelectItem>
+                        <SelectItem value="15">15 minutes</SelectItem>
+                        <SelectItem value="30">30 minutes</SelectItem>
+                        <SelectItem value="60">60 minutes</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <p className="text-xs text-muted-foreground">
-                      Lower intervals provide faster updates but use more device resources. 
-                      1-2 minutes recommended for small networks, 5-10 for larger networks.
+                      Higher intervals reduce load on OLT and MikroTik devices.
                     </p>
                   </div>
-                </div>
+                )}
+
                 <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Enable Background Polling</Label>
-                    <p className="text-sm text-muted-foreground">Poll devices in the background via VPS</p>
-                  </div>
-                  <Switch checked={settings.backgroundPolling} onCheckedChange={(checked) => updateSetting('backgroundPolling', checked)} />
-                </div>
+
                 <div className="space-y-2">
                   <Label>Polling Server URL</Label>
                   <Input value={settings.apiServerUrl} onChange={(e) => updateSetting('apiServerUrl', e.target.value)} className="bg-secondary" placeholder="https://olt.yourdomain.com/api" />
+                  <p className="text-xs text-muted-foreground">Your VPS polling server endpoint</p>
                 </div>
               </CardContent>
             </Card>
