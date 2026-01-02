@@ -716,12 +716,12 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                         <TableCell>
                           <span className="font-medium">{onu.name}</span>
                         </TableCell>
-                        <TableCell className="text-sm">{onu.router_name || 'N/A'}</TableCell>
-                        <TableCell className={`font-mono text-xs ${onu.pppoe_username ? 'text-success' : 'text-destructive'}`}>
-                          {onu.pppoe_username || <span className="text-destructive">Not matched</span>}
+                        <TableCell className="text-sm">{onu.router_name || <span className="text-muted-foreground">-</span>}</TableCell>
+                        <TableCell className={`font-mono text-xs ${onu.pppoe_username ? 'text-success' : 'text-muted-foreground'}`}>
+                          {onu.pppoe_username || <span className="text-muted-foreground">-</span>}
                         </TableCell>
-                        <TableCell className="font-mono text-xs">{onu.mac_address || 'N/A'}</TableCell>
-                        <TableCell className="font-mono text-xs">{(onu as any).router_mac || 'N/A'}</TableCell>
+                        <TableCell className="font-mono text-xs">{onu.mac_address || <span className="text-muted-foreground">-</span>}</TableCell>
+                        <TableCell className="font-mono text-xs">{(onu as any).router_mac || <span className="text-muted-foreground">-</span>}</TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center">
                             <PowerBadge power={onu.rx_power} type="rx" />
@@ -736,14 +736,14 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                               {temp.toFixed(1)}°C
                             </Badge>
                           ) : (
-                            <span className="text-muted-foreground text-xs">N/A</span>
+                            <span className="text-muted-foreground text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center font-mono text-xs">
                           {distance !== null && distance !== undefined ? (
                             distance >= 1000 ? `${(distance / 1000).toFixed(2)} km` : `${Math.round(distance)} m`
                           ) : (
-                            <span className="text-muted-foreground">N/A</span>
+                            <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center">
@@ -751,7 +751,15 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                         </TableCell>
                         <TableCell className="text-xs">
                           {onu.offline_reason ? (
-                            <Badge variant={onu.offline_reason === 'Power Off' ? 'destructive' : 'warning'} className="text-xs">
+                            <Badge 
+                              variant={
+                                onu.offline_reason.toLowerCase().includes('power off') ? 'destructive' :
+                                onu.offline_reason.toLowerCase().includes('los') ? 'warning' :
+                                onu.offline_reason.toLowerCase().includes('wire') ? 'warning' :
+                                'secondary'
+                              } 
+                              className="text-xs"
+                            >
                               {onu.offline_reason}
                             </Badge>
                           ) : (
@@ -762,17 +770,17 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="text-muted-foreground cursor-help">
+                                <span className={onu.last_online ? "text-foreground cursor-help" : "text-muted-foreground"}>
                                   {onu.last_online 
                                     ? formatDistanceToNow(new Date(onu.last_online), { addSuffix: true })
-                                    : 'N/A'}
+                                    : '-'}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs">
-                                  {onu.last_online ? new Date(onu.last_online).toLocaleString() : 'Never registered'}
-                                </p>
-                              </TooltipContent>
+                              {onu.last_online && (
+                                <TooltipContent>
+                                  <p className="text-xs">{new Date(onu.last_online).toLocaleString()}</p>
+                                </TooltipContent>
+                              )}
                             </Tooltip>
                           </TooltipProvider>
                         </TableCell>
@@ -780,22 +788,22 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="text-muted-foreground cursor-help">
+                                <span className={onu.last_offline ? "text-foreground cursor-help" : "text-muted-foreground"}>
                                   {onu.last_offline 
                                     ? formatDistanceToNow(new Date(onu.last_offline), { addSuffix: true })
-                                    : 'N/A'}
+                                    : '-'}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs">
-                                  {onu.last_offline ? new Date(onu.last_offline).toLocaleString() : 'Never deregistered'}
-                                </p>
-                              </TooltipContent>
+                              {onu.last_offline && (
+                                <TooltipContent>
+                                  <p className="text-xs">{new Date(onu.last_offline).toLocaleString()}</p>
+                                </TooltipContent>
+                              )}
                             </Tooltip>
                           </TooltipProvider>
                         </TableCell>
                         <TableCell className="text-xs font-mono">
-                          {(onu as any).alive_time || 'N/A'}
+                          {(onu as any).alive_time || <span className="text-muted-foreground">-</span>}
                         </TableCell>
                         <TableCell className="text-xs">
                           <TooltipProvider>

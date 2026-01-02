@@ -940,6 +940,11 @@ app.get('/debug-logs/:oltId', async (req, res) => {
 // Lightweight endpoint for when user views ONU page
 // Only fetches status/DBM from MikroTik - doesn't hit OLT CLI heavily
 
+// ============= REALTIME STATUS ENDPOINT =============
+// IMPORTANT: This endpoint NO LONGER updates ONU status
+// ONU Status is ONLY determined by OLT (source of truth)
+// MikroTik is used ONLY for PPPoE/Router info enrichment during full polls
+
 app.get('/api/realtime-status', async (req, res) => {
   const startTime = Date.now();
   
@@ -954,8 +959,9 @@ app.get('/api/realtime-status', async (req, res) => {
     const results = {
       timestamp: new Date().toISOString(),
       olts_checked: 0,
-      onus_updated: 0,
+      onus_enriched: 0,
       pppoe_sessions: 0,
+      note: 'ONU status comes from OLT only - MikroTik provides PPPoE/Router info',
     };
     
     for (const olt of olts || []) {
@@ -971,55 +977,72 @@ app.get('/api/realtime-status', async (req, res) => {
           password: olt.mikrotik_password_encrypted,
         };
         
-        // Fetch only PPPoE active sessions (very fast - no OLT CLI)
+        // Fetch PPPoE active sessions (for enrichment info only, NOT for status)
         const { pppoe } = await fetchAllMikroTikData(mikrotik);
         results.pppoe_sessions += pppoe.length;
         
-        // Build map of active users
-        const activeUsers = new Map();
+        // Build map of active PPPoE sessions for enrichment
+        const pppoeByMac = new Map();
+        const pppoeByUsername = new Map();
         for (const p of pppoe) {
+          if (p.mac_address) {
+            pppoeByMac.set(p.mac_address.toUpperCase(), p);
+          }
           if (p.pppoe_username) {
-            activeUsers.set(p.pppoe_username.toLowerCase(), {
-              uptime: p.uptime,
-              ip: p.ip_address,
-              callerId: p.mac_address,
-            });
+            pppoeByUsername.set(p.pppoe_username.toLowerCase(), p);
           }
         }
         
-        // Fetch ONUs for this OLT
+        // Fetch ONUs for this OLT (only those missing PPPoE/Router info)
         const { data: onus } = await supabase
           .from('onus')
-          .select('id, pppoe_username, status')
+          .select('id, mac_address, pppoe_username, router_name, router_mac')
           .eq('olt_id', olt.id);
         
-        // Update status for ONUs with PPPoE users
+        // Enrich ONUs with PPPoE/Router info (DO NOT touch status)
         for (const onu of onus || []) {
-          if (onu.pppoe_username) {
-            const session = activeUsers.get(onu.pppoe_username.toLowerCase());
-            const newStatus = session ? 'online' : 'offline';
+          // Try to find PPPoE session by ONU MAC or existing username
+          let session = null;
+          
+          if (onu.mac_address) {
+            session = pppoeByMac.get(onu.mac_address.toUpperCase());
+          }
+          if (!session && onu.pppoe_username) {
+            session = pppoeByUsername.get(onu.pppoe_username.toLowerCase());
+          }
+          
+          if (session) {
+            const updateData = {};
             
-            if (onu.status !== newStatus) {
+            // Only update if we have new info
+            if (session.pppoe_username && !onu.pppoe_username) {
+              updateData.pppoe_username = session.pppoe_username;
+            }
+            if (session.router_name && !onu.router_name) {
+              updateData.router_name = session.router_name;
+            }
+            if (session.mac_address && !onu.router_mac) {
+              updateData.router_mac = session.mac_address;
+            }
+            
+            // Only update if we have something new
+            if (Object.keys(updateData).length > 0) {
+              updateData.updated_at = new Date().toISOString();
               await supabase
                 .from('onus')
-                .update({ 
-                  status: newStatus, 
-                  updated_at: new Date().toISOString(),
-                  last_online: newStatus === 'online' ? new Date().toISOString() : undefined,
-                  last_offline: newStatus === 'offline' ? new Date().toISOString() : undefined,
-                })
+                .update(updateData)
                 .eq('id', onu.id);
-              results.onus_updated++;
+              results.onus_enriched++;
             }
           }
         }
       } catch (err) {
-        logger.warn(`Realtime status check failed for ${olt.name}: ${err.message}`);
+        logger.warn(`Realtime enrichment failed for ${olt.name}: ${err.message}`);
       }
     }
     
     results.duration_ms = Date.now() - startTime;
-    logger.info(`Realtime status: ${results.onus_updated} ONUs updated in ${results.duration_ms}ms`);
+    logger.info(`Realtime enrichment: ${results.onus_enriched} ONUs enriched with PPPoE info in ${results.duration_ms}ms`);
     
     res.json({ success: true, ...results });
   } catch (error) {
