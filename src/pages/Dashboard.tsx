@@ -8,7 +8,10 @@ import { LiveStatusWidget } from '@/components/dashboard/LiveStatusWidget';
 import { DataQualityWidget } from '@/components/dashboard/DataQualityWidget';
 import { DeviceHealthWidget } from '@/components/dashboard/DeviceHealthWidget';
 import { DeviceHealthChart } from '@/components/dashboard/DeviceHealthChart';
+import { SubscriptionAnalyticsWidget } from '@/components/dashboard/SubscriptionAnalyticsWidget';
 import { useOLTs, useONUs, useAlerts, useDashboardStats } from '@/hooks/useOLTData';
+import { useSuperAdmin } from '@/hooks/useSuperAdmin';
+import { useOnboardingRedirect } from '@/hooks/useOnboardingRedirect';
 import { Server, Router, AlertTriangle, Zap, Wifi, Loader2, Activity, Cpu } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,6 +21,10 @@ export default function Dashboard() {
   const { olts, loading: oltsLoading } = useOLTs();
   const { onus, loading: onusLoading } = useONUs();
   const { alerts, loading: alertsLoading } = useAlerts();
+  const { isSuperAdmin } = useSuperAdmin();
+  
+  // Check for onboarding redirect
+  useOnboardingRedirect();
 
   // Create a map of OLT IDs to names
   const oltNameMap = olts.reduce((acc, olt) => {
@@ -71,6 +78,9 @@ export default function Dashboard() {
   return (
     <DashboardLayout title="Dashboard" subtitle="Network Operations Overview">
       <div className="space-y-6 animate-fade-in">
+        {/* Super Admin Analytics Widget */}
+        {isSuperAdmin && <SubscriptionAnalyticsWidget />}
+        
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatsCard

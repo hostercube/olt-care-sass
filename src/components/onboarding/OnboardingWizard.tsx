@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Server, Settings, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Building2, Server, Settings, CheckCircle, ArrowRight, ArrowLeft, X } from 'lucide-react';
 
 const STEPS = [
   { id: 1, title: 'Company Info', icon: Building2 },
@@ -18,12 +18,30 @@ const STEPS = [
   { id: 4, title: 'Complete', icon: CheckCircle },
 ];
 
-export function OnboardingWizard() {
+const ONBOARDING_SKIPPED_KEY = 'onboarding_skipped';
+
+interface OnboardingWizardProps {
+  onSkip?: () => void;
+}
+
+export function OnboardingWizard({ onSkip }: OnboardingWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const { tenantId, refetch } = useTenantContext();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const handleSkip = () => {
+    sessionStorage.setItem(ONBOARDING_SKIPPED_KEY, 'true');
+    if (onSkip) {
+      onSkip();
+    }
+    navigate('/');
+    toast({
+      title: 'Onboarding Skipped',
+      description: 'You can complete setup later from OLT Management',
+    });
+  };
 
   const [companyData, setCompanyData] = useState({
     company_name: '',
@@ -145,8 +163,21 @@ export function OnboardingWizard() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl">
-        <CardHeader>
+      <Card className="w-full max-w-2xl relative">
+        {/* Skip Button */}
+        {currentStep < 4 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"
+            onClick={handleSkip}
+          >
+            <X className="h-4 w-4 mr-1" />
+            Skip
+          </Button>
+        )}
+        
+        <CardHeader className="pt-12">
           <CardTitle className="text-2xl text-center">Welcome to OLT Monitor</CardTitle>
           <CardDescription className="text-center">
             Let's get your ISP set up in just a few steps
