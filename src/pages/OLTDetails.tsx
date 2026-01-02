@@ -271,6 +271,15 @@ export default function OLTDetails() {
     ? oltONUs.reduce((acc, o) => acc + (o.rx_power || 0), 0) / oltONUs.length
     : 0;
   
+  // dBm Power Distribution Stats
+  const onusWithPower = oltONUs.filter(o => o.rx_power !== null && o.rx_power !== undefined);
+  const powerStats = {
+    good: onusWithPower.filter(o => o.rx_power! >= -20).length,
+    ok: onusWithPower.filter(o => o.rx_power! >= -24 && o.rx_power! < -20).length,
+    weak: onusWithPower.filter(o => o.rx_power! >= -27 && o.rx_power! < -24).length,
+    critical: onusWithPower.filter(o => o.rx_power! < -27).length,
+  };
+  
   // PPPoE coverage stats
   const pppoeMatchedONUs = oltONUs.filter(o => o.pppoe_username && o.pppoe_username.trim() !== '').length;
   const pppoeNotMatchedONUs = oltONUs.length - pppoeMatchedONUs;
@@ -490,6 +499,203 @@ export default function OLTDetails() {
                       : 'Never'}
                   </p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Power Distribution Stats */}
+        <Card variant="glass">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <Signal className="h-5 w-5 text-primary" />
+              RX Power Distribution ({onusWithPower.length} ONUs with readings)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 rounded-lg bg-success/10 border border-success/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-success font-medium">Good</span>
+                  <Badge variant="success" className="text-xs">≥ -20 dBm</Badge>
+                </div>
+                <p className="text-3xl font-bold text-success">{powerStats.good}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {onusWithPower.length > 0 ? Math.round((powerStats.good / onusWithPower.length) * 100) : 0}% of ONUs
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-primary font-medium">OK</span>
+                  <Badge variant="secondary" className="text-xs">-20 to -24 dBm</Badge>
+                </div>
+                <p className="text-3xl font-bold text-primary">{powerStats.ok}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {onusWithPower.length > 0 ? Math.round((powerStats.ok / onusWithPower.length) * 100) : 0}% of ONUs
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-warning/10 border border-warning/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-warning font-medium">Weak</span>
+                  <Badge variant="warning" className="text-xs">-24 to -27 dBm</Badge>
+                </div>
+                <p className="text-3xl font-bold text-warning">{powerStats.weak}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {onusWithPower.length > 0 ? Math.round((powerStats.weak / onusWithPower.length) * 100) : 0}% of ONUs
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-destructive font-medium">Critical</span>
+                  <Badge variant="destructive" className="text-xs">&lt; -27 dBm</Badge>
+                </div>
+                <p className="text-3xl font-bold text-destructive">{powerStats.critical}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {onusWithPower.length > 0 ? Math.round((powerStats.critical / onusWithPower.length) * 100) : 0}% of ONUs
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* OLT System Information */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Device Information */}
+          <Card variant="glass">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <Server className="h-5 w-5 text-primary" />
+                Device Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Device Model</p>
+                  <p className="font-medium">{olt.brand} OLT</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Mode</p>
+                  <Badge variant="secondary">{olt.olt_mode || 'GPON'}</Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">IP Address</p>
+                  <p className="font-mono text-sm">{olt.ip_address}:{olt.port}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <StatusIndicator status={olt.status} size="sm" showLabel />
+                </div>
+              </div>
+              
+              {/* System Info - Note: Real values would come from OLT polling */}
+              <div className="border-t border-border pt-4 mt-4">
+                <h4 className="text-sm font-semibold text-warning mb-3 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  System Information (from last poll)
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Ports</p>
+                    <p className="font-medium">{olt.total_ports}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Active Ports</p>
+                    <p className="font-medium text-success">{olt.active_ports}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Online ONUs</p>
+                    <p className="font-medium text-success">{onlineONUs}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Offline ONUs</p>
+                    <p className="font-medium text-destructive">{offlineONUs}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* PON Optical Power */}
+          <Card variant="glass">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                  <Signal className="h-5 w-5 text-primary" />
+                  PON Optical Power
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={handlePollNow} disabled={polling}>
+                  {polling ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {/* Group ONUs by PON port */}
+                {(() => {
+                  const ponPorts = [...new Set(oltONUs.map(o => o.pon_port))].sort();
+                  if (ponPorts.length === 0) {
+                    return (
+                      <div className="text-center text-muted-foreground py-8">
+                        <Signal className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p>No PON data available</p>
+                        <p className="text-xs">Run a poll to get ONU data</p>
+                      </div>
+                    );
+                  }
+                  return ponPorts.map(pon => {
+                    const ponONUs = oltONUs.filter(o => o.pon_port === pon);
+                    const onlineCount = ponONUs.filter(o => o.status === 'online').length;
+                    const avgRx = ponONUs.filter(o => o.rx_power !== null).reduce((acc, o) => acc + (o.rx_power || 0), 0) / (ponONUs.filter(o => o.rx_power !== null).length || 1);
+                    const minRx = Math.min(...ponONUs.filter(o => o.rx_power !== null).map(o => o.rx_power || 0));
+                    const maxRx = Math.max(...ponONUs.filter(o => o.rx_power !== null).map(o => o.rx_power || 0));
+                    const isHealthy = avgRx > -25 && onlineCount > 0;
+                    
+                    return (
+                      <div key={pon} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <Badge variant={isHealthy ? 'success' : onlineCount === 0 ? 'destructive' : 'warning'} className="font-mono">
+                            {pon}
+                          </Badge>
+                          <div className="text-sm">
+                            <span className="text-success">{onlineCount}</span>
+                            <span className="text-muted-foreground">/{ponONUs.length} ONUs</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm">
+                          {ponONUs.some(o => o.rx_power !== null) ? (
+                            <>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <div className={`font-mono ${avgRx < -24 ? 'text-destructive' : avgRx < -20 ? 'text-warning' : 'text-success'}`}>
+                                      {avgRx.toFixed(1)} dBm
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <div className="text-xs">
+                                      <p>Average RX Power</p>
+                                      <p>Min: {minRx.toFixed(1)} dBm</p>
+                                      <p>Max: {maxRx.toFixed(1)} dBm</p>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <Badge variant={isHealthy ? 'success' : 'warning'} className="text-xs">
+                                {isHealthy ? 'ACTIVE' : 'WEAK'}
+                              </Badge>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">No power data</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </CardContent>
           </Card>
