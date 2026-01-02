@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { useOLTs, useONUs } from '@/hooks/useOLTData';
+import { useRealtimeONUs, useRealtimeOLTs } from '@/hooks/useRealtimeONUs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,8 @@ import {
   Database,
   Tag,
   Trash2,
-  HelpCircle
+  HelpCircle,
+  Activity
 } from 'lucide-react';
 import {
   Tooltip,
@@ -59,8 +60,8 @@ interface DebugLog {
 export default function OLTDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { olts, loading: oltsLoading } = useOLTs();
-  const { onus, loading: onusLoading, refetch: refetchONUs } = useONUs();
+  const { olts, loading: oltsLoading } = useRealtimeOLTs();
+  const { onus, loading: onusLoading, refetch: refetchONUs, lastUpdate } = useRealtimeONUs(id);
   const [powerHistory, setPowerHistory] = useState<any[]>([]);
   const [polling, setPolling] = useState(false);
   const [resyncing, setResyncing] = useState(false);
@@ -76,31 +77,11 @@ export default function OLTDetails() {
 
   const olt = olts.find(o => o.id === id);
 
-  const oltONUs = (() => {
-    const withName = onus
-      .filter((onu) => onu.olt_id === id)
-      .map((onu) => ({
-        ...onu,
-        oltName: olt?.name || 'Unknown OLT',
-      }));
-
-    // De-duplicate by hardware identity: olt_id + pon_port + onu_index
-    const byKey = new Map<string, (typeof withName)[number]>();
-    for (const onu of withName) {
-      const key = `${onu.olt_id}|${onu.pon_port}|${onu.onu_index}`;
-      const prev = byKey.get(key);
-      if (!prev) {
-        byKey.set(key, onu);
-        continue;
-      }
-
-      const prevTime = prev.updated_at ? new Date(prev.updated_at).getTime() : 0;
-      const curTime = onu.updated_at ? new Date(onu.updated_at).getTime() : 0;
-      if (curTime >= prevTime) byKey.set(key, onu);
-    }
-
-    return Array.from(byKey.values());
-  })();
+  // ONUs are already deduplicated by the hook, just add OLT name
+  const oltONUs = onus.map(onu => ({
+    ...onu,
+    oltName: olt?.name || 'Unknown OLT',
+  }));
 
   // Fetch power history for OLT ONUs
   useEffect(() => {
@@ -367,6 +348,19 @@ export default function OLTDetails() {
       subtitle={`${olt.ip_address}:${olt.port} • ${olt.brand}`}
     >
       <div className="space-y-6 animate-fade-in">
+        {/* Real-time indicator */}
+        <div className="flex items-center gap-2 mb-2">
+          <Badge variant="outline" className="text-xs gap-1">
+            <Activity className="h-3 w-3 text-green-500 animate-pulse" />
+            Real-time Active
+          </Badge>
+          {lastUpdate && (
+            <span className="text-xs text-muted-foreground">
+              Last update: {formatDistanceToNow(lastUpdate, { addSuffix: true })}
+            </span>
+          )}
+        </div>
+        
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">

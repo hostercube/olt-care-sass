@@ -2,21 +2,17 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ONUTable } from '@/components/dashboard/ONUTable';
 import { PowerHistoryChart } from '@/components/onu/PowerHistoryChart';
 import { ONUUptimeStats } from '@/components/onu/ONUUptimeStats';
-import { useONUs, useOLTs } from '@/hooks/useOLTData';
-import { useAutoRealtimePolling } from '@/hooks/useRealtimePolling';
+import { useRealtimeONUs, useRealtimeOLTs } from '@/hooks/useRealtimeONUs';
 import { StatsCard } from '@/components/dashboard/StatsCard';
-import { Router, Wifi, WifiOff, Zap, Loader2, Clock, BarChart3, RefreshCw } from 'lucide-react';
+import { Router, Wifi, WifiOff, Zap, Loader2, Clock, BarChart3, RefreshCw, Activity } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { formatDistanceToNow } from 'date-fns';
 
 export default function ONUDevices() {
-  const { onus, loading, refetch } = useONUs();
-  const { olts } = useOLTs();
-  
-  // On-demand polling: Triggers real-time status check when page loads
-  // This only hits MikroTik (fast) - doesn't overload OLT CLI
-  const { isPolling, lastPolled, hasApiServer, triggerRealtimePoll } = useAutoRealtimePolling(true);
+  const { onus, loading, refetch, lastUpdate, totalRaw, totalUnique } = useRealtimeONUs();
+  const { olts } = useRealtimeOLTs();
 
   // Create a map of OLT IDs to names
   const oltNameMap = olts.reduce((acc, olt) => {
@@ -24,30 +20,11 @@ export default function ONUDevices() {
     return acc;
   }, {} as Record<string, string>);
 
-  // Add OLT name to each ONU and deduplicate by olt_id + pon_port + onu_index
-  const onusWithOltName = (() => {
-    const withName = onus.map(onu => ({
-      ...onu,
-      oltName: oltNameMap[onu.olt_id] || 'Unknown OLT'
-    }));
-    
-    // Deduplicate by hardware identity: olt_id + pon_port + onu_index
-    const byKey = new Map<string, typeof withName[number]>();
-    for (const onu of withName) {
-      const key = `${onu.olt_id}|${onu.pon_port}|${onu.onu_index}`;
-      const prev = byKey.get(key);
-      if (!prev) {
-        byKey.set(key, onu);
-        continue;
-      }
-      // Keep the more recently updated one
-      const prevTime = prev.updated_at ? new Date(prev.updated_at).getTime() : 0;
-      const curTime = onu.updated_at ? new Date(onu.updated_at).getTime() : 0;
-      if (curTime >= prevTime) byKey.set(key, onu);
-    }
-    
-    return Array.from(byKey.values());
-  })();
+  // Add OLT name to each ONU (already deduplicated by hook)
+  const onusWithOltName = onus.map(onu => ({
+    ...onu,
+    oltName: oltNameMap[onu.olt_id] || 'Unknown OLT'
+  }));
 
   const totalONUs = onus.length;
   const onlineONUs = onus.filter((o) => o.status === 'online').length;
@@ -58,11 +35,6 @@ export default function ONUDevices() {
   const avgPower = onusWithPower.length > 0 
     ? (onusWithPower.reduce((acc, o) => acc + (o.rx_power ?? 0), 0) / onusWithPower.length).toFixed(2)
     : 'N/A';
-
-  const handleRefresh = async () => {
-    await triggerRealtimePoll();
-    refetch();
-  };
 
   if (loading) {
     return (
@@ -77,35 +49,31 @@ export default function ONUDevices() {
   return (
     <DashboardLayout title="ONU Devices" subtitle="Monitor and manage ONU/Router devices">
       <div className="space-y-6 animate-fade-in">
-        {/* Real-time polling indicator */}
+        {/* Real-time indicator */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {hasApiServer && (
-              <Badge variant="outline" className="text-xs">
-                {isPolling ? (
-                  <>
-                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                    Fetching status...
-                  </>
-                ) : lastPolled ? (
-                  <>
-                    <Clock className="h-3 w-3 mr-1" />
-                    Updated {lastPolled.toLocaleTimeString()}
-                  </>
-                ) : (
-                  'On-demand mode'
-                )}
+            <Badge variant="outline" className="text-xs gap-1">
+              <Activity className="h-3 w-3 text-green-500 animate-pulse" />
+              Real-time Active
+            </Badge>
+            {lastUpdate && (
+              <span className="text-xs text-muted-foreground">
+                Last update: {formatDistanceToNow(lastUpdate, { addSuffix: true })}
+              </span>
+            )}
+            {totalRaw !== totalUnique && (
+              <Badge variant="secondary" className="text-xs">
+                {totalRaw - totalUnique} duplicates filtered
               </Badge>
             )}
           </div>
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={handleRefresh}
-            disabled={isPolling}
+            onClick={() => refetch()}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isPolling ? 'animate-spin' : ''}`} />
-            Refresh Status
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
           </Button>
         </div>
 
