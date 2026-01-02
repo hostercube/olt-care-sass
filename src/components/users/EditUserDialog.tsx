@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,10 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Shield, UserCog, Eye } from 'lucide-react';
+import { Loader2, Shield, UserCog, Eye, Key } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
+import { Separator } from '@/components/ui/separator';
 
 type AppRole = Database['public']['Enums']['app_role'];
 
@@ -43,14 +44,19 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
   const [loading, setLoading] = useState(false);
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [role, setRole] = useState<AppRole>(user?.role || 'viewer');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   // Update state when user changes
-  useState(() => {
+  useEffect(() => {
     if (user) {
       setFullName(user.full_name || '');
       setRole(user.role);
+      setNewPassword('');
+      setConfirmPassword('');
     }
-  });
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +108,74 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    if (!user) return;
+
+    if (!newPassword) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a new password',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: 'Error',
+        description: 'Password must be at least 6 characters',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: 'Error',
+        description: 'Passwords do not match',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      // Note: This requires admin privileges to change another user's password
+      // In Supabase, admins can use the admin API or service role to update passwords
+      const { error } = await supabase.auth.admin.updateUserById(user.id, {
+        password: newPassword,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Password Updated',
+        description: 'User password has been changed successfully.',
+      });
+
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      console.error('Error updating password:', error);
+      // Fallback message for non-admin users
+      if (error.message?.includes('not authorized') || error.message?.includes('admin')) {
+        toast({
+          title: 'Permission Denied',
+          description: 'You need admin privileges to change user passwords. Contact your system administrator.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to update password',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -163,6 +237,44 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
                   </SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            
+            <Separator className="my-2" />
+            
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Key className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">Change Password</Label>
+              </div>
+              <div className="space-y-2">
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handlePasswordChange}
+                disabled={passwordLoading || !newPassword || !confirmPassword}
+                className="w-full"
+              >
+                {passwordLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Update Password
+              </Button>
             </div>
           </div>
           <DialogFooter>

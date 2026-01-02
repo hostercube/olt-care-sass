@@ -702,10 +702,20 @@ function getOLTCommands(brand, mode = 'GPON') {
         'show epon onu-information interface epon 0/2',
         'show epon onu-information interface epon 0/3',
         'show epon onu-information interface epon 0/4',
-        // ONU status commands
+        // ONU status commands (for Distance, Register/Deregister time, Reason)
         'show epon active-onu',
         'show epon inactive-onu',
         'show epon onu status all',
+        // Per-PON ONU Status (for detailed register/deregister info)
+        'show epon onu status interface epon 0/1',
+        'show epon onu status interface epon 0/2',
+        'show epon onu status interface epon 0/3',
+        'show epon onu status interface epon 0/4',
+        // ONU Basic info (Vendor ID, Model ID, HW/SW version)
+        'show epon onu basic interface epon 0/1',
+        'show epon onu basic interface epon 0/2',
+        'show epon onu basic interface epon 0/3',
+        'show epon onu basic interface epon 0/4',
         // Offline reason (deregister log)
         'show onu deregister-log',
         'show epon onu deregister-log',
@@ -932,6 +942,8 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
         router_name: onu.router_name || existing.router_name,
         router_mac: onu.router_mac || existing.router_mac,
         pppoe_username: onu.pppoe_username || existing.pppoe_username,
+        last_register_time: onu.last_register_time || existing.last_register_time,
+        last_deregister_time: onu.last_deregister_time || existing.last_deregister_time,
       });
     }
   }
@@ -1079,11 +1091,32 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
         updateData.router_mac = onu.router_mac;
       }
 
-      if (wasOffline && isNowOnline) {
+      // Use OLT-provided last register time if available, otherwise use current time on status change
+      if (onu.last_register_time) {
+        // Parse OLT datetime format (YYYY-MM-DD HH:MM:SS or YYYY/MM/DD HH:MM:SS)
+        try {
+          const regTime = new Date(onu.last_register_time.replace(/-/g, '/'));
+          if (!isNaN(regTime.getTime()) && regTime.getFullYear() > 2000) {
+            updateData.last_online = regTime.toISOString();
+          }
+        } catch (e) {
+          logger.debug(`Failed to parse last_register_time: ${onu.last_register_time}`);
+        }
+      } else if (wasOffline && isNowOnline) {
         updateData.last_online = new Date().toISOString();
       }
 
-      if (wasOnline && isNowOffline) {
+      // Use OLT-provided last deregister time if available
+      if (onu.last_deregister_time) {
+        try {
+          const deregTime = new Date(onu.last_deregister_time.replace(/-/g, '/'));
+          if (!isNaN(deregTime.getTime()) && deregTime.getFullYear() > 2000) {
+            updateData.last_offline = deregTime.toISOString();
+          }
+        } catch (e) {
+          logger.debug(`Failed to parse last_deregister_time: ${onu.last_deregister_time}`);
+        }
+      } else if (wasOnline && isNowOffline) {
         updateData.last_offline = new Date().toISOString();
       }
 
