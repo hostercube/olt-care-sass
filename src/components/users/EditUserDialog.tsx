@@ -143,31 +143,20 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
 
     setPasswordLoading(true);
     try {
-      // Call edge function to update password (requires admin privileges)
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        throw new Error('Not authenticated');
+      // Use supabase.functions.invoke for better error handling
+      const { data, error } = await supabase.functions.invoke('update-user-password', {
+        body: {
+          userId: user.id,
+          newPassword: newPassword,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to update password');
       }
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-user-password`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionData.session.access_token}`,
-          },
-          body: JSON.stringify({
-            userId: user.id,
-            newPassword: newPassword,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to update password');
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
       toast({
