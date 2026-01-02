@@ -47,6 +47,7 @@ interface UserWithRole {
 }
 
 const roleConfig: Record<AppRole, { label: string; icon: React.ElementType; color: string }> = {
+  super_admin: { label: 'Super Admin', icon: Shield, color: 'text-yellow-500' },
   admin: { label: 'Admin', icon: Shield, color: 'text-destructive' },
   operator: { label: 'Operator', icon: UserCog, color: 'text-primary' },
   viewer: { label: 'Viewer', icon: Eye, color: 'text-muted-foreground' },
