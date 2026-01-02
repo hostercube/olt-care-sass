@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Json } from '@/integrations/supabase/types';
 
+export type PollingMode = 'on_demand' | 'light_cron' | 'full_cron';
+
 interface SystemSettings {
   // General
   systemName: string;
@@ -11,6 +13,8 @@ interface SystemSettings {
   showOfflineFirst: boolean;
 
   // Polling
+  pollingMode: PollingMode;  // NEW: on_demand, light_cron, full_cron
+  cronIntervalMinutes: number;  // NEW: 5, 10, 30 minutes for cron
   oltPollInterval: number;
   onuPollInterval: number;
   backgroundPolling: boolean;
@@ -45,9 +49,11 @@ const defaultSettings: SystemSettings = {
   timezone: 'asia_dhaka',
   autoRefresh: true,
   showOfflineFirst: true,
+  pollingMode: 'on_demand',  // Default: No continuous polling - only when viewing ONU page
+  cronIntervalMinutes: 10,   // Default: 10 minutes for light cron
   oltPollInterval: 5,
   onuPollInterval: 5,
-  backgroundPolling: true,
+  backgroundPolling: false,  // Default OFF to prevent OLT/MikroTik load
   storePowerHistory: true,
   historyRetention: 30,
   apiServerUrl: '',

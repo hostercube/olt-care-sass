@@ -936,6 +936,103 @@ app.get('/debug-logs/:oltId', async (req, res) => {
   }
 });
 
+// ============= ON-DEMAND REAL-TIME POLLING =============
+// Lightweight endpoint for when user views ONU page
+// Only fetches status/DBM from MikroTik - doesn't hit OLT CLI heavily
+
+app.get('/api/realtime-status', async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    // Fetch all OLTs with MikroTik
+    const { data: olts, error: oltError } = await supabase
+      .from('olts')
+      .select('*');
+    
+    if (oltError) throw oltError;
+    
+    const results = {
+      timestamp: new Date().toISOString(),
+      olts_checked: 0,
+      onus_updated: 0,
+      pppoe_sessions: 0,
+    };
+    
+    for (const olt of olts || []) {
+      if (!olt.mikrotik_ip || !olt.mikrotik_username) continue;
+      
+      results.olts_checked++;
+      
+      try {
+        const mikrotik = {
+          ip: olt.mikrotik_ip,
+          port: olt.mikrotik_port || 8728,
+          username: olt.mikrotik_username,
+          password: olt.mikrotik_password_encrypted,
+        };
+        
+        // Fetch only PPPoE active sessions (very fast - no OLT CLI)
+        const { pppoe } = await fetchAllMikroTikData(mikrotik);
+        results.pppoe_sessions += pppoe.length;
+        
+        // Build map of active users
+        const activeUsers = new Map();
+        for (const p of pppoe) {
+          if (p.pppoe_username) {
+            activeUsers.set(p.pppoe_username.toLowerCase(), {
+              uptime: p.uptime,
+              ip: p.ip_address,
+              callerId: p.mac_address,
+            });
+          }
+        }
+        
+        // Fetch ONUs for this OLT
+        const { data: onus } = await supabase
+          .from('onus')
+          .select('id, pppoe_username, status')
+          .eq('olt_id', olt.id);
+        
+        // Update status for ONUs with PPPoE users
+        for (const onu of onus || []) {
+          if (onu.pppoe_username) {
+            const session = activeUsers.get(onu.pppoe_username.toLowerCase());
+            const newStatus = session ? 'online' : 'offline';
+            
+            if (onu.status !== newStatus) {
+              await supabase
+                .from('onus')
+                .update({ 
+                  status: newStatus, 
+                  updated_at: new Date().toISOString(),
+                  last_online: newStatus === 'online' ? new Date().toISOString() : undefined,
+                  last_offline: newStatus === 'offline' ? new Date().toISOString() : undefined,
+                })
+                .eq('id', onu.id);
+              results.onus_updated++;
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn(`Realtime status check failed for ${olt.name}: ${err.message}`);
+      }
+    }
+    
+    results.duration_ms = Date.now() - startTime;
+    logger.info(`Realtime status: ${results.onus_updated} ONUs updated in ${results.duration_ms}ms`);
+    
+    res.json({ success: true, ...results });
+  } catch (error) {
+    logger.error('Realtime status error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/realtime-status', async (req, res) => {
+  req.url = '/api/realtime-status';
+  app.handle(req, res);
+});
+
 // ============= ONU BULK OPERATIONS =============
 
 // Bulk reboot ONUs
@@ -1328,27 +1425,172 @@ app.post('/clear-pppoe/:oltId', async (req, res) => {
   app.handle(req, res);
 });
 
-// Schedule polling based on interval
-const intervalMinutes = Math.floor(parseInt(process.env.POLLING_INTERVAL_MS || '60000') / 60000);
-const cronExpression = `*/${Math.max(1, intervalMinutes)} * * * *`;
+// ============= SMART POLLING BASED ON SETTINGS =============
+// Reads pollingMode from system_settings:
+// - 'on_demand': No cron polling, only manual/view-triggered
+// - 'light_cron': Light status-only poll at interval
+// - 'full_cron': Full data poll at interval
 
-cron.schedule(cronExpression, () => {
-  logger.info('Scheduled poll triggered');
-  pollAllOLTs();
+let cronJob = null;
+
+async function getPollingSettings() {
+  try {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('key, value')
+      .in('key', ['pollingMode', 'cronIntervalMinutes', 'backgroundPolling']);
+    
+    if (error) {
+      logger.warn('Failed to fetch polling settings:', error.message);
+      return { pollingMode: 'on_demand', cronIntervalMinutes: 10, backgroundPolling: false };
+    }
+    
+    const settings = {};
+    for (const row of data || []) {
+      const val = row.value;
+      settings[row.key] = typeof val === 'object' && val !== null && 'value' in val ? val.value : val;
+    }
+    
+    return {
+      pollingMode: settings.pollingMode || 'on_demand',
+      cronIntervalMinutes: settings.cronIntervalMinutes || 10,
+      backgroundPolling: settings.backgroundPolling !== false,
+    };
+  } catch (err) {
+    logger.error('Error fetching polling settings:', err);
+    return { pollingMode: 'on_demand', cronIntervalMinutes: 10, backgroundPolling: false };
+  }
+}
+
+async function setupCronPolling() {
+  const settings = await getPollingSettings();
+  
+  // Clear existing cron job if any
+  if (cronJob) {
+    cronJob.stop();
+    cronJob = null;
+    logger.info('Cleared existing cron job');
+  }
+  
+  if (settings.pollingMode === 'on_demand') {
+    logger.info('📴 Polling mode: ON-DEMAND - No background cron (OLT/MikroTik load minimized)');
+    return;
+  }
+  
+  const intervalMinutes = Math.max(5, settings.cronIntervalMinutes);
+  const cronExpression = `*/${intervalMinutes} * * * *`;
+  
+  if (settings.pollingMode === 'light_cron') {
+    logger.info(`⚡ Polling mode: LIGHT CRON - Status-only poll every ${intervalMinutes} min`);
+    cronJob = cron.schedule(cronExpression, () => {
+      logger.info('Light cron poll triggered (status/DBM only)');
+      pollAllOLTsLight(); // Light poll
+    });
+  } else if (settings.pollingMode === 'full_cron') {
+    logger.info(`🔄 Polling mode: FULL CRON - Complete poll every ${intervalMinutes} min`);
+    cronJob = cron.schedule(cronExpression, () => {
+      logger.info('Full cron poll triggered');
+      pollAllOLTs(); // Full poll
+    });
+  }
+}
+
+// Light polling function - only fetches status and DBM, minimal OLT load
+async function pollAllOLTsLight() {
+  if (pollingStatus.isPolling) {
+    logger.warn('Light poll skipped - already polling');
+    return;
+  }
+  
+  pollingStatus.isPolling = true;
+  
+  try {
+    const { data: olts, error } = await supabase
+      .from('olts')
+      .select('*')
+      .eq('status', 'online');
+    
+    if (error) throw error;
+    
+    logger.info(`Light poll: ${olts?.length || 0} online OLTs`);
+    
+    // For light poll, we only update status from MikroTik (much faster, no OLT CLI)
+    for (const olt of olts || []) {
+      if (olt.mikrotik_ip && olt.mikrotik_username) {
+        try {
+          const mikrotik = {
+            ip: olt.mikrotik_ip,
+            port: olt.mikrotik_port || 8728,
+            username: olt.mikrotik_username,
+            password: olt.mikrotik_password_encrypted,
+          };
+          
+          // Only fetch PPPoE active sessions (very fast)
+          const { pppoe } = await fetchAllMikroTikData(mikrotik);
+          
+          // Update ONU status based on PPPoE sessions
+          const activeUsers = new Set(pppoe.map(p => p.pppoe_username?.toLowerCase()).filter(Boolean));
+          
+          // Fetch ONUs for this OLT
+          const { data: onus } = await supabase
+            .from('onus')
+            .select('id, pppoe_username, status')
+            .eq('olt_id', olt.id);
+          
+          // Update status for ONUs with PPPoE users
+          for (const onu of onus || []) {
+            if (onu.pppoe_username) {
+              const isActive = activeUsers.has(onu.pppoe_username.toLowerCase());
+              const newStatus = isActive ? 'online' : 'offline';
+              if (onu.status !== newStatus) {
+                await supabase
+                  .from('onus')
+                  .update({ status: newStatus, updated_at: new Date().toISOString() })
+                  .eq('id', onu.id);
+              }
+            }
+          }
+          
+          logger.debug(`Light poll ${olt.name}: ${activeUsers.size} active PPPoE sessions`);
+        } catch (err) {
+          logger.warn(`Light poll failed for ${olt.name}: ${err.message}`);
+        }
+      }
+    }
+    
+    pollingStatus.lastPollTime = new Date().toISOString();
+    logger.info('Light poll complete');
+  } catch (err) {
+    logger.error('Light poll error:', err);
+  } finally {
+    pollingStatus.isPolling = false;
+  }
+}
+
+// Endpoint to refresh polling settings (call after settings change)
+app.post('/api/refresh-polling-settings', async (req, res) => {
+  logger.info('Refreshing polling settings...');
+  await setupCronPolling();
+  const settings = await getPollingSettings();
+  res.json({ success: true, settings });
+});
+
+app.post('/refresh-polling-settings', async (req, res) => {
+  req.url = '/api/refresh-polling-settings';
+  app.handle(req, res);
 });
 
 // Start server
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   logger.info(`OLT Polling Server running on port ${PORT}`);
-  logger.info(`Polling interval: ${process.env.POLLING_INTERVAL_MS || 60000}ms`);
   logger.info(`Supabase URL: ${process.env.SUPABASE_URL}`);
   
-  // Run initial poll after startup
-  setTimeout(() => {
-    logger.info('Running initial poll...');
-    pollAllOLTs();
-  }, 5000);
+  // Setup cron polling based on settings
+  await setupCronPolling();
+  
+  // NO initial poll - wait for user to trigger manually or view ONU page
+  logger.info('✅ Server ready - polling will be triggered on-demand or by cron settings');
 });
 
 // Handle uncaught exceptions
