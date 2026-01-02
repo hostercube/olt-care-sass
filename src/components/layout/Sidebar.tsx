@@ -53,6 +53,7 @@ const mainNavItems: NavItem[] = [
   { title: 'DB Integrity', href: '/integrity', icon: Database },
   { title: 'Debug Logs', href: '/debug', icon: Terminal },
   { title: 'User Management', href: '/users', icon: Users, adminOnly: true },
+  { title: 'Notifications', href: '/notifications', icon: Bell },
   { title: 'Settings', href: '/settings', icon: Settings },
 ];
 

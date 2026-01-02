@@ -31,6 +31,10 @@ import GatewaySettings from "./pages/SuperAdmin/GatewaySettings";
 import MySubscription from "./pages/Billing/MySubscription";
 import MakePayment from "./pages/Billing/MakePayment";
 
+// Additional Pages
+import Onboarding from "./pages/Onboarding";
+import NotificationPreferences from "./pages/NotificationPreferences";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -145,6 +149,18 @@ const App = () => (
               <Route path="/billing/pay" element={
                 <ProtectedRoute>
                   <MakePayment />
+                </ProtectedRoute>
+              } />
+
+              {/* Onboarding */}
+              <Route path="/onboarding" element={<Onboarding />} />
+
+              {/* Notification Settings */}
+              <Route path="/notifications" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <NotificationPreferences />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
 
