@@ -20,6 +20,7 @@ import {
   Cog,
   FileText,
   DollarSign,
+  ClipboardList,
   History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,8 @@ const mainNavItems: NavItem[] = [
   { title: 'User Management', href: '/users', icon: Users, adminOnly: true },
   { title: 'Notification Settings', href: '/notifications', icon: Bell },
   { title: 'Notification History', href: '/notifications/history', icon: History },
+  { title: 'Activity Logs', href: '/activity-logs', icon: ClipboardList },
+  { title: 'Invoices', href: '/invoices', icon: FileText },
   { title: 'Settings', href: '/settings', icon: Settings },
 ];
 
