@@ -20,6 +20,7 @@ import {
   Cog,
   FileText,
   DollarSign,
+  History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,7 +54,8 @@ const mainNavItems: NavItem[] = [
   { title: 'DB Integrity', href: '/integrity', icon: Database },
   { title: 'Debug Logs', href: '/debug', icon: Terminal },
   { title: 'User Management', href: '/users', icon: Users, adminOnly: true },
-  { title: 'Notifications', href: '/notifications', icon: Bell },
+  { title: 'Notification Settings', href: '/notifications', icon: Bell },
+  { title: 'Notification History', href: '/notifications/history', icon: History },
   { title: 'Settings', href: '/settings', icon: Settings },
 ];
 
