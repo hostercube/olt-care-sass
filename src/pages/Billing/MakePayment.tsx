@@ -87,7 +87,7 @@ export default function MakePayment() {
 
   if (paymentSuccess) {
     return (
-      <DashboardLayout>
+      <DashboardLayout title="Payment Successful">
         <div className="flex items-center justify-center min-h-[60vh]">
           <Card className="max-w-md w-full">
             <CardContent className="pt-6 text-center">
@@ -114,7 +114,7 @@ export default function MakePayment() {
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Make Payment" subtitle="Pay your subscription or invoice">
       <div className="space-y-6 max-w-3xl mx-auto">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Make Payment</h1>

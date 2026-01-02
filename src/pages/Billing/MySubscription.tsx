@@ -30,7 +30,7 @@ export default function MySubscription() {
 
   if (tenantLoading || subsLoading) {
     return (
-      <DashboardLayout>
+      <DashboardLayout title="My Subscription">
         <div className="flex items-center justify-center h-64">
           <p>Loading subscription details...</p>
         </div>
@@ -39,7 +39,7 @@ export default function MySubscription() {
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="My Subscription" subtitle="Manage your subscription and billing">
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">My Subscription</h1>

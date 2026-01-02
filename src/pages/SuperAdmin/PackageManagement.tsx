@@ -216,7 +216,7 @@ export default function PackageManagement() {
   );
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Package Management" subtitle="Manage subscription packages">
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>

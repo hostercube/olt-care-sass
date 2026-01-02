@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Invoice, InvoiceLineItem } from '@/types/saas';
 
-export function useInvoices() {
+export function useInvoices(tenantId?: string) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -11,7 +11,7 @@ export function useInvoices() {
   const fetchInvoices = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('invoices')
         .select(`
           *,
@@ -19,6 +19,12 @@ export function useInvoices() {
           subscription:subscriptions(billing_cycle, package:packages(name))
         `)
         .order('created_at', { ascending: false });
+
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       
@@ -66,7 +72,7 @@ export function useInvoices() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, tenantId]);
 
   useEffect(() => {
     fetchInvoices();

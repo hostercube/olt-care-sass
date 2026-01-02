@@ -19,6 +19,16 @@ import DebugLogs from "./pages/DebugLogs";
 import DatabaseIntegrity from "./pages/DatabaseIntegrity";
 import NotFound from "./pages/NotFound";
 
+// Super Admin Pages
+import TenantManagement from "./pages/SuperAdmin/TenantManagement";
+import PackageManagement from "./pages/SuperAdmin/PackageManagement";
+import PaymentManagement from "./pages/SuperAdmin/PaymentManagement";
+import GatewaySettings from "./pages/SuperAdmin/GatewaySettings";
+
+// ISP Billing Pages
+import MySubscription from "./pages/Billing/MySubscription";
+import MakePayment from "./pages/Billing/MakePayment";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -81,6 +91,41 @@ const App = () => (
                   <DatabaseIntegrity />
                 </ProtectedRoute>
               } />
+              
+              {/* Super Admin Routes */}
+              <Route path="/admin/tenants" element={
+                <ProtectedRoute>
+                  <TenantManagement />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/packages" element={
+                <ProtectedRoute>
+                  <PackageManagement />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/payments" element={
+                <ProtectedRoute>
+                  <PaymentManagement />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/gateways" element={
+                <ProtectedRoute>
+                  <GatewaySettings />
+                </ProtectedRoute>
+              } />
+
+              {/* ISP Billing Routes */}
+              <Route path="/billing/subscription" element={
+                <ProtectedRoute>
+                  <MySubscription />
+                </ProtectedRoute>
+              } />
+              <Route path="/billing/pay" element={
+                <ProtectedRoute>
+                  <MakePayment />
+                </ProtectedRoute>
+              } />
+
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

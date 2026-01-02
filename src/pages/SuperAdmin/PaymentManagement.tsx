@@ -84,7 +84,7 @@ export default function PaymentManagement() {
   ];
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Payment Management" subtitle="Verify payments and billing">
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Payment Management</h1>
