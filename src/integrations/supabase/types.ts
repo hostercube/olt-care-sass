@@ -1138,6 +1138,7 @@ export type Database = {
       is_authenticated: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       is_tenant_active: { Args: { _tenant_id: string }; Returns: boolean }
+      queue_subscription_reminders: { Args: never; Returns: undefined }
     }
     Enums: {
       alert_severity: "critical" | "warning" | "info"

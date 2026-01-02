@@ -34,6 +34,8 @@ import MakePayment from "./pages/Billing/MakePayment";
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
 import NotificationPreferences from "./pages/NotificationPreferences";
+import ActivityLogs from "./pages/ActivityLogs";
+import Invoices from "./pages/Invoices";
 import NotificationHistory from "./pages/NotificationHistory";
 
 const queryClient = new QueryClient();
@@ -170,6 +172,24 @@ const App = () => (
                 <ProtectedRoute>
                   <TenantAccessGuard>
                     <NotificationHistory />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+
+              {/* Activity Logs */}
+              <Route path="/activity-logs" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ActivityLogs />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+
+              {/* Invoices */}
+              <Route path="/invoices" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <Invoices />
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
