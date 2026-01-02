@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
+import { SuperAdminRoute } from "@/components/layout/SuperAdminRoute";
+import { TenantAccessGuard } from "@/components/layout/TenantAccessGuard";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import OLTManagement from "./pages/OLTManagement";
@@ -43,78 +45,98 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/" element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <TenantAccessGuard>
+                    <Dashboard />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/olts" element={
                 <ProtectedRoute>
-                  <OLTManagement />
+                  <TenantAccessGuard>
+                    <OLTManagement />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/olts/:id" element={
                 <ProtectedRoute>
-                  <OLTDetails />
+                  <TenantAccessGuard>
+                    <OLTDetails />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/onus" element={
                 <ProtectedRoute>
-                  <ONUDevices />
+                  <TenantAccessGuard>
+                    <ONUDevices />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/alerts" element={
                 <ProtectedRoute>
-                  <Alerts />
+                  <TenantAccessGuard>
+                    <Alerts />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/monitoring" element={
                 <ProtectedRoute>
-                  <Monitoring />
+                  <TenantAccessGuard>
+                    <Monitoring />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/settings" element={
                 <ProtectedRoute>
-                  <Settings />
+                  <TenantAccessGuard>
+                    <Settings />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/users" element={
                 <ProtectedRoute>
-                  <UserManagement />
+                  <TenantAccessGuard>
+                    <UserManagement />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/debug" element={
                 <ProtectedRoute>
-                  <DebugLogs />
+                  <TenantAccessGuard>
+                    <DebugLogs />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/integrity" element={
                 <ProtectedRoute>
-                  <DatabaseIntegrity />
+                  <TenantAccessGuard>
+                    <DatabaseIntegrity />
+                  </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               
-              {/* Super Admin Routes */}
+              {/* Super Admin Routes - Restricted to super_admin role */}
               <Route path="/admin/tenants" element={
-                <ProtectedRoute>
+                <SuperAdminRoute>
                   <TenantManagement />
-                </ProtectedRoute>
+                </SuperAdminRoute>
               } />
               <Route path="/admin/packages" element={
-                <ProtectedRoute>
+                <SuperAdminRoute>
                   <PackageManagement />
-                </ProtectedRoute>
+                </SuperAdminRoute>
               } />
               <Route path="/admin/payments" element={
-                <ProtectedRoute>
+                <SuperAdminRoute>
                   <PaymentManagement />
-                </ProtectedRoute>
+                </SuperAdminRoute>
               } />
               <Route path="/admin/gateways" element={
-                <ProtectedRoute>
+                <SuperAdminRoute>
                   <GatewaySettings />
-                </ProtectedRoute>
+                </SuperAdminRoute>
               } />
 
-              {/* ISP Billing Routes */}
+              {/* ISP Billing Routes - Accessible even when subscription expired */}
               <Route path="/billing/subscription" element={
                 <ProtectedRoute>
                   <MySubscription />
