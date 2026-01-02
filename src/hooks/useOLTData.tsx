@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables } from '@/integrations/supabase/types';
+import { useTenantContext, useSuperAdmin } from '@/hooks/useSuperAdmin';
 
 export type OLTRow = Tables<'olts'>;
 export type ONURow = Tables<'onus'>;
@@ -21,13 +22,24 @@ export function useOLTs() {
   const [olts, setOLTs] = useState<OLTRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { tenantId, loading: tenantLoading } = useTenantContext();
+  const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
 
   const fetchOLTs = useCallback(async () => {
+    if (tenantLoading || superAdminLoading) return;
+    
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('olts')
         .select('*')
         .order('created_at', { ascending: false });
+
+      // Filter by tenant for non-super-admin users
+      if (!isSuperAdmin && tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setOLTs(data || []);
@@ -36,7 +48,7 @@ export function useOLTs() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantId, tenantLoading, isSuperAdmin, superAdminLoading]);
 
   useEffect(() => {
     fetchOLTs();
@@ -58,20 +70,46 @@ export function useOLTs() {
     };
   }, [fetchOLTs]);
 
-  return { olts, loading, error, refetch: fetchOLTs };
+  return { olts, loading: loading || tenantLoading || superAdminLoading, error, refetch: fetchOLTs };
 }
 
 export function useONUs() {
   const [onus, setONUs] = useState<ONURow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { tenantId, loading: tenantLoading } = useTenantContext();
+  const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
 
   const fetchONUs = useCallback(async () => {
+    if (tenantLoading || superAdminLoading) return;
+    
     try {
-      const { data, error } = await supabase
+      // First get tenant's OLT IDs if not super admin
+      let oltIds: string[] = [];
+      if (!isSuperAdmin && tenantId) {
+        const { data: tenantOlts } = await supabase
+          .from('olts')
+          .select('id')
+          .eq('tenant_id', tenantId);
+        oltIds = (tenantOlts || []).map(o => o.id);
+      }
+
+      let query = supabase
         .from('onus')
         .select('*')
         .order('created_at', { ascending: false });
+
+      // Filter by tenant's OLTs
+      if (!isSuperAdmin && tenantId && oltIds.length > 0) {
+        query = query.in('olt_id', oltIds);
+      } else if (!isSuperAdmin && tenantId && oltIds.length === 0) {
+        // Tenant has no OLTs, return empty
+        setONUs([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setONUs(data || []);
@@ -80,7 +118,7 @@ export function useONUs() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantId, tenantLoading, isSuperAdmin, superAdminLoading]);
 
   useEffect(() => {
     fetchONUs();
@@ -102,20 +140,31 @@ export function useONUs() {
     };
   }, [fetchONUs]);
 
-  return { onus, loading, error, refetch: fetchONUs };
+  return { onus, loading: loading || tenantLoading || superAdminLoading, error, refetch: fetchONUs };
 }
 
 export function useAlerts() {
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { tenantId, loading: tenantLoading } = useTenantContext();
+  const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
 
   const fetchAlerts = useCallback(async () => {
+    if (tenantLoading || superAdminLoading) return;
+    
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('alerts')
         .select('*')
         .order('created_at', { ascending: false });
+
+      // Filter by tenant for non-super-admin users
+      if (!isSuperAdmin && tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setAlerts(data || []);
@@ -124,7 +173,7 @@ export function useAlerts() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantId, tenantLoading, isSuperAdmin, superAdminLoading]);
 
   const markAsRead = async (alertId: string) => {
     try {
@@ -174,7 +223,7 @@ export function useAlerts() {
     };
   }, [fetchAlerts]);
 
-  return { alerts, loading, error, refetch: fetchAlerts, markAsRead, markAllAsRead };
+  return { alerts, loading: loading || tenantLoading || superAdminLoading, error, refetch: fetchAlerts, markAsRead, markAllAsRead };
 }
 
 export function useDashboardStats() {
@@ -214,12 +263,24 @@ export async function addOLT(data: {
   mikrotik_port?: number;
   mikrotik_username?: string | null;
   mikrotik_password_encrypted?: string | null;
+  tenant_id?: string | null;
 }) {
   // Get current user for created_by field
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
     throw new Error('You must be logged in to add an OLT');
+  }
+
+  // Get user's tenant_id if not provided
+  let tenantId = data.tenant_id;
+  if (!tenantId) {
+    const { data: tenantUser } = await supabase
+      .from('tenant_users')
+      .select('tenant_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    tenantId = tenantUser?.tenant_id || null;
   }
 
   const insertData: any = {
@@ -232,6 +293,7 @@ export async function addOLT(data: {
     password_encrypted: data.password_encrypted,
     status: 'unknown',
     created_by: user.id,
+    tenant_id: tenantId,
   };
 
   // Only add MikroTik fields if IP is provided
