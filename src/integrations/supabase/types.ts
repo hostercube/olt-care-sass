@@ -223,6 +223,109 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          alert_notifications: boolean
+          created_at: string
+          email_address: string | null
+          email_enabled: boolean
+          id: string
+          phone_number: string | null
+          reminder_days_before: number
+          sms_enabled: boolean
+          subscription_reminders: boolean
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          alert_notifications?: boolean
+          created_at?: string
+          email_address?: string | null
+          email_enabled?: boolean
+          id?: string
+          phone_number?: string | null
+          reminder_days_before?: number
+          sms_enabled?: boolean
+          subscription_reminders?: boolean
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          alert_notifications?: boolean
+          created_at?: string
+          email_address?: string | null
+          email_enabled?: boolean
+          id?: string
+          phone_number?: string | null
+          reminder_days_before?: number
+          sms_enabled?: boolean
+          subscription_reminders?: boolean
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_queue: {
+        Row: {
+          channel: string
+          created_at: string
+          error_message: string | null
+          id: string
+          message: string
+          notification_type: string
+          recipient: string
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          subject: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          message: string
+          notification_type: string
+          recipient: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          message?: string
+          notification_type?: string
+          recipient?: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       olt_debug_logs: {
         Row: {
           commands_sent: string[] | null
