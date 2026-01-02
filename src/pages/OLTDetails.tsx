@@ -30,7 +30,10 @@ import {
   Tag,
   Trash2,
   HelpCircle,
-  Activity
+  Activity,
+  Zap,
+  Users,
+  RotateCcw
 } from 'lucide-react';
 import {
   Tooltip,
@@ -38,6 +41,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { formatDistanceToNow, format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
@@ -74,6 +85,9 @@ export default function OLTDetails() {
   const [fullSyncStep, setFullSyncStep] = useState<string>('');
   const [fullSyncProgress, setFullSyncProgress] = useState<{ step: string; status: string; detail: string }[]>([]);
   const [fullSyncResult, setFullSyncResult] = useState<any>(null);
+  const [syncAction, setSyncAction] = useState<string>('');
+  const [clearingPPPoE, setClearingPPPoE] = useState(false);
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
 
   const olt = olts.find(o => o.id === id);
 
@@ -252,6 +266,11 @@ export default function OLTDetails() {
     ? oltONUs.reduce((acc, o) => acc + (o.rx_power || 0), 0) / oltONUs.length
     : 0;
   
+  // Offline reason breakdown (like OLT Care)
+  const powerOffONUs = oltONUs.filter(o => o.status === 'offline' && o.offline_reason?.toLowerCase().includes('power')).length;
+  const fiberDownONUs = oltONUs.filter(o => o.status === 'offline' && (o.offline_reason?.toLowerCase().includes('los') || o.offline_reason?.toLowerCase().includes('fiber') || o.offline_reason?.toLowerCase().includes('wire'))).length;
+  const noResponseONUs = offlineONUs - powerOffONUs - fiberDownONUs;
+  
   // dBm Power Distribution Stats
   const onusWithPower = oltONUs.filter(o => o.rx_power !== null && o.rx_power !== undefined);
   const powerStats = {
@@ -336,10 +355,169 @@ export default function OLTDetails() {
   };
 
   // Keep handleBulkTag and handleForceBulkTag for DataQualityPanel compatibility
-  const handleReenrich = async () => {};
+  const handleReenrich = async () => {
+    if (!olt || !pollingServerUrl) return;
+    
+    setSyncAction('reenrich');
+    try {
+      const response = await fetch(`${pollingServerUrl}/api/reenrich/${olt.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const data = await response.json();
+      if (response.ok && data?.success) {
+        toast.success(`PPPoE data enriched for ${data.enriched || 0} ONUs`);
+        refetchONUs();
+      } else {
+        toast.error(`Re-enrich failed: ${data?.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      toast.error('Failed to connect to polling server');
+    } finally {
+      setSyncAction('');
+    }
+  };
+  
   const handleBulkTag = async () => handleFullSync();
   const handleForceBulkTag = async () => handleFullSync();
 
+  // Clear PPPoE data (reset pppoe_username, router_name, router_mac to null)
+  const handleClearPPPoE = async () => {
+    if (!olt || !pollingServerUrl) return;
+    
+    setClearingPPPoE(true);
+    try {
+      const response = await fetch(`${pollingServerUrl}/api/clear-pppoe/${olt.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const data = await response.json();
+      if (response.ok && data?.success) {
+        toast.success(`Cleared PPPoE data for ${data.cleared || 0} ONUs`);
+        refetchONUs();
+      } else {
+        toast.error(`Clear PPPoE failed: ${data?.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      toast.error('Failed to connect to polling server');
+    } finally {
+      setClearingPPPoE(false);
+    }
+  };
+
+  // Cleanup duplicate ONUs
+  const handleCleanupDuplicates = async (dryRun: boolean = false) => {
+    if (!olt || !pollingServerUrl) return;
+    
+    setCleaningDuplicates(true);
+    try {
+      const response = await fetch(`${pollingServerUrl}/api/cleanup-duplicates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oltId: olt.id, dryRun }),
+      });
+      
+      const data = await response.json();
+      if (response.ok && data?.success) {
+        if (dryRun) {
+          toast.info(`Found ${data.duplicatesFound || 0} duplicates. Run cleanup to remove them.`);
+        } else {
+          toast.success(`Removed ${data.deleted || 0} duplicate ONUs`);
+          refetchONUs();
+        }
+      } else {
+        toast.error(`Cleanup failed: ${data?.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      toast.error('Failed to connect to polling server');
+    } finally {
+      setCleaningDuplicates(false);
+    }
+  };
+
+  // Sync OLT Port data only
+  const handleSyncPort = async () => {
+    if (!olt || !pollingServerUrl) return;
+    
+    setSyncAction('port');
+    try {
+      const response = await fetch(`${pollingServerUrl}/api/poll/${olt.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        toast.success('OLT Port data synced successfully');
+        refetchONUs();
+      } else {
+        toast.error('Failed to sync port data');
+      }
+    } catch (error) {
+      toast.error('Failed to connect to polling server');
+    } finally {
+      setSyncAction('');
+    }
+  };
+
+  // Sync MikroTik data only
+  const handleSyncMikrotik = async () => {
+    if (!olt || !pollingServerUrl) return;
+    
+    setSyncAction('mikrotik');
+    try {
+      const response = await fetch(`${pollingServerUrl}/api/reenrich/${olt.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const data = await response.json();
+      if (response.ok && data?.success) {
+        toast.success(`MikroTik data synced for ${data.enriched || 0} ONUs`);
+        refetchONUs();
+      } else {
+        toast.error(`MikroTik sync failed: ${data?.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      toast.error('Failed to connect to polling server');
+    } finally {
+      setSyncAction('');
+    }
+  };
+
+  // Combined: Clear PPPoE + Full Sync
+  const handleCleanSync = async () => {
+    if (!olt || !pollingServerUrl) return;
+    
+    setSyncAction('clean');
+    try {
+      // Step 1: Clear PPPoE data
+      toast.info('Step 1: Clearing old PPPoE data...');
+      await fetch(`${pollingServerUrl}/api/clear-pppoe/${olt.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      // Step 2: Cleanup duplicates
+      toast.info('Step 2: Removing duplicates...');
+      await fetch(`${pollingServerUrl}/api/cleanup-duplicates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oltId: olt.id, dryRun: false }),
+      });
+      
+      // Step 3: Full sync
+      toast.info('Step 3: Running full sync...');
+      await handleFullSync();
+      
+      toast.success('Clean sync completed!');
+    } catch (error) {
+      toast.error('Clean sync failed');
+    } finally {
+      setSyncAction('');
+    }
+  };
 
 
   return (
@@ -348,17 +526,45 @@ export default function OLTDetails() {
       subtitle={`${olt.ip_address}:${olt.port} • ${olt.brand}`}
     >
       <div className="space-y-6 animate-fade-in">
-        {/* Real-time indicator */}
-        <div className="flex items-center gap-2 mb-2">
-          <Badge variant="outline" className="text-xs gap-1">
-            <Activity className="h-3 w-3 text-green-500 animate-pulse" />
-            Real-time Active
+        {/* Status Filter Badges - Like OLT Care */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="px-3 py-1.5 text-sm font-medium">
+            TOTAL {oltONUs.length}
           </Badge>
-          {lastUpdate && (
-            <span className="text-xs text-muted-foreground">
-              Last update: {formatDistanceToNow(lastUpdate, { addSuffix: true })}
-            </span>
+          <Badge className="bg-green-500 hover:bg-green-600 px-3 py-1.5 text-sm font-medium">
+            ONLINE {onlineONUs}
+          </Badge>
+          <Badge className="bg-red-500 hover:bg-red-600 px-3 py-1.5 text-sm font-medium">
+            OFFLINE {offlineONUs}
+          </Badge>
+          {noResponseONUs > 0 && (
+            <Badge className="bg-yellow-500 hover:bg-yellow-600 px-3 py-1.5 text-sm font-medium text-black">
+              NO RESPONSE {noResponseONUs}
+            </Badge>
           )}
+          {fiberDownONUs > 0 && (
+            <Badge className="bg-orange-500 hover:bg-orange-600 px-3 py-1.5 text-sm font-medium">
+              FIBER-DOWN {fiberDownONUs}
+            </Badge>
+          )}
+          {powerOffONUs > 0 && (
+            <Badge className="bg-gray-500 hover:bg-gray-600 px-3 py-1.5 text-sm font-medium">
+              POWER-OFF {powerOffONUs}
+            </Badge>
+          )}
+          
+          {/* Real-time indicator */}
+          <div className="ml-auto flex items-center gap-2">
+            <Badge variant="outline" className="text-xs gap-1">
+              <Activity className="h-3 w-3 text-green-500 animate-pulse" />
+              Real-time
+            </Badge>
+            {lastUpdate && (
+              <span className="text-xs text-muted-foreground">
+                {formatDistanceToNow(lastUpdate, { addSuffix: true })}
+              </span>
+            )}
+          </div>
         </div>
         
         {/* Header */}
@@ -382,53 +588,127 @@ export default function OLTDetails() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <StatusIndicator status={olt.status} size="md" showLabel />
+            
+            {/* Sync Dropdown Menu - Like OLT Care */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="default" 
+                  className="bg-primary"
+                  disabled={fullSyncing || syncAction !== '' || !pollingServerUrl}
+                >
+                  {(fullSyncing || syncAction !== '') ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  SYNC
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Sync Options</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                
+                <DropdownMenuItem onClick={handleFullSync} disabled={fullSyncing}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Sync All
+                  <span className="ml-auto text-xs text-muted-foreground">Full</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem onClick={handleSyncPort} disabled={syncAction === 'port'}>
+                  <Network className="h-4 w-4 mr-2" />
+                  Sync Port
+                  <span className="ml-auto text-xs text-muted-foreground">OLT Only</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem onClick={handleSyncMikrotik} disabled={syncAction === 'mikrotik'}>
+                  <RouterIcon className="h-4 w-4 mr-2" />
+                  Sync MikroTik
+                  <span className="ml-auto text-xs text-muted-foreground">PPPoE</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem onClick={handleReenrich} disabled={syncAction === 'reenrich'}>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Sync Update RX/TX
+                  <span className="ml-auto text-xs text-muted-foreground">Power</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator />
+                
+                <DropdownMenuItem onClick={handleCleanSync} disabled={syncAction === 'clean'}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Clean Sync
+                  <span className="ml-auto text-xs text-muted-foreground">Fresh</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Clear Button */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="destructive"
+                  disabled={clearingPPPoE || cleaningDuplicates || !pollingServerUrl}
+                >
+                  {(clearingPPPoE || cleaningDuplicates) ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  CLEAR
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Cleanup Options</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                
+                <DropdownMenuItem onClick={handleClearPPPoE} disabled={clearingPPPoE}>
+                  <Users className="h-4 w-4 mr-2" />
+                  Clear PPPoE Data
+                  <span className="ml-auto text-xs text-muted-foreground">Reset</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem onClick={() => handleCleanupDuplicates(true)}>
+                  <Database className="h-4 w-4 mr-2" />
+                  Find Duplicates
+                  <span className="ml-auto text-xs text-muted-foreground">Scan</span>
+                </DropdownMenuItem>
+                
+                <DropdownMenuItem 
+                  onClick={() => handleCleanupDuplicates(false)} 
+                  disabled={cleaningDuplicates}
+                  className="text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Remove Duplicates
+                  <span className="ml-auto text-xs text-muted-foreground">Delete</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Quick Actions */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
                     variant="outline" 
+                    size="icon"
                     onClick={handlePollNow}
                     disabled={polling || !pollingServerUrl}
                   >
                     {polling ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
+                      <RefreshCw className="h-4 w-4" />
                     )}
-                    Poll Now
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[300px]">
-                  <p className="font-semibold">🔄 Poll Now (OLT Data Only)</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    OLT থেকে শুধু ONU data (MAC, Power, Status) আপডেট করে। MikroTik data আনে না।
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    onClick={handleResyncOLT}
-                    disabled={resyncing || !pollingServerUrl}
-                  >
-                    {resyncing ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
-                    Re-sync OLT
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[300px]">
-                  <p className="font-semibold">🔁 Re-sync OLT (Fresh Detection)</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Cache clear করে fresh poll করে। নতুন ONU detect এবং old data fix করে।
-                  </p>
+                <TooltipContent side="bottom">
+                  <p>Quick Poll (OLT Only)</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
