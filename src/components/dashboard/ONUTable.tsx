@@ -59,6 +59,7 @@ interface ONUTableProps {
 
 type StatusFilter = 'all' | 'online' | 'offline' | 'warning';
 type DateFilter = 'all' | '1h' | '24h' | '7d' | '30d';
+type PowerFilter = 'all' | 'below_5' | 'below_10' | 'below_15' | 'below_20' | 'below_24' | 'above_25';
 
 interface ColumnFilters {
   routerMac: Set<string>;
@@ -86,6 +87,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
   const [selectedPON, setSelectedPON] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [powerFilter, setPowerFilter] = useState<PowerFilter>('all');
   
   // Column filters
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
@@ -164,10 +166,38 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
       const matchesPppoe = columnFilters.pppoeUsername.size === 0 || 
         columnFilters.pppoeUsername.has(onu.pppoe_username || '');
 
+      // Power (dBm) filter
+      let matchesPower = true;
+      const rxPower = onu.rx_power;
+      if (powerFilter !== 'all' && rxPower !== null && rxPower !== undefined) {
+        switch (powerFilter) {
+          case 'below_5':
+            matchesPower = rxPower < -5;
+            break;
+          case 'below_10':
+            matchesPower = rxPower < -10;
+            break;
+          case 'below_15':
+            matchesPower = rxPower < -15;
+            break;
+          case 'below_20':
+            matchesPower = rxPower < -20;
+            break;
+          case 'below_24':
+            matchesPower = rxPower < -24;
+            break;
+          case 'above_25':
+            matchesPower = rxPower >= -25;
+            break;
+        }
+      } else if (powerFilter !== 'all' && (rxPower === null || rxPower === undefined)) {
+        matchesPower = false; // Exclude ONUs with no power reading when filtering by power
+      }
+
       return matchesSearch && matchesOLT && matchesPON && matchesStatus && matchesDate &&
-        matchesRouterMac && matchesRouterName && matchesOnuMac && matchesPppoe;
+        matchesRouterMac && matchesRouterName && matchesOnuMac && matchesPppoe && matchesPower;
     });
-  }, [onus, searchTerm, selectedOLT, selectedPON, statusFilter, dateFilter, columnFilters]);
+  }, [onus, searchTerm, selectedOLT, selectedPON, statusFilter, dateFilter, columnFilters, powerFilter]);
 
   // Paginated data
   const paginatedONUs = useMemo(() => {
@@ -186,6 +216,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
     setSelectedPON('all');
     setStatusFilter('all');
     setDateFilter('all');
+    setPowerFilter('all');
     setColumnFilters({
       routerMac: new Set(),
       routerName: new Set(),
@@ -200,6 +231,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
     selectedPON !== 'all',
     statusFilter !== 'all',
     dateFilter !== 'all',
+    powerFilter !== 'all',
     columnFilters.routerMac.size > 0,
     columnFilters.routerName.size > 0,
     columnFilters.onuMac.size > 0,
@@ -457,6 +489,24 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                               </SelectContent>
                             </Select>
                           </div>
+
+                          <div className="space-y-1">
+                            <label className="text-sm text-muted-foreground">RX Power (dBm)</label>
+                            <Select value={powerFilter} onValueChange={(v) => setPowerFilter(v as PowerFilter)}>
+                              <SelectTrigger className="bg-secondary border-border">
+                                <SelectValue placeholder="All Power Levels" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Power Levels</SelectItem>
+                                <SelectItem value="above_25">🟢 Good (≥ -25 dBm)</SelectItem>
+                                <SelectItem value="below_5">🔴 Below -5 dBm</SelectItem>
+                                <SelectItem value="below_10">🔴 Below -10 dBm</SelectItem>
+                                <SelectItem value="below_15">🟡 Below -15 dBm</SelectItem>
+                                <SelectItem value="below_20">🟡 Below -20 dBm</SelectItem>
+                                <SelectItem value="below_24">🟠 Below -24 dBm (Weak)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
                     </PopoverContent>
@@ -520,6 +570,19 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <Badge variant="secondary" className="gap-1">
                     Last Online: {dateFilter === '1h' ? '1 Hour' : dateFilter === '24h' ? '24 Hours' : dateFilter === '7d' ? '7 Days' : '30 Days'}
                     <X className="h-3 w-3 cursor-pointer" onClick={() => setDateFilter('all')} />
+                  </Badge>
+                )}
+                {powerFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-1">
+                    RX Power: {
+                      powerFilter === 'above_25' ? '≥ -25 dBm' :
+                      powerFilter === 'below_5' ? '< -5 dBm' :
+                      powerFilter === 'below_10' ? '< -10 dBm' :
+                      powerFilter === 'below_15' ? '< -15 dBm' :
+                      powerFilter === 'below_20' ? '< -20 dBm' :
+                      '< -24 dBm'
+                    }
+                    <X className="h-3 w-3 cursor-pointer" onClick={() => setPowerFilter('all')} />
                   </Badge>
                 )}
               </div>
