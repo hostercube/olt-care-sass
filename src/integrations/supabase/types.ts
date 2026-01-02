@@ -274,12 +274,15 @@ export type Database = {
       }
       onus: {
         Row: {
+          alive_time: string | null
           created_at: string
           distance: number | null
+          hardware_version: string | null
           id: string
           last_offline: string | null
           last_online: string | null
           mac_address: string | null
+          model_id: string | null
           name: string
           offline_reason: string | null
           olt_id: string
@@ -290,18 +293,23 @@ export type Database = {
           router_name: string | null
           rx_power: number | null
           serial_number: string | null
+          software_version: string | null
           status: Database["public"]["Enums"]["connection_status"]
           temperature: number | null
           tx_power: number | null
           updated_at: string
+          vendor_id: string | null
         }
         Insert: {
+          alive_time?: string | null
           created_at?: string
           distance?: number | null
+          hardware_version?: string | null
           id?: string
           last_offline?: string | null
           last_online?: string | null
           mac_address?: string | null
+          model_id?: string | null
           name: string
           offline_reason?: string | null
           olt_id: string
@@ -312,18 +320,23 @@ export type Database = {
           router_name?: string | null
           rx_power?: number | null
           serial_number?: string | null
+          software_version?: string | null
           status?: Database["public"]["Enums"]["connection_status"]
           temperature?: number | null
           tx_power?: number | null
           updated_at?: string
+          vendor_id?: string | null
         }
         Update: {
+          alive_time?: string | null
           created_at?: string
           distance?: number | null
+          hardware_version?: string | null
           id?: string
           last_offline?: string | null
           last_online?: string | null
           mac_address?: string | null
+          model_id?: string | null
           name?: string
           offline_reason?: string | null
           olt_id?: string
@@ -334,10 +347,12 @@ export type Database = {
           router_name?: string | null
           rx_power?: number | null
           serial_number?: string | null
+          software_version?: string | null
           status?: Database["public"]["Enums"]["connection_status"]
           temperature?: number | null
           tx_power?: number | null
           updated_at?: string
+          vendor_id?: string | null
         }
         Relationships: [
           {

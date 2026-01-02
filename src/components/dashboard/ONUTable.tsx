@@ -556,6 +556,8 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                   <TableHead className="font-semibold">OLT</TableHead>
                   <TableHead className="font-semibold">PON Port</TableHead>
                   <TableHead className="font-semibold text-center">Index</TableHead>
+                  <TableHead className="font-semibold">Vendor</TableHead>
+                  <TableHead className="font-semibold">Model</TableHead>
                   <TableHead className="font-semibold">ONU Name</TableHead>
                   <TableHead className="font-semibold">Router</TableHead>
                   <TableHead className="font-semibold">
@@ -599,7 +601,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
               <TableBody>
                 {paginatedONUs.length === 0 ? (
                 <TableRow>
-                    <TableCell colSpan={21} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={23} className="text-center py-8 text-muted-foreground">
                       No ONU devices found
                     </TableCell>
                   </TableRow>
@@ -630,6 +632,24 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                         <TableCell className="font-medium">{onu.oltName || 'Unknown'}</TableCell>
                         <TableCell className="font-mono text-xs">{onu.pon_port}</TableCell>
                         <TableCell className="text-center font-mono text-xs">{onu.onu_index}</TableCell>
+                        <TableCell className="text-xs">
+                          {(onu as any).vendor_id ? (
+                            <Badge variant="outline" className="font-mono text-xs">
+                              {(onu as any).vendor_id}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {(onu as any).model_id ? (
+                            <Badge variant="secondary" className="font-mono text-xs">
+                              {(onu as any).model_id}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <span className="font-medium">{onu.name}</span>
                         </TableCell>

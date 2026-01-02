@@ -1,5 +1,114 @@
 import { logger } from '../../utils/logger.js';
 
+// MAC Vendor Database - common router/ONU vendors
+const MAC_VENDOR_DB = {
+  '4C:F9': 'HWTC',
+  '4C:AE': 'XPON',
+  'A2:7D': 'XPON',
+  'A2:4F': 'XDBC',
+  'A2:6E': 'HWTC',
+  'A2:4E': 'XDBC',
+  'B4:64': 'VSOL',
+  '6C:68': 'VSOL',
+  '4C:D7': 'VSOL',
+  '3C:F8': 'HWTC',
+  'C8:3A': 'HWTC',
+  '60:32:B1': 'TP-Link',
+  '00:0C:29': 'VMware',
+  'E4:5F:01': 'Raspberry Pi',
+  'DC:A6:32': 'Raspberry Pi',
+  'B8:27:EB': 'Raspberry Pi',
+  '00:E0:4C': 'Realtek',
+  '2C:F0:5D': 'Comfast',
+  '80:89:17': 'TP-Link',
+  '50:C7:BF': 'TP-Link',
+  'E8:94:F6': 'TP-Link',
+  'C0:E4:22': 'TP-Link',
+  '14:CC:20': 'TP-Link',
+  '30:B5:C2': 'TP-Link',
+  '7C:8B:CA': 'TP-Link',
+  '08:10:79': 'Tenda',
+  'C8:3A:35': 'Tenda',
+  '00:27:22': 'Ubiquiti',
+  '68:72:51': 'Ubiquiti',
+  '80:2A:A8': 'Ubiquiti',
+  '24:5A:4C': 'Ubiquiti',
+  'F4:92:BF': 'Ubiquiti',
+  'DC:9F:DB': 'Ubiquiti',
+  'FC:EC:DA': 'Ubiquiti',
+  '44:D9:E7': 'Ubiquiti',
+  '74:83:C2': 'Ubiquiti',
+  '04:18:D6': 'Ubiquiti',
+  '00:15:6D': 'Ubiquiti',
+  '18:E8:29': 'Xiaomi',
+  '64:09:80': 'Xiaomi',
+  '58:44:98': 'Xiaomi',
+  '28:6C:07': 'Xiaomi',
+  '64:64:4A': 'Huawei',
+  '00:18:82': 'Huawei',
+  '48:46:FB': 'Huawei',
+  '70:7B:E8': 'Huawei',
+  'E4:F3:F5': 'Huawei',
+  '9C:28:EF': 'Huawei',
+  '00:E0:FC': 'Huawei',
+  '88:28:B3': 'Huawei',
+  '28:31:52': 'Huawei',
+  'A4:4B:D5': 'Xiaomi',
+  '34:CE:00': 'Xiaomi',
+  'AC:C1:EE': 'Xiaomi',
+  '78:11:DC': 'Xiaomi',
+  'F8:A7:63': 'Xiaomi',
+  'D4:9A:20': 'Xiaomi',
+  'D8:B0:4C': 'Xiaomi',
+  '04:CF:8C': 'Xiaomi',
+  '98:FA:E3': 'Xiaomi',
+  '00:9A:CD': 'Huawei',
+  '24:44:27': 'Huawei',
+  '20:A6:CD': 'Huawei',
+  'C8:D1:5E': 'Huawei',
+  '88:53:95': 'Huawei',
+  '00:E0:1E': 'Cisco',
+  '3C:5A:B4': 'D-Link',
+  '1C:7E:E5': 'D-Link',
+  '84:C9:B2': 'D-Link',
+  'BC:0F:9A': 'D-Link',
+  'F4:EC:38': 'TP-Link',
+  '98:DA:C4': 'TP-Link',
+  'C4:E9:84': 'TP-Link',
+  'AC:84:C6': 'TP-Link',
+  'B0:BE:76': 'TP-Link',
+  'B0:4E:26': 'TP-Link',
+  '20:0D:B0': 'Shenzhen',
+  '00:1E:58': 'D-Link',
+  '1C:BD:B9': 'D-Link',
+  '28:10:7B': 'D-Link',
+  '5C:D9:98': 'D-Link',
+  '78:54:2E': 'D-Link',
+  'F0:B4:D2': 'D-Link',
+  '10:62:EB': 'D-Link',
+  'CC:B2:55': 'D-Link',
+  'AC:F1:DF': 'D-Link',
+};
+
+/**
+ * Get vendor name from MAC address
+ */
+export function getMacVendor(mac) {
+  if (!mac) return null;
+  const normalized = formatMac(mac);
+  if (!normalized) return null;
+  
+  // Try 3-octet prefix first (more specific)
+  const prefix3 = normalized.substring(0, 11).toUpperCase();
+  if (MAC_VENDOR_DB[prefix3]) return MAC_VENDOR_DB[prefix3];
+  
+  // Try 2-octet prefix
+  const prefix2 = normalized.substring(0, 5).toUpperCase();
+  if (MAC_VENDOR_DB[prefix2]) return MAC_VENDOR_DB[prefix2];
+  
+  return null;
+}
+
 /**
  * Parse VSOL OLT CLI output to extract ONU information
  * Supports VSOL EPON/GPON OLT series (V1600, V1601, V1602, etc.)
@@ -30,6 +139,7 @@ export function parseVSOLOutput(output) {
   const lastRegisterData = new Map(); // Store last register time
   const lastDeregisterData = new Map(); // Store last deregister time
   const aliveTimeData = new Map(); // Store alive/uptime
+  const vendorData = new Map(); // Store Vendor ID, Model ID, HW/SW versions
   
   logger.info(`VSOL parser processing ${lines.length} lines of output`);
   
@@ -657,6 +767,83 @@ export function parseVSOLOutput(output) {
       logger.debug(`ONU status row (simple) parsed: ${key} status=${status} distance=${distance}m`);
       continue;
     }
+
+    // Pattern 14: ONU Basic table from V-SOL web UI
+    // Format: EPON0/3:2  A2:7D:10:27:34:80         XPON  ONU  A27D10273480  2E2.A  V3R017C00S150
+    // Columns: ONU ID  MAC Address  Description  Vendor ID  Model ID  MAC Address  Hardware Version  Software Version
+    // Variant without Description column
+    const onuBasicRowMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+([0-9a-fA-F:.-]{12,17})\s+(?:(\S+)\s+)?([A-Z0-9]{2,10})\s+([A-Z0-9]{2,10})\s+([0-9A-Fa-f]{12})\s+([^\s]+)\s+([^\s]+)\s*$/i);
+    if (onuBasicRowMatch) {
+      const ponPort = onuBasicRowMatch[1];
+      const onuIndex = parseInt(onuBasicRowMatch[2]);
+      const macAddress = formatMac(onuBasicRowMatch[3]);
+      // onuBasicRowMatch[4] is description (optional)
+      const vendorId = onuBasicRowMatch[5]?.toUpperCase() || null;
+      const modelId = onuBasicRowMatch[6]?.toUpperCase() || null;
+      // onuBasicRowMatch[7] is MAC without colons (duplicate)
+      const hwVersion = onuBasicRowMatch[8] || null;
+      const swVersion = onuBasicRowMatch[9] || null;
+      const key = `${ponPort}:${onuIndex}`;
+      
+      vendorData.set(key, { vendorId, modelId, hwVersion, swVersion, macAddress });
+      
+      // Also update ONU entry if it exists
+      if (onuMap.has(key)) {
+        const onu = onuMap.get(key);
+        if (!onu.mac_address) onu.mac_address = macAddress;
+      } else {
+        onuMap.set(key, {
+          pon_port: ponPort,
+          onu_index: onuIndex,
+          status: 'online', // Default to online if found in ONU Basic
+          serial_number: macAddress.replace(/:/g, ''),
+          name: `ONU-${ponPort}:${onuIndex}`,
+          rx_power: null,
+          tx_power: null,
+          mac_address: macAddress,
+          router_name: null
+        });
+      }
+      
+      logger.debug(`ONU Basic row parsed: ${key} vendor=${vendorId} model=${modelId} HW=${hwVersion} SW=${swVersion}`);
+      continue;
+    }
+
+    // Pattern 14b: Simpler ONU Basic format (no description column)
+    // EPON0/3:3  B4:64:15:2F:58:46  VSOL  V711  B464152F5846  V4.2  V1.0.00-241216
+    const onuBasicSimpleMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+([0-9a-fA-F:.-]{12,17})\s+([A-Z0-9]{2,10})\s+([A-Z0-9]{2,10})\s+([0-9A-Fa-f]{12})\s+([^\s]+)\s+([^\s]+)\s*$/i);
+    if (onuBasicSimpleMatch) {
+      const ponPort = onuBasicSimpleMatch[1];
+      const onuIndex = parseInt(onuBasicSimpleMatch[2]);
+      const macAddress = formatMac(onuBasicSimpleMatch[3]);
+      const vendorId = onuBasicSimpleMatch[4]?.toUpperCase() || null;
+      const modelId = onuBasicSimpleMatch[5]?.toUpperCase() || null;
+      const hwVersion = onuBasicSimpleMatch[7] || null;
+      const swVersion = onuBasicSimpleMatch[8] || null;
+      const key = `${ponPort}:${onuIndex}`;
+      
+      vendorData.set(key, { vendorId, modelId, hwVersion, swVersion, macAddress });
+      
+      if (onuMap.has(key)) {
+        const onu = onuMap.get(key);
+        if (!onu.mac_address) onu.mac_address = macAddress;
+      } else {
+        onuMap.set(key, {
+          pon_port: ponPort,
+          onu_index: onuIndex,
+          status: 'online',
+          serial_number: macAddress.replace(/:/g, ''),
+          name: `ONU-${ponPort}:${onuIndex}`,
+          rx_power: null,
+          tx_power: null,
+          mac_address: macAddress,
+          router_name: null
+        });
+      }
+      
+      logger.debug(`ONU Basic (simple) row parsed: ${key} vendor=${vendorId} model=${modelId}`);
+      continue;
+    }
   }
   
   // Second pass: Mark inactive ONUs as offline
@@ -715,8 +902,24 @@ export function parseVSOLOutput(output) {
     }
   }
   
+  // Eighth pass: Merge vendor/model data (ONU Basic page)
+  for (const [key, data] of vendorData) {
+    if (onuMap.has(key)) {
+      const onu = onuMap.get(key);
+      if (data.vendorId) onu.vendor_id = data.vendorId;
+      if (data.modelId) onu.model_id = data.modelId;
+      if (data.hwVersion) onu.hardware_version = data.hwVersion;
+      if (data.swVersion) onu.software_version = data.swVersion;
+      if (data.macAddress && !onu.mac_address) onu.mac_address = data.macAddress;
+    }
+  }
+  
   // Convert map to array
   for (const [key, onu] of onuMap) {
+    // Set ONU name based on Vendor ID if available
+    if (onu.vendor_id && onu.name.startsWith('ONU-')) {
+      onu.name = `${onu.vendor_id}-${onu.model_id || 'ONU'}`;
+    }
     onus.push(onu);
   }
   

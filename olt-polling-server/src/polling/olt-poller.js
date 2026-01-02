@@ -1046,6 +1046,11 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
         temperature: onu.temperature || null,
         distance: onu.distance || null,
         offline_reason: onu.offline_reason || null,
+        vendor_id: onu.vendor_id || null,
+        model_id: onu.model_id || null,
+        hardware_version: onu.hardware_version || null,
+        software_version: onu.software_version || null,
+        alive_time: onu.alive_time || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -1170,6 +1175,11 @@ async function syncONUsToDatabase(supabase, oltId, onus) {
           temperature: onu.temperature || null,
           distance: onu.distance || null,
           offline_reason: onu.offline_reason || null,
+          vendor_id: onu.vendor_id || null,
+          model_id: onu.model_id || null,
+          hardware_version: onu.hardware_version || null,
+          software_version: onu.software_version || null,
+          alive_time: onu.alive_time || null,
           last_online: onu.status === 'online' ? new Date().toISOString() : null,
         });
 
