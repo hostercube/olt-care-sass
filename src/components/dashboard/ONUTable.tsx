@@ -59,7 +59,7 @@ interface ONUTableProps {
 
 type StatusFilter = 'all' | 'online' | 'offline' | 'warning';
 type DateFilter = 'all' | '1h' | '24h' | '7d' | '30d';
-type PowerFilter = 'all' | 'below_5' | 'below_10' | 'below_15' | 'below_20' | 'below_24' | 'above_25';
+type PowerFilter = 'all' | 'below_5' | 'below_10' | 'below_15' | 'below_20' | 'below_24' | 'below_25';
 
 interface ColumnFilters {
   routerMac: Set<string>;
@@ -186,8 +186,8 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
           case 'below_24':
             matchesPower = rxPower < -24;
             break;
-          case 'above_25':
-            matchesPower = rxPower >= -25;
+          case 'below_25':
+            matchesPower = rxPower <= -25;
             break;
         }
       } else if (powerFilter !== 'all' && (rxPower === null || rxPower === undefined)) {
@@ -498,12 +498,12 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="all">All Power Levels</SelectItem>
-                                <SelectItem value="above_25">🟢 Good (≥ -25 dBm)</SelectItem>
                                 <SelectItem value="below_5">🔴 Below -5 dBm</SelectItem>
                                 <SelectItem value="below_10">🔴 Below -10 dBm</SelectItem>
                                 <SelectItem value="below_15">🟡 Below -15 dBm</SelectItem>
                                 <SelectItem value="below_20">🟡 Below -20 dBm</SelectItem>
-                                <SelectItem value="below_24">🟠 Below -24 dBm (Weak)</SelectItem>
+                                <SelectItem value="below_24">🟠 Below -24 dBm</SelectItem>
+                                <SelectItem value="below_25">🔴 Critical (≤ -25 dBm)</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -575,7 +575,7 @@ export function ONUTable({ onus, title = 'ONU Devices', showFilters = true, onRe
                 {powerFilter !== 'all' && (
                   <Badge variant="secondary" className="gap-1">
                     RX Power: {
-                      powerFilter === 'above_25' ? '≥ -25 dBm' :
+                      powerFilter === 'below_25' ? '≤ -25 dBm' :
                       powerFilter === 'below_5' ? '< -5 dBm' :
                       powerFilter === 'below_10' ? '< -10 dBm' :
                       powerFilter === 'below_15' ? '< -15 dBm' :
