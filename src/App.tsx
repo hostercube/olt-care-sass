@@ -27,6 +27,7 @@ import PackageManagement from "./pages/SuperAdmin/PackageManagement";
 import PaymentManagement from "./pages/SuperAdmin/PaymentManagement";
 import GatewaySettings from "./pages/SuperAdmin/GatewaySettings";
 import SMSGatewaySettings from "./pages/SuperAdmin/SMSGatewaySettings";
+import EmailGatewaySettings from "./pages/SuperAdmin/EmailGatewaySettings";
 
 // ISP Billing Pages
 import MySubscription from "./pages/Billing/MySubscription";
@@ -146,6 +147,11 @@ const App = () => (
               <Route path="/admin/sms-gateway" element={
                 <SuperAdminRoute>
                   <SMSGatewaySettings />
+                </SuperAdminRoute>
+              } />
+              <Route path="/admin/email-gateway" element={
+                <SuperAdminRoute>
+                  <EmailGatewaySettings />
                 </SuperAdminRoute>
               } />
 
