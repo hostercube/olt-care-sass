@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
-import { Mail, MessageSquare, Bell, Clock, Save } from 'lucide-react';
+import { Mail, MessageSquare, Bell, Clock, Save, Send, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export function NotificationSettings() {
-  const { preferences, loading, savePreferences } = useNotificationPreferences();
+  const { preferences, loading, savePreferences, queueNotification } = useNotificationPreferences();
+  const { toast } = useToast();
   
   const [formData, setFormData] = useState({
     email_enabled: true,
@@ -20,6 +22,8 @@ export function NotificationSettings() {
     subscription_reminders: true,
     reminder_days_before: 7,
   });
+  
+  const [sendingTest, setSendingTest] = useState<'email' | 'sms' | null>(null);
 
   useEffect(() => {
     if (preferences) {
@@ -37,6 +41,47 @@ export function NotificationSettings() {
 
   const handleSave = () => {
     savePreferences(formData);
+  };
+
+  const sendTestEmail = async () => {
+    if (!formData.email_address) {
+      toast({ title: 'Error', description: 'Please enter an email address first', variant: 'destructive' });
+      return;
+    }
+    setSendingTest('email');
+    try {
+      await queueNotification(
+        'test',
+        'email',
+        formData.email_address,
+        'This is a test notification from OLTCARE. If you received this, your email notifications are working correctly!',
+        'OLTCARE Test Notification'
+      );
+      toast({ title: 'Test Email Queued', description: `Test email queued for ${formData.email_address}` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to send test email', variant: 'destructive' });
+    }
+    setSendingTest(null);
+  };
+
+  const sendTestSMS = async () => {
+    if (!formData.phone_number) {
+      toast({ title: 'Error', description: 'Please enter a phone number first', variant: 'destructive' });
+      return;
+    }
+    setSendingTest('sms');
+    try {
+      await queueNotification(
+        'test',
+        'sms',
+        formData.phone_number,
+        'OLTCARE Test: Your SMS notifications are working correctly!'
+      );
+      toast({ title: 'Test SMS Queued', description: `Test SMS queued for ${formData.phone_number}` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to send test SMS', variant: 'destructive' });
+    }
+    setSendingTest(null);
   };
 
   if (loading) {
@@ -81,16 +126,33 @@ export function NotificationSettings() {
           </div>
 
           {formData.email_enabled && (
-            <div className="ml-8">
+            <div className="ml-8 space-y-2">
               <Label htmlFor="email_address">Email Address</Label>
-              <Input
-                id="email_address"
-                type="email"
-                placeholder="alerts@yourcompany.com"
-                value={formData.email_address}
-                onChange={(e) => setFormData({ ...formData, email_address: e.target.value })}
-                className="mt-1"
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="email_address"
+                  type="email"
+                  placeholder="alerts@yourcompany.com"
+                  value={formData.email_address}
+                  onChange={(e) => setFormData({ ...formData, email_address: e.target.value })}
+                  className="flex-1"
+                />
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={sendTestEmail}
+                  disabled={sendingTest === 'email' || !formData.email_address}
+                >
+                  {sendingTest === 'email' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-1" />
+                      Test
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           )}
 
@@ -110,16 +172,33 @@ export function NotificationSettings() {
           </div>
 
           {formData.sms_enabled && (
-            <div className="ml-8">
+            <div className="ml-8 space-y-2">
               <Label htmlFor="phone_number">Phone Number</Label>
-              <Input
-                id="phone_number"
-                type="tel"
-                placeholder="+880 1XXXXXXXXX"
-                value={formData.phone_number}
-                onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                className="mt-1"
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="phone_number"
+                  type="tel"
+                  placeholder="+880 1XXXXXXXXX"
+                  value={formData.phone_number}
+                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                  className="flex-1"
+                />
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={sendTestSMS}
+                  disabled={sendingTest === 'sms' || !formData.phone_number}
+                >
+                  {sendingTest === 'sms' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-1" />
+                      Test
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

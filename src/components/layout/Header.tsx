@@ -1,7 +1,6 @@
-import { Bell, Search, User, RefreshCw, LogOut } from 'lucide-react';
+import { Search, User, RefreshCw, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,8 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import { useAlerts } from '@/hooks/useOLTData';
 import { ThemeToggle } from './ThemeToggle';
+import { AlertNotificationBell } from '@/components/notifications/AlertNotificationBell';
 
 interface HeaderProps {
   title: string;
@@ -23,9 +22,6 @@ interface HeaderProps {
 export function Header({ title, subtitle }: HeaderProps) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const { alerts } = useAlerts();
-  
-  const unreadAlerts = alerts.filter(a => !a.is_read);
 
   const handleSignOut = async () => {
     await signOut();
@@ -59,51 +55,8 @@ export function Header({ title, subtitle }: HeaderProps) {
         {/* Theme Toggle */}
         <ThemeToggle />
 
-        {/* Notifications */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="relative border-border">
-              <Bell className="h-4 w-4" />
-              {unreadAlerts.length > 0 && (
-                <Badge
-                  variant="danger"
-                  className="absolute -top-1 -right-1 h-5 w-5 p-0 justify-center text-[10px]"
-                >
-                  {unreadAlerts.length > 9 ? '9+' : unreadAlerts.length}
-                </Badge>
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80 bg-popover border-border">
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold">Notifications</span>
-                {unreadAlerts.length > 0 && (
-                  <Badge variant="secondary">{unreadAlerts.length} new</Badge>
-                )}
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {unreadAlerts.length === 0 ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                No new notifications
-              </div>
-            ) : (
-              unreadAlerts.slice(0, 5).map((alert) => (
-                <DropdownMenuItem key={alert.id} className="flex flex-col items-start gap-1 cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full ${
-                      alert.severity === 'critical' ? 'bg-destructive' : 
-                      alert.severity === 'warning' ? 'bg-warning' : 'bg-info'
-                    }`} />
-                    <span className="font-medium">{alert.title}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{alert.message}</span>
-                </DropdownMenuItem>
-              ))
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Real-time Alert Notifications */}
+        <AlertNotificationBell />
 
         {/* User Menu */}
         <DropdownMenu>
