@@ -22,6 +22,8 @@ import { parseVSOLMacTable } from './polling/parsers/vsol-parser.js';
 import { testMikrotikConnection, fetchAllMikroTikData, enrichONUWithMikroTikData, bulkTagPPPSecrets, clearMikroTikCache, fetchMikroTikHealth } from './polling/mikrotik-client.js';
 import { rebootONU, deauthorizeONU, executeBulkOperation } from './onu-commands.js';
 import { logger } from './utils/logger.js';
+import { updateUserPassword, isUserAdmin } from './admin/user-admin.js';
+import { getNotificationSettings, notifyAlert, testSmtpConnection, sendTestEmail, sendTestTelegram, sendTestWhatsApp } from './notifications/notifier.js';
 
 const app = express();
 app.use(cors());
@@ -1446,6 +1448,114 @@ app.post('/api/clear-pppoe/:oltId', async (req, res) => {
 app.post('/clear-pppoe/:oltId', async (req, res) => {
   req.url = `/api/clear-pppoe/${req.params.oltId}`;
   app.handle(req, res);
+});
+
+// ============= USER ADMIN ENDPOINTS =============
+// Password reset and user management (admin only)
+
+app.post('/api/admin/reset-password', async (req, res) => {
+  const { userId, newPassword, requestingUserId } = req.body;
+  
+  try {
+    // Verify requesting user is admin
+    if (!requestingUserId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const adminCheck = await isUserAdmin(supabase, requestingUserId);
+    if (!adminCheck) {
+      return res.status(403).json({ error: 'Only admins can reset user passwords' });
+    }
+    
+    // Update password
+    const result = await updateUserPassword(userId, newPassword);
+    res.json(result);
+  } catch (error) {
+    logger.error('Password reset error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/admin/reset-password', async (req, res) => {
+  req.url = '/api/admin/reset-password';
+  app.handle(req, res);
+});
+
+// ============= NOTIFICATION ENDPOINTS =============
+// Test notification channels
+
+app.post('/api/notifications/test-smtp', async (req, res) => {
+  const { toEmail } = req.body;
+  
+  try {
+    const settings = await getNotificationSettings(supabase);
+    
+    if (!settings.smtpHost) {
+      return res.status(400).json({ success: false, error: 'SMTP not configured. Please configure SMTP settings first.' });
+    }
+    
+    // Test connection first
+    const connectionTest = await testSmtpConnection(settings);
+    if (!connectionTest.success) {
+      return res.json({ success: false, error: `SMTP connection failed: ${connectionTest.error}` });
+    }
+    
+    // Send test email
+    const result = await sendTestEmail(settings, toEmail || settings.notificationEmail);
+    res.json(result);
+  } catch (error) {
+    logger.error('SMTP test error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/notifications/test-telegram', async (req, res) => {
+  try {
+    const settings = await getNotificationSettings(supabase);
+    
+    if (!settings.telegramBotToken || !settings.telegramChatId) {
+      return res.status(400).json({ success: false, error: 'Telegram not configured. Please add Bot Token and Chat ID.' });
+    }
+    
+    const result = await sendTestTelegram(settings);
+    res.json(result);
+  } catch (error) {
+    logger.error('Telegram test error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/notifications/test-whatsapp', async (req, res) => {
+  try {
+    const settings = await getNotificationSettings(supabase);
+    
+    if (!settings.whatsappApiUrl || !settings.whatsappPhoneNumber) {
+      return res.status(400).json({ success: false, error: 'WhatsApp not configured. Please add API URL and phone number.' });
+    }
+    
+    const result = await sendTestWhatsApp(settings);
+    res.json(result);
+  } catch (error) {
+    logger.error('WhatsApp test error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get current notification settings (for admin panel)
+app.get('/api/notifications/settings', async (req, res) => {
+  try {
+    const settings = await getNotificationSettings(supabase);
+    // Mask sensitive fields
+    res.json({
+      ...settings,
+      smtpPassword: settings.smtpPassword ? '********' : '',
+      telegramBotToken: settings.telegramBotToken ? '********' : '',
+      whatsappApiKey: settings.whatsappApiKey ? '********' : '',
+    });
+  } catch (error) {
+    logger.error('Get notification settings error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ============= SMART POLLING BASED ON SETTINGS =============

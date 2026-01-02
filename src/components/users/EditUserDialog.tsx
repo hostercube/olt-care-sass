@@ -143,20 +143,41 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
 
     setPasswordLoading(true);
     try {
-      // Use supabase.functions.invoke for better error handling
-      const { data, error } = await supabase.functions.invoke('update-user-password', {
-        body: {
-          userId: user.id,
-          newPassword: newPassword,
-        },
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Failed to update password');
+      // Get current user ID for authorization
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        throw new Error('You must be logged in to change passwords');
       }
 
-      if (data?.error) {
-        throw new Error(data.error);
+      // Get API server URL from settings
+      const { data: settingsData } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'apiServerUrl')
+        .single();
+
+      const apiUrl = settingsData?.value?.value || settingsData?.value || '';
+      if (!apiUrl) {
+        throw new Error('Polling server URL not configured. Please configure it in Settings → Polling.');
+      }
+
+      // Call polling server API for password reset
+      const response = await fetch(`${apiUrl}/api/admin/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          newPassword: newPassword,
+          requestingUserId: currentUser.id,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update password');
       }
 
       toast({

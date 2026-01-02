@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 
@@ -248,15 +248,90 @@ export default function Settings() {
                   <Switch checked={settings.oltUnreachableAlerts} onCheckedChange={(checked) => updateSetting('oltUnreachableAlerts', checked)} />
                 </div>
                 <Separator />
+                
+                {/* SMTP Email Settings */}
                 <div className="flex items-center justify-between">
-                  <div className="space-y-0.5"><Label className="flex items-center gap-2"><Mail className="h-4 w-4" />Email Notifications</Label><p className="text-sm text-muted-foreground">Send critical alerts via email</p></div>
+                  <div className="space-y-0.5"><Label className="flex items-center gap-2"><Mail className="h-4 w-4" />Email Notifications (SMTP)</Label><p className="text-sm text-muted-foreground">Send alerts via your own SMTP server</p></div>
                   <Switch checked={settings.emailNotifications} onCheckedChange={(checked) => updateSetting('emailNotifications', checked)} />
                 </div>
                 {settings.emailNotifications && (
-                  <div className="space-y-2">
-                    <Label>Notification Email</Label>
-                    <Input type="email" placeholder="admin@yourisp.com" value={settings.notificationEmail} onChange={(e) => updateSetting('notificationEmail', e.target.value)} className="bg-secondary" />
-                    <p className="text-xs text-muted-foreground">Requires RESEND_API_KEY to be configured in backend secrets</p>
+                  <div className="space-y-4 p-4 rounded-lg bg-muted/30 border border-border">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>SMTP Host</Label>
+                        <Input placeholder="smtp.gmail.com" value={settings.smtpHost} onChange={(e) => updateSetting('smtpHost', e.target.value)} className="bg-secondary" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>SMTP Port</Label>
+                        <Input type="number" placeholder="587" value={settings.smtpPort} onChange={(e) => updateSetting('smtpPort', parseInt(e.target.value) || 587)} className="bg-secondary" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>SMTP Username</Label>
+                        <Input placeholder="your-email@gmail.com" value={settings.smtpUser} onChange={(e) => updateSetting('smtpUser', e.target.value)} className="bg-secondary" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>SMTP Password</Label>
+                        <Input type="password" placeholder="App password" value={settings.smtpPassword} onChange={(e) => updateSetting('smtpPassword', e.target.value)} className="bg-secondary" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>From Email</Label>
+                        <Input placeholder="alerts@yourisp.com" value={settings.smtpFromEmail} onChange={(e) => updateSetting('smtpFromEmail', e.target.value)} className="bg-secondary" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>From Name</Label>
+                        <Input placeholder="OLTCARE" value={settings.smtpFromName} onChange={(e) => updateSetting('smtpFromName', e.target.value)} className="bg-secondary" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Notification Email (To)</Label>
+                      <Input type="email" placeholder="admin@yourisp.com" value={settings.notificationEmail} onChange={(e) => updateSetting('notificationEmail', e.target.value)} className="bg-secondary" />
+                    </div>
+                  </div>
+                )}
+
+                <Separator />
+                
+                {/* Telegram Settings */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5"><Label className="flex items-center gap-2"><Send className="h-4 w-4" />Telegram Notifications</Label><p className="text-sm text-muted-foreground">Send alerts to Telegram bot</p></div>
+                  <Switch checked={settings.telegramNotifications} onCheckedChange={(checked) => updateSetting('telegramNotifications', checked)} />
+                </div>
+                {settings.telegramNotifications && (
+                  <div className="space-y-4 p-4 rounded-lg bg-muted/30 border border-border">
+                    <div className="space-y-2">
+                      <Label>Bot Token</Label>
+                      <Input type="password" placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz" value={settings.telegramBotToken} onChange={(e) => updateSetting('telegramBotToken', e.target.value)} className="bg-secondary" />
+                      <p className="text-xs text-muted-foreground">Get from @BotFather on Telegram</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Chat ID</Label>
+                      <Input placeholder="-1001234567890" value={settings.telegramChatId} onChange={(e) => updateSetting('telegramChatId', e.target.value)} className="bg-secondary" />
+                      <p className="text-xs text-muted-foreground">Your personal or group chat ID</p>
+                    </div>
+                  </div>
+                )}
+
+                <Separator />
+                
+                {/* WhatsApp Settings */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5"><Label className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />WhatsApp Notifications</Label><p className="text-sm text-muted-foreground">Send alerts via WhatsApp API</p></div>
+                  <Switch checked={settings.whatsappNotifications} onCheckedChange={(checked) => updateSetting('whatsappNotifications', checked)} />
+                </div>
+                {settings.whatsappNotifications && (
+                  <div className="space-y-4 p-4 rounded-lg bg-muted/30 border border-border">
+                    <div className="space-y-2">
+                      <Label>API URL</Label>
+                      <Input placeholder="https://api.whatsapp-provider.com/send" value={settings.whatsappApiUrl} onChange={(e) => updateSetting('whatsappApiUrl', e.target.value)} className="bg-secondary" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>API Key (Optional)</Label>
+                      <Input type="password" placeholder="Your API key" value={settings.whatsappApiKey} onChange={(e) => updateSetting('whatsappApiKey', e.target.value)} className="bg-secondary" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Phone Number</Label>
+                      <Input placeholder="+8801XXXXXXXXX" value={settings.whatsappPhoneNumber} onChange={(e) => updateSetting('whatsappPhoneNumber', e.target.value)} className="bg-secondary" />
+                    </div>
                   </div>
                 )}
 
@@ -270,7 +345,6 @@ export default function Settings() {
                   <div className="space-y-2">
                     <Label>Webhook URL</Label>
                     <Input placeholder="https://your-server.com/webhook" value={settings.webhookUrl} onChange={(e) => updateSetting('webhookUrl', e.target.value)} className="bg-secondary" />
-                    <p className="text-xs text-muted-foreground">We will POST JSON for each offline / low-power alert.</p>
                   </div>
                 )}
               </CardContent>

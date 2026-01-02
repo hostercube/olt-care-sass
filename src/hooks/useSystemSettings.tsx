@@ -13,8 +13,8 @@ interface SystemSettings {
   showOfflineFirst: boolean;
 
   // Polling
-  pollingMode: PollingMode;  // NEW: on_demand, light_cron, full_cron
-  cronIntervalMinutes: number;  // NEW: 5, 10, 30 minutes for cron
+  pollingMode: PollingMode;
+  cronIntervalMinutes: number;
   oltPollInterval: number;
   onuPollInterval: number;
   backgroundPolling: boolean;
@@ -28,8 +28,29 @@ interface SystemSettings {
   onuOfflineAlerts: boolean;
   powerDropAlerts: boolean;
   oltUnreachableAlerts: boolean;
+  
+  // Email SMTP
   emailNotifications: boolean;
   notificationEmail: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPassword: string;
+  smtpFromEmail: string;
+  smtpFromName: string;
+  
+  // Telegram
+  telegramNotifications: boolean;
+  telegramBotToken: string;
+  telegramChatId: string;
+  
+  // WhatsApp
+  whatsappNotifications: boolean;
+  whatsappApiUrl: string;
+  whatsappApiKey: string;
+  whatsappPhoneNumber: string;
+  
+  // Webhook
   webhookNotifications: boolean;
   webhookUrl: string;
 
@@ -49,11 +70,11 @@ const defaultSettings: SystemSettings = {
   timezone: 'asia_dhaka',
   autoRefresh: true,
   showOfflineFirst: true,
-  pollingMode: 'on_demand',  // Default: No continuous polling - only when viewing ONU page
-  cronIntervalMinutes: 10,   // Default: 10 minutes for light cron
+  pollingMode: 'on_demand',
+  cronIntervalMinutes: 10,
   oltPollInterval: 5,
   onuPollInterval: 5,
-  backgroundPolling: false,  // Default OFF to prevent OLT/MikroTik load
+  backgroundPolling: false,
   storePowerHistory: true,
   historyRetention: 30,
   apiServerUrl: '',
@@ -62,10 +83,28 @@ const defaultSettings: SystemSettings = {
   onuOfflineAlerts: true,
   powerDropAlerts: true,
   oltUnreachableAlerts: true,
+  // Email SMTP
   emailNotifications: false,
   notificationEmail: '',
+  smtpHost: '',
+  smtpPort: 587,
+  smtpUser: '',
+  smtpPassword: '',
+  smtpFromEmail: '',
+  smtpFromName: 'OLTCARE',
+  // Telegram
+  telegramNotifications: false,
+  telegramBotToken: '',
+  telegramChatId: '',
+  // WhatsApp
+  whatsappNotifications: false,
+  whatsappApiUrl: '',
+  whatsappApiKey: '',
+  whatsappPhoneNumber: '',
+  // Webhook
   webhookNotifications: false,
   webhookUrl: '',
+  // MikroTik
   mikrotikMatchExactMac: true,
   mikrotikMatchLast6Mac: true,
   mikrotikMatchSerialOrComment: true,
