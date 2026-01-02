@@ -681,20 +681,109 @@ export function parseVSOLOutput(output) {
     }
 
     // Pattern 13: ONU Status table row from V-SOL web UI / CLI
-    // Format: EPON0/1:1  Online  4c:d7:c8:80:3c:06  2638  1705  2000/04/30 20:41:43  2000/04/30 20:41:41  Power Off  5 06:10:57
-    // Columns: ONU ID  Status  MAC Address  Description  Distance(m)  RTT(TQ)  Last Register Time  Last Deregister Time  Deregister Reason  Alive Time
-    const onuStatusRowMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+(Online|Offline|Active|Inactive|LOS|Deactive)\s+([0-9a-fA-F:.-]{12,17})\s+(?:\S+\s+)?(\d+)\s+\d+\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+([\w\s]+?)\s+(\d+\s+\d{2}:\d{2}:\d{2})/i);
-    if (onuStatusRowMatch) {
-      const ponPort = onuStatusRowMatch[1];
-      const onuIndex = parseInt(onuStatusRowMatch[2]);
-      const status = parseStatus(onuStatusRowMatch[3]);
-      const macAddress = formatMac(onuStatusRowMatch[4]);
-      const distance = parseInt(onuStatusRowMatch[5]);
-      const lastRegisterTime = onuStatusRowMatch[6].replace(/\//g, '-'); // Convert to ISO format
-      const lastDeregisterTime = onuStatusRowMatch[7].replace(/\//g, '-');
-      const deregisterReason = onuStatusRowMatch[8].trim();
-      const aliveTime = onuStatusRowMatch[9].trim();
+    // Screenshot format: EPON0/3:1  Offline  a2:4d:12:05:04:90    0  0  2075/02/01 14:29:50  2075/02/01 14:29:51  Wire Down  00:00:02
+    // Columns: ONU ID | Status | MAC Address | Description(empty) | Distance(m) | RTT(TQ) | Last Register Time | Last Deregister Time | Last Deregister Reason | Alive Time
+    // Note: Description can be empty, Alive Time can be "00:00:02" or "5 06:10:57" (with days)
+    
+    // Try multiple patterns to handle different formats
+    
+    // Pattern 13a: Full format with optional description and alive time with/without days
+    // EPON0/3:1  Offline  a2:4d:12:05:04:90    0  0  2075/02/01 14:29:50  2075/02/01 14:29:51  Wire Down  00:00:02
+    // EPON0/3:13  Offline  00:d5:9e:e0:6e:e2    1051  737  2075/03/29 19:14:35  2075/03/31 00:47:12  Wire Down  1 05:32:37
+    const onuStatusFullMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+(Online|Offline|Active|Inactive|LOS|Deactive)\s+([0-9a-fA-F:.-]{12,17})\s*(?:([^\d][^\s]*)\s+)?(\d+)\s+(\d+)\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+([\w\s]+?)\s+(\d+(?:\s+\d{2}:\d{2}:\d{2})?|\d{2}:\d{2}:\d{2})\s*$/i);
+    if (onuStatusFullMatch) {
+      const ponPort = onuStatusFullMatch[1];
+      const onuIndex = parseInt(onuStatusFullMatch[2]);
+      const status = parseStatus(onuStatusFullMatch[3]);
+      const macAddress = formatMac(onuStatusFullMatch[4]);
+      const description = onuStatusFullMatch[5]?.trim() || null;
+      const distance = parseInt(onuStatusFullMatch[6]);
+      const rttTq = parseInt(onuStatusFullMatch[7]);
+      const lastRegisterTime = onuStatusFullMatch[8].replace(/\//g, '-'); // Convert to ISO format
+      const lastDeregisterTime = onuStatusFullMatch[9].replace(/\//g, '-');
+      const deregisterReason = onuStatusFullMatch[10].trim();
+      const aliveTime = onuStatusFullMatch[11].trim();
       const key = `${ponPort}:${onuIndex}`;
+      
+      // Update or create ONU entry
+      if (onuMap.has(key)) {
+        const onu = onuMap.get(key);
+        onu.status = status;
+        if (!onu.mac_address) onu.mac_address = macAddress;
+        if (description) onu.name = description;
+      } else {
+        onuMap.set(key, {
+          pon_port: ponPort,
+          onu_index: onuIndex,
+          status: status,
+          serial_number: macAddress.replace(/:/g, ''),
+          name: description || `ONU-${ponPort}:${onuIndex}`,
+          rx_power: null,
+          tx_power: null,
+          mac_address: macAddress,
+          router_name: null
+        });
+      }
+      
+      distanceData.set(key, distance);
+      lastRegisterData.set(key, lastRegisterTime);
+      lastDeregisterData.set(key, lastDeregisterTime);
+      deregisterData.set(key, deregisterReason);
+      aliveTimeData.set(key, aliveTime);
+      
+      logger.debug(`ONU status row (full) parsed: ${key} status=${status} distance=${distance}m lastReg=${lastRegisterTime} deregReason=${deregisterReason} aliveTime=${aliveTime}`);
+      continue;
+    }
+
+    // Pattern 13b: Simpler format for rows where some columns may be harder to parse
+    // Just match the essential: EPON0/3:1  Offline  a2:4d:12:05:04:90  ... distance ... datetime datetime reason
+    const onuStatusSimpleMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+(Online|Offline|Active|Inactive|LOS|Deactive)\s+([0-9a-fA-F:.-]{12,17})/i);
+    if (onuStatusSimpleMatch) {
+      const ponPort = onuStatusSimpleMatch[1];
+      const onuIndex = parseInt(onuStatusSimpleMatch[2]);
+      const status = parseStatus(onuStatusSimpleMatch[3]);
+      const macAddress = formatMac(onuStatusSimpleMatch[4]);
+      const key = `${ponPort}:${onuIndex}`;
+      
+      // Try to extract distance, times, and reason from rest of line
+      const restOfLine = trimmedLine.substring(onuStatusSimpleMatch[0].length).trim();
+      
+      // Extract distance (first number after MAC)
+      const distanceMatch = restOfLine.match(/^(?:\S*\s+)?(\d+)\s+\d+\s+/);
+      if (distanceMatch) {
+        const distance = parseInt(distanceMatch[1]);
+        if (distance >= 0 && distance < 100000) {
+          distanceData.set(key, distance);
+        }
+      }
+      
+      // Extract timestamps (YYYY/MM/DD HH:MM:SS format)
+      const timeMatches = restOfLine.match(/(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})/g);
+      if (timeMatches && timeMatches.length >= 2) {
+        lastRegisterData.set(key, timeMatches[0].replace(/\//g, '-'));
+        lastDeregisterData.set(key, timeMatches[1].replace(/\//g, '-'));
+      }
+      
+      // Extract deregister reason (after second timestamp, before alive time)
+      const reasonMatch = restOfLine.match(/\d{2}:\d{2}:\d{2}\s+([\w\s]+?)\s+(?:\d+\s+)?\d{2}:\d{2}:\d{2}\s*$/);
+      if (reasonMatch) {
+        deregisterData.set(key, reasonMatch[1].trim());
+      } else {
+        // Try simpler reason extraction
+        if (restOfLine.toLowerCase().includes('wire down')) {
+          deregisterData.set(key, 'Wire Down');
+        } else if (restOfLine.toLowerCase().includes('power off')) {
+          deregisterData.set(key, 'Power Off');
+        } else if (restOfLine.toLowerCase().includes('los')) {
+          deregisterData.set(key, 'LOS');
+        }
+      }
+      
+      // Extract alive time (last time-like pattern)
+      const aliveMatch = restOfLine.match(/(\d+\s+\d{2}:\d{2}:\d{2}|\d{2}:\d{2}:\d{2})\s*$/);
+      if (aliveMatch) {
+        aliveTimeData.set(key, aliveMatch[1].trim());
+      }
       
       // Update or create ONU entry
       if (onuMap.has(key)) {
@@ -715,56 +804,7 @@ export function parseVSOLOutput(output) {
         });
       }
       
-      distanceData.set(key, distance);
-      lastRegisterData.set(key, lastRegisterTime);
-      lastDeregisterData.set(key, lastDeregisterTime);
-      deregisterData.set(key, deregisterReason);
-      aliveTimeData.set(key, aliveTime);
-      
-      logger.debug(`ONU status row parsed: ${key} status=${status} distance=${distance}m lastReg=${lastRegisterTime} deregReason=${deregisterReason}`);
-      continue;
-    }
-
-    // Pattern 13b: Simpler ONU status row without RTT column
-    // EPON0/1:1  Online  4c:d7:c8:80:3c:06  2638  2000/04/30 20:41:43  2000/04/30 20:41:41  Power Off  5 06:10:57
-    const onuStatusRowSimpleMatch = trimmedLine.match(/^(?:EPON)?(\d+\/\d+):(\d+)\s+(Online|Offline|Active|Inactive|LOS|Deactive)\s+([0-9a-fA-F:.-]{12,17})\s+(\d+)\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+([\w\s]+?)\s+(\d+\s+\d{2}:\d{2}:\d{2})/i);
-    if (onuStatusRowSimpleMatch) {
-      const ponPort = onuStatusRowSimpleMatch[1];
-      const onuIndex = parseInt(onuStatusRowSimpleMatch[2]);
-      const status = parseStatus(onuStatusRowSimpleMatch[3]);
-      const macAddress = formatMac(onuStatusRowSimpleMatch[4]);
-      const distance = parseInt(onuStatusRowSimpleMatch[5]);
-      const lastRegisterTime = onuStatusRowSimpleMatch[6].replace(/\//g, '-');
-      const lastDeregisterTime = onuStatusRowSimpleMatch[7].replace(/\//g, '-');
-      const deregisterReason = onuStatusRowSimpleMatch[8].trim();
-      const aliveTime = onuStatusRowSimpleMatch[9].trim();
-      const key = `${ponPort}:${onuIndex}`;
-      
-      if (onuMap.has(key)) {
-        const onu = onuMap.get(key);
-        onu.status = status;
-        if (!onu.mac_address) onu.mac_address = macAddress;
-      } else {
-        onuMap.set(key, {
-          pon_port: ponPort,
-          onu_index: onuIndex,
-          status: status,
-          serial_number: macAddress.replace(/:/g, ''),
-          name: `ONU-${ponPort}:${onuIndex}`,
-          rx_power: null,
-          tx_power: null,
-          mac_address: macAddress,
-          router_name: null
-        });
-      }
-      
-      distanceData.set(key, distance);
-      lastRegisterData.set(key, lastRegisterTime);
-      lastDeregisterData.set(key, lastDeregisterTime);
-      deregisterData.set(key, deregisterReason);
-      aliveTimeData.set(key, aliveTime);
-      
-      logger.debug(`ONU status row (simple) parsed: ${key} status=${status} distance=${distance}m`);
+      logger.debug(`ONU status row (simple) parsed: ${key} status=${status} MAC=${macAddress}`);
       continue;
     }
 

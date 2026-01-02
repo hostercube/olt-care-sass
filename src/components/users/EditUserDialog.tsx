@@ -143,13 +143,32 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
 
     setPasswordLoading(true);
     try {
-      // Note: This requires admin privileges to change another user's password
-      // In Supabase, admins can use the admin API or service role to update passwords
-      const { error } = await supabase.auth.admin.updateUserById(user.id, {
-        password: newPassword,
-      });
+      // Call edge function to update password (requires admin privileges)
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error('Not authenticated');
+      }
 
-      if (error) throw error;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-user-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionData.session.access_token}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            newPassword: newPassword,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update password');
+      }
 
       toast({
         title: 'Password Updated',
@@ -160,20 +179,11 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
       setConfirmPassword('');
     } catch (error: any) {
       console.error('Error updating password:', error);
-      // Fallback message for non-admin users
-      if (error.message?.includes('not authorized') || error.message?.includes('admin')) {
-        toast({
-          title: 'Permission Denied',
-          description: 'You need admin privileges to change user passwords. Contact your system administrator.',
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to update password',
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update password',
+        variant: 'destructive',
+      });
     } finally {
       setPasswordLoading(false);
     }
