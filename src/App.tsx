@@ -43,6 +43,7 @@ import ISPPackages from "./pages/ISP/Packages";
 import AreasManagement from "./pages/ISP/AreasManagement";
 import ResellersManagement from "./pages/ISP/ResellersManagement";
 import MikroTikManagement from "./pages/ISP/MikroTikManagement";
+import BillingAutomation from "./pages/ISP/BillingAutomation";
 
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
@@ -228,6 +229,13 @@ const App = () => (
               } />
 
               {/* ISP Management Routes */}
+              <Route path="/isp" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ISPDashboard />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
               <Route path="/isp/dashboard" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
@@ -246,6 +254,13 @@ const App = () => (
                 <ProtectedRoute>
                   <TenantAccessGuard>
                     <ISPBilling />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/automation" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <BillingAutomation />
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />

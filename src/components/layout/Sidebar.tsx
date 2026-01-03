@@ -22,9 +22,15 @@ import {
   DollarSign,
   ClipboardList,
   History,
-  FileCode,
   MessageSquare,
   Mail,
+  UserCircle,
+  MapPin,
+  Receipt,
+  Wifi,
+  ChevronDown,
+  ChevronUp,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +53,8 @@ interface NavSection {
   items: NavItem[];
   superAdminOnly?: boolean;
   tenantOnly?: boolean;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }
 
 const mainNavItems: NavItem[] = [
@@ -55,6 +63,20 @@ const mainNavItems: NavItem[] = [
   { title: 'ONU Devices', href: '/onus', icon: Router },
   { title: 'Alerts', href: '/alerts', icon: Bell, badge: 2 },
   { title: 'Monitoring', href: '/monitoring', icon: Activity },
+];
+
+const ispModuleItems: NavItem[] = [
+  { title: 'ISP Dashboard', href: '/isp', icon: LayoutDashboard },
+  { title: 'Customers', href: '/isp/customers', icon: UserCircle },
+  { title: 'Billing', href: '/isp/billing', icon: Receipt },
+  { title: 'Automation', href: '/isp/automation', icon: Zap },
+  { title: 'Packages', href: '/isp/packages', icon: Package },
+  { title: 'Areas', href: '/isp/areas', icon: MapPin },
+  { title: 'Resellers', href: '/isp/resellers', icon: Users },
+  { title: 'MikroTik', href: '/isp/mikrotik', icon: Wifi },
+];
+
+const systemNavItems: NavItem[] = [
   { title: 'DB Integrity', href: '/integrity', icon: Database },
   { title: 'Debug Logs', href: '/debug', icon: Terminal },
   { title: 'User Management', href: '/users', icon: Users, adminOnly: true },
@@ -83,32 +105,43 @@ const tenantBillingItems: NavItem[] = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [ispExpanded, setIspExpanded] = useState(true);
+  const [systemExpanded, setSystemExpanded] = useState(false);
   const location = useLocation();
   const { isAdmin } = useUserRole();
   const { isSuperAdmin } = useSuperAdmin();
   const { tenantId } = useTenantContext();
 
-  // Filter main nav items based on user role
-  const filteredMainItems = mainNavItems.filter(item => !item.adminOnly || isAdmin);
+  // Filter system nav items based on user role
+  const filteredSystemItems = systemNavItems.filter(item => !item.adminOnly || isAdmin);
+
+  // Check if current path is in ISP section
+  const isInIspSection = location.pathname.startsWith('/isp');
+  
+  // Auto-expand ISP section if user is on an ISP page
+  useState(() => {
+    if (isInIspSection) setIspExpanded(true);
+  });
 
   const renderNavItem = (item: NavItem) => {
-    const isActive = location.pathname === item.href;
+    const isActive = location.pathname === item.href || 
+      (item.href !== '/' && location.pathname.startsWith(item.href));
     return (
       <Link
         key={item.href}
         to={item.href}
         className={cn(
-          'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200',
           isActive
             ? 'bg-primary/10 text-primary border border-primary/20'
             : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
           collapsed && 'justify-center px-2'
         )}
       >
-        <item.icon className={cn('h-5 w-5 flex-shrink-0', isActive && 'text-primary')} />
+        <item.icon className={cn('h-4 w-4 flex-shrink-0', isActive && 'text-primary')} />
         {!collapsed && (
           <>
-            <span className="flex-1">{item.title}</span>
+            <span className="flex-1 truncate">{item.title}</span>
             {item.badge && (
               <Badge variant="danger" className="h-5 min-w-[20px] justify-center">
                 {item.badge}
@@ -120,16 +153,29 @@ export function Sidebar() {
     );
   };
 
-  const renderSection = (title: string, items: NavItem[]) => (
-    <div className="mt-4">
+  const renderSection = (title: string, items: NavItem[], collapsible?: boolean, expanded?: boolean, onToggle?: () => void) => (
+    <div className="mt-3">
       {!collapsed && (
-        <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          {title}
-        </p>
+        <div 
+          className={cn(
+            "flex items-center justify-between px-3 mb-1",
+            collapsible && "cursor-pointer hover:bg-muted/50 rounded py-1"
+          )}
+          onClick={collapsible ? onToggle : undefined}
+        >
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            {title}
+          </p>
+          {collapsible && (
+            expanded ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />
+          )}
+        </div>
       )}
-      <div className="flex flex-col gap-1">
-        {items.map(renderNavItem)}
-      </div>
+      {(!collapsible || expanded || collapsed) && (
+        <div className="flex flex-col gap-0.5">
+          {items.map(renderNavItem)}
+        </div>
+      )}
     </div>
   );
 
@@ -141,30 +187,41 @@ export function Sidebar() {
       )}
     >
       {/* Logo */}
-      <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
+      <div className="flex h-14 items-center justify-between px-3 border-b border-sidebar-border">
         {!collapsed && (
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Network className="h-8 w-8 text-primary" />
-              <div className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-success rounded-full animate-pulse" />
+              <Network className="h-7 w-7 text-primary" />
+              <div className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-success rounded-full animate-pulse" />
             </div>
             <div className="flex flex-col">
-              <span className="font-bold text-lg text-foreground">OLT Manager</span>
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Network Operations</span>
+              <span className="font-bold text-base text-foreground">ISP Point</span>
+              <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Network Management</span>
             </div>
           </div>
         )}
         {collapsed && (
-          <Network className="h-8 w-8 text-primary mx-auto" />
+          <Network className="h-7 w-7 text-primary mx-auto" />
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1 p-3 mt-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
-        {/* Main Navigation */}
-        <div className="flex flex-col gap-1">
-          {filteredMainItems.map(renderNavItem)}
+      <nav className="flex flex-col gap-0.5 p-2 mt-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+        {/* Main OLT Navigation */}
+        {!collapsed && (
+          <p className="px-3 mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            OLT Care
+          </p>
+        )}
+        <div className="flex flex-col gap-0.5">
+          {mainNavItems.map(renderNavItem)}
         </div>
+
+        {/* ISP Management Section */}
+        {renderSection('ISP Management', ispModuleItems, true, ispExpanded, () => setIspExpanded(!ispExpanded))}
+
+        {/* System Section */}
+        {renderSection('System', filteredSystemItems, true, systemExpanded, () => setSystemExpanded(!systemExpanded))}
 
         {/* Super Admin Section */}
         {isSuperAdmin && renderSection('Super Admin', superAdminItems)}
@@ -178,17 +235,17 @@ export function Sidebar() {
         variant="ghost"
         size="icon"
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute bottom-4 right-3 h-8 w-8 rounded-full border border-border bg-background hover:bg-secondary"
+        className="absolute bottom-4 right-2 h-7 w-7 rounded-full border border-border bg-background hover:bg-secondary"
       >
         {collapsed ? (
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-3 w-3" />
         ) : (
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-3 w-3" />
         )}
       </Button>
 
       {/* VPS Connection Status */}
-      <div className="absolute bottom-16 left-3 right-3">
+      <div className="absolute bottom-14 left-2 right-2">
         <VPSStatusIndicator collapsed={collapsed} />
       </div>
     </aside>
