@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useSuperAdmin } from '@/hooks/useSuperAdmin';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Wifi, Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { z } from 'zod';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
+
 
 interface Package {
   id: string;
@@ -37,6 +39,7 @@ const DIVISIONS = [
 
 export default function Auth() {
   const { signIn, loading, user } = useAuth();
+  const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
@@ -66,10 +69,10 @@ export default function Auth() {
   });
 
   useEffect(() => {
-    if (user) {
-      navigate('/dashboard');
+    if (user && !superAdminLoading) {
+      navigate(isSuperAdmin ? '/admin' : '/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, navigate, isSuperAdmin, superAdminLoading]);
 
   useEffect(() => {
     const fetchPackages = async () => {

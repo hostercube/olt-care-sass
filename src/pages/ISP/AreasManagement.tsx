@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,15 +12,14 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
-} from '@/components/ui/select';
 import { useLocationHierarchy } from '@/hooks/useLocationHierarchy';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { MapPin, Plus, Trash2, Loader2, Globe, Building, Map, Home, Trees } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+
 
 type DialogType = 'division' | 'district' | 'upazila' | 'union' | 'village' | null;
 
@@ -42,13 +41,27 @@ export default function AreasManagement() {
 
   // Form state
   const [divisionName, setDivisionName] = useState('');
+
+  // District
   const [districtName, setDistrictName] = useState('');
   const [selectedDivisionId, setSelectedDivisionId] = useState('');
+
+  // Upazila
   const [upazilaName, setUpazilaName] = useState('');
+  const [upazilaDivisionId, setUpazilaDivisionId] = useState('');
   const [selectedDistrictId, setSelectedDistrictId] = useState('');
+
+  // Union
   const [unionName, setUnionName] = useState('');
+  const [unionDivisionId, setUnionDivisionId] = useState('');
+  const [unionDistrictId, setUnionDistrictId] = useState('');
   const [selectedUpazilaId, setSelectedUpazilaId] = useState('');
+
+  // Village
   const [villageName, setVillageName] = useState('');
+  const [villageDivisionId, setVillageDivisionId] = useState('');
+  const [villageDistrictId, setVillageDistrictId] = useState('');
+  const [villageUpazilaId, setVillageUpazilaId] = useState('');
   const [selectedUnionId, setSelectedUnionId] = useState('');
   const [sectionBlock, setSectionBlock] = useState('');
   const [roadNo, setRoadNo] = useState('');
@@ -56,14 +69,25 @@ export default function AreasManagement() {
 
   const resetForm = () => {
     setDivisionName('');
+
     setDistrictName('');
     setSelectedDivisionId('');
+
     setUpazilaName('');
+    setUpazilaDivisionId('');
     setSelectedDistrictId('');
+
     setUnionName('');
+    setUnionDivisionId('');
+    setUnionDistrictId('');
     setSelectedUpazilaId('');
+
     setVillageName('');
+    setVillageDivisionId('');
+    setVillageDistrictId('');
+    setVillageUpazilaId('');
     setSelectedUnionId('');
+
     setSectionBlock('');
     setRoadNo('');
     setHouseNo('');
@@ -414,7 +438,7 @@ export default function AreasManagement() {
       </Dialog>
 
       {/* Add District Dialog */}
-      <Dialog open={showDialog === 'district'} onOpenChange={(open) => !open && setShowDialog(null)}>
+      <Dialog open={showDialog === 'district'} onOpenChange={(open) => { if (!open) { setShowDialog(null); resetForm(); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New District</DialogTitle>
@@ -422,17 +446,14 @@ export default function AreasManagement() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Select Division (Optional)</Label>
-              <Select value={selectedDivisionId} onValueChange={setSelectedDivisionId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a division" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {divisions.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={selectedDivisionId}
+                onValueChange={(v) => setSelectedDivisionId(v)}
+                options={divisions.map((d) => ({ value: d.id, label: d.name }))}
+                placeholder="Select a division"
+                allowClear
+                clearLabel="None"
+              />
             </div>
             <div className="space-y-2">
               <Label>District Name *</Label>
@@ -444,7 +465,7 @@ export default function AreasManagement() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowDialog(null); resetForm(); }}>Cancel</Button>
             <Button onClick={() => handleSubmit('district')} disabled={saving || !districtName}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create District
@@ -454,25 +475,39 @@ export default function AreasManagement() {
       </Dialog>
 
       {/* Add Upazila Dialog */}
-      <Dialog open={showDialog === 'upazila'} onOpenChange={(open) => !open && setShowDialog(null)}>
+      <Dialog open={showDialog === 'upazila'} onOpenChange={(open) => { if (!open) { setShowDialog(null); resetForm(); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Upazila/Thana</DialogTitle>
           </DialogHeader>
+
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Select District *</Label>
-              <Select value={selectedDistrictId} onValueChange={setSelectedDistrictId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a district" />
-                </SelectTrigger>
-                <SelectContent>
-                  {districts.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Select Division *</Label>
+              <SearchableSelect
+                value={upazilaDivisionId}
+                onValueChange={(v) => {
+                  setUpazilaDivisionId(v);
+                  setSelectedDistrictId('');
+                }}
+                options={divisions.map((d) => ({ value: d.id, label: d.name }))}
+                placeholder="Select a division"
+              />
             </div>
+
+            <div className="space-y-2">
+              <Label>Select District *</Label>
+              <SearchableSelect
+                value={selectedDistrictId}
+                onValueChange={(v) => setSelectedDistrictId(v)}
+                options={districts
+                  .filter((d) => !upazilaDivisionId || d.division_id === upazilaDivisionId)
+                  .map((d) => ({ value: d.id, label: d.name }))}
+                placeholder={upazilaDivisionId ? 'Select a district' : 'Select a division first'}
+                disabled={!upazilaDivisionId}
+              />
+            </div>
+
             <div className="space-y-2">
               <Label>Upazila/Thana Name *</Label>
               <Input
@@ -482,8 +517,9 @@ export default function AreasManagement() {
               />
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowDialog(null); resetForm(); }}>Cancel</Button>
             <Button onClick={() => handleSubmit('upazila')} disabled={saving || !upazilaName || !selectedDistrictId}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create Upazila
@@ -493,25 +529,57 @@ export default function AreasManagement() {
       </Dialog>
 
       {/* Add Union Dialog */}
-      <Dialog open={showDialog === 'union'} onOpenChange={(open) => !open && setShowDialog(null)}>
+      <Dialog open={showDialog === 'union'} onOpenChange={(open) => { if (!open) { setShowDialog(null); resetForm(); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Union</DialogTitle>
           </DialogHeader>
+
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Select Division *</Label>
+                <SearchableSelect
+                  value={unionDivisionId}
+                  onValueChange={(v) => {
+                    setUnionDivisionId(v);
+                    setUnionDistrictId('');
+                    setSelectedUpazilaId('');
+                  }}
+                  options={divisions.map((d) => ({ value: d.id, label: d.name }))}
+                  placeholder="Select a division"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Select District *</Label>
+                <SearchableSelect
+                  value={unionDistrictId}
+                  onValueChange={(v) => {
+                    setUnionDistrictId(v);
+                    setSelectedUpazilaId('');
+                  }}
+                  options={districts
+                    .filter((d) => !unionDivisionId || d.division_id === unionDivisionId)
+                    .map((d) => ({ value: d.id, label: d.name }))}
+                  placeholder={unionDivisionId ? 'Select a district' : 'Select a division first'}
+                  disabled={!unionDivisionId}
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Select Upazila *</Label>
-              <Select value={selectedUpazilaId} onValueChange={setSelectedUpazilaId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an upazila" />
-                </SelectTrigger>
-                <SelectContent>
-                  {upazilas.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name} ({getDistrictName(u.district_id)})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={selectedUpazilaId}
+                onValueChange={(v) => setSelectedUpazilaId(v)}
+                options={upazilas
+                  .filter((u) => !unionDistrictId || u.district_id === unionDistrictId)
+                  .map((u) => ({ value: u.id, label: u.name }))}
+                placeholder={unionDistrictId ? 'Select an upazila' : 'Select a district first'}
+                disabled={!unionDistrictId}
+              />
             </div>
+
             <div className="space-y-2">
               <Label>Union Name *</Label>
               <Input
@@ -521,8 +589,9 @@ export default function AreasManagement() {
               />
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowDialog(null); resetForm(); }}>Cancel</Button>
             <Button onClick={() => handleSubmit('union')} disabled={saving || !unionName || !selectedUpazilaId}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create Union
@@ -532,25 +601,76 @@ export default function AreasManagement() {
       </Dialog>
 
       {/* Add Village Dialog */}
-      <Dialog open={showDialog === 'village'} onOpenChange={(open) => !open && setShowDialog(null)}>
+      <Dialog open={showDialog === 'village'} onOpenChange={(open) => { if (!open) { setShowDialog(null); resetForm(); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Village/Market</DialogTitle>
           </DialogHeader>
+
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Select Union *</Label>
-              <Select value={selectedUnionId} onValueChange={setSelectedUnionId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a union" />
-                </SelectTrigger>
-                <SelectContent>
-                  {unions.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name} ({getUpazilaName(u.upazila_id)})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Select Division *</Label>
+                <SearchableSelect
+                  value={villageDivisionId}
+                  onValueChange={(v) => {
+                    setVillageDivisionId(v);
+                    setVillageDistrictId('');
+                    setVillageUpazilaId('');
+                    setSelectedUnionId('');
+                  }}
+                  options={divisions.map((d) => ({ value: d.id, label: d.name }))}
+                  placeholder="Select a division"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Select District *</Label>
+                <SearchableSelect
+                  value={villageDistrictId}
+                  onValueChange={(v) => {
+                    setVillageDistrictId(v);
+                    setVillageUpazilaId('');
+                    setSelectedUnionId('');
+                  }}
+                  options={districts
+                    .filter((d) => !villageDivisionId || d.division_id === villageDivisionId)
+                    .map((d) => ({ value: d.id, label: d.name }))}
+                  placeholder={villageDivisionId ? 'Select a district' : 'Select a division first'}
+                  disabled={!villageDivisionId}
+                />
+              </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Select Upazila *</Label>
+                <SearchableSelect
+                  value={villageUpazilaId}
+                  onValueChange={(v) => {
+                    setVillageUpazilaId(v);
+                    setSelectedUnionId('');
+                  }}
+                  options={upazilas
+                    .filter((u) => !villageDistrictId || u.district_id === villageDistrictId)
+                    .map((u) => ({ value: u.id, label: u.name }))}
+                  placeholder={villageDistrictId ? 'Select an upazila' : 'Select a district first'}
+                  disabled={!villageDistrictId}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Select Union *</Label>
+                <SearchableSelect
+                  value={selectedUnionId}
+                  onValueChange={(v) => setSelectedUnionId(v)}
+                  options={unions
+                    .filter((u) => !villageUpazilaId || u.upazila_id === villageUpazilaId)
+                    .map((u) => ({ value: u.id, label: u.name }))}
+                  placeholder={villageUpazilaId ? 'Select a union' : 'Select an upazila first'}
+                  disabled={!villageUpazilaId}
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Village/Market Name *</Label>
               <Input
@@ -559,6 +679,7 @@ export default function AreasManagement() {
                 placeholder="e.g., Bazar, Para"
               />
             </div>
+
             <div className="space-y-2">
               <Label>Section/Block (Optional)</Label>
               <Input
@@ -567,27 +688,21 @@ export default function AreasManagement() {
                 placeholder="e.g., Block A, Section 10"
               />
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Road No (Optional)</Label>
-                <Input
-                  value={roadNo}
-                  onChange={(e) => setRoadNo(e.target.value)}
-                  placeholder="e.g., Road 5"
-                />
+                <Input value={roadNo} onChange={(e) => setRoadNo(e.target.value)} placeholder="e.g., Road 5" />
               </div>
               <div className="space-y-2">
                 <Label>House No (Optional)</Label>
-                <Input
-                  value={houseNo}
-                  onChange={(e) => setHouseNo(e.target.value)}
-                  placeholder="e.g., 123"
-                />
+                <Input value={houseNo} onChange={(e) => setHouseNo(e.target.value)} placeholder="e.g., 123" />
               </div>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowDialog(null); resetForm(); }}>Cancel</Button>
             <Button onClick={() => handleSubmit('village')} disabled={saving || !villageName || !selectedUnionId}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create Village

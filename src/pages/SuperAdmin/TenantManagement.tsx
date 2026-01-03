@@ -207,61 +207,26 @@ export default function TenantManagement() {
   const handleLoginAsTenant = async (tenant: any) => {
     setLoggingInAs(tenant.id);
     try {
-      // Store current super admin session
-      const { data: currentSession } = await supabase.auth.getSession();
-      if (currentSession.session) {
-        sessionStorage.setItem('superAdminSession', JSON.stringify({
-          access_token: currentSession.session.access_token,
-          refresh_token: currentSession.session.refresh_token,
-        }));
-      }
-
-      // Get the tenant owner's user_id
-      const { data: tenantUser, error: tuError } = await supabase
-        .from('tenant_users')
-        .select('user_id')
-        .eq('tenant_id', tenant.id)
-        .eq('is_owner', true)
-        .maybeSingle();
-
-      if (tuError || !tenantUser) {
-        // Try to get any admin user for this tenant
-        const { data: anyUser } = await supabase
-          .from('tenant_users')
-          .select('user_id')
-          .eq('tenant_id', tenant.id)
-          .limit(1)
-          .single();
-
-        if (!anyUser) {
-          toast({
-            title: 'Error',
-            description: 'No user found for this tenant',
-            variant: 'destructive',
-          });
-          setLoggingInAs(null);
-          return;
-        }
-      }
-
-      // Store tenant info in session for "login as"
-      sessionStorage.setItem('loginAsTenant', JSON.stringify({
-        tenantId: tenant.id,
-        tenantName: tenant.name || tenant.company_name,
-      }));
+      // Store tenant context for scoped super admin view (UI + query filtering)
+      sessionStorage.setItem(
+        'loginAsTenant',
+        JSON.stringify({
+          tenantId: tenant.id,
+          tenantName: tenant.name || tenant.company_name,
+        }),
+      );
 
       toast({
-        title: 'Switching to Tenant',
-        description: `You are now viewing as ${tenant.name || tenant.company_name}. Navigate to the dashboard to manage this tenant.`,
+        title: 'Tenant View Enabled',
+        description: `You are now viewing as ${tenant.name || tenant.company_name}.`,
       });
 
-      // Redirect to dashboard as the tenant
       window.location.href = '/dashboard';
     } catch (err: any) {
       console.error('Login as tenant error:', err);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to login as tenant',
+        description: err.message || 'Failed to switch tenant view',
         variant: 'destructive',
       });
     } finally {
