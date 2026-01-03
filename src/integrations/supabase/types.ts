@@ -113,34 +113,46 @@ export type Database = {
           created_at: string
           description: string | null
           district: string | null
+          house_no: string | null
           id: string
           name: string
           olt_id: string | null
+          road_no: string | null
           tenant_id: string
+          union_name: string | null
           upazila: string | null
           updated_at: string
+          village: string | null
         }
         Insert: {
           created_at?: string
           description?: string | null
           district?: string | null
+          house_no?: string | null
           id?: string
           name: string
           olt_id?: string | null
+          road_no?: string | null
           tenant_id: string
+          union_name?: string | null
           upazila?: string | null
           updated_at?: string
+          village?: string | null
         }
         Update: {
           created_at?: string
           description?: string | null
           district?: string | null
+          house_no?: string | null
           id?: string
           name?: string
           olt_id?: string | null
+          road_no?: string | null
           tenant_id?: string
+          union_name?: string | null
           upazila?: string | null
           updated_at?: string
+          village?: string | null
         }
         Relationships: [
           {
@@ -273,6 +285,81 @@ export type Database = {
           },
         ]
       }
+      bkash_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string | null
+          customer_code: string | null
+          customer_id: string | null
+          id: string
+          matched_at: string | null
+          payment_id: string | null
+          payment_type: string
+          raw_payload: Json | null
+          receiver_number: string | null
+          reference: string | null
+          sender_number: string | null
+          status: string
+          tenant_id: string
+          trx_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string | null
+          customer_code?: string | null
+          customer_id?: string | null
+          id?: string
+          matched_at?: string | null
+          payment_id?: string | null
+          payment_type: string
+          raw_payload?: Json | null
+          receiver_number?: string | null
+          reference?: string | null
+          sender_number?: string | null
+          status?: string
+          tenant_id: string
+          trx_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string | null
+          customer_code?: string | null
+          customer_id?: string | null
+          id?: string
+          matched_at?: string | null
+          payment_id?: string | null
+          payment_type?: string
+          raw_payload?: Json | null
+          receiver_number?: string | null
+          reference?: string | null
+          sender_number?: string | null
+          status?: string
+          tenant_id?: string
+          trx_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bkash_payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bkash_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_bills: {
         Row: {
           amount: number
@@ -350,6 +437,59 @@ export type Database = {
           },
           {
             foreignKeyName: "customer_bills_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_imports: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_log: Json | null
+          failed_count: number | null
+          file_name: string
+          id: string
+          imported_by: string | null
+          imported_count: number | null
+          started_at: string | null
+          status: string
+          tenant_id: string
+          total_rows: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          failed_count?: number | null
+          file_name: string
+          id?: string
+          imported_by?: string | null
+          imported_count?: number | null
+          started_at?: string | null
+          status?: string
+          tenant_id: string
+          total_rows?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          failed_count?: number | null
+          file_name?: string
+          id?: string
+          imported_by?: string | null
+          imported_count?: number | null
+          started_at?: string | null
+          status?: string
+          tenant_id?: string
+          total_rows?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_imports_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -446,6 +586,7 @@ export type Database = {
           id: string
           is_auto_disable: boolean | null
           last_payment_date: string | null
+          mikrotik_id: string | null
           monthly_bill: number | null
           name: string
           notes: string | null
@@ -475,6 +616,7 @@ export type Database = {
           id?: string
           is_auto_disable?: boolean | null
           last_payment_date?: string | null
+          mikrotik_id?: string | null
           monthly_bill?: number | null
           name: string
           notes?: string | null
@@ -504,6 +646,7 @@ export type Database = {
           id?: string
           is_auto_disable?: boolean | null
           last_payment_date?: string | null
+          mikrotik_id?: string | null
           monthly_bill?: number | null
           name?: string
           notes?: string | null
@@ -527,6 +670,13 @@ export type Database = {
             columns: ["area_id"]
             isOneToOne: false
             referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_mikrotik_id_fkey"
+            columns: ["mikrotik_id"]
+            isOneToOne: false
+            referencedRelation: "mikrotik_routers"
             referencedColumns: ["id"]
           },
           {
@@ -2416,6 +2566,15 @@ export type Database = {
       is_authenticated: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       is_tenant_active: { Args: { _tenant_id: string }; Returns: boolean }
+      match_bkash_payment: {
+        Args: {
+          _amount: number
+          _customer_code: string
+          _tenant_id: string
+          _trx_id: string
+        }
+        Returns: Json
+      }
       queue_subscription_reminders: { Args: never; Returns: undefined }
     }
     Enums: {

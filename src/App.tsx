@@ -47,6 +47,7 @@ import MikroTikManagement from "./pages/ISP/MikroTikManagement";
 import BillingAutomation from "./pages/ISP/BillingAutomation";
 import ISPGatewaySettings from "./pages/ISP/GatewaySettings";
 import SMSCenter from "./pages/ISP/SMSCenter";
+import BkashPayments from "./pages/ISP/BkashPayments";
 
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
@@ -318,6 +319,13 @@ const App = () => (
                     <ModuleAccessGuard module="sms_alerts" moduleName="SMS Center">
                       <SMSCenter />
                     </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/bkash" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <BkashPayments />
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />

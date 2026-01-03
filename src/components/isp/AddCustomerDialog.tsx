@@ -15,6 +15,7 @@ import { useISPPackages } from '@/hooks/useISPPackages';
 import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
 import { useRealtimeONUs } from '@/hooks/useRealtimeONUs';
+import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
 import { Loader2, User, Network, Package, MapPin } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 
@@ -30,6 +31,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   const { areas } = useAreas();
   const { resellers } = useResellers();
   const { onus } = useRealtimeONUs();
+  const { routers } = useMikroTikRouters();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
 
@@ -41,6 +43,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     address: '',
     area_id: '',
     reseller_id: '',
+    mikrotik_id: '',
     onu_id: '',
     onu_mac: '',
     pon_port: '',
@@ -101,6 +104,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         address: formData.address || null,
         area_id: formData.area_id || null,
         reseller_id: formData.reseller_id || null,
+        mikrotik_id: formData.mikrotik_id || null,
         onu_id: formData.onu_id || null,
         onu_mac: formData.onu_mac || null,
         pon_port: formData.pon_port || null,
@@ -135,6 +139,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       address: '',
       area_id: '',
       reseller_id: '',
+      mikrotik_id: '',
       onu_id: '',
       onu_mac: '',
       pon_port: '',
@@ -225,6 +230,31 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
             </TabsContent>
 
             <TabsContent value="network" className="space-y-4 mt-4">
+              {/* MikroTik Selection */}
+              <div className="space-y-2">
+                <Label>MikroTik Router</Label>
+                <Select
+                  value={formData.mikrotik_id}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, mikrotik_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select MikroTik router" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None</SelectItem>
+                    {routers.map((router) => (
+                      <SelectItem key={router.id} value={router.id}>
+                        {router.name} ({router.ip_address})
+                        {router.is_primary && ' - Primary'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Select which MikroTik router this customer belongs to
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label>Link to ONU Device</Label>
                 <Select
@@ -379,7 +409,10 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     <SelectItem value="">None</SelectItem>
                     {areas.map((area) => (
                       <SelectItem key={area.id} value={area.id}>
-                        {area.name} {area.upazila && `(${area.upazila})`}
+                        {area.name} 
+                        {area.village && `, ${area.village}`}
+                        {area.upazila && `, ${area.upazila}`}
+                        {area.district && ` (${area.district})`}
                       </SelectItem>
                     ))}
                   </SelectContent>

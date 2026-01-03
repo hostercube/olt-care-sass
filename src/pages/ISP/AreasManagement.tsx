@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '@/components/ui/table';
@@ -30,11 +29,24 @@ export default function AreasManagement() {
     name: '',
     district: '',
     upazila: '',
+    union_name: '',
+    village: '',
+    road_no: '',
+    house_no: '',
     description: '',
   });
 
   const resetForm = () => {
-    setFormData({ name: '', district: '', upazila: '', description: '' });
+    setFormData({ 
+      name: '', 
+      district: '', 
+      upazila: '', 
+      union_name: '',
+      village: '',
+      road_no: '',
+      house_no: '',
+      description: '' 
+    });
     setEditingArea(null);
   };
 
@@ -44,6 +56,10 @@ export default function AreasManagement() {
       name: area.name,
       district: area.district || '',
       upazila: area.upazila || '',
+      union_name: area.union_name || '',
+      village: area.village || '',
+      road_no: area.road_no || '',
+      house_no: area.house_no || '',
       description: area.description || '',
     });
     setShowDialog(true);
@@ -58,6 +74,10 @@ export default function AreasManagement() {
         name: formData.name,
         district: formData.district || null,
         upazila: formData.upazila || null,
+        union_name: formData.union_name || null,
+        village: formData.village || null,
+        road_no: formData.road_no || null,
+        house_no: formData.house_no || null,
         description: formData.description || null,
       };
 
@@ -83,10 +103,20 @@ export default function AreasManagement() {
     }
   };
 
+  const getFullAddress = (area: Area) => {
+    const parts = [
+      area.village,
+      area.union_name,
+      area.upazila,
+      area.district
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : '-';
+  };
+
   return (
     <DashboardLayout
       title="Areas Management"
-      subtitle="Manage service areas and locations"
+      subtitle="Manage service areas and locations with full address hierarchy"
     >
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -105,8 +135,8 @@ export default function AreasManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Area Name</TableHead>
-                  <TableHead>District</TableHead>
-                  <TableHead>Upazila</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Address Details</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -128,8 +158,15 @@ export default function AreasManagement() {
                   areas.map((area) => (
                     <TableRow key={area.id}>
                       <TableCell className="font-medium">{area.name}</TableCell>
-                      <TableCell>{area.district || '-'}</TableCell>
-                      <TableCell>{area.upazila || '-'}</TableCell>
+                      <TableCell className="text-sm">
+                        {getFullAddress(area)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {area.road_no && `Road: ${area.road_no}`}
+                        {area.road_no && area.house_no && ', '}
+                        {area.house_no && `House: ${area.house_no}`}
+                        {!area.road_no && !area.house_no && '-'}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{area.description || '-'}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" onClick={() => handleEdit(area)}>
@@ -150,7 +187,7 @@ export default function AreasManagement() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingArea ? 'Edit Area' : 'Add New Area'}</DialogTitle>
           </DialogHeader>
@@ -180,6 +217,44 @@ export default function AreasManagement() {
                   value={formData.upazila}
                   onChange={(e) => setFormData(prev => ({ ...prev, upazila: e.target.value }))}
                   placeholder="Upazila name"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Union</Label>
+                <Input
+                  value={formData.union_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, union_name: e.target.value }))}
+                  placeholder="Union name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Village</Label>
+                <Input
+                  value={formData.village}
+                  onChange={(e) => setFormData(prev => ({ ...prev, village: e.target.value }))}
+                  placeholder="Village name"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Road No (Optional)</Label>
+                <Input
+                  value={formData.road_no}
+                  onChange={(e) => setFormData(prev => ({ ...prev, road_no: e.target.value }))}
+                  placeholder="Road number"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>House No (Optional)</Label>
+                <Input
+                  value={formData.house_no}
+                  onChange={(e) => setFormData(prev => ({ ...prev, house_no: e.target.value }))}
+                  placeholder="House number"
                 />
               </div>
             </div>
