@@ -1410,72 +1410,223 @@ INSERT INTO public.system_settings (key, value) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 
+-- =====================================================
+-- SECTION 55: TENANT-SPECIFIC GATEWAY TABLES
+-- =====================================================
+
+-- Tenant Payment Gateways
+CREATE TABLE IF NOT EXISTS public.tenant_payment_gateways (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  gateway public.payment_method NOT NULL,
+  display_name TEXT NOT NULL,
+  is_enabled BOOLEAN DEFAULT false,
+  sandbox_mode BOOLEAN DEFAULT true,
+  config JSONB DEFAULT '{}',
+  instructions TEXT,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(tenant_id, gateway)
+);
+
+ALTER TABLE public.tenant_payment_gateways ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Super admins full access to tenant_payment_gateways"
+  ON public.tenant_payment_gateways FOR ALL
+  USING (is_super_admin());
+
+CREATE POLICY "Tenant users can manage own payment gateways"
+  ON public.tenant_payment_gateways FOR ALL
+  USING (tenant_id = get_user_tenant_id());
+
+-- Tenant SMS Gateways
+CREATE TABLE IF NOT EXISTS public.tenant_sms_gateways (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE UNIQUE,
+  provider TEXT NOT NULL DEFAULT 'smsnoc',
+  api_key TEXT,
+  api_url TEXT DEFAULT 'https://app.smsnoc.com/api/v3/sms/send',
+  sender_id TEXT,
+  is_enabled BOOLEAN DEFAULT false,
+  config JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.tenant_sms_gateways ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Super admins full access to tenant_sms_gateways"
+  ON public.tenant_sms_gateways FOR ALL
+  USING (is_super_admin());
+
+CREATE POLICY "Tenant users can manage own SMS gateways"
+  ON public.tenant_sms_gateways FOR ALL
+  USING (tenant_id = get_user_tenant_id());
+
+-- Tenant Email Gateways
+CREATE TABLE IF NOT EXISTS public.tenant_email_gateways (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE UNIQUE,
+  provider TEXT NOT NULL DEFAULT 'smtp',
+  smtp_host TEXT,
+  smtp_port INTEGER DEFAULT 587,
+  smtp_username TEXT,
+  smtp_password TEXT,
+  use_tls BOOLEAN DEFAULT true,
+  sender_name TEXT DEFAULT 'ISP Management',
+  sender_email TEXT,
+  is_enabled BOOLEAN DEFAULT false,
+  config JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.tenant_email_gateways ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Super admins full access to tenant_email_gateways"
+  ON public.tenant_email_gateways FOR ALL
+  USING (is_super_admin());
+
+CREATE POLICY "Tenant users can manage own email gateways"
+  ON public.tenant_email_gateways FOR ALL
+  USING (tenant_id = get_user_tenant_id());
+
+-- Tenant Backups
+CREATE TABLE IF NOT EXISTS public.tenant_backups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  backup_type TEXT NOT NULL DEFAULT 'full',
+  file_name TEXT NOT NULL,
+  file_size BIGINT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  error_message TEXT,
+  created_by UUID,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+
+ALTER TABLE public.tenant_backups ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Super admins full access to tenant_backups"
+  ON public.tenant_backups FOR ALL
+  USING (is_super_admin());
+
+CREATE POLICY "Tenant admins can view own backups"
+  ON public.tenant_backups FOR SELECT
+  USING (tenant_id = get_user_tenant_id());
+
+CREATE POLICY "Tenant admins can create backups"
+  ON public.tenant_backups FOR INSERT
+  WITH CHECK (tenant_id = get_user_tenant_id() AND has_role(auth.uid(), 'admin'));
+
+-- Update triggers for tenant gateway tables
+CREATE TRIGGER update_tenant_payment_gateways_updated_at
+  BEFORE UPDATE ON public.tenant_payment_gateways
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_tenant_sms_gateways_updated_at
+  BEFORE UPDATE ON public.tenant_sms_gateways
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_tenant_email_gateways_updated_at
+  BEFORE UPDATE ON public.tenant_email_gateways
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+-- =====================================================
+-- SECTION 56: TENANT GATEWAY INITIALIZATION FUNCTION
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.initialize_tenant_gateways(_tenant_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.tenant_payment_gateways (tenant_id, gateway, display_name, sort_order)
+  VALUES
+    (_tenant_id, 'sslcommerz', 'SSLCommerz', 1),
+    (_tenant_id, 'bkash', 'bKash', 2),
+    (_tenant_id, 'rocket', 'Rocket', 3),
+    (_tenant_id, 'nagad', 'Nagad', 4),
+    (_tenant_id, 'manual', 'Manual Payment', 5)
+  ON CONFLICT (tenant_id, gateway) DO NOTHING;
+  
+  INSERT INTO public.tenant_sms_gateways (tenant_id, provider)
+  VALUES (_tenant_id, 'smsnoc')
+  ON CONFLICT (tenant_id) DO NOTHING;
+  
+  INSERT INTO public.tenant_email_gateways (tenant_id, provider)
+  VALUES (_tenant_id, 'smtp')
+  ON CONFLICT (tenant_id) DO NOTHING;
+END;
+$$;
+
+-- =====================================================
+-- SECTION 57: TENANT DATA EXPORT FUNCTION
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.export_tenant_data(_tenant_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _result JSONB;
+BEGIN
+  SELECT jsonb_build_object(
+    'tenant', (SELECT row_to_json(t) FROM tenants t WHERE id = _tenant_id),
+    'customers', (SELECT COALESCE(jsonb_agg(row_to_json(c)), '[]'::jsonb) FROM customers c WHERE tenant_id = _tenant_id),
+    'areas', (SELECT COALESCE(jsonb_agg(row_to_json(a)), '[]'::jsonb) FROM areas a WHERE tenant_id = _tenant_id),
+    'resellers', (SELECT COALESCE(jsonb_agg(row_to_json(r)), '[]'::jsonb) FROM resellers r WHERE tenant_id = _tenant_id),
+    'isp_packages', (SELECT COALESCE(jsonb_agg(row_to_json(p)), '[]'::jsonb) FROM isp_packages p WHERE tenant_id = _tenant_id),
+    'mikrotik_routers', (SELECT COALESCE(jsonb_agg(row_to_json(m)), '[]'::jsonb) FROM mikrotik_routers m WHERE tenant_id = _tenant_id),
+    'customer_bills', (SELECT COALESCE(jsonb_agg(row_to_json(cb)), '[]'::jsonb) FROM customer_bills cb WHERE tenant_id = _tenant_id),
+    'customer_payments', (SELECT COALESCE(jsonb_agg(row_to_json(cp)), '[]'::jsonb) FROM customer_payments cp WHERE tenant_id = _tenant_id),
+    'billing_rules', (SELECT COALESCE(jsonb_agg(row_to_json(br)), '[]'::jsonb) FROM billing_rules br WHERE tenant_id = _tenant_id),
+    'exported_at', now()
+  ) INTO _result;
+  
+  RETURN _result;
+END;
+$$;
+
+
 -- ================================================================
 -- SETUP COMPLETE!
 -- ================================================================
 --
--- Your database is now ready for OLT Care SaaS.
+-- Your database is now ready for OLT Care SaaS with Full ISP Management.
 --
--- TABLES CREATED (25 total):
--- ✓ profiles
--- ✓ user_roles
--- ✓ tenants
--- ✓ tenant_users
--- ✓ olts (with MikroTik columns)
--- ✓ onus (with full diagnostics)
--- ✓ alerts
--- ✓ power_readings
--- ✓ onu_status_history
--- ✓ onu_edit_history
--- ✓ device_health_history
--- ✓ olt_debug_logs
--- ✓ system_settings
--- ✓ packages
--- ✓ subscriptions
--- ✓ payments
--- ✓ invoices
--- ✓ payment_gateway_settings
--- ✓ notification_preferences
--- ✓ notification_queue
--- ✓ sms_gateway_settings
--- ✓ sms_logs
--- ✓ email_gateway_settings
--- ✓ email_logs
--- ✓ activity_logs
+-- TABLES CREATED (35+ total):
+-- Core: profiles, user_roles, olts, onus, alerts, power_readings, 
+--       onu_status_history, onu_edit_history, device_health_history, 
+--       olt_debug_logs, system_settings
+-- Multi-Tenancy: tenants, tenant_users
+-- SaaS Billing: packages, subscriptions, payments, invoices, payment_gateway_settings
+-- Notifications: notification_preferences, notification_queue, sms_gateway_settings, 
+--                sms_logs, email_gateway_settings, email_logs
+-- ISP Management: customers, isp_packages, areas, resellers, customer_bills, 
+--                 customer_payments, reseller_transactions, mikrotik_routers, 
+--                 pppoe_profiles, staff_permissions, billing_rules, automation_logs
+-- Tenant Gateways: tenant_payment_gateways, tenant_sms_gateways, 
+--                  tenant_email_gateways, tenant_backups
+-- Activity: activity_logs
 --
--- ENUMS CREATED (11 total):
--- ✓ app_role (admin, operator, viewer, super_admin)
--- ✓ connection_status (online, offline, warning, unknown)
--- ✓ olt_brand (ZTE, Huawei, Fiberhome, Nokia, BDCOM, VSOL, DBC, CDATA, ECOM, Other)
--- ✓ olt_mode (EPON, GPON)
--- ✓ alert_severity (critical, warning, info)
--- ✓ alert_type (onu_offline, power_drop, olt_unreachable, high_latency)
--- ✓ tenant_status (active, suspended, trial, cancelled)
--- ✓ subscription_status (active, expired, cancelled, pending)
--- ✓ billing_cycle (monthly, yearly)
--- ✓ payment_status (pending, completed, failed, refunded)
--- ✓ payment_method (sslcommerz, bkash, rocket, nagad, manual)
---
--- FUNCTIONS CREATED (7 total):
--- ✓ is_authenticated()
--- ✓ has_role()
--- ✓ is_super_admin()
--- ✓ get_user_tenant_id()
--- ✓ is_tenant_active()
--- ✓ handle_new_user()
--- ✓ update_updated_at_column()
--- ✓ queue_subscription_reminders()
---
--- RLS POLICIES: Configured for all tables
--- REALTIME: Enabled for olts, onus, alerts
--- INDEXES: Optimized for common queries
+-- ARCHITECTURE:
+-- - Multi-tenant SaaS for ISP Owners
+-- - Super Admin manages all tenants, packages, global gateways
+-- - Each ISP Owner (Tenant) has isolated data
+-- - Tenant-specific payment/SMS/email gateways
+-- - Module access controlled by subscription package
 --
 -- NEXT STEPS:
--- 1. Create your first admin user via Supabase Auth
--- 2. Run this SQL to make them super_admin:
---    INSERT INTO public.user_roles (user_id, role)
---    SELECT id, 'super_admin' FROM auth.users WHERE email = 'your-email@example.com';
--- 3. Configure the polling server environment variables
--- 4. Start using OLT Care SaaS!
+-- 1. Create super admin user and assign super_admin role
+-- 2. Create tenants (ISP owners) with their subscription packages
+-- 3. Configure global and tenant-specific gateways
+-- 4. Deploy frontend and backend to VPS
 --
 -- ================================================================

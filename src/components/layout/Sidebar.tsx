@@ -74,6 +74,7 @@ const ispModuleItems: NavItem[] = [
   { title: 'Areas', href: '/isp/areas', icon: MapPin },
   { title: 'Resellers', href: '/isp/resellers', icon: Users },
   { title: 'MikroTik', href: '/isp/mikrotik', icon: Wifi },
+  { title: 'Gateways', href: '/isp/gateways', icon: CreditCard },
 ];
 
 const systemNavItems: NavItem[] = [

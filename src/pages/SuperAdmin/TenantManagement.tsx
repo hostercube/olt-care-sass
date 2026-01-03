@@ -152,6 +152,14 @@ export default function TenantManagement() {
             status: 'pending',
           });
         }
+
+        // Initialize payment/SMS/email gateways for tenant
+        const { error: gatewayError } = await supabase.rpc('initialize_tenant_gateways', {
+          _tenant_id: tenant.id
+        });
+        if (gatewayError) {
+          console.error('Error initializing gateways:', gatewayError);
+        }
       }
 
       toast({
