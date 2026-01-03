@@ -108,6 +108,457 @@ export type Database = {
           },
         ]
       }
+      areas: {
+        Row: {
+          created_at: string
+          description: string | null
+          district: string | null
+          id: string
+          name: string
+          olt_id: string | null
+          tenant_id: string
+          upazila: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          district?: string | null
+          id?: string
+          name: string
+          olt_id?: string | null
+          tenant_id: string
+          upazila?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          district?: string | null
+          id?: string
+          name?: string
+          olt_id?: string | null
+          tenant_id?: string
+          upazila?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "areas_olt_id_fkey"
+            columns: ["olt_id"]
+            isOneToOne: false
+            referencedRelation: "olts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "areas_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_logs: {
+        Row: {
+          action: string
+          customer_id: string | null
+          details: Json | null
+          error_message: string | null
+          executed_at: string
+          id: string
+          rule_id: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          customer_id?: string | null
+          details?: Json | null
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          rule_id?: string | null
+          status: string
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          customer_id?: string | null
+          details?: Json | null
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          rule_id?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_logs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_logs_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "billing_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_rules: {
+        Row: {
+          action: string
+          action_params: Json | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          last_run: string | null
+          name: string
+          rule_type: string
+          tenant_id: string
+          trigger_condition: string | null
+          trigger_days: number | null
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          action_params?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_run?: string | null
+          name: string
+          rule_type: string
+          tenant_id: string
+          trigger_condition?: string | null
+          trigger_days?: number | null
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          action_params?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_run?: string | null
+          name?: string
+          rule_type?: string
+          tenant_id?: string
+          trigger_condition?: string | null
+          trigger_days?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_bills: {
+        Row: {
+          amount: number
+          bill_date: string
+          bill_number: string
+          billing_month: string
+          collected_by: string | null
+          created_at: string
+          customer_id: string
+          discount: number | null
+          due_date: string
+          id: string
+          notes: string | null
+          paid_amount: number | null
+          paid_date: string | null
+          payment_method: string | null
+          payment_reference: string | null
+          status: Database["public"]["Enums"]["bill_status"]
+          tax: number | null
+          tenant_id: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          bill_date?: string
+          bill_number: string
+          billing_month: string
+          collected_by?: string | null
+          created_at?: string
+          customer_id: string
+          discount?: number | null
+          due_date: string
+          id?: string
+          notes?: string | null
+          paid_amount?: number | null
+          paid_date?: string | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          status?: Database["public"]["Enums"]["bill_status"]
+          tax?: number | null
+          tenant_id: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          bill_date?: string
+          bill_number?: string
+          billing_month?: string
+          collected_by?: string | null
+          created_at?: string
+          customer_id?: string
+          discount?: number | null
+          due_date?: string
+          id?: string
+          notes?: string | null
+          paid_amount?: number | null
+          paid_date?: string | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          status?: Database["public"]["Enums"]["bill_status"]
+          tax?: number | null
+          tenant_id?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_bills_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_bills_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_payments: {
+        Row: {
+          amount: number
+          bill_id: string | null
+          collected_by: string | null
+          created_at: string
+          customer_id: string
+          gateway_response: Json | null
+          id: string
+          notes: string | null
+          payment_date: string
+          payment_gateway: string | null
+          payment_method: string
+          tenant_id: string
+          transaction_id: string | null
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          amount: number
+          bill_id?: string | null
+          collected_by?: string | null
+          created_at?: string
+          customer_id: string
+          gateway_response?: Json | null
+          id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_gateway?: string | null
+          payment_method?: string
+          tenant_id: string
+          transaction_id?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          amount?: number
+          bill_id?: string | null
+          collected_by?: string | null
+          created_at?: string
+          customer_id?: string
+          gateway_response?: Json | null
+          id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_gateway?: string | null
+          payment_method?: string
+          tenant_id?: string
+          transaction_id?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_payments_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "customer_bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          address: string | null
+          area_id: string | null
+          connection_date: string | null
+          created_at: string
+          customer_code: string | null
+          due_amount: number | null
+          email: string | null
+          expiry_date: string | null
+          id: string
+          is_auto_disable: boolean | null
+          last_payment_date: string | null
+          monthly_bill: number | null
+          name: string
+          notes: string | null
+          onu_id: string | null
+          onu_index: number | null
+          onu_mac: string | null
+          package_id: string | null
+          phone: string | null
+          pon_port: string | null
+          pppoe_password: string | null
+          pppoe_username: string | null
+          reseller_id: string | null
+          router_mac: string | null
+          status: Database["public"]["Enums"]["customer_status"]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          area_id?: string | null
+          connection_date?: string | null
+          created_at?: string
+          customer_code?: string | null
+          due_amount?: number | null
+          email?: string | null
+          expiry_date?: string | null
+          id?: string
+          is_auto_disable?: boolean | null
+          last_payment_date?: string | null
+          monthly_bill?: number | null
+          name: string
+          notes?: string | null
+          onu_id?: string | null
+          onu_index?: number | null
+          onu_mac?: string | null
+          package_id?: string | null
+          phone?: string | null
+          pon_port?: string | null
+          pppoe_password?: string | null
+          pppoe_username?: string | null
+          reseller_id?: string | null
+          router_mac?: string | null
+          status?: Database["public"]["Enums"]["customer_status"]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          area_id?: string | null
+          connection_date?: string | null
+          created_at?: string
+          customer_code?: string | null
+          due_amount?: number | null
+          email?: string | null
+          expiry_date?: string | null
+          id?: string
+          is_auto_disable?: boolean | null
+          last_payment_date?: string | null
+          monthly_bill?: number | null
+          name?: string
+          notes?: string | null
+          onu_id?: string | null
+          onu_index?: number | null
+          onu_mac?: string | null
+          package_id?: string | null
+          phone?: string | null
+          pon_port?: string | null
+          pppoe_password?: string | null
+          pppoe_username?: string | null
+          reseller_id?: string | null
+          router_mac?: string | null
+          status?: Database["public"]["Enums"]["customer_status"]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_onu_id_fkey"
+            columns: ["onu_id"]
+            isOneToOne: false
+            referencedRelation: "onus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "isp_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_reseller_id_fkey"
+            columns: ["reseller_id"]
+            isOneToOne: false
+            referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       device_health_history: {
         Row: {
           cpu_percent: number | null
@@ -344,6 +795,134 @@ export type Database = {
           },
           {
             foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      isp_packages: {
+        Row: {
+          created_at: string
+          description: string | null
+          download_speed: number
+          id: string
+          is_active: boolean | null
+          name: string
+          price: number
+          sort_order: number | null
+          speed_unit: Database["public"]["Enums"]["speed_unit"]
+          tenant_id: string
+          updated_at: string
+          upload_speed: number
+          validity_days: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          download_speed?: number
+          id?: string
+          is_active?: boolean | null
+          name: string
+          price?: number
+          sort_order?: number | null
+          speed_unit?: Database["public"]["Enums"]["speed_unit"]
+          tenant_id: string
+          updated_at?: string
+          upload_speed?: number
+          validity_days?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          download_speed?: number
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price?: number
+          sort_order?: number | null
+          speed_unit?: Database["public"]["Enums"]["speed_unit"]
+          tenant_id?: string
+          updated_at?: string
+          upload_speed?: number
+          validity_days?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "isp_packages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mikrotik_routers: {
+        Row: {
+          auto_disable_expired: boolean | null
+          created_at: string
+          id: string
+          ip_address: string
+          is_primary: boolean | null
+          last_synced: string | null
+          name: string
+          olt_id: string | null
+          password_encrypted: string
+          port: number | null
+          status: string | null
+          sync_pppoe: boolean | null
+          sync_queues: boolean | null
+          tenant_id: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          auto_disable_expired?: boolean | null
+          created_at?: string
+          id?: string
+          ip_address: string
+          is_primary?: boolean | null
+          last_synced?: string | null
+          name: string
+          olt_id?: string | null
+          password_encrypted: string
+          port?: number | null
+          status?: string | null
+          sync_pppoe?: boolean | null
+          sync_queues?: boolean | null
+          tenant_id: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          auto_disable_expired?: boolean | null
+          created_at?: string
+          id?: string
+          ip_address?: string
+          is_primary?: boolean | null
+          last_synced?: string | null
+          name?: string
+          olt_id?: string | null
+          password_encrypted?: string
+          port?: number | null
+          status?: string | null
+          sync_pppoe?: boolean | null
+          sync_queues?: boolean | null
+          tenant_id?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mikrotik_routers_olt_id_fkey"
+            columns: ["olt_id"]
+            isOneToOne: false
+            referencedRelation: "olts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mikrotik_routers_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -934,6 +1513,69 @@ export type Database = {
           },
         ]
       }
+      pppoe_profiles: {
+        Row: {
+          address_list: string | null
+          created_at: string
+          id: string
+          is_synced: boolean | null
+          local_address: string | null
+          mikrotik_id: string | null
+          mikrotik_profile_id: string | null
+          name: string
+          parent_queue: string | null
+          rate_limit: string | null
+          remote_address: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          address_list?: string | null
+          created_at?: string
+          id?: string
+          is_synced?: boolean | null
+          local_address?: string | null
+          mikrotik_id?: string | null
+          mikrotik_profile_id?: string | null
+          name: string
+          parent_queue?: string | null
+          rate_limit?: string | null
+          remote_address?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          address_list?: string | null
+          created_at?: string
+          id?: string
+          is_synced?: boolean | null
+          local_address?: string | null
+          mikrotik_id?: string | null
+          mikrotik_profile_id?: string | null
+          name?: string
+          parent_queue?: string | null
+          rate_limit?: string | null
+          remote_address?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pppoe_profiles_mikrotik_id_fkey"
+            columns: ["mikrotik_id"]
+            isOneToOne: false
+            referencedRelation: "mikrotik_routers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pppoe_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -960,6 +1602,132 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      reseller_transactions: {
+        Row: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          reference_id: string | null
+          reference_type: string | null
+          reseller_id: string
+          tenant_id: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reference_id?: string | null
+          reference_type?: string | null
+          reseller_id: string
+          tenant_id: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reference_id?: string | null
+          reference_type?: string | null
+          reseller_id?: string
+          tenant_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_transactions_reseller_id_fkey"
+            columns: ["reseller_id"]
+            isOneToOne: false
+            referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resellers: {
+        Row: {
+          address: string | null
+          area_id: string | null
+          balance: number | null
+          commission_type: string | null
+          commission_value: number | null
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          phone: string | null
+          tenant_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          address?: string | null
+          area_id?: string | null
+          balance?: number | null
+          commission_type?: string | null
+          commission_value?: number | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          phone?: string | null
+          tenant_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          address?: string | null
+          area_id?: string | null
+          balance?: number | null
+          commission_type?: string | null
+          commission_value?: number | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resellers_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resellers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sms_gateway_settings: {
         Row: {
@@ -1034,6 +1802,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "sms_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_permissions: {
+        Row: {
+          created_at: string
+          id: string
+          permissions: Json | null
+          role: Database["public"]["Enums"]["staff_role"]
+          tenant_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          permissions?: Json | null
+          role?: Database["public"]["Enums"]["staff_role"]
+          tenant_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          permissions?: Json | null
+          role?: Database["public"]["Enums"]["staff_role"]
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_permissions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1255,6 +2061,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      generate_bill_number: { Args: { _tenant_id: string }; Returns: string }
+      generate_customer_code: { Args: { _tenant_id: string }; Returns: string }
       get_user_tenant_id: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -1276,8 +2084,15 @@ export type Database = {
         | "olt_unreachable"
         | "high_latency"
       app_role: "admin" | "operator" | "viewer" | "super_admin"
+      bill_status: "unpaid" | "paid" | "partial" | "overdue" | "cancelled"
       billing_cycle: "monthly" | "yearly"
       connection_status: "online" | "offline" | "warning" | "unknown"
+      customer_status:
+        | "active"
+        | "expired"
+        | "suspended"
+        | "pending"
+        | "cancelled"
       olt_brand:
         | "ZTE"
         | "Huawei"
@@ -1292,6 +2107,8 @@ export type Database = {
       olt_mode: "EPON" | "GPON"
       payment_method: "sslcommerz" | "bkash" | "rocket" | "nagad" | "manual"
       payment_status: "pending" | "completed" | "failed" | "refunded"
+      speed_unit: "mbps" | "gbps"
+      staff_role: "admin" | "staff" | "technician" | "support" | "reseller"
       subscription_status: "active" | "expired" | "cancelled" | "pending"
       tenant_status: "active" | "suspended" | "trial" | "cancelled"
     }
@@ -1429,8 +2246,16 @@ export const Constants = {
         "high_latency",
       ],
       app_role: ["admin", "operator", "viewer", "super_admin"],
+      bill_status: ["unpaid", "paid", "partial", "overdue", "cancelled"],
       billing_cycle: ["monthly", "yearly"],
       connection_status: ["online", "offline", "warning", "unknown"],
+      customer_status: [
+        "active",
+        "expired",
+        "suspended",
+        "pending",
+        "cancelled",
+      ],
       olt_brand: [
         "ZTE",
         "Huawei",
@@ -1446,6 +2271,8 @@ export const Constants = {
       olt_mode: ["EPON", "GPON"],
       payment_method: ["sslcommerz", "bkash", "rocket", "nagad", "manual"],
       payment_status: ["pending", "completed", "failed", "refunded"],
+      speed_unit: ["mbps", "gbps"],
+      staff_role: ["admin", "staff", "technician", "support", "reseller"],
       subscription_status: ["active", "expired", "cancelled", "pending"],
       tenant_status: ["active", "suspended", "trial", "cancelled"],
     },

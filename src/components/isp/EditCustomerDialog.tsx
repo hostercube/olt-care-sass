@@ -1,0 +1,274 @@
+import { useState, useEffect } from 'react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select';
+import { useCustomers } from '@/hooks/useCustomers';
+import { useISPPackages } from '@/hooks/useISPPackages';
+import { useAreas } from '@/hooks/useAreas';
+import { useResellers } from '@/hooks/useResellers';
+import { Loader2 } from 'lucide-react';
+import type { Customer } from '@/types/isp';
+
+interface EditCustomerDialogProps {
+  customer: Customer;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+}
+
+export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: EditCustomerDialogProps) {
+  const { updateCustomer } = useCustomers();
+  const { packages } = useISPPackages();
+  const { areas } = useAreas();
+  const { resellers } = useResellers();
+  const [loading, setLoading] = useState(false);
+
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+    area_id: '',
+    reseller_id: '',
+    router_mac: '',
+    pppoe_username: '',
+    pppoe_password: '',
+    package_id: '',
+    expiry_date: '',
+    monthly_bill: '',
+    notes: '',
+    status: 'active' as 'active' | 'expired' | 'suspended' | 'pending' | 'cancelled',
+  });
+
+  useEffect(() => {
+    if (customer) {
+      setFormData({
+        name: customer.name || '',
+        phone: customer.phone || '',
+        email: customer.email || '',
+        address: customer.address || '',
+        area_id: customer.area_id || '',
+        reseller_id: customer.reseller_id || '',
+        router_mac: customer.router_mac || '',
+        pppoe_username: customer.pppoe_username || '',
+        pppoe_password: customer.pppoe_password || '',
+        package_id: customer.package_id || '',
+        expiry_date: customer.expiry_date || '',
+        monthly_bill: customer.monthly_bill?.toString() || '',
+        notes: customer.notes || '',
+        status: customer.status,
+      });
+    }
+  }, [customer]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      await updateCustomer(customer.id, {
+        name: formData.name,
+        phone: formData.phone || null,
+        email: formData.email || null,
+        address: formData.address || null,
+        area_id: formData.area_id || null,
+        reseller_id: formData.reseller_id || null,
+        router_mac: formData.router_mac || null,
+        pppoe_username: formData.pppoe_username || null,
+        pppoe_password: formData.pppoe_password || null,
+        package_id: formData.package_id || null,
+        expiry_date: formData.expiry_date || null,
+        monthly_bill: parseFloat(formData.monthly_bill) || 0,
+        notes: formData.notes || null,
+        status: formData.status,
+      });
+      
+      onSuccess?.();
+    } catch (err) {
+      console.error('Error updating customer:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Customer</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name *</Label>
+              <Input
+                id="edit-name"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">Phone</Label>
+              <Input
+                id="edit-phone"
+                value={formData.phone}
+                onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-email">Email</Label>
+            <Input
+              id="edit-email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-pppoe">PPPoE Username</Label>
+              <Input
+                id="edit-pppoe"
+                value={formData.pppoe_username}
+                onChange={(e) => setFormData(prev => ({ ...prev, pppoe_username: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-pppoe-pass">PPPoE Password</Label>
+              <Input
+                id="edit-pppoe-pass"
+                type="password"
+                value={formData.pppoe_password}
+                onChange={(e) => setFormData(prev => ({ ...prev, pppoe_password: e.target.value }))}
+                placeholder="Leave empty to keep current"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Package</Label>
+            <Select
+              value={formData.package_id}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, package_id: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select package" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None</SelectItem>
+                {packages.map((pkg) => (
+                  <SelectItem key={pkg.id} value={pkg.id}>
+                    {pkg.name} - ৳{pkg.price}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-expiry">Expiry Date</Label>
+              <Input
+                id="edit-expiry"
+                type="date"
+                value={formData.expiry_date}
+                onChange={(e) => setFormData(prev => ({ ...prev, expiry_date: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-bill">Monthly Bill (৳)</Label>
+              <Input
+                id="edit-bill"
+                type="number"
+                value={formData.monthly_bill}
+                onChange={(e) => setFormData(prev => ({ ...prev, monthly_bill: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Area</Label>
+              <Select
+                value={formData.area_id}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, area_id: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select area" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {areas.map((area) => (
+                    <SelectItem key={area.id} value={area.id}>
+                      {area.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                  <SelectItem value="suspended">Suspended</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-address">Address</Label>
+            <Textarea
+              id="edit-address"
+              value={formData.address}
+              onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+              rows={2}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-notes">Notes</Label>
+            <Textarea
+              id="edit-notes"
+              value={formData.notes}
+              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+              rows={2}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading || !formData.name}>
+              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
