@@ -44,6 +44,7 @@ import MakePayment from "./pages/Billing/MakePayment";
 
 // ISP Management Pages
 import CustomerManagement from "./pages/ISP/CustomerManagement";
+import CustomerProfile from "./pages/ISP/CustomerProfile";
 import ISPBilling from "./pages/ISP/Billing";
 import ISPDashboard from "./pages/ISP/Dashboard";
 import ISPPackages from "./pages/ISP/Packages";
@@ -59,6 +60,10 @@ import Staff from "./pages/ISP/Staff";
 import Transactions from "./pages/ISP/Transactions";
 import Reports from "./pages/ISP/Reports";
 import CustomDomain from "./pages/ISP/CustomDomain";
+
+// Customer Portal Pages
+import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
+import CustomerDashboard from "./pages/CustomerPortal/CustomerDashboard";
 
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
@@ -280,6 +285,15 @@ const App = () => (
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
+              <Route path="/isp/customers/:id" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_customers" moduleName="Customer Profile">
+                      <CustomerProfile />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
               <Route path="/isp/billing" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
@@ -392,6 +406,10 @@ const App = () => (
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
+
+              {/* Customer Portal Routes (Public) */}
+              <Route path="/portal/login" element={<CustomerLogin />} />
+              <Route path="/portal/dashboard" element={<CustomerDashboard />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>
