@@ -1,88 +1,85 @@
-# 🚀 OLT Care SaaS - Complete Deployment Guide
+# OLT Care SaaS - Complete VPS Deployment Guide
 
-## 📁 Project Structure (ফোল্ডার গঠন)
+## 📋 Project Information
+
+| Item | Value |
+|------|-------|
+| Project Name | oltcaresass |
+| Git Repository | https://github.com/hostercube/olt-care-sass.git |
+| Frontend Domain | https://olt.isppoint.com |
+| Backend API | https://olt.isppoint.com/olt-polling-server |
+| Supabase Project ID | koodidvsmjfwjcgnmqox |
+| Supabase URL | https://koodidvsmjfwjcgnmqox.supabase.co |
+
+---
+
+## 📁 Project Structure
 
 ```
-oltcaresass/
-├── .env                          # ❌ Lovable Cloud (auto-generated, DO NOT USE FOR VPS)
-├── .env.production               # ✅ YOUR VPS Frontend Config (copy to .env before build)
+olt-care-sass/
+├── .env.production               # ✅ Frontend Production Config
 ├── olt-polling-server/
-│   ├── .env.production           # ✅ YOUR VPS Backend Config (copy to .env)
-│   ├── .env.example              # Template example
-│   └── src/                      # Backend source code
-├── src/                          # Frontend React source code
-├── public/                       # Static assets (NO .env here!)
-├── supabase/                     # Supabase migrations
-├── COMPLETE_DATABASE_SCHEMA.sql  # ✅ Run this in Supabase SQL Editor
-└── dist/                         # Built frontend (after npm run build)
+│   ├── .env.production           # ✅ Backend Production Config
+│   ├── ecosystem.config.cjs      # PM2 Config
+│   └── src/                      # Backend Source Code
+├── src/                          # Frontend React Source
+├── public/                       # Static Assets
+├── COMPLETE_DATABASE_SCHEMA.sql  # ✅ Run in Supabase SQL Editor
+└── dist/                         # Built Frontend (after npm run build)
 ```
 
 ---
 
-## 🔐 Environment Files - কোথায় কি রাখবেন
+## 🔐 Environment Files
 
-### ❌ Root `.env` (Lovable Cloud - স্পর্শ করবেন না)
-```
-Location: /.env
-Purpose: Lovable Cloud development environment (Lovable এর নিজস্ব Supabase)
-Action: VPS deployment এ এই ফাইল USE করবেন না!
-```
-
-### ✅ Root `.env.production` (YOUR VPS Frontend)
-```
-Location: /.env.production
-Purpose: আপনার production Supabase credentials (frontend এর জন্য)
-Action: VPS এ build করার আগে এটা .env হিসেবে copy করুন
-Command: cp .env.production .env
+### Frontend (.env.production → .env)
+```env
+VITE_SUPABASE_URL=https://koodidvsmjfwjcgnmqox.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtvb2RpZHZzbWpmd2pjZ25tcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNjc5NzIsImV4cCI6MjA4Mjk0Mzk3Mn0.yPQpGWhlm6N9PzeQ4FQztK5LJmRU8BEfiSnDLHSn2Ac
+VITE_SUPABASE_PROJECT_ID=koodidvsmjfwjcgnmqox
+VITE_POLLING_SERVER_URL=https://olt.isppoint.com/olt-polling-server
 ```
 
-### ✅ `olt-polling-server/.env.production` (YOUR VPS Backend)
-```
-Location: /olt-polling-server/.env.production
-Purpose: আপনার production Supabase credentials (polling server এর জন্য)
-Action: VPS এ /olt-polling-server/.env হিসেবে copy করুন
-Command: cp .env.production .env
+### Backend (olt-polling-server/.env.production → .env)
+```env
+PORT=3001
+NODE_ENV=production
+SUPABASE_URL=https://koodidvsmjfwjcgnmqox.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtvb2RpZHZzbWpmd2pjZ25tcW94Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzM2Nzk3MiwiZXhwIjoyMDgyOTQzOTcyfQ.VOOCGUxPyLMQP4E-f--72bsql-BLVAXUNcbrUXFqyZs
+POLLING_INTERVAL=30000
+SSH_TIMEOUT=30000
+MIKROTIK_TIMEOUT=15000
+DEBUG=false
 ```
 
 ---
 
-## 📋 YOUR Supabase Credentials
+## 🗄️ Step 1: Supabase Database Setup
 
+### 1.1 Go to Supabase SQL Editor
 ```
-Project Name: oltcaresass
-Project ID: koodidvsmjfwjcgnmqox
-Project URL: https://koodidvsmjfwjcgnmqox.supabase.co
-
-Anon Key (Frontend): eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtvb2RpZHZzbWpmd2pjZ25tcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNjc5NzIsImV4cCI6MjA4Mjk0Mzk3Mn0.yPQpGWhlm6N9PzeQ4FQztK5LJmRU8BEfiSnDLHSn2Ac
-
-Service Role Key (Backend): eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtvb2RpZHZzbWpmd2pjZ25tcW94Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzM2Nzk3MiwiZXhwIjoyMDgyOTQzOTcyfQ.VOOCGUxPyLMQP4E-f--72bsql-BLVAXUNcbrUXFqyZs
+https://supabase.com/dashboard/project/koodidvsmjfwjcgnmqox/sql/new
 ```
 
----
+### 1.2 Run Database Schema
+- `COMPLETE_DATABASE_SCHEMA.sql` ফাইলের সব SQL কপি করুন
+- SQL Editor এ paste করুন
+- "Run" বাটনে ক্লিক করুন
 
-## 🛠️ Step-by-Step VPS Deployment
-
-### Step 1: Supabase Database Setup
-
-1. Go to [Supabase Dashboard](https://supabase.com/dashboard/project/koodidvsmjfwjcgnmqox/sql)
-2. Open **SQL Editor**
-3. Copy entire content from `COMPLETE_DATABASE_SCHEMA.sql`
-4. Run the SQL
-
-### Step 2: Create Super Admin User
-
-After running schema, signup through the app first, then run this SQL:
+### 1.3 Create Super Admin User
 ```sql
--- আপনার email দিয়ে replace করুন
+-- First, create user through signup page
+-- Then run this to make them super_admin:
 INSERT INTO public.user_roles (user_id, role)
-SELECT id, 'super_admin' 
-FROM auth.users 
-WHERE email = 'YOUR_EMAIL@example.com'
+SELECT id, 'super_admin'::app_role FROM auth.users WHERE email = 'admin@isppoint.com'
 ON CONFLICT DO NOTHING;
 ```
 
-### Step 3: VPS Server Setup
+---
 
+## 🖥️ Step 2: VPS Server Setup
+
+### 2.1 Install Required Packages
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
@@ -91,76 +88,96 @@ sudo apt update && sudo apt upgrade -y
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
-# Install PM2 & Nginx
+# Install PM2
 sudo npm install -g pm2
+
+# Install Nginx
 sudo apt install -y nginx
 
-# Clone your project
-cd /var/www
-git clone https://github.com/YOUR_USERNAME/oltcaresass.git
-cd oltcaresass
+# Install Git
+sudo apt install -y git
 ```
 
-### Step 4: Build Frontend
+### 2.2 Clone Project
+```bash
+cd /var/www
+sudo git clone https://github.com/hostercube/olt-care-sass.git
+sudo chown -R $USER:$USER /var/www/olt-care-sass
+cd /var/www/olt-care-sass
+```
+
+---
+
+## 🎨 Step 3: Frontend Build
 
 ```bash
-cd /var/www/oltcaresass
+cd /var/www/olt-care-sass
 
-# ⭐ IMPORTANT: Copy production env to .env (NOT from public folder!)
+# Copy production env
 cp .env.production .env
 
-# Verify .env content - should show YOUR Supabase, not Lovable's
-cat .env
-
-# Install and build
+# Install dependencies
 npm install
+
+# Build
 npm run build
 
-# Verify dist folder created
+# Verify build
 ls -la dist/
 ```
 
-### Step 5: Setup Backend Polling Server
+---
+
+## ⚙️ Step 4: Backend Setup
 
 ```bash
-cd /var/www/oltcaresass/olt-polling-server
+cd /var/www/olt-care-sass/olt-polling-server
 
-# ⭐ IMPORTANT: Copy production env to .env
+# Copy production env
 cp .env.production .env
-
-# Verify .env content
-cat .env
 
 # Install dependencies
 npm install
 
 # Start with PM2
 pm2 start ecosystem.config.cjs
+
+# Save PM2 config
 pm2 save
+
+# Enable PM2 startup
 pm2 startup
 ```
 
-### Step 6: Configure Nginx
+---
 
+## 🌐 Step 5: Nginx Configuration
+
+### 5.1 Create Nginx Config
 ```bash
 sudo nano /etc/nginx/sites-available/oltapp
 ```
 
-Paste this configuration:
+### 5.2 Paste This Configuration
 ```nginx
 server {
     listen 80;
-    server_name oltapp.isppoint.com;
+    server_name olt.isppoint.com;
 
-    # Frontend - React App
-    root /var/www/oltcaresass/dist;
+    # Frontend
+    root /var/www/olt-care-sass/dist;
     index index.html;
 
+    # Gzip compression
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+    # Frontend routes
     location / {
         try_files $uri $uri/ /index.html;
     }
 
-    # Backend - Polling Server API
+    # Backend API Proxy
     location /olt-polling-server/ {
         proxy_pass http://127.0.0.1:3001/;
         proxy_http_version 1.1;
@@ -177,138 +194,132 @@ server {
 
     # Static assets caching
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-        expires 30d;
+        expires 1y;
         add_header Cache-Control "public, immutable";
     }
 }
 ```
 
-Enable site:
+### 5.3 Enable Site
 ```bash
 sudo ln -s /etc/nginx/sites-available/oltapp /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
-sudo systemctl restart nginx
+sudo systemctl reload nginx
 ```
 
-### Step 7: SSL Certificate (HTTPS)
+---
+
+## 🔒 Step 6: SSL Certificate (HTTPS)
 
 ```bash
-sudo apt install certbot python3-certbot-nginx -y
-sudo certbot --nginx -d oltapp.isppoint.com
+# Install Certbot
+sudo apt install -y certbot python3-certbot-nginx
+
+# Get SSL certificate
+sudo certbot --nginx -d olt.isppoint.com
+
+# Auto-renewal test
+sudo certbot renew --dry-run
 ```
 
-### Step 8: Firewall Setup
+---
+
+## 🔥 Step 7: Firewall Setup
 
 ```bash
 sudo ufw allow 22
 sudo ufw allow 80
 sudo ufw allow 443
 sudo ufw enable
+sudo ufw status
 ```
 
 ---
 
-## ✅ Verification Checklist
+## ✅ Step 8: Verification
 
-### Check Frontend
-```bash
-# Open in browser
-https://oltapp.isppoint.com
-```
-
-### Check Backend Health
-```bash
-curl https://oltapp.isppoint.com/olt-polling-server/health
-# Should return: {"status":"ok","timestamp":"..."}
-```
-
-### Check PM2 Status
+### 8.1 Check Backend
 ```bash
 pm2 status
 pm2 logs olt-polling-server
+curl http://localhost:3001/health
 ```
+
+### 8.2 Check Frontend
+```bash
+curl -I https://olt.isppoint.com
+```
+
+### 8.3 Test URLs
+- Frontend: https://olt.isppoint.com
+- Backend Health: https://olt.isppoint.com/olt-polling-server/health
 
 ---
 
-## 🔄 Update Commands (Future Updates)
+## 🔄 Update Commands
 
 ```bash
-cd /var/www/oltcaresass
+cd /var/www/olt-care-sass
 
-# Pull latest code
+# Pull latest changes
 git pull origin main
 
 # Rebuild frontend
-cp .env.production .env
 npm install
 npm run build
 
 # Restart backend
 cd olt-polling-server
-cp .env.production .env
 npm install
 pm2 restart olt-polling-server
-
-# Restart Nginx
-sudo systemctl restart nginx
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## 🔧 Troubleshooting
 
-### Problem: Frontend shows blank page
+### Backend not starting
 ```bash
-# Check if dist exists
-ls -la /var/www/oltcaresass/dist/
+cd /var/www/olt-care-sass/olt-polling-server
+cat .env  # Check if .env exists
+pm2 logs olt-polling-server --lines 50
+```
 
-# Check Nginx config
+### Frontend blank page
+```bash
+ls -la /var/www/olt-care-sass/dist/
+cat /var/www/olt-care-sass/dist/index.html
+```
+
+### Nginx errors
+```bash
 sudo nginx -t
-
-# Check Nginx error log
-sudo tail -100 /var/log/nginx/error.log
+sudo tail -f /var/log/nginx/error.log
 ```
 
-### Problem: Polling server not responding
+### PM2 commands
 ```bash
-# Check PM2 status
-pm2 status
-pm2 logs olt-polling-server --lines 100
-
-# Check if .env exists
-cat /var/www/oltcaresass/olt-polling-server/.env
-
-# Restart server
-pm2 restart olt-polling-server
-```
-
-### Problem: Supabase connection failed
-```bash
-# Verify environment variables
-cat /var/www/oltcaresass/.env | grep SUPABASE
-cat /var/www/oltcaresass/olt-polling-server/.env | grep SUPABASE
-
-# Test connection
-curl -I https://koodidvsmjfwjcgnmqox.supabase.co
+pm2 list
+pm2 restart all
+pm2 logs
+pm2 monit
 ```
 
 ---
 
-## 📝 Quick Reference Table
+## 📊 Quick Reference
 
-| Component | Source File | VPS Location | Command |
-|-----------|-------------|--------------|---------|
-| Frontend .env | `/.env.production` | `/.env` | `cp .env.production .env` |
-| Backend .env | `/olt-polling-server/.env.production` | `/olt-polling-server/.env` | `cp .env.production .env` |
-| Database Schema | `/COMPLETE_DATABASE_SCHEMA.sql` | Supabase SQL Editor | Run SQL |
-| Built Frontend | `/dist/` | Served by Nginx | `npm run build` |
+| Service | Port | URL |
+|---------|------|-----|
+| Frontend | 80/443 | https://olt.isppoint.com |
+| Backend | 3001 | https://olt.isppoint.com/olt-polling-server |
+| Supabase | - | https://koodidvsmjfwjcgnmqox.supabase.co |
 
----
-
-## ⚠️ Important Notes
-
-1. **Root `.env` is for Lovable Cloud** - VPS এ এটা ব্যবহার করবেন না!
-2. **`.env.production` files copy করুন** - `.env` হিসেবে VPS এ
-3. **public folder এ কোনো .env নেই** - আগে ছিল, এখন সরানো হয়েছে
-4. **Service Role Key secret রাখুন** - এটা admin access দেয়
+| Command | Description |
+|---------|-------------|
+| `pm2 status` | Check backend status |
+| `pm2 restart olt-polling-server` | Restart backend |
+| `pm2 logs` | View logs |
+| `sudo systemctl reload nginx` | Reload Nginx |
+| `sudo certbot renew` | Renew SSL |

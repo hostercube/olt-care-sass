@@ -4,9 +4,15 @@ A modern SaaS web application for monitoring and managing Optical Line Terminal 
 
 ## 🌐 Production URLs
 
-- **Frontend**: https://oltapp.isppoint.com
-- **Backend API**: https://oltapp.isppoint.com/olt-polling-server
+- **Frontend**: https://olt.isppoint.com
+- **Backend API**: https://olt.isppoint.com/olt-polling-server
 - **Supabase**: https://koodidvsmjfwjcgnmqox.supabase.co
+
+## 📦 Git Repository
+
+```bash
+git clone https://github.com/hostercube/olt-care-sass.git
+```
 
 ## ✨ Features
 
@@ -45,7 +51,7 @@ A modern SaaS web application for monitoring and managing Optical Line Terminal 
 ## 📁 Project Structure
 
 ```
-oltcaresass/
+olt-care-sass/
 ├── src/                        # Frontend React application
 │   ├── components/             # React components
 │   ├── pages/                  # Page components
@@ -64,19 +70,24 @@ oltcaresass/
 └── dist/                       # Built frontend (after npm run build)
 ```
 
-## 🚀 Deployment
+## 🚀 Quick Deployment
 
-See [DEPLOYMENT_INSTRUCTIONS.md](./DEPLOYMENT_INSTRUCTIONS.md) for complete VPS deployment guide.
+### 1. Database Setup (Supabase)
+```sql
+-- COMPLETE_DATABASE_SCHEMA.sql ফাইলের সব SQL কপি করে
+-- Supabase SQL Editor এ paste করে Run করুন
+```
 
-### Quick Commands
-
+### 2. Frontend Build
 ```bash
-# Frontend Build
 cp .env.production .env
 npm install
 npm run build
+# dist/ folder টি Nginx এ serve করুন
+```
 
-# Backend Start
+### 3. Backend Start
+```bash
 cd olt-polling-server
 cp .env.production .env
 npm install
@@ -89,6 +100,11 @@ pm2 start ecosystem.config.cjs
 Project ID: koodidvsmjfwjcgnmqox
 Project URL: https://koodidvsmjfwjcgnmqox.supabase.co
 ```
+
+## 📚 Documentation
+
+- [Deployment Instructions](./DEPLOYMENT_INSTRUCTIONS.md) - Complete VPS deployment guide
+- [Database Schema](./COMPLETE_DATABASE_SCHEMA.sql) - Full database schema
 
 ## 📄 License
 
