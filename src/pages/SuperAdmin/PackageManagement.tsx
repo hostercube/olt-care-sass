@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import { usePackages } from '@/hooks/usePackages';
 import { 
   Package, Plus, Edit, Trash2, Check, X, Server, MessageSquare, Mail, Code, 
   Globe, Paintbrush, Activity, Users, CreditCard, MapPin, ShoppingCart, 
-  Headphones, FileText, Database, Router, Infinity
+  Headphones, FileText, Database, Router, Infinity, DollarSign, ClipboardList, Ticket
 } from 'lucide-react';
 import { 
   AVAILABLE_MODULES, PAYMENT_GATEWAYS, SMS_GATEWAYS,
@@ -22,7 +22,7 @@ import {
 } from '@/types/saas';
 
 const DEFAULT_FEATURES: TenantFeatures = {
-  olt_care: true,
+  olt_care: false,
   isp_billing: false,
   isp_customers: false,
   isp_resellers: false,
@@ -30,6 +30,9 @@ const DEFAULT_FEATURES: TenantFeatures = {
   isp_areas: false,
   isp_crm: false,
   isp_inventory: false,
+  isp_salary_payroll: false,
+  isp_btrc_reports: false,
+  isp_tickets: false,
   sms_alerts: false,
   email_alerts: false,
   api_access: false,
@@ -61,48 +64,114 @@ const DEFAULT_FEATURES: TenantFeatures = {
   },
 };
 
+const MODULE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  olt_care: Server,
+  isp_billing: CreditCard,
+  isp_customers: Users,
+  isp_resellers: Users,
+  isp_mikrotik: Router,
+  isp_areas: MapPin,
+  isp_crm: Headphones,
+  isp_inventory: ShoppingCart,
+  isp_salary_payroll: DollarSign,
+  isp_btrc_reports: ClipboardList,
+  isp_tickets: Ticket,
+  sms_alerts: MessageSquare,
+  email_alerts: Mail,
+  api_access: Code,
+  custom_domain: Globe,
+  white_label: Paintbrush,
+  advanced_monitoring: Activity,
+  multi_user: Users,
+  reports_export: FileText,
+  backup_restore: Database,
+};
+
+interface FormData {
+  name: string;
+  description: string;
+  price_monthly: number;
+  price_yearly: number;
+  max_olts: number | null;
+  max_onus: number | null;
+  max_users: number | null;
+  max_mikrotiks: number | null;
+  max_customers: number | null;
+  max_areas: number | null;
+  max_resellers: number | null;
+  features: TenantFeatures;
+  is_active: boolean;
+  sort_order: number;
+}
+
+// Separate LimitInput component outside of the main component
+function LimitInput({ 
+  label, 
+  value, 
+  onChange, 
+  allowUnlimited = true 
+}: { 
+  label: string; 
+  value: number | null; 
+  onChange: (v: number | null) => void;
+  allowUnlimited?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value ? parseInt(e.target.value) : null)}
+          placeholder={allowUnlimited ? 'Unlimited' : '0'}
+          disabled={allowUnlimited && value === null}
+          className="flex-1"
+        />
+        {allowUnlimited && (
+          <Button
+            type="button"
+            variant={value === null ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => onChange(value === null ? 100 : null)}
+            className="whitespace-nowrap"
+          >
+            <Infinity className="h-4 w-4 mr-1" />
+            {value === null ? 'Limited' : 'Unlimited'}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PackageManagement() {
   const { packages, loading, createPackage, updatePackage, deletePackage } = usePackages();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPackage, setEditingPackage] = useState<any>(null);
 
-  const [formData, setFormData] = useState({
+  const initialFormData: FormData = useMemo(() => ({
     name: '',
     description: '',
     price_monthly: 0,
     price_yearly: 0,
-    // Resource limits
     max_olts: 1,
     max_onus: 100,
     max_users: 1,
     max_mikrotiks: 1,
-    max_customers: null as number | null,
-    max_areas: null as number | null,
-    max_resellers: null as number | null,
-    // Features
+    max_customers: null,
+    max_areas: null,
+    max_resellers: null,
     features: { ...DEFAULT_FEATURES },
     is_active: true,
     sort_order: 0,
-  });
+  }), []);
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      description: '',
-      price_monthly: 0,
-      price_yearly: 0,
-      max_olts: 1,
-      max_onus: 100,
-      max_users: 1,
-      max_mikrotiks: 1,
-      max_customers: null,
-      max_areas: null,
-      max_resellers: null,
-      features: { ...DEFAULT_FEATURES },
-      is_active: true,
-      sort_order: 0,
-    });
-  };
+  const [formData, setFormData] = useState<FormData>(initialFormData);
+
+  const resetForm = useCallback(() => {
+    setFormData(initialFormData);
+  }, [initialFormData]);
 
   const handleCreate = async () => {
     await createPackage(formData);
@@ -139,93 +208,51 @@ export default function PackageManagement() {
   };
 
   const getModuleIcon = (moduleId: string) => {
-    switch (moduleId) {
-      case 'olt_care': return Server;
-      case 'isp_billing': return CreditCard;
-      case 'isp_customers': return Users;
-      case 'isp_resellers': return Users;
-      case 'isp_mikrotik': return Router;
-      case 'isp_areas': return MapPin;
-      case 'isp_crm': return Headphones;
-      case 'isp_inventory': return ShoppingCart;
-      case 'sms_alerts': return MessageSquare;
-      case 'email_alerts': return Mail;
-      case 'api_access': return Code;
-      case 'custom_domain': return Globe;
-      case 'white_label': return Paintbrush;
-      case 'advanced_monitoring': return Activity;
-      case 'multi_user': return Users;
-      case 'reports_export': return FileText;
-      case 'backup_restore': return Database;
-      default: return Check;
-    }
+    return MODULE_ICONS[moduleId] || Check;
   };
 
-  const updatePaymentGateway = (gatewayId: string, enabled: boolean) => {
-    setFormData({
-      ...formData,
+  const handleFeatureChange = useCallback((key: string, value: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      features: { ...prev.features, [key]: value }
+    }));
+  }, []);
+
+  const handlePaymentGatewayChange = useCallback((gatewayId: string, enabled: boolean) => {
+    setFormData(prev => ({
+      ...prev,
       features: {
-        ...formData.features,
+        ...prev.features,
         payment_gateways: {
-          ...(formData.features.payment_gateways as PaymentGatewayPermissions),
+          ...(prev.features.payment_gateways as PaymentGatewayPermissions),
           [gatewayId]: enabled,
         },
       },
-    });
-  };
+    }));
+  }, []);
 
-  const updateSMSGateway = (gatewayId: string, enabled: boolean) => {
-    setFormData({
-      ...formData,
+  const handleSMSGatewayChange = useCallback((gatewayId: string, enabled: boolean) => {
+    setFormData(prev => ({
+      ...prev,
       features: {
-        ...formData.features,
+        ...prev.features,
         sms_gateways: {
-          ...(formData.features.sms_gateways as SMSGatewayPermissions),
+          ...(prev.features.sms_gateways as SMSGatewayPermissions),
           [gatewayId]: enabled,
         },
       },
-    });
+    }));
+  }, []);
+
+  const handleInputChange = useCallback((field: keyof FormData, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
+  const formatLimit = (value: number | null) => {
+    return value === null ? 'Unlimited' : value;
   };
 
-  const LimitInput = ({ 
-    label, 
-    value, 
-    onChange, 
-    allowUnlimited = true 
-  }: { 
-    label: string; 
-    value: number | null; 
-    onChange: (v: number | null) => void;
-    allowUnlimited?: boolean;
-  }) => (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <div className="flex items-center gap-2">
-        <Input
-          type="number"
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value ? parseInt(e.target.value) : null)}
-          placeholder={allowUnlimited ? 'Unlimited' : '0'}
-          disabled={allowUnlimited && value === null}
-          className="flex-1"
-        />
-        {allowUnlimited && (
-          <Button
-            type="button"
-            variant={value === null ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onChange(value === null ? 100 : null)}
-            className="whitespace-nowrap"
-          >
-            <Infinity className="h-4 w-4 mr-1" />
-            {value === null ? 'Limited' : 'Unlimited'}
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-
-  const PackageForm = ({ onSubmit, submitLabel }: { onSubmit: () => void; submitLabel: string }) => (
+  const PackageFormContent = () => (
     <ScrollArea className="max-h-[70vh]">
       <div className="space-y-6 pr-4">
         {/* Basic Info */}
@@ -236,7 +263,7 @@ export default function PackageManagement() {
               <Label>Package Name *</Label>
               <Input
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => handleInputChange('name', e.target.value)}
                 placeholder="Basic Plan"
               />
             </div>
@@ -245,14 +272,14 @@ export default function PackageManagement() {
               <Input
                 type="number"
                 value={formData.sort_order}
-                onChange={(e) => setFormData({ ...formData, sort_order: parseInt(e.target.value) })}
+                onChange={(e) => handleInputChange('sort_order', parseInt(e.target.value) || 0)}
               />
             </div>
             <div className="col-span-2 space-y-2">
               <Label>Description</Label>
               <Textarea
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) => handleInputChange('description', e.target.value)}
                 placeholder="Package description..."
               />
             </div>
@@ -261,7 +288,7 @@ export default function PackageManagement() {
               <Input
                 type="number"
                 value={formData.price_monthly}
-                onChange={(e) => setFormData({ ...formData, price_monthly: parseFloat(e.target.value) })}
+                onChange={(e) => handleInputChange('price_monthly', parseFloat(e.target.value) || 0)}
               />
             </div>
             <div className="space-y-2">
@@ -269,15 +296,16 @@ export default function PackageManagement() {
               <Input
                 type="number"
                 value={formData.price_yearly}
-                onChange={(e) => setFormData({ ...formData, price_yearly: parseFloat(e.target.value) })}
+                onChange={(e) => handleInputChange('price_yearly', parseFloat(e.target.value) || 0)}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Active</Label>
+            <div className="flex items-center space-x-2">
               <Switch
+                id="is_active"
                 checked={formData.is_active}
-                onCheckedChange={(v) => setFormData({ ...formData, is_active: v })}
+                onCheckedChange={(v) => handleInputChange('is_active', v)}
               />
+              <Label htmlFor="is_active">Active</Label>
             </div>
           </div>
         </div>
@@ -292,39 +320,37 @@ export default function PackageManagement() {
             <LimitInput
               label="Max OLTs"
               value={formData.max_olts}
-              onChange={(v) => setFormData({ ...formData, max_olts: v || 1 })}
-              allowUnlimited={false}
+              onChange={(v) => handleInputChange('max_olts', v)}
             />
             <LimitInput
               label="Max ONUs"
               value={formData.max_onus}
-              onChange={(v) => setFormData({ ...formData, max_onus: v })}
+              onChange={(v) => handleInputChange('max_onus', v)}
             />
             <LimitInput
               label="Max MikroTiks"
               value={formData.max_mikrotiks}
-              onChange={(v) => setFormData({ ...formData, max_mikrotiks: v })}
+              onChange={(v) => handleInputChange('max_mikrotiks', v)}
             />
             <LimitInput
               label="Max Users"
               value={formData.max_users}
-              onChange={(v) => setFormData({ ...formData, max_users: v || 1 })}
-              allowUnlimited={false}
+              onChange={(v) => handleInputChange('max_users', v)}
             />
             <LimitInput
               label="Max Customers"
               value={formData.max_customers}
-              onChange={(v) => setFormData({ ...formData, max_customers: v })}
+              onChange={(v) => handleInputChange('max_customers', v)}
             />
             <LimitInput
               label="Max Areas"
               value={formData.max_areas}
-              onChange={(v) => setFormData({ ...formData, max_areas: v })}
+              onChange={(v) => handleInputChange('max_areas', v)}
             />
             <LimitInput
               label="Max Resellers"
               value={formData.max_resellers}
-              onChange={(v) => setFormData({ ...formData, max_resellers: v })}
+              onChange={(v) => handleInputChange('max_resellers', v)}
             />
           </div>
         </div>
@@ -351,14 +377,13 @@ export default function PackageManagement() {
                 <div className="grid grid-cols-2 gap-2">
                   {categoryModules.map((module) => {
                     const Icon = getModuleIcon(module.id);
-                    const isDisabled = module.id === 'olt_care';
                     const isEnabled = formData.features[module.id] as boolean;
                     return (
                       <div 
                         key={module.id} 
                         className={`flex items-center justify-between p-3 rounded-lg border ${
                           isEnabled ? 'border-primary/50 bg-primary/5' : 'border-border'
-                        } ${isDisabled ? 'opacity-60' : ''}`}
+                        }`}
                       >
                         <div className="flex items-center gap-2">
                           <Icon className="h-4 w-4 text-muted-foreground" />
@@ -369,11 +394,7 @@ export default function PackageManagement() {
                         </div>
                         <Switch
                           checked={isEnabled ?? false}
-                          disabled={isDisabled}
-                          onCheckedChange={(v) => setFormData({ 
-                            ...formData, 
-                            features: { ...formData.features, [module.id]: v } 
-                          })}
+                          onCheckedChange={(v) => handleFeatureChange(module.id, v)}
                         />
                       </div>
                     );
@@ -409,7 +430,7 @@ export default function PackageManagement() {
                   </div>
                   <Switch
                     checked={isEnabled ?? false}
-                    onCheckedChange={(v) => updatePaymentGateway(gateway.id, v)}
+                    onCheckedChange={(v) => handlePaymentGatewayChange(gateway.id, v)}
                   />
                 </div>
               );
@@ -442,29 +463,16 @@ export default function PackageManagement() {
                   </div>
                   <Switch
                     checked={isEnabled ?? false}
-                    onCheckedChange={(v) => updateSMSGateway(gateway.id, v)}
+                    onCheckedChange={(v) => handleSMSGatewayChange(gateway.id, v)}
                   />
                 </div>
               );
             })}
           </div>
         </div>
-
-        <DialogFooter className="pt-4">
-          <Button variant="outline" onClick={() => { setIsCreateOpen(false); setEditingPackage(null); resetForm(); }}>
-            Cancel
-          </Button>
-          <Button onClick={onSubmit} disabled={!formData.name}>
-            {submitLabel}
-          </Button>
-        </DialogFooter>
       </div>
     </ScrollArea>
   );
-
-  const formatLimit = (value: number | null) => {
-    return value === null ? 'Unlimited' : value;
-  };
 
   return (
     <DashboardLayout title="Package Management" subtitle="Manage subscription packages">
@@ -474,7 +482,10 @@ export default function PackageManagement() {
             <h1 className="text-3xl font-bold text-foreground">Package Management</h1>
             <p className="text-muted-foreground">Create and manage subscription packages with resource limits and module access</p>
           </div>
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <Dialog open={isCreateOpen} onOpenChange={(open) => {
+            setIsCreateOpen(open);
+            if (!open) resetForm();
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -486,155 +497,156 @@ export default function PackageManagement() {
                 <DialogTitle>Create New Package</DialogTitle>
                 <DialogDescription>Define a new subscription package with limits and features</DialogDescription>
               </DialogHeader>
-              <PackageForm onSubmit={handleCreate} submitLabel="Create Package" />
+              <PackageFormContent />
+              <DialogFooter className="pt-4">
+                <Button variant="outline" onClick={() => { setIsCreateOpen(false); resetForm(); }}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreate} disabled={!formData.name}>
+                  Create Package
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {loading ? (
-            <p>Loading packages...</p>
-          ) : packages.length === 0 ? (
-            <Card className="col-span-full">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Package className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No packages created yet</p>
-                <Button className="mt-4" onClick={() => setIsCreateOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create First Package
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            packages.map((pkg) => (
-              <Card key={pkg.id} className={!pkg.is_active ? 'opacity-60' : ''}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <Package className="h-5 w-5" />
-                      {pkg.name}
-                    </CardTitle>
-                    <Badge variant={pkg.is_active ? 'success' : 'default'}>
-                      {pkg.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
-                  <CardDescription>{pkg.description}</CardDescription>
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader className="space-y-2">
+                  <div className="h-6 bg-muted rounded w-1/2" />
+                  <div className="h-4 bg-muted rounded w-3/4" />
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold">৳{pkg.price_monthly}</span>
-                    <span className="text-muted-foreground">/month</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    or ৳{pkg.price_yearly}/year
-                  </div>
-
-                  {/* Resource Limits */}
-                  <div className="space-y-2 text-sm border-t pt-3">
-                    <h5 className="font-medium text-muted-foreground">Resource Limits</h5>
-                    <div className="grid grid-cols-2 gap-1">
-                      <div className="flex justify-between">
-                        <span>OLTs</span>
-                        <span className="font-medium">{pkg.max_olts}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>ONUs</span>
-                        <span className="font-medium">{formatLimit(pkg.max_onus)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>MikroTiks</span>
-                        <span className="font-medium">{formatLimit(pkg.max_mikrotiks)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Users</span>
-                        <span className="font-medium">{pkg.max_users}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Customers</span>
-                        <span className="font-medium">{formatLimit(pkg.max_customers)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Areas</span>
-                        <span className="font-medium">{formatLimit(pkg.max_areas)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Resellers</span>
-                        <span className="font-medium">{formatLimit(pkg.max_resellers)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Modules */}
-                  <div className="border-t pt-3 space-y-1">
-                    <h5 className="font-medium text-muted-foreground text-sm mb-2">Modules</h5>
-                    <div className="grid grid-cols-2 gap-1">
-                      {AVAILABLE_MODULES.slice(0, 6).map((module) => {
-                        const Icon = getModuleIcon(module.id);
-                        const isEnabled = pkg.features?.[module.id];
-                        return (
-                          <div key={module.id} className="flex items-center gap-1 text-xs">
-                            {isEnabled ? (
-                              <Check className="h-3 w-3 text-success" />
-                            ) : (
-                              <X className="h-3 w-3 text-muted-foreground" />
-                            )}
-                            <span className={!isEnabled ? 'text-muted-foreground' : ''}>
-                              {module.name}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {AVAILABLE_MODULES.length > 6 && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        +{AVAILABLE_MODULES.length - 6} more modules...
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Payment Gateways */}
-                  <div className="border-t pt-3">
-                    <h5 className="font-medium text-muted-foreground text-sm mb-2">Payment Gateways</h5>
-                    <div className="flex flex-wrap gap-1">
-                      {PAYMENT_GATEWAYS.map((gw) => {
-                        const isEnabled = (pkg.features?.payment_gateways as PaymentGatewayPermissions)?.[gw.id as keyof PaymentGatewayPermissions];
-                        return (
-                          <Badge key={gw.id} variant={isEnabled ? 'success' : 'outline'} className="text-xs">
-                            {gw.name}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 pt-2">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(pkg)}>
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={() => deletePackage(pkg.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                <CardContent>
+                  <div className="h-20 bg-muted rounded" />
                 </CardContent>
               </Card>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {packages.map((pkg) => {
+              const features = pkg.features as TenantFeatures;
+              const enabledModules = AVAILABLE_MODULES.filter(m => features?.[m.id]);
+              
+              return (
+                <Card key={pkg.id} className="relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/10 to-transparent rounded-bl-full" />
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <CardTitle className="flex items-center gap-2">
+                          <Package className="h-5 w-5 text-primary" />
+                          {pkg.name}
+                        </CardTitle>
+                        <CardDescription>{pkg.description}</CardDescription>
+                      </div>
+                      <Badge variant={pkg.is_active ? 'default' : 'secondary'}>
+                        {pkg.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Pricing */}
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold text-primary">৳{pkg.price_monthly}</span>
+                      <span className="text-muted-foreground">/month</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      or ৳{pkg.price_yearly}/year (save {Math.round((1 - pkg.price_yearly / (pkg.price_monthly * 12)) * 100)}%)
+                    </p>
+
+                    {/* Limits */}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Resource Limits</Label>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Server className="h-3 w-3 text-muted-foreground" />
+                          <span>OLTs: {formatLimit(pkg.max_olts)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Users className="h-3 w-3 text-muted-foreground" />
+                          <span>Users: {formatLimit(pkg.max_users)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Router className="h-3 w-3 text-muted-foreground" />
+                          <span>MikroTiks: {formatLimit(pkg.max_mikrotiks)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Users className="h-3 w-3 text-muted-foreground" />
+                          <span>Customers: {formatLimit(pkg.max_customers)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Enabled Modules */}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Enabled Modules ({enabledModules.length})</Label>
+                      <div className="flex flex-wrap gap-1">
+                        {enabledModules.slice(0, 5).map((module) => (
+                          <Badge key={module.id} variant="outline" className="text-xs">
+                            {module.name}
+                          </Badge>
+                        ))}
+                        {enabledModules.length > 5 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{enabledModules.length - 5} more
+                          </Badge>
+                        )}
+                        {enabledModules.length === 0 && (
+                          <span className="text-xs text-muted-foreground">No modules enabled</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => openEdit(pkg)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => deletePackage(pkg.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
 
         {/* Edit Dialog */}
-        <Dialog open={!!editingPackage} onOpenChange={(open) => !open && setEditingPackage(null)}>
+        <Dialog open={!!editingPackage} onOpenChange={(open) => {
+          if (!open) {
+            setEditingPackage(null);
+            resetForm();
+          }
+        }}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Edit Package</DialogTitle>
-              <DialogDescription>Update package details, limits, and features</DialogDescription>
+              <DialogDescription>Update package settings and features</DialogDescription>
             </DialogHeader>
-            <PackageForm onSubmit={handleUpdate} submitLabel="Save Changes" />
+            <PackageFormContent />
+            <DialogFooter className="pt-4">
+              <Button variant="outline" onClick={() => { setEditingPackage(null); resetForm(); }}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdate} disabled={!formData.name}>
+                Update Package
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
