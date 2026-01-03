@@ -9,6 +9,9 @@ import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { SuperAdminRoute } from "@/components/layout/SuperAdminRoute";
 import { TenantAccessGuard } from "@/components/layout/TenantAccessGuard";
 import { ModuleAccessGuard } from "@/components/layout/ModuleAccessGuard";
+
+// Main Pages
+import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import OLTManagement from "./pages/OLTManagement";
@@ -48,6 +51,11 @@ import BillingAutomation from "./pages/ISP/BillingAutomation";
 import ISPGatewaySettings from "./pages/ISP/GatewaySettings";
 import SMSCenter from "./pages/ISP/SMSCenter";
 import BkashPayments from "./pages/ISP/BkashPayments";
+import Inventory from "./pages/ISP/Inventory";
+import Staff from "./pages/ISP/Staff";
+import Transactions from "./pages/ISP/Transactions";
+import Reports from "./pages/ISP/Reports";
+import CustomDomain from "./pages/ISP/CustomDomain";
 
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
@@ -67,8 +75,12 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<Landing />} />
               <Route path="/auth" element={<Auth />} />
-              <Route path="/" element={
+              
+              {/* Protected Dashboard */}
+              <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
                     <Dashboard />
@@ -139,7 +151,7 @@ const App = () => (
                 </ProtectedRoute>
               } />
               
-              {/* Super Admin Routes - Restricted to super_admin role */}
+              {/* Super Admin Routes */}
               <Route path="/admin" element={
                 <SuperAdminRoute>
                   <SuperAdminDashboard />
@@ -181,7 +193,7 @@ const App = () => (
                 </SuperAdminRoute>
               } />
 
-              {/* ISP Billing Routes - Accessible even when subscription expired */}
+              {/* ISP Billing Routes */}
               <Route path="/billing/subscription" element={
                 <ProtectedRoute>
                   <MySubscription />
@@ -204,8 +216,6 @@ const App = () => (
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
-              
-              {/* Notification History */}
               <Route path="/notifications/history" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
@@ -213,8 +223,6 @@ const App = () => (
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
-
-              {/* Activity Logs */}
               <Route path="/activity-logs" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
@@ -222,8 +230,6 @@ const App = () => (
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
-
-              {/* Invoices */}
               <Route path="/invoices" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
@@ -326,6 +332,45 @@ const App = () => (
                 <ProtectedRoute>
                   <TenantAccessGuard>
                     <BkashPayments />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/inventory" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_inventory" moduleName="Inventory Management">
+                      <Inventory />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/staff" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <Staff />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/transactions" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <Transactions />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/reports" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <Reports />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/domain" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="custom_domain" moduleName="Custom Domain">
+                      <CustomDomain />
+                    </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />

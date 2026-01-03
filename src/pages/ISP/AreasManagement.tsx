@@ -16,29 +16,34 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useLocationHierarchy } from '@/hooks/useLocationHierarchy';
-import { MapPin, Plus, Trash2, Loader2, Building, Map, Home, Trees } from 'lucide-react';
+import { MapPin, Plus, Trash2, Loader2, Globe, Building, Map, Home, Trees } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 
-type DialogType = 'district' | 'upazila' | 'union' | 'village' | null;
+type DialogType = 'division' | 'district' | 'upazila' | 'union' | 'village' | null;
 
 export default function AreasManagement() {
   const {
-    districts, upazilas, unions, villages, loading,
-    createDistrict, createUpazila, createUnion, createVillage,
-    deleteDistrict, deleteUpazila, deleteUnion, deleteVillage,
-    fetchUpazilas, fetchUnions, fetchVillages
+    divisions, districts, upazilas, unions, villages, loading,
+    createDivision, deleteDivision,
+    createDistrict, deleteDistrict,
+    createUpazila, deleteUpazila,
+    createUnion, deleteUnion,
+    createVillage, deleteVillage,
+    getDivisionName, getDistrictName, getUpazilaName, getUnionName
   } = useLocationHierarchy();
 
-  const [activeTab, setActiveTab] = useState('districts');
+  const [activeTab, setActiveTab] = useState('divisions');
   const [showDialog, setShowDialog] = useState<DialogType>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: DialogType; id: string; name: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Form state
+  const [divisionName, setDivisionName] = useState('');
   const [districtName, setDistrictName] = useState('');
+  const [selectedDivisionId, setSelectedDivisionId] = useState('');
   const [upazilaName, setUpazilaName] = useState('');
   const [selectedDistrictId, setSelectedDistrictId] = useState('');
   const [unionName, setUnionName] = useState('');
@@ -46,14 +51,13 @@ export default function AreasManagement() {
   const [villageName, setVillageName] = useState('');
   const [selectedUnionId, setSelectedUnionId] = useState('');
   const [sectionBlock, setSectionBlock] = useState('');
-
-  // Filtered lists based on selection
-  const [filteredUpazilas, setFilteredUpazilas] = useState(upazilas);
-  const [filteredUnions, setFilteredUnions] = useState(unions);
-  const [filteredVillages, setFilteredVillages] = useState(villages);
+  const [roadNo, setRoadNo] = useState('');
+  const [houseNo, setHouseNo] = useState('');
 
   const resetForm = () => {
+    setDivisionName('');
     setDistrictName('');
+    setSelectedDivisionId('');
     setUpazilaName('');
     setSelectedDistrictId('');
     setUnionName('');
@@ -61,6 +65,8 @@ export default function AreasManagement() {
     setVillageName('');
     setSelectedUnionId('');
     setSectionBlock('');
+    setRoadNo('');
+    setHouseNo('');
   };
 
   const handleSubmit = async (type: DialogType) => {
@@ -69,8 +75,11 @@ export default function AreasManagement() {
 
     try {
       switch (type) {
+        case 'division':
+          await createDivision(divisionName);
+          break;
         case 'district':
-          await createDistrict(districtName);
+          await createDistrict(districtName, selectedDivisionId || undefined);
           break;
         case 'upazila':
           await createUpazila(upazilaName, selectedDistrictId);
@@ -79,7 +88,7 @@ export default function AreasManagement() {
           await createUnion(unionName, selectedUpazilaId);
           break;
         case 'village':
-          await createVillage(villageName, selectedUnionId, sectionBlock);
+          await createVillage(villageName, selectedUnionId, sectionBlock, roadNo, houseNo);
           break;
       }
       setShowDialog(null);
@@ -94,6 +103,9 @@ export default function AreasManagement() {
   const handleDelete = async () => {
     if (!deleteConfirm) return;
     switch (deleteConfirm.type) {
+      case 'division':
+        await deleteDivision(deleteConfirm.id);
+        break;
       case 'district':
         await deleteDistrict(deleteConfirm.id);
         break;
@@ -110,15 +122,10 @@ export default function AreasManagement() {
     setDeleteConfirm(null);
   };
 
-  // Get parent names for display
-  const getDistrictName = (districtId: string) => districts.find(d => d.id === districtId)?.name || '-';
-  const getUpazilaName = (upazilaId: string) => upazilas.find(u => u.id === upazilaId)?.name || '-';
-  const getUnionName = (unionId: string) => unions.find(u => u.id === unionId)?.name || '-';
-
   return (
     <DashboardLayout
       title="Location Management"
-      subtitle="Manage hierarchical locations: District → Upazila → Union → Village"
+      subtitle="Manage hierarchical locations: Division → District → Upazila → Union → Village"
     >
       <Card>
         <CardHeader>
@@ -127,29 +134,75 @@ export default function AreasManagement() {
             Location Hierarchy
           </CardTitle>
           <CardDescription>
-            Create and manage locations in hierarchical order. First add Districts, then Upazilas under them, and so on.
+            Create and manage locations in hierarchical order. First add Divisions, then Districts under them, and so on.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-4 w-full">
-              <TabsTrigger value="districts" className="gap-2">
+            <TabsList className="grid grid-cols-5 w-full">
+              <TabsTrigger value="divisions" className="gap-1 text-xs sm:text-sm">
+                <Globe className="h-4 w-4" />
+                <span className="hidden sm:inline">Divisions</span> ({divisions.length})
+              </TabsTrigger>
+              <TabsTrigger value="districts" className="gap-1 text-xs sm:text-sm">
                 <Building className="h-4 w-4" />
-                Districts ({districts.length})
+                <span className="hidden sm:inline">Districts</span> ({districts.length})
               </TabsTrigger>
-              <TabsTrigger value="upazilas" className="gap-2">
+              <TabsTrigger value="upazilas" className="gap-1 text-xs sm:text-sm">
                 <Map className="h-4 w-4" />
-                Upazilas ({upazilas.length})
+                <span className="hidden sm:inline">Upazilas</span> ({upazilas.length})
               </TabsTrigger>
-              <TabsTrigger value="unions" className="gap-2">
+              <TabsTrigger value="unions" className="gap-1 text-xs sm:text-sm">
                 <Home className="h-4 w-4" />
-                Unions ({unions.length})
+                <span className="hidden sm:inline">Unions</span> ({unions.length})
               </TabsTrigger>
-              <TabsTrigger value="villages" className="gap-2">
+              <TabsTrigger value="villages" className="gap-1 text-xs sm:text-sm">
                 <Trees className="h-4 w-4" />
-                Villages ({villages.length})
+                <span className="hidden sm:inline">Villages</span> ({villages.length})
               </TabsTrigger>
             </TabsList>
+
+            {/* Divisions Tab */}
+            <TabsContent value="divisions" className="mt-4">
+              <div className="flex justify-end mb-4">
+                <Button onClick={() => setShowDialog('division')}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Division
+                </Button>
+              </div>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Division Name</TableHead>
+                      <TableHead>Districts</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow><TableCell colSpan={3} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                    ) : divisions.length === 0 ? (
+                      <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No divisions found. Add your first division (e.g., Dhaka, Chittagong).</TableCell></TableRow>
+                    ) : (
+                      divisions.map((division) => (
+                        <TableRow key={division.id}>
+                          <TableCell className="font-medium">{division.name}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{districts.filter(d => d.division_id === division.id).length} Districts</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm({ type: 'division', id: division.id, name: division.name })}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
 
             {/* Districts Tab */}
             <TabsContent value="districts" className="mt-4">
@@ -164,19 +217,21 @@ export default function AreasManagement() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>District Name</TableHead>
+                      <TableHead>Division</TableHead>
                       <TableHead>Upazilas</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={3} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
                     ) : districts.length === 0 ? (
-                      <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No districts found. Add your first district.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No districts found. Add a division first, then add districts.</TableCell></TableRow>
                     ) : (
                       districts.map((district) => (
                         <TableRow key={district.id}>
                           <TableCell className="font-medium">{district.name}</TableCell>
+                          <TableCell>{district.division_id ? getDivisionName(district.division_id) : '-'}</TableCell>
                           <TableCell>
                             <Badge variant="secondary">{upazilas.filter(u => u.district_id === district.id).length} Upazilas</Badge>
                           </TableCell>
@@ -198,14 +253,14 @@ export default function AreasManagement() {
               <div className="flex justify-end mb-4">
                 <Button onClick={() => setShowDialog('upazila')} disabled={districts.length === 0}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Upazila/Police Station
+                  Add Upazila/Thana
                 </Button>
               </div>
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Upazila Name</TableHead>
+                      <TableHead>Upazila/Thana Name</TableHead>
                       <TableHead>District</TableHead>
                       <TableHead>Unions</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -296,20 +351,26 @@ export default function AreasManagement() {
                       <TableHead>Village/Market Name</TableHead>
                       <TableHead>Union</TableHead>
                       <TableHead>Section/Block</TableHead>
+                      <TableHead>Road/House</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
                     ) : villages.length === 0 ? (
-                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No villages found. Add a union first, then add villages.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No villages found. Add a union first, then add villages.</TableCell></TableRow>
                     ) : (
                       villages.map((village) => (
                         <TableRow key={village.id}>
                           <TableCell className="font-medium">{village.name}</TableCell>
                           <TableCell>{getUnionName(village.union_id)}</TableCell>
                           <TableCell>{village.section_block || '-'}</TableCell>
+                          <TableCell>
+                            {village.road_no || village.house_no 
+                              ? `${village.road_no || ''}${village.road_no && village.house_no ? '/' : ''}${village.house_no || ''}`
+                              : '-'}
+                          </TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm({ type: 'village', id: village.id, name: village.name })}>
                               <Trash2 className="h-4 w-4 text-destructive" />
@@ -326,6 +387,32 @@ export default function AreasManagement() {
         </CardContent>
       </Card>
 
+      {/* Add Division Dialog */}
+      <Dialog open={showDialog === 'division'} onOpenChange={(open) => !open && setShowDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Division</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Division Name *</Label>
+              <Input
+                value={divisionName}
+                onChange={(e) => setDivisionName(e.target.value)}
+                placeholder="e.g., Dhaka, Chittagong, Rajshahi"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDialog(null)}>Cancel</Button>
+            <Button onClick={() => handleSubmit('division')} disabled={saving || !divisionName}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Create Division
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Add District Dialog */}
       <Dialog open={showDialog === 'district'} onOpenChange={(open) => !open && setShowDialog(null)}>
         <DialogContent>
@@ -334,11 +421,25 @@ export default function AreasManagement() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label>Select Division (Optional)</Label>
+              <Select value={selectedDivisionId} onValueChange={setSelectedDivisionId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a division" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {divisions.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>District Name *</Label>
               <Input
                 value={districtName}
                 onChange={(e) => setDistrictName(e.target.value)}
-                placeholder="e.g., Dhaka, Chittagong"
+                placeholder="e.g., Gazipur, Narayanganj"
               />
             </div>
           </div>
@@ -356,7 +457,7 @@ export default function AreasManagement() {
       <Dialog open={showDialog === 'upazila'} onOpenChange={(open) => !open && setShowDialog(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New Upazila/Police Station</DialogTitle>
+            <DialogTitle>Add New Upazila/Thana</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -373,7 +474,7 @@ export default function AreasManagement() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Upazila/Police Station Name *</Label>
+              <Label>Upazila/Thana Name *</Label>
               <Input
                 value={upazilaName}
                 onChange={(e) => setUpazilaName(e.target.value)}
@@ -406,9 +507,7 @@ export default function AreasManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   {upazilas.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name} ({getDistrictName(u.district_id)})
-                    </SelectItem>
+                    <SelectItem key={u.id} value={u.id}>{u.name} ({getDistrictName(u.district_id)})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -418,7 +517,7 @@ export default function AreasManagement() {
               <Input
                 value={unionName}
                 onChange={(e) => setUnionName(e.target.value)}
-                placeholder="e.g., Ward 1, Union Parishad"
+                placeholder="e.g., Rupganj, Araihazar"
               />
             </div>
           </div>
@@ -447,9 +546,7 @@ export default function AreasManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   {unions.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name} ({getUpazilaName(u.upazila_id)})
-                    </SelectItem>
+                    <SelectItem key={u.id} value={u.id}>{u.name} ({getUpazilaName(u.upazila_id)})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -459,7 +556,7 @@ export default function AreasManagement() {
               <Input
                 value={villageName}
                 onChange={(e) => setVillageName(e.target.value)}
-                placeholder="e.g., Banani Market, Mohakhali"
+                placeholder="e.g., Bazar, Para"
               />
             </div>
             <div className="space-y-2">
@@ -467,8 +564,26 @@ export default function AreasManagement() {
               <Input
                 value={sectionBlock}
                 onChange={(e) => setSectionBlock(e.target.value)}
-                placeholder="e.g., Block A, Section 2"
+                placeholder="e.g., Block A, Section 10"
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Road No (Optional)</Label>
+                <Input
+                  value={roadNo}
+                  onChange={(e) => setRoadNo(e.target.value)}
+                  placeholder="e.g., Road 5"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>House No (Optional)</Label>
+                <Input
+                  value={houseNo}
+                  onChange={(e) => setHouseNo(e.target.value)}
+                  placeholder="e.g., 123"
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -487,7 +602,7 @@ export default function AreasManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleteConfirm?.type}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deleteConfirm?.name}"? This will also delete all child items.
+              Are you sure you want to delete "{deleteConfirm?.name}"? This will also delete all child locations and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

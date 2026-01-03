@@ -3,10 +3,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { toast } from 'sonner';
 
-export interface District {
+export interface Division {
   id: string;
   tenant_id: string;
   name: string;
+  bn_name?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface District {
+  id: string;
+  tenant_id: string;
+  division_id?: string | null;
+  name: string;
+  bn_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -16,6 +27,7 @@ export interface Upazila {
   tenant_id: string;
   district_id: string;
   name: string;
+  bn_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -25,6 +37,7 @@ export interface Union {
   tenant_id: string;
   upazila_id: string;
   name: string;
+  bn_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,28 +47,48 @@ export interface Village {
   tenant_id: string;
   union_id: string;
   name: string;
-  section_block: string | null;
+  bn_name?: string | null;
+  section_block?: string | null;
+  road_no?: string | null;
+  house_no?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export function useLocationHierarchy() {
   const { tenantId, isSuperAdmin } = useTenantContext();
+  const [divisions, setDivisions] = useState<Division[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
   const [upazilas, setUpazilas] = useState<Upazila[]>([]);
   const [unions, setUnions] = useState<Union[]>([]);
   const [villages, setVillages] = useState<Village[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchDistricts = useCallback(async () => {
+  const fetchDivisions = useCallback(async () => {
     try {
-      let query = supabase.from('districts').select('*').order('name');
+      let query = supabase.from('divisions').select('*').order('name');
       if (!isSuperAdmin && tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
       const { data, error } = await query;
       if (error) throw error;
-      setDistricts(data || []);
+      setDivisions((data as any[]) || []);
+    } catch (err) {
+      console.error('Error fetching divisions:', err);
+    }
+  }, [tenantId, isSuperAdmin]);
+
+  const fetchDistricts = useCallback(async (divisionId?: string) => {
+    try {
+      let query = supabase.from('districts').select('*').order('name');
+      if (divisionId) {
+        query = query.eq('division_id', divisionId);
+      } else if (!isSuperAdmin && tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      setDistricts((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching districts:', err);
     }
@@ -71,7 +104,7 @@ export function useLocationHierarchy() {
       }
       const { data, error } = await query;
       if (error) throw error;
-      setUpazilas(data || []);
+      setUpazilas((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching upazilas:', err);
     }
@@ -87,7 +120,7 @@ export function useLocationHierarchy() {
       }
       const { data, error } = await query;
       if (error) throw error;
-      setUnions(data || []);
+      setUnions((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching unions:', err);
     }
@@ -103,7 +136,7 @@ export function useLocationHierarchy() {
       }
       const { data, error } = await query;
       if (error) throw error;
-      setVillages(data || []);
+      setVillages((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching villages:', err);
     }
@@ -112,22 +145,64 @@ export function useLocationHierarchy() {
   useEffect(() => {
     const loadAll = async () => {
       setLoading(true);
-      await Promise.all([fetchDistricts(), fetchUpazilas(), fetchUnions(), fetchVillages()]);
+      await Promise.all([
+        fetchDivisions(),
+        fetchDistricts(),
+        fetchUpazilas(),
+        fetchUnions(),
+        fetchVillages()
+      ]);
       setLoading(false);
     };
     if (tenantId || isSuperAdmin) {
       loadAll();
     }
-  }, [fetchDistricts, fetchUpazilas, fetchUnions, fetchVillages, tenantId, isSuperAdmin]);
+  }, [fetchDivisions, fetchDistricts, fetchUpazilas, fetchUnions, fetchVillages, tenantId, isSuperAdmin]);
+
+  // CRUD functions for divisions
+  const createDivision = async (name: string, bnName?: string) => {
+    if (!tenantId && !isSuperAdmin) return null;
+    const tid = tenantId || '';
+    try {
+      const { data, error } = await supabase
+        .from('divisions')
+        .insert({ name, bn_name: bnName || null, tenant_id: tid } as any)
+        .select()
+        .single();
+      if (error) throw error;
+      toast.success('Division created');
+      await fetchDivisions();
+      return data;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create division');
+      return null;
+    }
+  };
+
+  const deleteDivision = async (id: string) => {
+    try {
+      const { error } = await supabase.from('divisions').delete().eq('id', id);
+      if (error) throw error;
+      toast.success('Division deleted');
+      await fetchDivisions();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete division');
+    }
+  };
 
   // CRUD functions for districts
-  const createDistrict = async (name: string) => {
+  const createDistrict = async (name: string, divisionId?: string, bnName?: string) => {
     if (!tenantId && !isSuperAdmin) return null;
     const tid = tenantId || '';
     try {
       const { data, error } = await supabase
         .from('districts')
-        .insert({ name, tenant_id: tid })
+        .insert({ 
+          name, 
+          division_id: divisionId || null, 
+          bn_name: bnName || null, 
+          tenant_id: tid 
+        } as any)
         .select()
         .single();
       if (error) throw error;
@@ -136,63 +211,6 @@ export function useLocationHierarchy() {
       return data;
     } catch (err: any) {
       toast.error(err.message || 'Failed to create district');
-      return null;
-    }
-  };
-
-  const createUpazila = async (name: string, districtId: string) => {
-    if (!tenantId && !isSuperAdmin) return null;
-    const tid = tenantId || '';
-    try {
-      const { data, error } = await supabase
-        .from('upazilas')
-        .insert({ name, district_id: districtId, tenant_id: tid })
-        .select()
-        .single();
-      if (error) throw error;
-      toast.success('Upazila/Police Station created');
-      await fetchUpazilas();
-      return data;
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create upazila');
-      return null;
-    }
-  };
-
-  const createUnion = async (name: string, upazilaId: string) => {
-    if (!tenantId && !isSuperAdmin) return null;
-    const tid = tenantId || '';
-    try {
-      const { data, error } = await supabase
-        .from('unions')
-        .insert({ name, upazila_id: upazilaId, tenant_id: tid })
-        .select()
-        .single();
-      if (error) throw error;
-      toast.success('Union created');
-      await fetchUnions();
-      return data;
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create union');
-      return null;
-    }
-  };
-
-  const createVillage = async (name: string, unionId: string, sectionBlock?: string) => {
-    if (!tenantId && !isSuperAdmin) return null;
-    const tid = tenantId || '';
-    try {
-      const { data, error } = await supabase
-        .from('villages')
-        .insert({ name, union_id: unionId, tenant_id: tid, section_block: sectionBlock || null })
-        .select()
-        .single();
-      if (error) throw error;
-      toast.success('Village/Market created');
-      await fetchVillages();
-      return data;
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create village');
       return null;
     }
   };
@@ -208,6 +226,25 @@ export function useLocationHierarchy() {
     }
   };
 
+  const createUpazila = async (name: string, districtId: string, bnName?: string) => {
+    if (!tenantId && !isSuperAdmin) return null;
+    const tid = tenantId || '';
+    try {
+      const { data, error } = await supabase
+        .from('upazilas')
+        .insert({ name, district_id: districtId, bn_name: bnName || null, tenant_id: tid } as any)
+        .select()
+        .single();
+      if (error) throw error;
+      toast.success('Upazila/Police Station created');
+      await fetchUpazilas();
+      return data;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create upazila');
+      return null;
+    }
+  };
+
   const deleteUpazila = async (id: string) => {
     try {
       const { error } = await supabase.from('upazilas').delete().eq('id', id);
@@ -216,6 +253,25 @@ export function useLocationHierarchy() {
       await fetchUpazilas();
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete upazila');
+    }
+  };
+
+  const createUnion = async (name: string, upazilaId: string, bnName?: string) => {
+    if (!tenantId && !isSuperAdmin) return null;
+    const tid = tenantId || '';
+    try {
+      const { data, error } = await supabase
+        .from('unions')
+        .insert({ name, upazila_id: upazilaId, bn_name: bnName || null, tenant_id: tid } as any)
+        .select()
+        .single();
+      if (error) throw error;
+      toast.success('Union created');
+      await fetchUnions();
+      return data;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create union');
+      return null;
     }
   };
 
@@ -230,6 +286,40 @@ export function useLocationHierarchy() {
     }
   };
 
+  const createVillage = async (
+    name: string, 
+    unionId: string, 
+    sectionBlock?: string,
+    roadNo?: string,
+    houseNo?: string,
+    bnName?: string
+  ) => {
+    if (!tenantId && !isSuperAdmin) return null;
+    const tid = tenantId || '';
+    try {
+      const { data, error } = await supabase
+        .from('villages')
+        .insert({ 
+          name, 
+          union_id: unionId, 
+          tenant_id: tid, 
+          section_block: sectionBlock || null,
+          road_no: roadNo || null,
+          house_no: houseNo || null,
+          bn_name: bnName || null
+        } as any)
+        .select()
+        .single();
+      if (error) throw error;
+      toast.success('Village/Market created');
+      await fetchVillages();
+      return data;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create village');
+      return null;
+    }
+  };
+
   const deleteVillage = async (id: string) => {
     try {
       const { error } = await supabase.from('villages').delete().eq('id', id);
@@ -241,23 +331,37 @@ export function useLocationHierarchy() {
     }
   };
 
+  // Helper functions to get parent names
+  const getDivisionName = (divisionId: string) => divisions.find(d => d.id === divisionId)?.name || '-';
+  const getDistrictName = (districtId: string) => districts.find(d => d.id === districtId)?.name || '-';
+  const getUpazilaName = (upazilaId: string) => upazilas.find(u => u.id === upazilaId)?.name || '-';
+  const getUnionName = (unionId: string) => unions.find(u => u.id === unionId)?.name || '-';
+
   return {
+    divisions,
     districts,
     upazilas,
     unions,
     villages,
     loading,
+    fetchDivisions,
     fetchDistricts,
     fetchUpazilas,
     fetchUnions,
     fetchVillages,
+    createDivision,
+    deleteDivision,
     createDistrict,
-    createUpazila,
-    createUnion,
-    createVillage,
     deleteDistrict,
+    createUpazila,
     deleteUpazila,
+    createUnion,
     deleteUnion,
+    createVillage,
     deleteVillage,
+    getDivisionName,
+    getDistrictName,
+    getUpazilaName,
+    getUnionName,
   };
 }
