@@ -4,7 +4,7 @@
  * IMPORTANT: Update 'cwd' path before running!
  * 
  * Usage:
- *   cd /var/www/olt.isppoint.com/olt-polling-server
+ *   cd /var/www/oltapp.isppoint.com/olt-polling-server
  *   pm2 start ecosystem.config.cjs
  */
 module.exports = {
@@ -13,8 +13,8 @@ module.exports = {
     script: 'src/index.js',
     
     // Working directory - MUST match your actual server path
-    // For olt.isppoint.com use:
-    cwd: '/var/www/olt.isppoint.com/olt-polling-server',
+    // For oltapp.isppoint.com use:
+    cwd: '/var/www/oltapp.isppoint.com/olt-polling-server',
     
     // Process settings
     instances: 1,

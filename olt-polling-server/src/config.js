@@ -15,7 +15,7 @@ const __dirname = dirname(__filename);
 const possibleEnvPaths = [
   join(__dirname, '..', '.env'),           // /src/../.env (project root)
   join(process.cwd(), '.env'),              // Current working directory
-  '/var/www/olt.isppoint.com/olt-polling-server/.env',  // Absolute path
+  '/var/www/oltapp.isppoint.com/olt-polling-server/.env',  // Absolute path for production
 ];
 
 let envLoaded = false;
