@@ -1821,6 +1821,125 @@ export type Database = {
           },
         ]
       }
+      sms_queue: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          failed_count: number | null
+          group_filter: Json | null
+          id: string
+          message: string
+          recipients: Json
+          scheduled_at: string | null
+          send_type: string
+          sent_count: number | null
+          started_at: string | null
+          status: string
+          template_id: string | null
+          tenant_id: string
+          total_count: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          failed_count?: number | null
+          group_filter?: Json | null
+          id?: string
+          message: string
+          recipients?: Json
+          scheduled_at?: string | null
+          send_type?: string
+          sent_count?: number | null
+          started_at?: string | null
+          status?: string
+          template_id?: string | null
+          tenant_id: string
+          total_count?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          failed_count?: number | null
+          group_filter?: Json | null
+          id?: string
+          message?: string
+          recipients?: Json
+          scheduled_at?: string | null
+          send_type?: string
+          sent_count?: number | null
+          started_at?: string | null
+          status?: string
+          template_id?: string | null
+          tenant_id?: string
+          total_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_queue_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "sms_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_templates: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          is_system: boolean | null
+          message: string
+          name: string
+          template_type: string
+          tenant_id: string | null
+          updated_at: string
+          variables: Json | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          is_system?: boolean | null
+          message: string
+          name: string
+          template_type: string
+          tenant_id?: string | null
+          updated_at?: string
+          variables?: Json | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          is_system?: boolean | null
+          message?: string
+          name?: string
+          template_type?: string
+          tenant_id?: string | null
+          updated_at?: string
+          variables?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_permissions: {
         Row: {
           created_at: string
@@ -2108,6 +2227,7 @@ export type Database = {
           id: string
           is_enabled: boolean | null
           provider: string
+          provider_name: string | null
           sender_id: string | null
           tenant_id: string
           updated_at: string | null
@@ -2120,6 +2240,7 @@ export type Database = {
           id?: string
           is_enabled?: boolean | null
           provider?: string
+          provider_name?: string | null
           sender_id?: string | null
           tenant_id: string
           updated_at?: string | null
@@ -2132,6 +2253,7 @@ export type Database = {
           id?: string
           is_enabled?: boolean | null
           provider?: string
+          provider_name?: string | null
           sender_id?: string | null
           tenant_id?: string
           updated_at?: string | null
@@ -2325,7 +2447,16 @@ export type Database = {
         | "CDATA"
         | "ECOM"
       olt_mode: "EPON" | "GPON"
-      payment_method: "sslcommerz" | "bkash" | "rocket" | "nagad" | "manual"
+      payment_method:
+        | "sslcommerz"
+        | "bkash"
+        | "rocket"
+        | "nagad"
+        | "manual"
+        | "uddoktapay"
+        | "shurjopay"
+        | "aamarpay"
+        | "portwallet"
       payment_status: "pending" | "completed" | "failed" | "refunded"
       speed_unit: "mbps" | "gbps"
       staff_role: "admin" | "staff" | "technician" | "support" | "reseller"
@@ -2489,7 +2620,17 @@ export const Constants = {
         "ECOM",
       ],
       olt_mode: ["EPON", "GPON"],
-      payment_method: ["sslcommerz", "bkash", "rocket", "nagad", "manual"],
+      payment_method: [
+        "sslcommerz",
+        "bkash",
+        "rocket",
+        "nagad",
+        "manual",
+        "uddoktapay",
+        "shurjopay",
+        "aamarpay",
+        "portwallet",
+      ],
       payment_status: ["pending", "completed", "failed", "refunded"],
       speed_unit: ["mbps", "gbps"],
       staff_role: ["admin", "staff", "technician", "support", "reseller"],

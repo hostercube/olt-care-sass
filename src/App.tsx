@@ -46,6 +46,7 @@ import ResellersManagement from "./pages/ISP/ResellersManagement";
 import MikroTikManagement from "./pages/ISP/MikroTikManagement";
 import BillingAutomation from "./pages/ISP/BillingAutomation";
 import ISPGatewaySettings from "./pages/ISP/GatewaySettings";
+import SMSCenter from "./pages/ISP/SMSCenter";
 
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
@@ -308,6 +309,15 @@ const App = () => (
                 <ProtectedRoute>
                   <TenantAccessGuard>
                     <ISPGatewaySettings />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/sms" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="sms_alerts" moduleName="SMS Center">
+                      <SMSCenter />
+                    </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
