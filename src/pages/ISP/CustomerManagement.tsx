@@ -29,6 +29,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+import { useTablePagination, PaginationControls } from '@/components/common/TableWithPagination';
 
 const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any }> = {
   active: { label: 'Active', variant: 'default', icon: UserCheck },
@@ -61,6 +62,19 @@ export default function CustomerManagement() {
       return matchesSearch && matchesStatus;
     });
   }, [customers, searchTerm, statusFilter]);
+
+  // Pagination
+  const {
+    paginatedData: paginatedCustomers,
+    currentPage,
+    totalPages,
+    pageSize,
+    totalItems,
+    startIndex,
+    endIndex,
+    goToPage,
+    handlePageSizeChange,
+  } = useTablePagination(filteredCustomers, 10);
 
   const handleDelete = async () => {
     if (deleteConfirm) {
@@ -239,14 +253,14 @@ export default function CustomerManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCustomers.length === 0 ? (
+                  {paginatedCustomers.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                         No customers found
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredCustomers.map((customer) => {
+                    paginatedCustomers.map((customer) => {
                       const statusInfo = statusConfig[customer.status];
                       const StatusIcon = statusInfo.icon;
                       return (
@@ -289,7 +303,7 @@ export default function CustomerManagement() {
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
+                              <DropdownMenuContent align="end" className="bg-popover border border-border">
                                 <DropdownMenuItem onClick={() => setSelectedCustomer(customer)}>
                                   <Eye className="h-4 w-4 mr-2" />
                                   View Details
@@ -326,6 +340,18 @@ export default function CustomerManagement() {
                   )}
                 </TableBody>
               </Table>
+              
+              {/* Pagination */}
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={totalItems}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={goToPage}
+                onPageSizeChange={handlePageSizeChange}
+              />
             </div>
           )}
         </CardContent>

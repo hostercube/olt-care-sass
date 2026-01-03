@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Wifi, Loader2, ArrowLeft, Eye, EyeOff, Shield } from 'lucide-react';
 import { z } from 'zod';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
+import { DIVISIONS, getDistricts, getUpazilas } from '@/data/bangladeshLocations';
 
 interface Package {
   id: string;
@@ -36,29 +37,6 @@ const signupSchema = authSchema.extend({
   message: "Passwords don't match",
   path: ["confirmPassword"],
 });
-
-const DIVISIONS = [
-  'Dhaka', 'Chittagong', 'Rajshahi', 'Khulna', 'Barisal', 'Sylhet', 'Rangpur', 'Mymensingh'
-];
-
-// Bangladesh districts by division
-const DISTRICTS_BY_DIVISION: Record<string, string[]> = {
-  'Dhaka': ['Dhaka', 'Faridpur', 'Gazipur', 'Gopalganj', 'Kishoreganj', 'Madaripur', 'Manikganj', 'Munshiganj', 'Narayanganj', 'Narsingdi', 'Rajbari', 'Shariatpur', 'Tangail'],
-  'Chittagong': ['Chittagong', 'Bandarban', 'Brahmanbaria', 'Chandpur', 'Comilla', 'Cox\'s Bazar', 'Feni', 'Khagrachari', 'Lakshmipur', 'Noakhali', 'Rangamati'],
-  'Rajshahi': ['Rajshahi', 'Bogra', 'Chapainawabganj', 'Joypurhat', 'Naogaon', 'Natore', 'Nawabganj', 'Pabna', 'Sirajganj'],
-  'Khulna': ['Khulna', 'Bagerhat', 'Chuadanga', 'Jessore', 'Jhenaidah', 'Kushtia', 'Magura', 'Meherpur', 'Narail', 'Satkhira'],
-  'Barisal': ['Barisal', 'Barguna', 'Bhola', 'Jhalokati', 'Patuakhali', 'Pirojpur'],
-  'Sylhet': ['Sylhet', 'Habiganj', 'Moulvibazar', 'Sunamganj'],
-  'Rangpur': ['Rangpur', 'Dinajpur', 'Gaibandha', 'Kurigram', 'Lalmonirhat', 'Nilphamari', 'Panchagarh', 'Thakurgaon'],
-  'Mymensingh': ['Mymensingh', 'Jamalpur', 'Netrokona', 'Sherpur'],
-};
-
-// Sample upazilas (common ones across districts)
-const COMMON_UPAZILAS = [
-  'Sadar', 'South', 'North', 'East', 'West', 'Central', 
-  'Uttara', 'Mirpur', 'Mohammadpur', 'Dhanmondi', 'Gulshan',
-  'Kotwali', 'Model', 'Cantonment', 'Railway', 'Port', 'Airport'
-];
 
 export default function Auth() {
   const { signIn, loading, user } = useAuth();
@@ -479,7 +457,7 @@ export default function Auth() {
                         <SelectTrigger>
                           <SelectValue placeholder="Select" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-popover border border-border z-50">
                           {DIVISIONS.map(d => (
                             <SelectItem key={d} value={d}>{d}</SelectItem>
                           ))}
@@ -494,10 +472,10 @@ export default function Auth() {
                         disabled={!signupData.division}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select" />
+                          <SelectValue placeholder={signupData.division ? "Select" : "Select Division first"} />
                         </SelectTrigger>
-                        <SelectContent>
-                          {(DISTRICTS_BY_DIVISION[signupData.division] || []).map(d => (
+                        <SelectContent className="bg-popover border border-border z-50 max-h-[300px]">
+                          {getDistricts(signupData.division).map(d => (
                             <SelectItem key={d} value={d}>{d}</SelectItem>
                           ))}
                         </SelectContent>
@@ -511,10 +489,10 @@ export default function Auth() {
                         disabled={!signupData.district}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select" />
+                          <SelectValue placeholder={signupData.district ? "Select" : "Select District first"} />
                         </SelectTrigger>
-                        <SelectContent>
-                          {COMMON_UPAZILAS.map(u => (
+                        <SelectContent className="bg-popover border border-border z-50 max-h-[300px]">
+                          {getUpazilas(signupData.district).map(u => (
                             <SelectItem key={u} value={u}>{u}</SelectItem>
                           ))}
                         </SelectContent>
