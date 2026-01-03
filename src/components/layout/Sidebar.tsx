@@ -90,10 +90,10 @@ const superAdminItems: NavItem[] = [
   { title: 'Tenants', href: '/admin/tenants', icon: Building2 },
   { title: 'Packages', href: '/admin/packages', icon: Package },
   { title: 'Payments', href: '/admin/payments', icon: CreditCard },
-  { title: 'Gateways', href: '/admin/gateways', icon: Cog },
-  { title: 'SMS Gateway', href: '/admin/sms-gateway', icon: MessageSquare },
+  { title: 'Payment Gateways', href: '/admin/gateways', icon: Wallet },
   { title: 'Email Gateway', href: '/admin/email-gateway', icon: Mail },
   { title: 'Email Templates', href: '/admin/email-templates', icon: FileText },
+  { title: 'SMS Templates', href: '/admin/sms-templates', icon: MessageSquare },
 ];
 
 const tenantBillingItems: NavItem[] = [
