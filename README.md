@@ -1,17 +1,25 @@
-# OLTCare - GPON/EPON OLT Management System
+# OLT Care SaaS - GPON/EPON OLT Management System
 
-A modern web application for monitoring and managing Optical Line Terminal (OLT) devices and Optical Network Units (ONUs).
+A modern SaaS web application for monitoring and managing Optical Line Terminal (OLT) devices and Optical Network Units (ONUs).
 
-## Features
+## 🌐 Production URLs
+
+- **Frontend**: https://oltapp.isppoint.com
+- **Backend API**: https://oltapp.isppoint.com/olt-polling-server
+- **Supabase**: https://koodidvsmjfwjcgnmqox.supabase.co
+
+## ✨ Features
 
 - 🖥️ **OLT Management**: Add, edit, and monitor multiple OLT devices
 - 📊 **Real-time Monitoring**: Live status updates for OLTs and ONUs
 - 🔔 **Smart Alerts**: Automatic alerts for offline devices and power issues
-- 📈 **Power Monitoring**: Track RX/TX power levels
-- 👥 **Multi-user Support**: Role-based access (Admin, Operator, Viewer)
+- 📈 **Power Monitoring**: Track RX/TX power levels with history
+- 👥 **Multi-tenant SaaS**: Role-based access (Super Admin, Admin, Operator, Viewer)
 - 🌐 **MikroTik Integration**: PPPoE username lookup from MikroTik routers
+- 💳 **Billing System**: Subscription packages, payments, invoices
+- 📱 **SMS/Email Notifications**: Alert notifications via SMS and Email
 
-## Supported OLT Brands
+## 🔧 Supported OLT Brands
 
 | Brand | Protocol | Support Level |
 |-------|----------|---------------|
@@ -25,45 +33,63 @@ A modern web application for monitoring and managing Optical Line Terminal (OLT)
 | BDCOM | SSH | Partial |
 | Nokia | SSH | Partial |
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-- **Frontend**: React, TypeScript, Tailwind CSS, Shadcn/UI
-- **Backend**: Node.js, Express (Polling Server)
+- **Frontend**: React 18, TypeScript, Tailwind CSS, Shadcn/UI
+- **Backend**: Node.js (Polling Server)
 - **Database**: Supabase (PostgreSQL)
 - **Authentication**: Supabase Auth
+- **Process Manager**: PM2
+- **Web Server**: Nginx
 
-## Project Structure
+## 📁 Project Structure
 
 ```
-/
-├── src/                    # Frontend React application
-│   ├── components/         # React components
-│   ├── pages/              # Page components
-│   ├── hooks/              # Custom hooks
-│   └── integrations/       # Supabase client
-├── olt-polling-server/     # Backend polling server
+oltcaresass/
+├── src/                        # Frontend React application
+│   ├── components/             # React components
+│   ├── pages/                  # Page components
+│   ├── hooks/                  # Custom hooks
+│   └── integrations/           # Supabase client
+├── olt-polling-server/         # Backend polling server
 │   ├── src/
-│   │   ├── polling/        # OLT polling logic
-│   │   └── utils/          # Utilities
-│   └── ecosystem.config.cjs
-├── dist/                   # Built frontend (after npm run build)
-└── UBUNTU_DEPLOYMENT.md    # Full deployment guide
+│   │   ├── polling/            # OLT polling logic
+│   │   └── notifications/      # Alert notifications
+│   ├── .env.production         # Backend production config
+│   └── ecosystem.config.cjs    # PM2 config
+├── public/                     # Static assets
+├── .env.production             # Frontend production config
+├── COMPLETE_DATABASE_SCHEMA.sql # Database schema for Supabase
+├── DEPLOYMENT_INSTRUCTIONS.md  # Full deployment guide
+└── dist/                       # Built frontend (after npm run build)
 ```
 
-## Quick Start (Development)
+## 🚀 Deployment
+
+See [DEPLOYMENT_INSTRUCTIONS.md](./DEPLOYMENT_INSTRUCTIONS.md) for complete VPS deployment guide.
+
+### Quick Commands
 
 ```bash
-# Install dependencies
+# Frontend Build
+cp .env.production .env
 npm install
+npm run build
 
-# Start development server
-npm run dev
+# Backend Start
+cd olt-polling-server
+cp .env.production .env
+npm install
+pm2 start ecosystem.config.cjs
 ```
 
-## Deployment
+## 📋 Supabase Credentials
 
-See [UBUNTU_DEPLOYMENT.md](./UBUNTU_DEPLOYMENT.md) for complete deployment instructions on Ubuntu 24.04.
+```
+Project ID: koodidvsmjfwjcgnmqox
+Project URL: https://koodidvsmjfwjcgnmqox.supabase.co
+```
 
-## License
+## 📄 License
 
 Private - For internal use only
