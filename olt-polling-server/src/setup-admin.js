@@ -19,11 +19,11 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   process.exit(1);
 }
 
-// Admin credentials - CHANGE THESE!
-const ADMIN_EMAIL = 'admin@oltcare.com';
-const ADMIN_PASSWORD = 'Admin@123456';
+// Admin credentials
+const ADMIN_EMAIL = 'admin@isppoint.com';
+const ADMIN_PASSWORD = 'admin123';
 const ADMIN_NAME = 'Super Admin';
-const TENANT_NAME = 'OLT Care Admin';
+const TENANT_NAME = 'ISP Point Admin';
 
 async function setupAdmin() {
   console.log('🚀 Setting up first super_admin user...\n');
