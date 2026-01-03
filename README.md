@@ -4,8 +4,8 @@ A modern SaaS web application for monitoring and managing Optical Line Terminal 
 
 ## 🌐 Production URLs
 
-- **Frontend**: https://olt.isppoint.com
-- **Backend API**: https://olt.isppoint.com/olt-polling-server
+- **Frontend**: https://oltapp.isppoint.com
+- **Backend API**: https://oltapp.isppoint.com/olt-polling-server
 - **Supabase**: https://koodidvsmjfwjcgnmqox.supabase.co
 
 ## 📦 Git Repository

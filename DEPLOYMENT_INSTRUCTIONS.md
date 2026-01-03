@@ -6,8 +6,8 @@
 |------|-------|
 | Project Name | oltcaresass |
 | Git Repository | https://github.com/hostercube/olt-care-sass.git |
-| Frontend Domain | https://olt.isppoint.com |
-| Backend API | https://olt.isppoint.com/olt-polling-server |
+| Frontend Domain | https://oltapp.isppoint.com |
+| Backend API | https://oltapp.isppoint.com/olt-polling-server |
 | Supabase Project ID | koodidvsmjfwjcgnmqox |
 | Supabase URL | https://koodidvsmjfwjcgnmqox.supabase.co |
 
@@ -37,7 +37,7 @@ olt-care-sass/
 VITE_SUPABASE_URL=https://koodidvsmjfwjcgnmqox.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtvb2RpZHZzbWpmd2pjZ25tcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNjc5NzIsImV4cCI6MjA4Mjk0Mzk3Mn0.yPQpGWhlm6N9PzeQ4FQztK5LJmRU8BEfiSnDLHSn2Ac
 VITE_SUPABASE_PROJECT_ID=koodidvsmjfwjcgnmqox
-VITE_POLLING_SERVER_URL=https://olt.isppoint.com/olt-polling-server
+VITE_POLLING_SERVER_URL=https://oltapp.isppoint.com/olt-polling-server
 ```
 
 ### Backend (olt-polling-server/.env.production → .env)
@@ -162,7 +162,7 @@ sudo nano /etc/nginx/sites-available/oltapp
 ```nginx
 server {
     listen 80;
-    server_name olt.isppoint.com;
+    server_name oltapp.isppoint.com;
 
     # Frontend
     root /var/www/olt-care-sass/dist;
@@ -217,7 +217,7 @@ sudo systemctl reload nginx
 sudo apt install -y certbot python3-certbot-nginx
 
 # Get SSL certificate
-sudo certbot --nginx -d olt.isppoint.com
+sudo certbot --nginx -d oltapp.isppoint.com
 
 # Auto-renewal test
 sudo certbot renew --dry-run
@@ -248,12 +248,12 @@ curl http://localhost:3001/health
 
 ### 8.2 Check Frontend
 ```bash
-curl -I https://olt.isppoint.com
+curl -I https://oltapp.isppoint.com
 ```
 
 ### 8.3 Test URLs
-- Frontend: https://olt.isppoint.com
-- Backend Health: https://olt.isppoint.com/olt-polling-server/health
+- Frontend: https://oltapp.isppoint.com
+- Backend Health: https://oltapp.isppoint.com/olt-polling-server/health
 
 ---
 
@@ -312,8 +312,8 @@ pm2 monit
 
 | Service | Port | URL |
 |---------|------|-----|
-| Frontend | 80/443 | https://olt.isppoint.com |
-| Backend | 3001 | https://olt.isppoint.com/olt-polling-server |
+| Frontend | 80/443 | https://oltapp.isppoint.com |
+| Backend | 3001 | https://oltapp.isppoint.com/olt-polling-server |
 | Supabase | - | https://koodidvsmjfwjcgnmqox.supabase.co |
 
 | Command | Description |
