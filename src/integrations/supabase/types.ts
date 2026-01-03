@@ -113,48 +113,70 @@ export type Database = {
           created_at: string
           description: string | null
           district: string | null
+          district_id: string | null
           house_no: string | null
           id: string
           name: string
           olt_id: string | null
           road_no: string | null
+          section_block: string | null
           tenant_id: string
+          union_id: string | null
           union_name: string | null
           upazila: string | null
+          upazila_id: string | null
           updated_at: string
           village: string | null
+          village_id: string | null
         }
         Insert: {
           created_at?: string
           description?: string | null
           district?: string | null
+          district_id?: string | null
           house_no?: string | null
           id?: string
           name: string
           olt_id?: string | null
           road_no?: string | null
+          section_block?: string | null
           tenant_id: string
+          union_id?: string | null
           union_name?: string | null
           upazila?: string | null
+          upazila_id?: string | null
           updated_at?: string
           village?: string | null
+          village_id?: string | null
         }
         Update: {
           created_at?: string
           description?: string | null
           district?: string | null
+          district_id?: string | null
           house_no?: string | null
           id?: string
           name?: string
           olt_id?: string | null
           road_no?: string | null
+          section_block?: string | null
           tenant_id?: string
+          union_id?: string | null
           union_name?: string | null
           upazila?: string | null
+          upazila_id?: string | null
           updated_at?: string
           village?: string | null
+          village_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "areas_district_id_fkey"
+            columns: ["district_id"]
+            isOneToOne: false
+            referencedRelation: "districts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "areas_olt_id_fkey"
             columns: ["olt_id"]
@@ -167,6 +189,27 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "areas_union_id_fkey"
+            columns: ["union_id"]
+            isOneToOne: false
+            referencedRelation: "unions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "areas_upazila_id_fkey"
+            columns: ["upazila_id"]
+            isOneToOne: false
+            referencedRelation: "upazilas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "areas_village_id_fkey"
+            columns: ["village_id"]
+            isOneToOne: false
+            referencedRelation: "villages"
             referencedColumns: ["id"]
           },
         ]
@@ -747,6 +790,38 @@ export type Database = {
           uptime_seconds?: number | null
         }
         Relationships: []
+      }
+      districts: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "districts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_gateway_settings: {
         Row: {
@@ -1894,36 +1969,45 @@ export type Database = {
       sms_gateway_settings: {
         Row: {
           api_key: string | null
+          api_secret: string | null
           api_url: string | null
           config: Json | null
           created_at: string
           id: string
           is_enabled: boolean | null
+          password: string | null
           provider: string
           sender_id: string | null
           updated_at: string
+          username: string | null
         }
         Insert: {
           api_key?: string | null
+          api_secret?: string | null
           api_url?: string | null
           config?: Json | null
           created_at?: string
           id?: string
           is_enabled?: boolean | null
+          password?: string | null
           provider?: string
           sender_id?: string | null
           updated_at?: string
+          username?: string | null
         }
         Update: {
           api_key?: string | null
+          api_secret?: string | null
           api_url?: string | null
           config?: Json | null
           created_at?: string
           id?: string
           is_enabled?: boolean | null
+          password?: string | null
           provider?: string
           sender_id?: string | null
           updated_at?: string
+          username?: string | null
         }
         Relationships: []
       }
@@ -2371,42 +2455,51 @@ export type Database = {
       tenant_sms_gateways: {
         Row: {
           api_key: string | null
+          api_secret: string | null
           api_url: string | null
           config: Json | null
           created_at: string | null
           id: string
           is_enabled: boolean | null
+          password: string | null
           provider: string
           provider_name: string | null
           sender_id: string | null
           tenant_id: string
           updated_at: string | null
+          username: string | null
         }
         Insert: {
           api_key?: string | null
+          api_secret?: string | null
           api_url?: string | null
           config?: Json | null
           created_at?: string | null
           id?: string
           is_enabled?: boolean | null
+          password?: string | null
           provider?: string
           provider_name?: string | null
           sender_id?: string | null
           tenant_id: string
           updated_at?: string | null
+          username?: string | null
         }
         Update: {
           api_key?: string | null
+          api_secret?: string | null
           api_url?: string | null
           config?: Json | null
           created_at?: string | null
           id?: string
           is_enabled?: boolean | null
+          password?: string | null
           provider?: string
           provider_name?: string | null
           sender_id?: string | null
           tenant_id?: string
           updated_at?: string | null
+          username?: string | null
         }
         Relationships: [
           {
@@ -2525,6 +2618,90 @@ export type Database = {
         }
         Relationships: []
       }
+      unions: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          tenant_id: string
+          upazila_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          tenant_id: string
+          upazila_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          tenant_id?: string
+          upazila_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unions_upazila_id_fkey"
+            columns: ["upazila_id"]
+            isOneToOne: false
+            referencedRelation: "upazilas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upazilas: {
+        Row: {
+          created_at: string
+          district_id: string
+          id: string
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          district_id: string
+          id?: string
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          district_id?: string
+          id?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upazilas_district_id_fkey"
+            columns: ["district_id"]
+            isOneToOne: false
+            referencedRelation: "districts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upazilas_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -2542,6 +2719,51 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      villages: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          section_block: string | null
+          tenant_id: string
+          union_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          section_block?: string | null
+          tenant_id: string
+          union_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          section_block?: string | null
+          tenant_id?: string
+          union_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "villages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "villages_union_id_fkey"
+            columns: ["union_id"]
+            isOneToOne: false
+            referencedRelation: "unions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

@@ -30,7 +30,7 @@ export type ModuleName =
 export type PaymentGatewayType = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'uddoktapay' | 'shurjopay' | 'aamarpay' | 'portwallet' | 'piprapay' | 'manual';
 
 // SMS gateway types (all supported gateways)
-export type SMSGatewayType = 'smsnoc' | 'mimsms' | 'revesms' | 'greenweb' | 'bulksmsbd' | 'smsq' | 'custom';
+export type SMSGatewayType = 'smsnoc' | 'smsnetbd' | 'sslwireless' | 'jamansms' | 'mimsms' | 'revesms' | 'greenweb' | 'bulksmsbd' | 'smsq' | 'custom';
 
 export interface PaymentGatewayPermissions {
   sslcommerz?: boolean;
@@ -47,6 +47,9 @@ export interface PaymentGatewayPermissions {
 
 export interface SMSGatewayPermissions {
   smsnoc?: boolean;
+  smsnetbd?: boolean;
+  sslwireless?: boolean;
+  jamansms?: boolean;
   mimsms?: boolean;
   revesms?: boolean;
   greenweb?: boolean;
@@ -211,18 +214,26 @@ export interface PaymentGatewaySettings {
 }
 
 export interface PaymentGatewayConfig {
+  // SSLCommerz
   store_id?: string;
   store_password?: string;
-  api_key?: string;
-  api_secret?: string;
-  merchant_id?: string;
-  merchant_number?: string;
+  // bKash
   app_key?: string;
   app_secret?: string;
   username?: string;
   password?: string;
+  // Common merchant
+  merchant_id?: string;
+  merchant_number?: string;
+  // API Keys
+  api_key?: string;
+  api_secret?: string;
+  secret_key?: string;
   public_key?: string;
   private_key?: string;
+  // Webhook
+  webhook_secret?: string;
+  callback_url?: string;
   [key: string]: string | undefined;
 }
 
@@ -232,7 +243,10 @@ export interface SMSGatewaySettings {
   is_enabled: boolean;
   api_url: string | null;
   api_key: string | null;
+  api_secret: string | null;
   sender_id: string | null;
+  username: string | null;
+  password: string | null;
   config: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -359,30 +373,163 @@ export const AVAILABLE_MODULES: ModuleConfig[] = [
   { id: 'backup_restore', name: 'Backup & Restore', description: 'Data backup and restore', category: 'advanced' },
 ];
 
-// Payment gateway configuration for packages
+// Payment gateway configuration with API fields
 export const PAYMENT_GATEWAYS = [
-  { id: 'sslcommerz', name: 'SSLCommerz', description: 'Bangladesh payment gateway' },
-  { id: 'bkash', name: 'bKash', description: 'Mobile banking' },
-  { id: 'rocket', name: 'Rocket', description: 'DBBL mobile banking' },
-  { id: 'nagad', name: 'Nagad', description: 'Bangladesh Post Office mobile banking' },
-  { id: 'uddoktapay', name: 'UddoktaPay', description: 'Digital payment gateway' },
-  { id: 'shurjopay', name: 'ShurjoPay', description: 'Online payment solution' },
-  { id: 'aamarpay', name: 'aamarPay', description: 'Multi-channel payment gateway' },
-  { id: 'portwallet', name: 'PortWallet', description: 'Digital wallet & payments' },
-  { id: 'piprapay', name: 'PipraPay', description: 'PipraPay payment gateway' },
-  { id: 'manual', name: 'Manual Payment', description: 'Cash/Bank transfer' },
-];
+  { 
+    id: 'sslcommerz', 
+    name: 'SSLCommerz', 
+    description: 'Bangladesh payment gateway',
+    fields: ['store_id', 'store_password'],
+    fieldLabels: { store_id: 'Store ID', store_password: 'Store Password' }
+  },
+  { 
+    id: 'bkash', 
+    name: 'bKash', 
+    description: 'Mobile banking',
+    fields: ['app_key', 'app_secret', 'username', 'password'],
+    fieldLabels: { app_key: 'App Key', app_secret: 'App Secret', username: 'Username', password: 'Password' }
+  },
+  { 
+    id: 'rocket', 
+    name: 'Rocket', 
+    description: 'DBBL mobile banking',
+    fields: ['merchant_number'],
+    fieldLabels: { merchant_number: 'Merchant Number' }
+  },
+  { 
+    id: 'nagad', 
+    name: 'Nagad', 
+    description: 'Bangladesh Post Office mobile banking',
+    fields: ['merchant_id', 'public_key', 'private_key'],
+    fieldLabels: { merchant_id: 'Merchant ID', public_key: 'Public Key', private_key: 'Private Key' }
+  },
+  { 
+    id: 'uddoktapay', 
+    name: 'UddoktaPay', 
+    description: 'Digital payment gateway',
+    fields: ['api_key', 'api_secret'],
+    fieldLabels: { api_key: 'API Key', api_secret: 'API Secret' }
+  },
+  { 
+    id: 'shurjopay', 
+    name: 'ShurjoPay', 
+    description: 'Online payment solution',
+    fields: ['username', 'password', 'merchant_id'],
+    fieldLabels: { username: 'Username', password: 'Password', merchant_id: 'Merchant Prefix' }
+  },
+  { 
+    id: 'aamarpay', 
+    name: 'aamarPay', 
+    description: 'Multi-channel payment gateway',
+    fields: ['store_id', 'api_key'],
+    fieldLabels: { store_id: 'Store ID', api_key: 'Signature Key' }
+  },
+  { 
+    id: 'portwallet', 
+    name: 'PortWallet', 
+    description: 'Digital wallet & payments',
+    fields: ['app_key', 'secret_key'],
+    fieldLabels: { app_key: 'App Key', secret_key: 'Secret Key' }
+  },
+  { 
+    id: 'piprapay', 
+    name: 'PipraPay', 
+    description: 'PipraPay payment gateway',
+    fields: ['api_key', 'api_secret'],
+    fieldLabels: { api_key: 'API Key', api_secret: 'API Secret' }
+  },
+  { 
+    id: 'manual', 
+    name: 'Manual Payment', 
+    description: 'Cash/Bank transfer',
+    fields: [],
+    fieldLabels: {}
+  },
+] as const;
 
-// SMS gateway configuration for packages
+// SMS gateway configuration with API fields
 export const SMS_GATEWAYS = [
-  { id: 'smsnoc', name: 'SMS NOC', description: 'SMS NOC gateway' },
-  { id: 'mimsms', name: 'MIM SMS', description: 'MIM SMS gateway' },
-  { id: 'revesms', name: 'Reve SMS', description: 'Reve Systems SMS' },
-  { id: 'greenweb', name: 'Green Web', description: 'Green Web SMS' },
-  { id: 'bulksmsbd', name: 'Bulk SMS BD', description: 'Bulk SMS Bangladesh' },
-  { id: 'smsq', name: 'SMSQ', description: 'SMSQ gateway' },
-  { id: 'custom', name: 'Custom Gateway', description: 'Custom SMS API' },
-];
+  { 
+    id: 'smsnoc', 
+    name: 'SMS NOC', 
+    description: 'SMS NOC gateway',
+    api_url: 'https://app.smsnoc.com/api/v3/sms/send',
+    fields: ['api_key', 'sender_id'],
+    fieldLabels: { api_key: 'API Key', sender_id: 'Sender ID' }
+  },
+  { 
+    id: 'smsnetbd', 
+    name: 'sms.net.bd', 
+    description: 'Alpha SMS gateway',
+    api_url: 'https://api.sms.net.bd/sendsms',
+    fields: ['api_key', 'sender_id'],
+    fieldLabels: { api_key: 'API Key', sender_id: 'Sender ID (Optional)' }
+  },
+  { 
+    id: 'sslwireless', 
+    name: 'SSL Wireless', 
+    description: 'SSL Wireless SMS gateway',
+    api_url: 'https://smsplus.sslwireless.com/api/v3/send-sms',
+    fields: ['api_key', 'username', 'password', 'sender_id'],
+    fieldLabels: { api_key: 'API Token', username: 'Username', password: 'Password', sender_id: 'SID' }
+  },
+  { 
+    id: 'jamansms', 
+    name: 'Jaman SMS', 
+    description: 'Jaman SMS gateway',
+    api_url: 'https://api.jamansms.com/send',
+    fields: ['api_key', 'sender_id'],
+    fieldLabels: { api_key: 'API Key', sender_id: 'Sender ID' }
+  },
+  { 
+    id: 'mimsms', 
+    name: 'MIM SMS', 
+    description: 'MIM SMS gateway',
+    api_url: 'https://esms.mimsms.com/smsapi',
+    fields: ['api_key', 'sender_id'],
+    fieldLabels: { api_key: 'API Key', sender_id: 'Sender ID' }
+  },
+  { 
+    id: 'revesms', 
+    name: 'Reve SMS', 
+    description: 'Reve Systems SMS',
+    api_url: 'https://api.revesoft.com/send-sms',
+    fields: ['api_key', 'api_secret', 'sender_id'],
+    fieldLabels: { api_key: 'API Key', api_secret: 'API Secret', sender_id: 'Sender ID' }
+  },
+  { 
+    id: 'greenweb', 
+    name: 'Green Web', 
+    description: 'Green Web SMS',
+    api_url: 'http://api.greenweb.com.bd/api.php',
+    fields: ['api_key', 'sender_id'],
+    fieldLabels: { api_key: 'Token', sender_id: 'Sender ID' }
+  },
+  { 
+    id: 'bulksmsbd', 
+    name: 'Bulk SMS BD', 
+    description: 'Bulk SMS Bangladesh',
+    api_url: 'http://bulksmsbd.net/api/smsapi',
+    fields: ['api_key', 'sender_id'],
+    fieldLabels: { api_key: 'API Key', sender_id: 'Sender ID' }
+  },
+  { 
+    id: 'smsq', 
+    name: 'SMSQ', 
+    description: 'SMSQ gateway',
+    api_url: 'https://api.smsq.global/api/v2/SendSMS',
+    fields: ['api_key', 'sender_id'],
+    fieldLabels: { api_key: 'API Key', sender_id: 'Sender ID' }
+  },
+  { 
+    id: 'custom', 
+    name: 'Custom Gateway', 
+    description: 'Custom SMS API',
+    api_url: '',
+    fields: ['api_url', 'api_key', 'api_secret', 'sender_id'],
+    fieldLabels: { api_url: 'API URL', api_key: 'API Key', api_secret: 'API Secret', sender_id: 'Sender ID' }
+  },
+] as const;
 
 // Resource limits configuration
 export interface PackageLimits {
@@ -449,6 +596,9 @@ export const SUPER_ADMIN_FEATURES: TenantFeatures = {
   },
   sms_gateways: {
     smsnoc: true,
+    smsnetbd: true,
+    sslwireless: true,
+    jamansms: true,
     mimsms: true,
     revesms: true,
     greenweb: true,
