@@ -1,16 +1,44 @@
-# OLT Care SaaS - Complete VPS Deployment Guide
+# ISP Point - Full ISP Management System Deployment Guide
 
 ## 📋 Project Information
 
 | Item | Value |
 |------|-------|
-| Project Name | oltcaresass |
+| Project Name | ISP Point (OLT Care + ISP Billing + CRM) |
 | Git Repository | https://github.com/hostercube/olt-care-sass.git |
 | Frontend URL | https://oltapp.isppoint.com |
 | Backend API URL | https://oltapp.isppoint.com/olt-polling-server |
-| Supabase Project ID | koodidvsmjfwjcgnmqox |
-| Supabase URL | https://koodidvsmjfwjcgnmqox.supabase.co |
+| Supabase Project ID | kpcmlbztpztrxdwlfhfw |
+| Supabase URL | https://kpcmlbztpztrxdwlfhfw.supabase.co |
 | VPS Directory | /var/www/oltapp.isppoint.com |
+
+---
+
+## 🎯 System Features
+
+### OLT Care Module
+- OLT Management (VSOL, ZTE, Huawei, Fiberhome, BDCOM, CDATA, ECOM, DBC)
+- ONU Devices monitoring with real-time status
+- Power readings (RX/TX dBm), Temperature, Distance
+- Offline reasons (Power Off, LOS, Wire Down)
+- Last Register/Deregister timestamps
+- MikroTik PPPoE integration for user mapping
+
+### ISP Management Module
+- Customer Management with ONU linking
+- ISP Billing with auto-generate bills
+- Billing Automation (auto-disable expired, auto-enable on payment)
+- Package Management (speed/price configuration)
+- Areas/Zones Management
+- Reseller System with commissions
+- MikroTik Router Management
+
+### SaaS Features
+- Multi-tenant architecture
+- Subscription management
+- Payment gateway integration (SSLCommerz, bKash, Nagad, Rocket, Manual)
+- Email/SMS notifications
+- Role-based access control
 
 ---
 
@@ -26,7 +54,24 @@
 │   ├── ecosystem.config.cjs      # PM2 Configuration
 │   ├── package.json              # Backend Dependencies
 │   └── src/                      # Backend Source Code
+│       ├── polling/              # OLT Polling Logic
+│       │   ├── parsers/          # Brand-specific parsers (VSOL, ZTE, etc.)
+│       │   ├── mikrotik-client.js # MikroTik API integration
+│       │   └── telnet-client.js  # Telnet connection handler
+│       └── notifications/        # Alert notifications
 ├── src/                          # Frontend React Source
+│   ├── pages/
+│   │   ├── ISP/                  # ISP Management pages
+│   │   │   ├── CustomerManagement.tsx
+│   │   │   ├── Billing.tsx
+│   │   │   ├── BillingAutomation.tsx
+│   │   │   ├── Packages.tsx
+│   │   │   ├── AreasManagement.tsx
+│   │   │   ├── ResellersManagement.tsx
+│   │   │   └── MikroTikManagement.tsx
+│   │   └── SuperAdmin/           # Super Admin pages
+│   ├── components/               # React components
+│   └── hooks/                    # Custom React hooks
 ├── public/                       # Static Assets
 ├── COMPLETE_DATABASE_SCHEMA.sql  # Database Schema (Run in Supabase)
 ├── dist/                         # Built Frontend (after npm run build)
