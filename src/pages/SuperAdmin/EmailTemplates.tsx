@@ -8,16 +8,47 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useEmailTemplates, EmailTemplate } from '@/hooks/useEmailTemplates';
-import { Mail, Save, Edit, Eye, RefreshCw, Loader2, Code, FileText } from 'lucide-react';
+import { Mail, Save, Edit, Eye, RefreshCw, Loader2, Code, FileText, Plus, Trash2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
+
+const TEMPLATE_TYPES = [
+  { value: 'welcome', label: 'Welcome Email' },
+  { value: 'expiry_reminder_7', label: 'Expiry Reminder (7 Days)' },
+  { value: 'expiry_reminder_1', label: 'Expiry Reminder (1 Day)' },
+  { value: 'subscription_expired', label: 'Subscription Expired' },
+  { value: 'payment_received', label: 'Payment Received' },
+  { value: 'subscription_renewed', label: 'Subscription Renewed' },
+  { value: 'account_suspended', label: 'Account Suspended' },
+  { value: 'onu_offline_alert', label: 'ONU Offline Alert' },
+  { value: 'billing_reminder', label: 'Billing Reminder' },
+  { value: 'custom', label: 'Custom' },
+];
+
+const AVAILABLE_VARIABLES = [
+  'tenant_name', 'company_name', 'package_name', 'expiry_date', 'amount',
+  'billing_cycle', 'customer_name', 'days_remaining', 'invoice_number',
+  'payment_method', 'transaction_id', 'payment_date', 'email', 'phone',
+  'suspension_reason', 'onu_name', 'olt_name', 'pon_port', 'alert_time'
+];
 
 export default function EmailTemplates() {
-  const { templates, loading, updateTemplate, fetchTemplates } = useEmailTemplates();
+  const { templates, loading, updateTemplate, createTemplate, deleteTemplate, fetchTemplates } = useEmailTemplates();
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [createMode, setCreateMode] = useState(false);
   const [editedTemplate, setEditedTemplate] = useState<Partial<EmailTemplate>>({});
   const [previewMode, setPreviewMode] = useState(false);
+  const [newTemplate, setNewTemplate] = useState({
+    name: '',
+    template_type: 'custom',
+    subject: '',
+    body: '',
+    variables: [] as string[],
+    is_active: true,
+  });
 
   const handleEdit = (template: EmailTemplate) => {
     setSelectedTemplate(template);
@@ -40,6 +71,25 @@ export default function EmailTemplates() {
       await updateTemplate(selectedTemplate.id, editedTemplate);
       setEditMode(false);
       setSelectedTemplate(null);
+      toast.success('Template updated');
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!newTemplate.name || !newTemplate.subject || !newTemplate.body) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    await createTemplate(newTemplate);
+    setCreateMode(false);
+    setNewTemplate({ name: '', template_type: 'custom', subject: '', body: '', variables: [], is_active: true });
+    toast.success('Template created');
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this template?')) {
+      await deleteTemplate(id);
+      toast.success('Template deleted');
     }
   };
 
@@ -48,23 +98,20 @@ export default function EmailTemplates() {
   };
 
   const getTemplateTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      subscription_reminder: 'Subscription Reminder',
-      payment_confirmation: 'Payment Confirmation',
-      account_suspended: 'Account Suspended',
-      onu_offline_alert: 'ONU Offline Alert',
-      welcome_email: 'Welcome Email',
-    };
-    return labels[type] || type;
+    return TEMPLATE_TYPES.find(t => t.value === type)?.label || type;
   };
 
   const getTemplateTypeColor = (type: string) => {
     const colors: Record<string, 'default' | 'success' | 'warning' | 'destructive'> = {
-      subscription_reminder: 'warning',
-      payment_confirmation: 'success',
+      welcome: 'success',
+      expiry_reminder_7: 'warning',
+      expiry_reminder_1: 'destructive',
+      subscription_expired: 'destructive',
+      payment_received: 'success',
+      subscription_renewed: 'success',
       account_suspended: 'destructive',
       onu_offline_alert: 'destructive',
-      welcome_email: 'default',
+      billing_reminder: 'warning',
     };
     return colors[type] || 'default';
   };
@@ -118,12 +165,18 @@ export default function EmailTemplates() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Email Templates</h1>
-            <p className="text-muted-foreground">Customize email templates for notifications and alerts</p>
+            <p className="text-muted-foreground">Create and customize email templates for notifications</p>
           </div>
-          <Button onClick={() => fetchTemplates()} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => fetchTemplates()} variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button onClick={() => setCreateMode(true)} size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Template
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -173,6 +226,14 @@ export default function EmailTemplates() {
                     >
                       <Edit className="h-4 w-4 mr-1" />
                       Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(template.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -323,6 +384,110 @@ export default function EmailTemplates() {
 
             <DialogFooter>
               <Button onClick={() => setPreviewMode(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Template Dialog */}
+        <Dialog open={createMode} onOpenChange={setCreateMode}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5" />
+                Create Email Template
+              </DialogTitle>
+              <DialogDescription>
+                Create a new email template. Use variables in double curly braces like {`{{variable_name}}`}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Template Name *</Label>
+                  <Input
+                    value={newTemplate.name}
+                    onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
+                    placeholder="e.g., Welcome Email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Template Type</Label>
+                  <Select 
+                    value={newTemplate.template_type} 
+                    onValueChange={(v) => setNewTemplate({ ...newTemplate, template_type: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TEMPLATE_TYPES.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Email Subject *</Label>
+                <Input
+                  value={newTemplate.subject}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, subject: e.target.value })}
+                  placeholder="e.g., Welcome to {{company_name}}!"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Email Body *</Label>
+                <Textarea
+                  value={newTemplate.body}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, body: e.target.value })}
+                  rows={10}
+                  placeholder="Enter your email content here. Use {{variable_name}} for dynamic content."
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Code className="h-4 w-4" />
+                  Available Variables (click to insert)
+                </Label>
+                <div className="flex flex-wrap gap-2 p-3 bg-muted rounded-lg">
+                  {AVAILABLE_VARIABLES.map((variable) => (
+                    <Badge 
+                      key={variable} 
+                      variant="secondary" 
+                      className="font-mono cursor-pointer hover:bg-primary hover:text-primary-foreground"
+                      onClick={() => setNewTemplate({
+                        ...newTemplate,
+                        body: newTemplate.body + `{{${variable}}}`
+                      })}
+                    >
+                      {`{{${variable}}}`}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={newTemplate.is_active}
+                  onCheckedChange={(checked) => setNewTemplate({ ...newTemplate, is_active: checked })}
+                />
+                <Label>Active</Label>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateMode(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreate}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Template
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
