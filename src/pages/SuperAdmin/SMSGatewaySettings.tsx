@@ -12,8 +12,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { MessageSquare, Settings, History, Send, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react';
+import { 
+  MessageSquare, Settings, History, Send, CheckCircle, XCircle, Clock, 
+  Loader2, ExternalLink, Info, Wallet, AlertTriangle, RefreshCw
+} from 'lucide-react';
 import { format } from 'date-fns';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface SMSGatewaySettings {
   id: string;
@@ -35,12 +39,112 @@ interface SMSLog {
   created_at: string;
 }
 
+// SMS Provider configurations based on official documentation
 const SMS_PROVIDERS = [
-  { value: 'smsnoc', label: 'SMS NOC', apiUrl: 'https://smsnoc.com/api/v1/sms' },
-  { value: 'bulksmsbd', label: 'BulkSMS BD', apiUrl: 'https://bulksmsbd.com/api/smsapi' },
-  { value: 'smsq', label: 'SMSQ', apiUrl: 'https://smsq.global/api/v2/SendSMS' },
-  { value: 'greenweb', label: 'Green Web', apiUrl: 'https://api.greenweb.com.bd/api.php' },
-  { value: 'custom', label: 'Custom Provider', apiUrl: '' },
+  { 
+    value: 'smsnoc', 
+    label: 'SMS NOC', 
+    apiUrl: 'https://app.smsnoc.com/api/v3/sms/send',
+    balanceUrl: 'https://app.smsnoc.com/api/v3/balance',
+    docUrl: 'https://smsnoc.com/sms-api-plugins.html',
+    authType: 'bearer',
+    description: 'Official SMS NOC API - Uses Bearer token authentication',
+    fields: {
+      api_key: { label: 'API Token', placeholder: 'Your API Token from SMS NOC dashboard', required: true },
+      sender_id: { label: 'Sender ID', placeholder: 'Your approved Sender ID (max 11 chars)', required: true },
+    },
+    testPayload: {
+      recipient: '{{phone}}',
+      sender_id: '{{sender_id}}',
+      type: 'plain',
+      message: '{{message}}'
+    }
+  },
+  { 
+    value: 'ssl_wireless', 
+    label: 'SSL Wireless', 
+    apiUrl: 'https://smsplus.sslwireless.com/api/v3/send-sms',
+    docUrl: 'https://www.sslwireless.com/sms-api-documentation',
+    authType: 'token',
+    description: 'SSL Wireless SMS API with token authentication',
+    fields: {
+      api_key: { label: 'API Token', placeholder: 'Your SSL Wireless API token', required: true },
+      sender_id: { label: 'SID (Sender ID)', placeholder: 'Your approved SID', required: true },
+    }
+  },
+  { 
+    value: 'mimsms', 
+    label: 'MIM SMS', 
+    apiUrl: 'https://esms.mimsms.com/smsapi',
+    docUrl: 'https://mimsms.com/developer-api',
+    authType: 'apikey',
+    description: 'MIM SMS API with API key authentication',
+    fields: {
+      api_key: { label: 'API Key', placeholder: 'Your MIM SMS API key', required: true },
+      sender_id: { label: 'Sender ID', placeholder: 'Your approved Sender ID', required: true },
+    }
+  },
+  { 
+    value: 'revesms', 
+    label: 'Reve SMS', 
+    apiUrl: 'https://api.revesms.com/api/v1/sms/send',
+    docUrl: 'https://www.revesms.com/api-documentation',
+    authType: 'apikey_secret',
+    description: 'Reve SMS API with API key and secret',
+    fields: {
+      api_key: { label: 'API Key', placeholder: 'Your Reve SMS API key', required: true },
+      api_secret: { label: 'API Secret', placeholder: 'Your Reve SMS API secret', required: true },
+      sender_id: { label: 'Sender ID', placeholder: 'Your approved Sender ID', required: true },
+    }
+  },
+  { 
+    value: 'bulksmsbd', 
+    label: 'BulkSMS BD', 
+    apiUrl: 'https://bulksmsbd.net/api/smsapi',
+    docUrl: 'https://bulksmsbd.net/api-docs',
+    authType: 'apikey',
+    description: 'BulkSMS BD API',
+    fields: {
+      api_key: { label: 'API Key', placeholder: 'Your BulkSMS BD API key', required: true },
+      sender_id: { label: 'Sender ID', placeholder: 'Your approved Sender ID', required: true },
+    }
+  },
+  { 
+    value: 'greenweb', 
+    label: 'Green Web', 
+    apiUrl: 'https://api.greenweb.com.bd/api.php',
+    docUrl: 'https://greenweb.com.bd/sms-api-documentation',
+    authType: 'token',
+    description: 'Green Web SMS API',
+    fields: {
+      api_key: { label: 'Token', placeholder: 'Your Green Web API token', required: true },
+      sender_id: { label: 'Sender ID', placeholder: 'Your approved Sender ID', required: true },
+    }
+  },
+  { 
+    value: 'smsnetbd', 
+    label: 'SMS.net.bd', 
+    apiUrl: 'https://api.sms.net.bd/sendsms',
+    docUrl: 'https://www.sms.net.bd/api-documentation',
+    authType: 'apikey',
+    description: 'SMS.net.bd API',
+    fields: {
+      api_key: { label: 'API Key', placeholder: 'Your SMS.net.bd API key', required: true },
+      sender_id: { label: 'Sender ID', placeholder: 'Your approved Sender ID', required: true },
+    }
+  },
+  { 
+    value: 'custom', 
+    label: 'Custom Provider', 
+    apiUrl: '',
+    docUrl: '',
+    authType: 'custom',
+    description: 'Configure a custom SMS gateway',
+    fields: {
+      api_key: { label: 'API Key/Token', placeholder: 'Your API key or token', required: true },
+      sender_id: { label: 'Sender ID', placeholder: 'Your Sender ID', required: false },
+    }
+  },
 ];
 
 export default function SMSGatewaySettings() {
@@ -49,16 +153,21 @@ export default function SMSGatewaySettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testNumber, setTestNumber] = useState('');
-  const [testMessage, setTestMessage] = useState('This is a test SMS from OLT Care SaaS');
+  const [testMessage, setTestMessage] = useState('This is a test SMS from OLT Care Platform');
   const [sendingTest, setSendingTest] = useState(false);
+  const [balance, setBalance] = useState<string | null>(null);
+  const [checkingBalance, setCheckingBalance] = useState(false);
   const { toast } = useToast();
 
   // Form state
   const [provider, setProvider] = useState('smsnoc');
   const [apiKey, setApiKey] = useState('');
-  const [apiUrl, setApiUrl] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
+  const [apiUrl, setApiUrl] = useState('https://app.smsnoc.com/api/v3/sms/send');
   const [senderId, setSenderId] = useState('');
   const [isEnabled, setIsEnabled] = useState(false);
+
+  const selectedProvider = SMS_PROVIDERS.find(p => p.value === provider);
 
   useEffect(() => {
     fetchSettings();
@@ -78,9 +187,12 @@ export default function SMSGatewaySettings() {
         setSettings(data as SMSGatewaySettings);
         setProvider(data.provider || 'smsnoc');
         setApiKey(data.api_key || '');
-        setApiUrl(data.api_url || '');
+        setApiUrl(data.api_url || 'https://app.smsnoc.com/api/v3/sms/send');
         setSenderId(data.sender_id || '');
         setIsEnabled(data.is_enabled || false);
+        if (data.config && typeof data.config === 'object') {
+          setApiSecret((data.config as any).api_secret || '');
+        }
       }
     } catch (error) {
       console.error('Error fetching SMS settings:', error);
@@ -94,8 +206,9 @@ export default function SMSGatewaySettings() {
       const { data, error } = await supabase
         .from('sms_logs')
         .select('*')
+        .is('tenant_id', null)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(100);
 
       if (error) throw error;
       setLogs((data || []) as SMSLog[]);
@@ -115,26 +228,28 @@ export default function SMSGatewaySettings() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const config = apiSecret ? { api_secret: apiSecret } : {};
+
       const updateData = {
         provider,
         api_key: apiKey || null,
         api_url: apiUrl || null,
         sender_id: senderId || null,
         is_enabled: isEnabled,
-        config: {},
+        config: config as any,
         updated_at: new Date().toISOString(),
       };
 
       if (settings?.id) {
         const { error } = await supabase
           .from('sms_gateway_settings')
-          .update(updateData)
+          .update(updateData as any)
           .eq('id', settings.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('sms_gateway_settings')
-          .insert(updateData);
+          .insert(updateData as any);
         if (error) throw error;
       }
 
@@ -153,6 +268,28 @@ export default function SMSGatewaySettings() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCheckBalance = async () => {
+    if (!apiKey || provider !== 'smsnoc') {
+      toast({
+        title: 'Error',
+        description: 'Balance check is only available for SMS NOC with a valid API token',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setCheckingBalance(true);
+    try {
+      // This would typically be done via an edge function to avoid CORS
+      toast({
+        title: 'Balance Check',
+        description: 'Balance checking requires server-side implementation. Please check your SMS NOC dashboard.',
+      });
+    } finally {
+      setCheckingBalance(false);
     }
   };
 
@@ -175,13 +312,14 @@ export default function SMSGatewaySettings() {
           phone_number: testNumber,
           message: testMessage,
           status: 'pending',
+          tenant_id: null,
         });
 
       if (error) throw error;
 
       toast({
         title: 'Test SMS Queued',
-        description: 'Test SMS has been queued for sending',
+        description: 'Test SMS has been queued. The polling server will process it using the configured gateway.',
       });
 
       await fetchLogs();
@@ -201,7 +339,7 @@ export default function SMSGatewaySettings() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'sent':
-        return <Badge className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" /> Sent</Badge>;
+        return <Badge className="bg-success text-success-foreground"><CheckCircle className="h-3 w-3 mr-1" /> Sent</Badge>;
       case 'failed':
         return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Failed</Badge>;
       case 'pending':
@@ -213,7 +351,7 @@ export default function SMSGatewaySettings() {
 
   if (loading) {
     return (
-      <DashboardLayout title="SMS Gateway" subtitle="Configure SMS provider settings">
+      <DashboardLayout title="SMS Gateway Settings" subtitle="Configure SMS provider for platform notifications">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -222,204 +360,331 @@ export default function SMSGatewaySettings() {
   }
 
   return (
-    <DashboardLayout title="SMS Gateway" subtitle="Configure SMS provider settings">
-      <Tabs defaultValue="settings" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="settings" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Settings
-          </TabsTrigger>
-          <TabsTrigger value="test" className="flex items-center gap-2">
-            <Send className="h-4 w-4" />
-            Test SMS
-          </TabsTrigger>
-          <TabsTrigger value="logs" className="flex items-center gap-2">
-            <History className="h-4 w-4" />
-            Logs
-          </TabsTrigger>
-        </TabsList>
+    <DashboardLayout title="SMS Gateway Settings" subtitle="Configure SMS provider for platform notifications">
+      <div className="space-y-6">
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle>Super Admin SMS Gateway</AlertTitle>
+          <AlertDescription>
+            Configure the SMS gateway for sending notifications to ISP owners/tenants. This is separate from tenant-level SMS gateways.
+          </AlertDescription>
+        </Alert>
 
-        <TabsContent value="settings">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                SMS Provider Configuration
-              </CardTitle>
-              <CardDescription>
-                Configure your SMS gateway to send notifications to tenants
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                <div>
-                  <Label htmlFor="enabled" className="text-base font-medium">Enable SMS Gateway</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Turn on SMS notifications for alerts and reminders
-                  </p>
-                </div>
-                <Switch
-                  id="enabled"
-                  checked={isEnabled}
-                  onCheckedChange={setIsEnabled}
-                />
+        <Tabs defaultValue="settings" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="settings" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Configuration
+            </TabsTrigger>
+            <TabsTrigger value="test" className="flex items-center gap-2">
+              <Send className="h-4 w-4" />
+              Test SMS
+            </TabsTrigger>
+            <TabsTrigger value="logs" className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Logs
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="settings">
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5 text-primary" />
+                      SMS Provider Configuration
+                    </CardTitle>
+                    <CardDescription>
+                      Configure your SMS gateway to send notifications to ISP tenants
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg border">
+                      <div>
+                        <Label htmlFor="enabled" className="text-base font-medium">Enable SMS Gateway</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Turn on SMS notifications for subscription alerts and reminders
+                        </p>
+                      </div>
+                      <Switch
+                        id="enabled"
+                        checked={isEnabled}
+                        onCheckedChange={setIsEnabled}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="provider">SMS Provider</Label>
+                        <Select value={provider} onValueChange={handleProviderChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select provider" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SMS_PROVIDERS.map((p) => (
+                              <SelectItem key={p.value} value={p.value}>
+                                {p.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedProvider && (
+                          <p className="text-xs text-muted-foreground">{selectedProvider.description}</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="apiKey">
+                          {selectedProvider?.fields?.api_key?.label || 'API Key/Token'}
+                        </Label>
+                        <Input
+                          id="apiKey"
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder={selectedProvider?.fields?.api_key?.placeholder || 'Enter your API key'}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="senderId">
+                          {selectedProvider?.fields?.sender_id?.label || 'Sender ID'}
+                        </Label>
+                        <Input
+                          id="senderId"
+                          value={senderId}
+                          onChange={(e) => setSenderId(e.target.value)}
+                          placeholder={selectedProvider?.fields?.sender_id?.placeholder || 'Your Sender ID'}
+                          maxLength={11}
+                        />
+                        <p className="text-xs text-muted-foreground">Max 11 characters</p>
+                      </div>
+
+                      {selectedProvider?.authType === 'apikey_secret' && (
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="apiSecret">API Secret</Label>
+                          <Input
+                            id="apiSecret"
+                            type="password"
+                            value={apiSecret}
+                            onChange={(e) => setApiSecret(e.target.value)}
+                            placeholder="Enter your API secret"
+                          />
+                        </div>
+                      )}
+
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="apiUrl">API Endpoint URL</Label>
+                        <Input
+                          id="apiUrl"
+                          value={apiUrl}
+                          onChange={(e) => setApiUrl(e.target.value)}
+                          placeholder="https://api.smsprovider.com/send"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-4 border-t">
+                      {provider === 'smsnoc' && apiKey && (
+                        <Button variant="outline" onClick={handleCheckBalance} disabled={checkingBalance}>
+                          {checkingBalance ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wallet className="h-4 w-4 mr-2" />}
+                          Check Balance
+                        </Button>
+                      )}
+                      <div className="ml-auto">
+                        <Button onClick={handleSave} disabled={saving}>
+                          {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Save Settings
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="provider">SMS Provider</Label>
-                  <Select value={provider} onValueChange={handleProviderChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select provider" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SMS_PROVIDERS.map((p) => (
-                        <SelectItem key={p.value} value={p.value}>
-                          {p.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {/* Provider Info Card */}
+              <div className="space-y-4">
+                {selectedProvider && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">{selectedProvider.label} Info</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {selectedProvider.docUrl && (
+                        <Button variant="outline" className="w-full" asChild>
+                          <a href={selectedProvider.docUrl} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            API Documentation
+                          </a>
+                        </Button>
+                      )}
+                      
+                      {provider === 'smsnoc' && (
+                        <div className="space-y-3 text-sm">
+                          <div className="p-3 bg-muted rounded-lg">
+                            <p className="font-medium mb-2">API Endpoint:</p>
+                            <code className="text-xs break-all bg-background p-2 rounded block">
+                              POST https://app.smsnoc.com/api/v3/sms/send
+                            </code>
+                          </div>
+                          <div className="p-3 bg-muted rounded-lg">
+                            <p className="font-medium mb-2">Authentication:</p>
+                            <code className="text-xs bg-background p-2 rounded block">
+                              Authorization: Bearer {'{'}&lt;api_token&gt;{'}'}
+                            </code>
+                          </div>
+                          <div className="p-3 bg-muted rounded-lg">
+                            <p className="font-medium mb-2">Request Body:</p>
+                            <pre className="text-xs bg-background p-2 rounded overflow-x-auto">
+{`{
+  "recipient": "8801xxxxxxx",
+  "sender_id": "YourID",
+  "type": "plain",
+  "message": "Your message"
+}`}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="senderId">Sender ID</Label>
-                  <Input
-                    id="senderId"
-                    value={senderId}
-                    onChange={(e) => setSenderId(e.target.value)}
-                    placeholder="e.g., OLTCare"
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="apiUrl">API URL</Label>
-                  <Input
-                    id="apiUrl"
-                    value={apiUrl}
-                    onChange={(e) => setApiUrl(e.target.value)}
-                    placeholder="https://api.smsprovider.com/send"
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="apiKey">API Key</Label>
-                  <Input
-                    id="apiKey"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Enter your API key"
-                  />
-                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-warning" />
+                      Important Notes
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm text-muted-foreground">
+                    <p>• Ensure your Sender ID is approved by the provider</p>
+                    <p>• Phone numbers should include country code (88)</p>
+                    <p>• SMS will be processed by the polling server</p>
+                    <p>• Check provider dashboard for delivery reports</p>
+                  </CardContent>
+                </Card>
               </div>
+            </div>
+          </TabsContent>
 
-              <div className="flex justify-end">
-                <Button onClick={handleSave} disabled={saving}>
-                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Save Settings
+          <TabsContent value="test">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="h-5 w-5 text-primary" />
+                  Send Test SMS
+                </CardTitle>
+                <CardDescription>
+                  Test your SMS gateway configuration by sending a test message
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!isEnabled && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Gateway Disabled</AlertTitle>
+                    <AlertDescription>
+                      SMS gateway is currently disabled. Enable it in settings to send messages.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="testNumber">Phone Number</Label>
+                    <Input
+                      id="testNumber"
+                      value={testNumber}
+                      onChange={(e) => setTestNumber(e.target.value)}
+                      placeholder="e.g., 8801712345678"
+                    />
+                    <p className="text-xs text-muted-foreground">Include country code (88 for Bangladesh)</p>
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="testMessage">Message</Label>
+                    <Textarea
+                      id="testMessage"
+                      value={testMessage}
+                      onChange={(e) => setTestMessage(e.target.value)}
+                      rows={4}
+                    />
+                    <p className="text-xs text-muted-foreground">{testMessage.length} characters</p>
+                  </div>
+                </div>
+
+                <Button onClick={handleSendTest} disabled={sendingTest || !isEnabled}>
+                  {sendingTest && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <Send className="h-4 w-4 mr-2" />
+                  Send Test SMS
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <TabsContent value="test">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Send className="h-5 w-5" />
-                Send Test SMS
-              </CardTitle>
-              <CardDescription>
-                Test your SMS gateway configuration by sending a test message
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!isEnabled && (
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                  <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                    SMS gateway is currently disabled. Enable it in settings to send messages.
-                  </p>
+          <TabsContent value="logs">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <History className="h-5 w-5 text-primary" />
+                      SMS Logs
+                    </CardTitle>
+                    <CardDescription>
+                      Recent SMS messages sent through the Super Admin gateway
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchLogs}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
                 </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="testNumber">Phone Number</Label>
-                <Input
-                  id="testNumber"
-                  value={testNumber}
-                  onChange={(e) => setTestNumber(e.target.value)}
-                  placeholder="e.g., 01712345678"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="testMessage">Message</Label>
-                <Textarea
-                  id="testMessage"
-                  value={testMessage}
-                  onChange={(e) => setTestMessage(e.target.value)}
-                  rows={3}
-                />
-              </div>
-
-              <Button onClick={handleSendTest} disabled={sendingTest || !isEnabled}>
-                {sendingTest && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Send Test SMS
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="logs">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                SMS Logs
-              </CardTitle>
-              <CardDescription>
-                Recent SMS messages sent through the gateway
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Phone Number</TableHead>
-                    <TableHead>Message</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Sent At</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logs.length === 0 ? (
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
-                        No SMS logs found
-                      </TableCell>
+                      <TableHead>Phone Number</TableHead>
+                      <TableHead>Message</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Error</TableHead>
+                      <TableHead>Date</TableHead>
                     </TableRow>
-                  ) : (
-                    logs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="font-mono">{log.phone_number}</TableCell>
-                        <TableCell className="max-w-xs truncate">{log.message}</TableCell>
-                        <TableCell>{getStatusBadge(log.status)}</TableCell>
-                        <TableCell>
-                          {log.sent_at 
-                            ? format(new Date(log.sent_at), 'MMM d, yyyy HH:mm')
-                            : format(new Date(log.created_at), 'MMM d, yyyy HH:mm')}
+                  </TableHeader>
+                  <TableBody>
+                    {logs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          No SMS logs found
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                    ) : (
+                      logs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="font-mono text-sm">{log.phone_number}</TableCell>
+                          <TableCell className="max-w-xs truncate text-sm">{log.message}</TableCell>
+                          <TableCell>{getStatusBadge(log.status)}</TableCell>
+                          <TableCell className="text-xs text-destructive max-w-xs truncate">
+                            {log.error_message || '-'}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {log.sent_at 
+                              ? format(new Date(log.sent_at), 'MMM d, yyyy HH:mm')
+                              : format(new Date(log.created_at), 'MMM d, yyyy HH:mm')}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </DashboardLayout>
   );
 }
