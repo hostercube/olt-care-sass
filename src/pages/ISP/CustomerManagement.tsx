@@ -17,9 +17,10 @@ import { useCustomers } from '@/hooks/useCustomers';
 import { AddCustomerDialog } from '@/components/isp/AddCustomerDialog';
 import { EditCustomerDialog } from '@/components/isp/EditCustomerDialog';
 import { CustomerDetailsSheet } from '@/components/isp/CustomerDetailsSheet';
+import { ImportCustomersDialog } from '@/components/isp/ImportCustomersDialog';
 import { 
   Users, UserPlus, Search, MoreHorizontal, Eye, Edit, Trash2, 
-  RefreshCw, UserCheck, UserX, Clock, Ban, Download
+  RefreshCw, UserCheck, UserX, Clock, Ban, Download, Upload
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Customer, CustomerStatus } from '@/types/isp';
@@ -45,6 +46,7 @@ export default function CustomerManagement() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Customer | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   const filteredCustomers = useMemo(() => {
     return customers.filter(customer => {
@@ -168,6 +170,10 @@ export default function CustomerManagement() {
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <CardTitle>Customers</CardTitle>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowImportDialog(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
             <Button variant="outline" size="sm" onClick={exportCSV}>
               <Download className="h-4 w-4 mr-2" />
               Export
@@ -354,6 +360,15 @@ export default function CustomerManagement() {
           onOpenChange={(open) => !open && setSelectedCustomer(null)}
         />
       )}
+
+      <ImportCustomersDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        onSuccess={() => {
+          setShowImportDialog(false);
+          refetch();
+        }}
+      />
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>

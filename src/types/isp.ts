@@ -27,6 +27,10 @@ export interface Area {
   name: string;
   district: string | null;
   upazila: string | null;
+  union_name: string | null;
+  village: string | null;
+  road_no: string | null;
+  house_no: string | null;
   description: string | null;
   olt_id: string | null;
   created_at: string;
@@ -62,6 +66,7 @@ export interface Customer {
   address: string | null;
   area_id: string | null;
   reseller_id: string | null;
+  mikrotik_id: string | null;
   
   // ONU/Network Info
   onu_id: string | null;
@@ -94,6 +99,7 @@ export interface Customer {
   area?: Area;
   reseller?: Reseller;
   package?: ISPPackage;
+  mikrotik?: MikroTikRouter;
 }
 
 export interface CustomerBill {
