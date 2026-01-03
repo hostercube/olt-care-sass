@@ -100,6 +100,58 @@ export interface Customer {
   reseller?: Reseller;
   package?: ISPPackage;
   mikrotik?: MikroTikRouter;
+  onu?: ONUDetails;
+}
+
+// Extended customer with network details for profile
+export interface CustomerProfile extends Customer {
+  // PPPoE Session Info (from MikroTik)
+  pppoe_status?: 'online' | 'offline';
+  pppoe_uptime?: string;
+  pppoe_caller_id?: string;
+  pppoe_address?: string;
+  pppoe_service?: string;
+  
+  // Bandwidth Info
+  rx_bytes?: number;
+  tx_bytes?: number;
+  rx_rate?: number; // Current Mbps
+  tx_rate?: number; // Current Mbps
+  
+  // MAC Binding
+  is_mac_bound?: boolean;
+  
+  // Activity
+  last_login?: string;
+  last_logout?: string;
+  last_active_time?: string;
+  last_deactive_time?: string;
+  total_uptime_seconds?: number;
+  
+  // ONU Details (if OLT enabled)
+  onu_rx_power?: number;
+  onu_tx_power?: number;
+  onu_status?: 'online' | 'offline' | 'power-off';
+  onu_name?: string;
+  router_name?: string;
+}
+
+export interface ONUDetails {
+  id: string;
+  olt_id: string;
+  name: string;
+  mac_address: string | null;
+  serial_number: string | null;
+  pon_port: string;
+  onu_index: number;
+  status: 'online' | 'offline' | 'unknown';
+  rx_power: number | null;
+  tx_power: number | null;
+  router_mac: string | null;
+  router_name: string | null;
+  pppoe_username: string | null;
+  last_online: string | null;
+  last_offline: string | null;
 }
 
 export interface CustomerBill {
@@ -183,6 +235,43 @@ export interface PPPoEProfile {
   updated_at: string;
 }
 
+export interface PPPoEUser {
+  name: string;
+  password: string;
+  service: string;
+  profile: string;
+  caller_id: string;
+  remote_address: string;
+  disabled: boolean;
+  comment: string;
+}
+
+export interface PPPoEActiveSession {
+  name: string;
+  service: string;
+  caller_id: string;
+  address: string;
+  uptime: string;
+  encoding: string;
+  session_id: string;
+  limit_bytes_in: number;
+  limit_bytes_out: number;
+  rx_byte: number;
+  tx_byte: number;
+  rx_rate: number;
+  tx_rate: number;
+}
+
+export interface QueueSimple {
+  name: string;
+  target: string;
+  max_limit: string;
+  burst_limit: string;
+  priority: string;
+  disabled: boolean;
+  comment: string;
+}
+
 export interface StaffPermissions {
   id: string;
   tenant_id: string;
@@ -244,4 +333,23 @@ export interface ISPDashboardStats {
   totalDue: number;
   onlineDevices: number;
   offlineDevices: number;
+}
+
+// Activity Log for customers
+export interface CustomerActivityLog {
+  id: string;
+  customer_id: string;
+  action: string;
+  details: string;
+  performed_by: string | null;
+  created_at: string;
+}
+
+// Bandwidth History
+export interface BandwidthReading {
+  timestamp: string;
+  rx_rate: number;
+  tx_rate: number;
+  rx_bytes: number;
+  tx_bytes: number;
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,6 @@ import {
 import { useCustomers } from '@/hooks/useCustomers';
 import { AddCustomerDialog } from '@/components/isp/AddCustomerDialog';
 import { EditCustomerDialog } from '@/components/isp/EditCustomerDialog';
-import { CustomerDetailsSheet } from '@/components/isp/CustomerDetailsSheet';
 import { ImportCustomersDialog } from '@/components/isp/ImportCustomersDialog';
 import { 
   Users, UserPlus, Search, MoreHorizontal, Eye, Edit, Trash2, 
@@ -40,11 +40,11 @@ const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' |
 };
 
 export default function CustomerManagement() {
+  const navigate = useNavigate();
   const { customers, loading, stats, refetch, deleteCustomer, updateStatus } = useCustomers();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Customer | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -304,9 +304,9 @@ export default function CustomerManagement() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="bg-popover border border-border">
-                                <DropdownMenuItem onClick={() => setSelectedCustomer(customer)}>
+                                <DropdownMenuItem onClick={() => navigate(`/isp/customers/${customer.id}`)}>
                                   <Eye className="h-4 w-4 mr-2" />
-                                  View Details
+                                  View Profile
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => setEditCustomer(customer)}>
                                   <Edit className="h-4 w-4 mr-2" />
@@ -376,14 +376,6 @@ export default function CustomerManagement() {
             setEditCustomer(null);
             refetch();
           }}
-        />
-      )}
-
-      {selectedCustomer && (
-        <CustomerDetailsSheet
-          customer={selectedCustomer}
-          open={!!selectedCustomer}
-          onOpenChange={(open) => !open && setSelectedCustomer(null)}
         />
       )}
 
