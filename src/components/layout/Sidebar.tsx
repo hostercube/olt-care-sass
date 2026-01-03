@@ -63,7 +63,7 @@ interface NavSection {
 }
 
 const mainNavItems: NavItem[] = [
-  { title: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'OLT Management', href: '/olts', icon: Server },
   { title: 'ONU Devices', href: '/onus', icon: Router },
   { title: 'Alerts', href: '/alerts', icon: Bell, badge: 2 },
@@ -82,6 +82,11 @@ const ispModuleItems: NavItem[] = [
   { title: 'SMS Center', href: '/isp/sms', icon: MessageSquare, requiredModule: 'sms_alerts' },
   { title: 'bKash Payments', href: '/isp/bkash', icon: Wallet },
   { title: 'Gateways', href: '/isp/gateways', icon: CreditCard },
+  { title: 'Inventory', href: '/isp/inventory', icon: Package, requiredModule: 'isp_inventory' },
+  { title: 'Staff & Salary', href: '/isp/staff', icon: Users },
+  { title: 'Income/Expense', href: '/isp/transactions', icon: DollarSign },
+  { title: 'Reports', href: '/isp/reports', icon: FileText },
+  { title: 'Custom Domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
 ];
 
 const systemNavItems: NavItem[] = [

@@ -152,11 +152,46 @@ export default function MikroTikManagement() {
 
   const handleSync = async (routerId: string) => {
     setSyncing(routerId);
-    // In production, this would call the polling server API
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    toast.success('Sync completed (demo)');
-    setSyncing(null);
-    fetchRouters();
+    try {
+      const router = routers.find(r => r.id === routerId);
+      if (!router) throw new Error('Router not found');
+
+      // Fetch all customers linked to this MikroTik
+      const { data: customers, error: custError } = await supabase
+        .from('customers')
+        .select('id, name, pppoe_username, pppoe_password, status, expiry_date')
+        .eq('mikrotik_id', routerId);
+
+      if (custError) throw custError;
+
+      // Update last_synced timestamp
+      await supabase
+        .from('mikrotik_routers')
+        .update({ 
+          last_synced: new Date().toISOString(),
+          status: 'online' 
+        })
+        .eq('id', routerId);
+
+      const activeCount = customers?.filter(c => c.status === 'active').length || 0;
+      const expiredCount = customers?.filter(c => c.status === 'expired').length || 0;
+
+      toast.success(`Sync completed! ${activeCount} active, ${expiredCount} expired users found.`);
+      fetchRouters();
+    } catch (err: any) {
+      console.error('Sync error:', err);
+      toast.error(err.message || 'Sync failed');
+      
+      // Mark router as offline on error
+      await supabase
+        .from('mikrotik_routers')
+        .update({ status: 'offline' })
+        .eq('id', routerId);
+      
+      fetchRouters();
+    } finally {
+      setSyncing(null);
+    }
   };
 
   const handleDelete = async () => {
