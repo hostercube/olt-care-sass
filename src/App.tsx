@@ -28,6 +28,8 @@ import PaymentManagement from "./pages/SuperAdmin/PaymentManagement";
 import GatewaySettings from "./pages/SuperAdmin/GatewaySettings";
 import SMSGatewaySettings from "./pages/SuperAdmin/SMSGatewaySettings";
 import EmailGatewaySettings from "./pages/SuperAdmin/EmailGatewaySettings";
+import EmailTemplates from "./pages/SuperAdmin/EmailTemplates";
+import SuperAdminDashboard from "./pages/SuperAdmin/SuperAdminDashboard";
 
 // ISP Billing Pages
 import MySubscription from "./pages/Billing/MySubscription";
@@ -124,6 +126,11 @@ const App = () => (
               } />
               
               {/* Super Admin Routes - Restricted to super_admin role */}
+              <Route path="/admin" element={
+                <SuperAdminRoute>
+                  <SuperAdminDashboard />
+                </SuperAdminRoute>
+              } />
               <Route path="/admin/tenants" element={
                 <SuperAdminRoute>
                   <TenantManagement />
@@ -152,6 +159,11 @@ const App = () => (
               <Route path="/admin/email-gateway" element={
                 <SuperAdminRoute>
                   <EmailGatewaySettings />
+                </SuperAdminRoute>
+              } />
+              <Route path="/admin/email-templates" element={
+                <SuperAdminRoute>
+                  <EmailTemplates />
                 </SuperAdminRoute>
               } />
 
