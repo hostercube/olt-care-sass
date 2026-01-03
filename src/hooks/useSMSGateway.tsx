@@ -27,6 +27,11 @@ export interface SMSLog {
   created_at: string;
 }
 
+// SMS NOC API configuration
+// API Endpoint: https://app.smsnoc.com/api/v3/sms/send
+// Headers: Authorization: Bearer {api_token}, Accept: application/json
+// Body: { recipient: string, sender_id: string, type: "plain", message: string }
+
 export function useSMSGateway() {
   const [settings, setSettings] = useState<SMSGatewaySettings | null>(null);
   const [logs, setLogs] = useState<SMSLog[]>([]);
@@ -117,7 +122,7 @@ export function useSMSGateway() {
 
   const sendTestSMS = async (phoneNumber: string, message: string) => {
     try {
-      // Log the SMS attempt
+      // Log the SMS attempt with pending status
       const { error } = await supabase
         .from('sms_logs')
         .insert({
@@ -130,7 +135,7 @@ export function useSMSGateway() {
 
       toast({
         title: 'Test SMS Queued',
-        description: 'Test SMS has been queued for sending',
+        description: `Test SMS queued for ${phoneNumber}. The polling server will process it.`,
       });
 
       await fetchLogs();
@@ -138,7 +143,7 @@ export function useSMSGateway() {
       console.error('Error sending test SMS:', error);
       toast({
         title: 'Error',
-        description: 'Failed to send test SMS',
+        description: 'Failed to queue test SMS',
         variant: 'destructive',
       });
     }

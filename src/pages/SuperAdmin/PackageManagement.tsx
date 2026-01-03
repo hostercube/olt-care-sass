@@ -9,7 +9,19 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePackages } from '@/hooks/usePackages';
-import { Package, Plus, Edit, Trash2, Check, X } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Check, X, Server, MessageSquare, Mail, Code, Globe, Paintbrush, Activity, Users } from 'lucide-react';
+import { AVAILABLE_MODULES, type TenantFeatures } from '@/types/saas';
+
+const DEFAULT_FEATURES: TenantFeatures = {
+  olt_care: true,  // Always enabled
+  sms_alerts: false,
+  email_alerts: false,
+  api_access: false,
+  custom_domain: false,
+  white_label: false,
+  advanced_monitoring: false,
+  multi_user: false,
+};
 
 export default function PackageManagement() {
   const { packages, loading, createPackage, updatePackage, deletePackage } = usePackages();
@@ -24,13 +36,7 @@ export default function PackageManagement() {
     max_olts: 1,
     max_onus: 100,
     max_users: 1,
-    features: {
-      sms_alerts: false,
-      email_alerts: false,
-      api_access: false,
-      custom_domain: false,
-      white_label: false,
-    },
+    features: { ...DEFAULT_FEATURES },
     is_active: true,
     sort_order: 0,
   });
@@ -44,13 +50,7 @@ export default function PackageManagement() {
       max_olts: 1,
       max_onus: 100,
       max_users: 1,
-      features: {
-        sms_alerts: false,
-        email_alerts: false,
-        api_access: false,
-        custom_domain: false,
-        white_label: false,
-      },
+      features: { ...DEFAULT_FEATURES },
       is_active: true,
       sort_order: 0,
     });
@@ -79,17 +79,25 @@ export default function PackageManagement() {
       max_olts: pkg.max_olts,
       max_onus: pkg.max_onus || 100,
       max_users: pkg.max_users,
-      features: pkg.features || {
-        sms_alerts: false,
-        email_alerts: false,
-        api_access: false,
-        custom_domain: false,
-        white_label: false,
-      },
+      features: { ...DEFAULT_FEATURES, ...(pkg.features || {}) },
       is_active: pkg.is_active,
       sort_order: pkg.sort_order || 0,
     });
     setEditingPackage(pkg);
+  };
+
+  const getModuleIcon = (moduleId: string) => {
+    switch (moduleId) {
+      case 'olt_care': return Server;
+      case 'sms_alerts': return MessageSquare;
+      case 'email_alerts': return Mail;
+      case 'api_access': return Code;
+      case 'custom_domain': return Globe;
+      case 'white_label': return Paintbrush;
+      case 'advanced_monitoring': return Activity;
+      case 'multi_user': return Users;
+      default: return Check;
+    }
   };
 
   const FeatureToggle = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
@@ -176,32 +184,39 @@ export default function PackageManagement() {
       </div>
 
       <div className="border rounded-lg p-4 space-y-3">
-        <h4 className="font-medium">Features</h4>
-        <FeatureToggle
-          label="SMS Alerts"
-          checked={formData.features.sms_alerts}
-          onChange={(v) => setFormData({ ...formData, features: { ...formData.features, sms_alerts: v } })}
-        />
-        <FeatureToggle
-          label="Email Alerts"
-          checked={formData.features.email_alerts}
-          onChange={(v) => setFormData({ ...formData, features: { ...formData.features, email_alerts: v } })}
-        />
-        <FeatureToggle
-          label="API Access"
-          checked={formData.features.api_access}
-          onChange={(v) => setFormData({ ...formData, features: { ...formData.features, api_access: v } })}
-        />
-        <FeatureToggle
-          label="Custom Domain"
-          checked={formData.features.custom_domain}
-          onChange={(v) => setFormData({ ...formData, features: { ...formData.features, custom_domain: v } })}
-        />
-        <FeatureToggle
-          label="White Label"
-          checked={formData.features.white_label}
-          onChange={(v) => setFormData({ ...formData, features: { ...formData.features, white_label: v } })}
-        />
+        <h4 className="font-medium">Modules & Features</h4>
+        <p className="text-sm text-muted-foreground mb-4">Select which modules and features are included in this package</p>
+        
+        <div className="grid grid-cols-2 gap-3">
+          {AVAILABLE_MODULES.map((module) => {
+            const Icon = getModuleIcon(module.id);
+            const isDisabled = module.id === 'olt_care'; // OLT Care is always enabled
+            return (
+              <div 
+                key={module.id} 
+                className={`flex items-center justify-between p-3 rounded-lg border ${
+                  formData.features[module.id] ? 'border-primary/50 bg-primary/5' : 'border-border'
+                } ${isDisabled ? 'opacity-60' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <Label className="cursor-pointer">{module.name}</Label>
+                    <p className="text-xs text-muted-foreground">{module.description}</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={formData.features[module.id] ?? false}
+                  disabled={isDisabled}
+                  onCheckedChange={(v) => setFormData({ 
+                    ...formData, 
+                    features: { ...formData.features, [module.id]: v } 
+                  })}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <DialogFooter>
@@ -294,18 +309,22 @@ export default function PackageManagement() {
                   </div>
 
                   <div className="border-t pt-4 space-y-1">
-                    {Object.entries(pkg.features || {}).map(([key, value]) => (
-                      <div key={key} className="flex items-center gap-2 text-sm">
-                        {value ? (
-                          <Check className="h-4 w-4 text-success" />
-                        ) : (
-                          <X className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <span className={!value ? 'text-muted-foreground' : ''}>
-                          {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </span>
-                      </div>
-                    ))}
+                    {AVAILABLE_MODULES.map((module) => {
+                      const Icon = getModuleIcon(module.id);
+                      const isEnabled = pkg.features?.[module.id];
+                      return (
+                        <div key={module.id} className="flex items-center gap-2 text-sm">
+                          {isEnabled ? (
+                            <Icon className="h-4 w-4 text-success" />
+                          ) : (
+                            <X className="h-4 w-4 text-muted-foreground" />
+                          )}
+                          <span className={!isEnabled ? 'text-muted-foreground line-through' : ''}>
+                            {module.name}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="flex gap-2 pt-2">

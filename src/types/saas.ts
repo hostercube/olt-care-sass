@@ -6,6 +6,35 @@ export type BillingCycle = 'monthly' | 'yearly';
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type PaymentMethod = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'manual';
 
+// Module names for package-based access
+export type ModuleName = 
+  | 'olt_care'
+  | 'billing'
+  | 'sms_alerts'
+  | 'email_alerts'
+  | 'api_access'
+  | 'custom_domain'
+  | 'white_label'
+  | 'advanced_monitoring'
+  | 'multi_user';
+
+export interface TenantFeatures {
+  // Core modules
+  olt_care?: boolean;
+  billing?: boolean;
+  // Alert features
+  sms_alerts?: boolean;
+  email_alerts?: boolean;
+  // Advanced features
+  api_access?: boolean;
+  custom_domain?: boolean;
+  white_label?: boolean;
+  advanced_monitoring?: boolean;
+  multi_user?: boolean;
+  // Allow any additional features
+  [key: string]: boolean | undefined;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -27,15 +56,6 @@ export interface Tenant {
   suspended_reason: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface TenantFeatures {
-  custom_domain?: boolean;
-  sms_alerts?: boolean;
-  email_alerts?: boolean;
-  api_access?: boolean;
-  white_label?: boolean;
-  [key: string]: boolean | undefined;
 }
 
 export interface Package {
@@ -141,10 +161,13 @@ export interface PaymentGatewayConfig {
   api_key?: string;
   api_secret?: string;
   merchant_id?: string;
+  merchant_number?: string;
   app_key?: string;
   app_secret?: string;
   username?: string;
   password?: string;
+  public_key?: string;
+  private_key?: string;
   [key: string]: string | undefined;
 }
 
@@ -212,3 +235,22 @@ export interface SaaSDashboardStats {
   pendingPayments: number;
   activeSubscriptions: number;
 }
+
+// Module configuration for UI
+export interface ModuleConfig {
+  id: ModuleName;
+  name: string;
+  description: string;
+  icon?: string;
+}
+
+export const AVAILABLE_MODULES: ModuleConfig[] = [
+  { id: 'olt_care', name: 'OLT Care', description: 'OLT and ONU device management' },
+  { id: 'sms_alerts', name: 'SMS Alerts', description: 'SMS notifications for alerts' },
+  { id: 'email_alerts', name: 'Email Alerts', description: 'Email notifications for alerts' },
+  { id: 'api_access', name: 'API Access', description: 'REST API access for integrations' },
+  { id: 'custom_domain', name: 'Custom Domain', description: 'Use your own domain' },
+  { id: 'white_label', name: 'White Label', description: 'Remove branding' },
+  { id: 'advanced_monitoring', name: 'Advanced Monitoring', description: 'Advanced monitoring features' },
+  { id: 'multi_user', name: 'Multi User', description: 'Multiple user accounts' },
+];
