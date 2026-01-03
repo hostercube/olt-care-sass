@@ -144,7 +144,7 @@ export function useEmployees() {
     const newPaidAmount = (salary.paid_amount || 0) + amount;
     const newStatus = newPaidAmount >= salary.net_salary ? 'paid' : 'partial';
 
-    const { error: paymentError } = await supabase.from('salary_payments').insert({
+    const { error: paymentError } = await (supabase.from as any)('salary_payments').insert({
       tenant_id: tenantId,
       monthly_salary_id: salaryId,
       employee_id: salary.employee_id,
