@@ -71,9 +71,11 @@ export function useTenants() {
 
   const updateTenant = async (id: string, updates: Partial<Tenant>) => {
     try {
+      // Cast features to any to avoid Json type conflicts
+      const dbUpdates = { ...updates, features: updates.features as any };
       const { error } = await supabase
         .from('tenants')
-        .update(updates)
+        .update(dbUpdates)
         .eq('id', id);
 
       if (error) throw error;

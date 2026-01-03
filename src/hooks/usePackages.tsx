@@ -73,9 +73,11 @@ export function usePackages() {
 
   const updatePackage = async (id: string, updates: Partial<Package>) => {
     try {
+      // Cast features to any to avoid Json type conflicts
+      const dbUpdates = { ...updates, features: updates.features as any };
       const { error } = await supabase
         .from('packages')
-        .update(updates)
+        .update(dbUpdates)
         .eq('id', id);
 
       if (error) throw error;
