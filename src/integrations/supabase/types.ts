@@ -1326,8 +1326,12 @@ export type Database = {
           features: Json | null
           id: string
           is_active: boolean | null
+          max_areas: number | null
+          max_customers: number | null
+          max_mikrotiks: number | null
           max_olts: number
           max_onus: number | null
+          max_resellers: number | null
           max_users: number
           name: string
           price_monthly: number
@@ -1341,8 +1345,12 @@ export type Database = {
           features?: Json | null
           id?: string
           is_active?: boolean | null
+          max_areas?: number | null
+          max_customers?: number | null
+          max_mikrotiks?: number | null
           max_olts?: number
           max_onus?: number | null
+          max_resellers?: number | null
           max_users?: number
           name: string
           price_monthly?: number
@@ -1356,8 +1364,12 @@ export type Database = {
           features?: Json | null
           id?: string
           is_active?: boolean | null
+          max_areas?: number | null
+          max_customers?: number | null
+          max_mikrotiks?: number | null
           max_olts?: number
           max_onus?: number | null
+          max_resellers?: number | null
           max_users?: number
           name?: string
           price_monthly?: number

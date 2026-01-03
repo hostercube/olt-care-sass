@@ -472,7 +472,7 @@ ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 
 
 -- =====================================================
--- SECTION 16: PACKAGES TABLE
+-- SECTION 16: PACKAGES TABLE (with extended limits)
 -- =====================================================
 
 CREATE TABLE IF NOT EXISTS public.packages (
@@ -481,10 +481,45 @@ CREATE TABLE IF NOT EXISTS public.packages (
   description text,
   price_monthly numeric NOT NULL DEFAULT 0,
   price_yearly numeric NOT NULL DEFAULT 0,
+  -- Resource Limits
   max_olts integer NOT NULL DEFAULT 1,
   max_users integer NOT NULL DEFAULT 1,
-  max_onus integer,
-  features jsonb DEFAULT '{"api_access": false, "sms_alerts": false, "white_label": false, "email_alerts": false, "custom_domain": false}'::jsonb,
+  max_onus integer,  -- NULL = unlimited
+  max_mikrotiks integer DEFAULT 1,  -- NULL = unlimited
+  max_customers integer,  -- NULL = unlimited
+  max_areas integer,  -- NULL = unlimited
+  max_resellers integer,  -- NULL = unlimited
+  -- Features JSON with module access and gateway permissions
+  features jsonb DEFAULT '{
+    "olt_care": true,
+    "isp_billing": false,
+    "isp_customers": false,
+    "isp_resellers": false,
+    "isp_mikrotik": false,
+    "isp_areas": false,
+    "isp_crm": false,
+    "isp_inventory": false,
+    "sms_alerts": false,
+    "email_alerts": false,
+    "api_access": false,
+    "custom_domain": false,
+    "white_label": false,
+    "advanced_monitoring": false,
+    "multi_user": false,
+    "reports_export": false,
+    "backup_restore": false,
+    "payment_gateways": {
+      "sslcommerz": false,
+      "bkash": false,
+      "rocket": false,
+      "nagad": false,
+      "manual": true
+    },
+    "sms_gateways": {
+      "smsnoc": false,
+      "custom": false
+    }
+  }'::jsonb,
   is_active boolean DEFAULT true,
   sort_order integer DEFAULT 0,
   created_at timestamp with time zone NOT NULL DEFAULT now(),

@@ -8,18 +8,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTenantPaymentGateways, TenantPaymentGateway } from '@/hooks/useTenantPaymentGateways';
 import { useTenantSMSGateway } from '@/hooks/useTenantSMSGateway';
 import { useTenantEmailGateway } from '@/hooks/useTenantEmailGateway';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
-import { CreditCard, MessageSquare, Mail, Save, TestTube, Loader2 } from 'lucide-react';
+import { useModuleAccess } from '@/hooks/useModuleAccess';
+import { CreditCard, MessageSquare, Mail, Save, TestTube, Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+import { PAYMENT_GATEWAYS, SMS_GATEWAYS, type PaymentGatewayType, type SMSGatewayType } from '@/types/saas';
 
 export default function ISPGatewaySettings() {
   const { tenantId } = useTenantContext();
+  const { hasPaymentGatewayAccess, hasSMSGatewayAccess, hasAccess } = useModuleAccess();
   const { gateways, loading: gatewaysLoading, updateGateway, initializeGateways } = useTenantPaymentGateways();
   const { settings: smsSettings, loading: smsLoading, updateSettings: updateSMSSettings, sendTestSMS } = useTenantSMSGateway();
   const { settings: emailSettings, loading: emailLoading, updateSettings: updateEmailSettings } = useTenantEmailGateway();
+
+  // Check which gateways are accessible based on package
+  const canAccessSMS = hasAccess('sms_alerts');
+  const canAccessEmail = hasAccess('email_alerts');
 
   const [paymentConfigs, setPaymentConfigs] = useState<Record<string, TenantPaymentGateway>>({});
   const [smsConfig, setSmsConfig] = useState({
@@ -126,7 +134,34 @@ export default function ISPGatewaySettings() {
 
   const PaymentGatewayCard = ({ gateway, title, description }: { gateway: string; title: string; description: string }) => {
     const config = paymentConfigs[gateway];
+    const hasAccess = hasPaymentGatewayAccess(gateway as PaymentGatewayType);
+    
     if (!config) return null;
+
+    // If no access, show locked card
+    if (!hasAccess) {
+      return (
+        <Card className="opacity-60">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Lock className="h-4 w-4 text-muted-foreground" />
+                  {title}
+                  <Badge variant="outline" className="text-xs">Locked</Badge>
+                </CardTitle>
+                <CardDescription className="text-xs">{description}</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              This payment gateway is not included in your package. Contact support to upgrade.
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
 
     return (
       <Card>
@@ -278,6 +313,14 @@ export default function ISPGatewaySettings() {
           </TabsContent>
 
           <TabsContent value="sms" className="space-y-4">
+            {!canAccessSMS ? (
+              <Alert>
+                <Lock className="h-4 w-4" />
+                <AlertDescription>
+                  SMS Alerts are not included in your current package. Please upgrade to access SMS gateway configuration.
+                </AlertDescription>
+              </Alert>
+            ) : (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -348,9 +391,18 @@ export default function ISPGatewaySettings() {
                 </div>
               </CardContent>
             </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="email" className="space-y-4">
+            {!canAccessEmail ? (
+              <Alert>
+                <Lock className="h-4 w-4" />
+                <AlertDescription>
+                  Email Alerts are not included in your current package. Please upgrade to access email gateway configuration.
+                </AlertDescription>
+              </Alert>
+            ) : (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -436,6 +488,7 @@ export default function ISPGatewaySettings() {
                 </Button>
               </CardContent>
             </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>

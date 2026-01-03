@@ -13,13 +13,37 @@ export type ModuleName =
   | 'isp_customers'
   | 'isp_resellers'
   | 'isp_mikrotik'
+  | 'isp_areas'
+  | 'isp_crm'
+  | 'isp_inventory'
   | 'sms_alerts'
   | 'email_alerts'
   | 'api_access'
   | 'custom_domain'
   | 'white_label'
   | 'advanced_monitoring'
-  | 'multi_user';
+  | 'multi_user'
+  | 'reports_export'
+  | 'backup_restore';
+
+// Payment gateway types
+export type PaymentGatewayType = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'manual';
+
+// SMS gateway types
+export type SMSGatewayType = 'smsnoc' | 'custom';
+
+export interface PaymentGatewayPermissions {
+  sslcommerz?: boolean;
+  bkash?: boolean;
+  rocket?: boolean;
+  nagad?: boolean;
+  manual?: boolean;
+}
+
+export interface SMSGatewayPermissions {
+  smsnoc?: boolean;
+  custom?: boolean;
+}
 
 export interface TenantFeatures {
   // Core modules
@@ -29,6 +53,9 @@ export interface TenantFeatures {
   isp_customers?: boolean;
   isp_resellers?: boolean;
   isp_mikrotik?: boolean;
+  isp_areas?: boolean;
+  isp_crm?: boolean;
+  isp_inventory?: boolean;
   // Alert features
   sms_alerts?: boolean;
   email_alerts?: boolean;
@@ -38,8 +65,13 @@ export interface TenantFeatures {
   white_label?: boolean;
   advanced_monitoring?: boolean;
   multi_user?: boolean;
+  reports_export?: boolean;
+  backup_restore?: boolean;
+  // Gateway permissions
+  payment_gateways?: PaymentGatewayPermissions;
+  sms_gateways?: SMSGatewayPermissions;
   // Allow any additional features
-  [key: string]: boolean | undefined;
+  [key: string]: boolean | PaymentGatewayPermissions | SMSGatewayPermissions | undefined;
 }
 
 export interface Tenant {
@@ -71,9 +103,15 @@ export interface Package {
   description: string | null;
   price_monthly: number;
   price_yearly: number;
+  // Resource limits
   max_olts: number;
   max_users: number;
   max_onus: number | null;
+  max_mikrotiks: number | null;
+  max_customers: number | null;
+  max_areas: number | null;
+  max_resellers: number | null;
+  // Features
   features: TenantFeatures;
   is_active: boolean;
   sort_order: number;
@@ -248,20 +286,69 @@ export interface ModuleConfig {
   id: ModuleName;
   name: string;
   description: string;
+  category: 'core' | 'isp' | 'alerts' | 'advanced';
   icon?: string;
 }
 
 export const AVAILABLE_MODULES: ModuleConfig[] = [
-  { id: 'olt_care', name: 'OLT Care', description: 'OLT and ONU device management' },
-  { id: 'isp_billing', name: 'ISP Billing', description: 'Customer billing and invoices' },
-  { id: 'isp_customers', name: 'Customer Management', description: 'Manage ISP customers' },
-  { id: 'isp_resellers', name: 'Reseller System', description: 'Manage resellers and sub-resellers' },
-  { id: 'isp_mikrotik', name: 'MikroTik Integration', description: 'PPPoE and queue management' },
-  { id: 'sms_alerts', name: 'SMS Alerts', description: 'SMS notifications for alerts' },
-  { id: 'email_alerts', name: 'Email Alerts', description: 'Email notifications for alerts' },
-  { id: 'api_access', name: 'API Access', description: 'REST API access for integrations' },
-  { id: 'custom_domain', name: 'Custom Domain', description: 'Use your own domain' },
-  { id: 'white_label', name: 'White Label', description: 'Remove branding' },
-  { id: 'advanced_monitoring', name: 'Advanced Monitoring', description: 'Advanced monitoring features' },
-  { id: 'multi_user', name: 'Multi User', description: 'Multiple user accounts' },
+  // Core Modules
+  { id: 'olt_care', name: 'OLT Care', description: 'OLT and ONU device management', category: 'core' },
+  
+  // ISP Management Modules
+  { id: 'isp_customers', name: 'Customer Management', description: 'Manage ISP customers', category: 'isp' },
+  { id: 'isp_billing', name: 'ISP Billing', description: 'Customer billing and invoices', category: 'isp' },
+  { id: 'isp_areas', name: 'Area Management', description: 'Manage service areas', category: 'isp' },
+  { id: 'isp_resellers', name: 'Reseller System', description: 'Manage resellers and sub-resellers', category: 'isp' },
+  { id: 'isp_mikrotik', name: 'MikroTik Integration', description: 'PPPoE and queue management', category: 'isp' },
+  { id: 'isp_crm', name: 'CRM', description: 'Customer relationship management', category: 'isp' },
+  { id: 'isp_inventory', name: 'Inventory', description: 'Equipment and stock management', category: 'isp' },
+  
+  // Alert Features
+  { id: 'sms_alerts', name: 'SMS Alerts', description: 'SMS notifications for alerts', category: 'alerts' },
+  { id: 'email_alerts', name: 'Email Alerts', description: 'Email notifications for alerts', category: 'alerts' },
+  
+  // Advanced Features
+  { id: 'api_access', name: 'API Access', description: 'REST API access for integrations', category: 'advanced' },
+  { id: 'custom_domain', name: 'Custom Domain', description: 'Use your own domain', category: 'advanced' },
+  { id: 'white_label', name: 'White Label', description: 'Remove branding', category: 'advanced' },
+  { id: 'advanced_monitoring', name: 'Advanced Monitoring', description: 'Advanced monitoring features', category: 'advanced' },
+  { id: 'multi_user', name: 'Multi User', description: 'Multiple user accounts', category: 'advanced' },
+  { id: 'reports_export', name: 'Reports & Export', description: 'Export data and reports', category: 'advanced' },
+  { id: 'backup_restore', name: 'Backup & Restore', description: 'Data backup and restore', category: 'advanced' },
 ];
+
+// Payment gateway configuration for packages
+export const PAYMENT_GATEWAYS = [
+  { id: 'sslcommerz', name: 'SSLCommerz', description: 'Bangladesh payment gateway' },
+  { id: 'bkash', name: 'bKash', description: 'Mobile banking' },
+  { id: 'rocket', name: 'Rocket', description: 'DBBL mobile banking' },
+  { id: 'nagad', name: 'Nagad', description: 'Bangladesh Post Office mobile banking' },
+  { id: 'manual', name: 'Manual Payment', description: 'Cash/Bank transfer' },
+];
+
+// SMS gateway configuration for packages
+export const SMS_GATEWAYS = [
+  { id: 'smsnoc', name: 'SMS NOC', description: 'SMS NOC gateway' },
+  { id: 'custom', name: 'Custom Gateway', description: 'Custom SMS API' },
+];
+
+// Resource limits configuration
+export interface PackageLimits {
+  max_olts: number;
+  max_onus: number | null;
+  max_users: number;
+  max_mikrotiks: number | null;
+  max_customers: number | null;
+  max_areas: number | null;
+  max_resellers: number | null;
+}
+
+export const DEFAULT_PACKAGE_LIMITS: PackageLimits = {
+  max_olts: 1,
+  max_onus: 100,
+  max_users: 1,
+  max_mikrotiks: 1,
+  max_customers: null,
+  max_areas: null,
+  max_resellers: null,
+};
