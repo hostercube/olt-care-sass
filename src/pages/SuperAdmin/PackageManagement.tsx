@@ -9,11 +9,15 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePackages } from '@/hooks/usePackages';
-import { Package, Plus, Edit, Trash2, Check, X, Server, MessageSquare, Mail, Code, Globe, Paintbrush, Activity, Users } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Check, X, Server, MessageSquare, Mail, Code, Globe, Paintbrush, Activity, Users, CreditCard } from 'lucide-react';
 import { AVAILABLE_MODULES, type TenantFeatures } from '@/types/saas';
 
 const DEFAULT_FEATURES: TenantFeatures = {
   olt_care: true,  // Always enabled
+  isp_billing: false,
+  isp_customers: false,
+  isp_resellers: false,
+  isp_mikrotik: false,
   sms_alerts: false,
   email_alerts: false,
   api_access: false,
@@ -89,6 +93,10 @@ export default function PackageManagement() {
   const getModuleIcon = (moduleId: string) => {
     switch (moduleId) {
       case 'olt_care': return Server;
+      case 'isp_billing': return CreditCard;
+      case 'isp_customers': return Users;
+      case 'isp_resellers': return Users;
+      case 'isp_mikrotik': return Server;
       case 'sms_alerts': return MessageSquare;
       case 'email_alerts': return Mail;
       case 'api_access': return Code;

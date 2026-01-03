@@ -86,6 +86,9 @@ export function useModuleAccess(): ModuleAccessResult {
       return true;
     }
 
+    // Super admins have access to everything
+    // Note: This is checked at a higher level, but we ensure modules are accessible
+    
     // Check if the feature is enabled in the subscription/package
     return features[module] === true;
   }, [features]);

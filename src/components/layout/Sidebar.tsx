@@ -31,12 +31,15 @@ import {
   ChevronDown,
   ChevronUp,
   Zap,
+  Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { VPSStatusIndicator } from './VPSStatusIndicator';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useSuperAdmin, useTenantContext } from '@/hooks/useSuperAdmin';
+import { useModuleAccess } from '@/hooks/useModuleAccess';
+import type { ModuleName } from '@/types/saas';
 
 interface NavItem {
   title: string;
@@ -46,6 +49,7 @@ interface NavItem {
   adminOnly?: boolean;
   superAdminOnly?: boolean;
   tenantOnly?: boolean;
+  requiredModule?: ModuleName;
 }
 
 interface NavSection {
@@ -67,13 +71,13 @@ const mainNavItems: NavItem[] = [
 
 const ispModuleItems: NavItem[] = [
   { title: 'ISP Dashboard', href: '/isp', icon: LayoutDashboard },
-  { title: 'Customers', href: '/isp/customers', icon: UserCircle },
-  { title: 'Billing', href: '/isp/billing', icon: Receipt },
-  { title: 'Automation', href: '/isp/automation', icon: Zap },
+  { title: 'Customers', href: '/isp/customers', icon: UserCircle, requiredModule: 'isp_customers' },
+  { title: 'Billing', href: '/isp/billing', icon: Receipt, requiredModule: 'isp_billing' },
+  { title: 'Automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
   { title: 'Packages', href: '/isp/packages', icon: Package },
   { title: 'Areas', href: '/isp/areas', icon: MapPin },
-  { title: 'Resellers', href: '/isp/resellers', icon: Users },
-  { title: 'MikroTik', href: '/isp/mikrotik', icon: Wifi },
+  { title: 'Resellers', href: '/isp/resellers', icon: Users, requiredModule: 'isp_resellers' },
+  { title: 'MikroTik', href: '/isp/mikrotik', icon: Wifi, requiredModule: 'isp_mikrotik' },
   { title: 'Gateways', href: '/isp/gateways', icon: CreditCard },
 ];
 
@@ -112,9 +116,17 @@ export function Sidebar() {
   const { isAdmin } = useUserRole();
   const { isSuperAdmin } = useSuperAdmin();
   const { tenantId } = useTenantContext();
+  const { hasAccess } = useModuleAccess();
 
   // Filter system nav items based on user role
   const filteredSystemItems = systemNavItems.filter(item => !item.adminOnly || isAdmin);
+
+  // Filter ISP items based on module access (super admins see all)
+  const filteredIspItems = ispModuleItems.filter(item => {
+    if (isSuperAdmin) return true;
+    if (!item.requiredModule) return true;
+    return hasAccess(item.requiredModule);
+  });
 
   // Check if current path is in ISP section
   const isInIspSection = location.pathname.startsWith('/isp');
@@ -219,7 +231,7 @@ export function Sidebar() {
         </div>
 
         {/* ISP Management Section */}
-        {renderSection('ISP Management', ispModuleItems, true, ispExpanded, () => setIspExpanded(!ispExpanded))}
+        {renderSection('ISP Management', filteredIspItems, true, ispExpanded, () => setIspExpanded(!ispExpanded))}
 
         {/* System Section */}
         {renderSection('System', filteredSystemItems, true, systemExpanded, () => setSystemExpanded(!systemExpanded))}
