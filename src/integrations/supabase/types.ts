@@ -2457,6 +2457,7 @@ export type Database = {
         | "shurjopay"
         | "aamarpay"
         | "portwallet"
+        | "piprapay"
       payment_status: "pending" | "completed" | "failed" | "refunded"
       speed_unit: "mbps" | "gbps"
       staff_role: "admin" | "staff" | "technician" | "support" | "reseller"
@@ -2630,6 +2631,7 @@ export const Constants = {
         "shurjopay",
         "aamarpay",
         "portwallet",
+        "piprapay",
       ],
       payment_status: ["pending", "completed", "failed", "refunded"],
       speed_unit: ["mbps", "gbps"],

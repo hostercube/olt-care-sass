@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,13 +15,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useTenantBackup } from '@/hooks/useTenantBackup';
+import { useTenantContext } from '@/hooks/useSuperAdmin';
+import { useModuleAccess } from '@/hooks/useModuleAccess';
+import { format } from 'date-fns';
 
 export default function Settings() {
   const { settings, loading, saving, updateSetting, saveSettings, resetSettings } = useSystemSettings();
   const { isAdmin } = useUserRole();
+  const { tenantId } = useTenantContext();
+  const { hasAccess } = useModuleAccess();
+  const { backups, exporting, fetchBackups, exportData } = useTenantBackup();
+  
+  const canBackup = hasAccess('backup_restore');
+
+  useEffect(() => {
+    if (canBackup && tenantId) {
+      fetchBackups();
+    }
+  }, [canBackup, tenantId, fetchBackups]);
 
   if (loading) {
     return (
@@ -53,6 +69,12 @@ export default function Settings() {
               <Shield className="h-4 w-4" />
               Security
             </TabsTrigger>
+            {canBackup && (
+              <TabsTrigger value="backup" className="gap-2">
+                <HardDrive className="h-4 w-4" />
+                Backup
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* General Settings */}
@@ -425,6 +447,76 @@ export default function Settings() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Backup Settings */}
+          {canBackup && (
+            <TabsContent value="backup" className="space-y-6">
+              <Card variant="glass">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <HardDrive className="h-5 w-5 text-primary" />
+                    Data Backup
+                  </CardTitle>
+                  <CardDescription>Export your ISP data for backup or migration</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium">Full Data Export</h4>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Export all your customers, areas, resellers, packages, bills, and payments as JSON
+                        </p>
+                      </div>
+                      <Button onClick={() => exportData()} disabled={exporting}>
+                        {exporting ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4 mr-2" />
+                        )}
+                        Export Data
+                      </Button>
+                    </div>
+                  </div>
+
+                  {backups.length > 0 && (
+                    <>
+                      <Separator />
+                      <div>
+                        <h4 className="font-medium mb-3">Recent Backups</h4>
+                        <div className="space-y-2">
+                          {backups.map((backup) => (
+                            <div
+                              key={backup.id}
+                              className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Database className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                  <p className="text-sm font-medium">{backup.file_name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {format(new Date(backup.created_at), 'PPpp')}
+                                    {backup.file_size && ` • ${(backup.file_size / 1024).toFixed(1)} KB`}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                backup.status === 'completed' 
+                                  ? 'bg-success/20 text-success' 
+                                  : 'bg-warning/20 text-warning'
+                              }`}>
+                                {backup.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
 
         <div className="flex justify-end gap-2">

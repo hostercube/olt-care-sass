@@ -57,14 +57,21 @@ export function useCustomers() {
 
   const createCustomer = async (data: Partial<Customer>) => {
     try {
-      const customerData = {
+      // Super admins must select a tenant context or we skip tenant_id
+      const customerData: any = {
         ...data,
-        tenant_id: tenantId,
       };
+      
+      // Only add tenant_id if available (not super admin without tenant context)
+      if (tenantId) {
+        customerData.tenant_id = tenantId;
+      } else if (!isSuperAdmin) {
+        throw new Error('No tenant context available');
+      }
 
       const { data: newCustomer, error } = await supabase
         .from('customers')
-        .insert(customerData as any)
+        .insert(customerData)
         .select()
         .single();
 

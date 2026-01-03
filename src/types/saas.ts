@@ -4,7 +4,7 @@ export type TenantStatus = 'active' | 'suspended' | 'trial' | 'cancelled';
 export type SubscriptionStatus = 'active' | 'expired' | 'cancelled' | 'pending';
 export type BillingCycle = 'monthly' | 'yearly';
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
-export type PaymentMethod = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'uddoktapay' | 'shurjopay' | 'aamarpay' | 'portwallet' | 'manual';
+export type PaymentMethod = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'uddoktapay' | 'shurjopay' | 'aamarpay' | 'portwallet' | 'piprapay' | 'manual';
 
 // Module names for package-based access
 export type ModuleName = 
@@ -27,7 +27,7 @@ export type ModuleName =
   | 'backup_restore';
 
 // Payment gateway types (all supported gateways)
-export type PaymentGatewayType = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'uddoktapay' | 'shurjopay' | 'aamarpay' | 'portwallet' | 'manual';
+export type PaymentGatewayType = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'uddoktapay' | 'shurjopay' | 'aamarpay' | 'portwallet' | 'piprapay' | 'manual';
 
 // SMS gateway types (all supported gateways)
 export type SMSGatewayType = 'smsnoc' | 'mimsms' | 'revesms' | 'greenweb' | 'bulksmsbd' | 'smsq' | 'custom';
@@ -41,6 +41,7 @@ export interface PaymentGatewayPermissions {
   shurjopay?: boolean;
   aamarpay?: boolean;
   portwallet?: boolean;
+  piprapay?: boolean;
   manual?: boolean;
 }
 
@@ -368,6 +369,7 @@ export const PAYMENT_GATEWAYS = [
   { id: 'shurjopay', name: 'ShurjoPay', description: 'Online payment solution' },
   { id: 'aamarpay', name: 'aamarPay', description: 'Multi-channel payment gateway' },
   { id: 'portwallet', name: 'PortWallet', description: 'Digital wallet & payments' },
+  { id: 'piprapay', name: 'PipraPay', description: 'PipraPay payment gateway' },
   { id: 'manual', name: 'Manual Payment', description: 'Cash/Bank transfer' },
 ];
 
@@ -442,6 +444,7 @@ export const SUPER_ADMIN_FEATURES: TenantFeatures = {
     shurjopay: true,
     aamarpay: true,
     portwallet: true,
+    piprapay: true,
     manual: true,
   },
   sms_gateways: {
