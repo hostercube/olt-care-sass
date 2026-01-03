@@ -6,30 +6,24 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Users, DollarSign, Package, TrendingUp, AlertCircle, Clock, 
-  Building2, CreditCard, BarChart3, RefreshCw, Loader2, 
-  ArrowUpRight, ArrowDownRight, CheckCircle, XCircle, Calendar,
-  Activity, Zap, Globe, MessageSquare, Mail, Shield, Server
+  Building2, CreditCard, RefreshCw, ArrowUpRight, Calendar,
+  Zap, MessageSquare, Mail, Settings, ExternalLink
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
   Cell,
   AreaChart,
   Area,
 } from 'recharts';
-import { Progress } from '@/components/ui/progress';
 
 interface AnalyticsData {
   totalTenants: number;
@@ -49,8 +43,7 @@ interface AnalyticsData {
   monthlyRevenueData: any[];
   subscriptionsByPackage: any[];
   totalCustomers: number;
-  totalOLTs: number;
-  totalMikroTiks: number;
+  totalPackages: number;
 }
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
@@ -82,17 +75,15 @@ export default function SuperAdminDashboard() {
         .select('*, tenants(name)')
         .order('created_at', { ascending: false });
 
+      // Fetch packages count
+      const { count: totalPackages } = await supabase
+        .from('packages')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+
       // Fetch counts for additional stats
       const { count: totalCustomers } = await supabase
         .from('customers')
-        .select('*', { count: 'exact', head: true });
-
-      const { count: totalOLTs } = await supabase
-        .from('olts')
-        .select('*', { count: 'exact', head: true });
-
-      const { count: totalMikroTiks } = await supabase
-        .from('mikrotik_routers')
         .select('*', { count: 'exact', head: true });
 
       const now = new Date();
@@ -172,8 +163,7 @@ export default function SuperAdminDashboard() {
         monthlyRevenueData,
         subscriptionsByPackage,
         totalCustomers: totalCustomers || 0,
-        totalOLTs: totalOLTs || 0,
-        totalMikroTiks: totalMikroTiks || 0,
+        totalPackages: totalPackages || 0,
       });
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -207,7 +197,7 @@ export default function SuperAdminDashboard() {
   if (!data) return null;
 
   return (
-    <DashboardLayout title="Super Admin Dashboard" subtitle="Platform Analytics & Management">
+    <DashboardLayout title="SaaS Admin" subtitle="Platform Management">
       <div className="space-y-6">
         {/* Header with Actions */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -215,12 +205,16 @@ export default function SuperAdminDashboard() {
             <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-chart-1 bg-clip-text text-transparent">
               Platform Overview
             </h1>
-            <p className="text-muted-foreground mt-1">Real-time analytics and insights across all tenants</p>
+            <p className="text-muted-foreground mt-1">Manage your SaaS platform and ISP tenants</p>
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={fetchAnalytics} variant="outline" size="sm">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
+            </Button>
+            <Button onClick={() => navigate('/admin/settings')} variant="outline" size="sm">
+              <Settings className="h-4 w-4 mr-2" />
+              Settings
             </Button>
             <Button onClick={() => navigate('/admin/tenants')} size="sm">
               <Building2 className="h-4 w-4 mr-2" />
@@ -256,7 +250,7 @@ export default function SuperAdminDashboard() {
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Total Tenants</p>
+                  <p className="text-sm font-medium text-muted-foreground">Total ISPs</p>
                   <p className="text-4xl font-bold">{data.totalTenants}</p>
                   <div className="flex items-center gap-2 text-xs">
                     <Badge variant="success" className="text-xs">{data.activeTenants} active</Badge>
@@ -283,10 +277,6 @@ export default function SuperAdminDashboard() {
                 <div className="rounded-full p-3 bg-success/10">
                   <DollarSign className="h-6 w-6 text-success" />
                 </div>
-              </div>
-              <div className="mt-4 flex items-center gap-2 text-sm text-success">
-                <ArrowUpRight className="h-4 w-4" />
-                <span>+12% from last month</span>
               </div>
             </CardContent>
           </Card>
@@ -338,7 +328,7 @@ export default function SuperAdminDashboard() {
                   <Users className="h-6 w-6 text-chart-2" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Customers</p>
+                  <p className="text-sm text-muted-foreground">Total End Customers</p>
                   <p className="text-2xl font-bold">{data.totalCustomers.toLocaleString()}</p>
                 </div>
               </div>
@@ -348,11 +338,11 @@ export default function SuperAdminDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
                 <div className="rounded-lg p-3 bg-chart-3/10">
-                  <Server className="h-6 w-6 text-chart-3" />
+                  <Package className="h-6 w-6 text-chart-3" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total OLTs</p>
-                  <p className="text-2xl font-bold">{data.totalOLTs}</p>
+                  <p className="text-sm text-muted-foreground">Active Packages</p>
+                  <p className="text-2xl font-bold">{data.totalPackages}</p>
                 </div>
               </div>
             </CardContent>
@@ -364,8 +354,8 @@ export default function SuperAdminDashboard() {
                   <Zap className="h-6 w-6 text-chart-4" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">MikroTik Routers</p>
-                  <p className="text-2xl font-bold">{data.totalMikroTiks}</p>
+                  <p className="text-sm text-muted-foreground">Platform Status</p>
+                  <p className="text-2xl font-bold text-success">Healthy</p>
                 </div>
               </div>
             </CardContent>
@@ -412,7 +402,8 @@ export default function SuperAdminDashboard() {
                     dataKey="revenue" 
                     stroke="hsl(var(--primary))" 
                     strokeWidth={2}
-                    fill="url(#colorRevenue)"
+                    fillOpacity={1} 
+                    fill="url(#colorRevenue)" 
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -423,53 +414,41 @@ export default function SuperAdminDashboard() {
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <BarChart3 className="h-5 w-5 text-primary" />
+                <Package className="h-5 w-5 text-primary" />
                 Subscriptions by Package
               </CardTitle>
-              <CardDescription>Active subscriptions distribution</CardDescription>
+              <CardDescription>Distribution of active subscriptions</CardDescription>
             </CardHeader>
             <CardContent>
               {data.subscriptionsByPackage.length > 0 ? (
-                <div className="flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={data.subscriptionsByPackage}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {data.subscriptionsByPackage.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={data.subscriptionsByPackage}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, value }) => `${name}: ${value}`}
+                    >
+                      {data.subscriptionsByPackage.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px',
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
               ) : (
-                <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
-                  <Package className="h-12 w-12 mb-3 opacity-50" />
-                  <p>No active subscriptions</p>
-                </div>
-              )}
-              {data.subscriptionsByPackage.length > 0 && (
-                <div className="flex flex-wrap justify-center gap-4 mt-4">
-                  {data.subscriptionsByPackage.map((pkg, index) => (
-                    <div key={pkg.name} className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                      <span className="text-sm">{pkg.name}: {pkg.value}</span>
-                    </div>
-                  ))}
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  No active subscriptions yet
                 </div>
               )}
             </CardContent>
@@ -487,49 +466,43 @@ export default function SuperAdminDashboard() {
                   Recent Payments
                 </CardTitle>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/admin/payments')}>
-                  View All
+                  View All <ExternalLink className="h-3 w-3 ml-1" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {data.recentPayments.length > 0 ? (
-                  data.recentPayments.map((payment) => (
-                    <div key={payment.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+              {data.recentPayments.length > 0 ? (
+                <div className="space-y-3">
+                  {data.recentPayments.map((payment) => (
+                    <div key={payment.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
-                        {payment.status === 'completed' ? (
-                          <div className="rounded-full p-2 bg-success/10">
-                            <CheckCircle className="h-4 w-4 text-success" />
-                          </div>
-                        ) : payment.status === 'pending' ? (
-                          <div className="rounded-full p-2 bg-warning/10">
-                            <Clock className="h-4 w-4 text-warning" />
-                          </div>
-                        ) : (
-                          <div className="rounded-full p-2 bg-destructive/10">
-                            <XCircle className="h-4 w-4 text-destructive" />
-                          </div>
-                        )}
+                        <div className={`p-2 rounded-full ${
+                          payment.status === 'completed' ? 'bg-success/10 text-success' :
+                          payment.status === 'pending' ? 'bg-warning/10 text-warning' :
+                          'bg-destructive/10 text-destructive'
+                        }`}>
+                          <DollarSign className="h-4 w-4" />
+                        </div>
                         <div>
-                          <p className="font-medium text-sm">{(payment.tenants as any)?.name || 'Unknown'}</p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(payment.created_at), 'MMM d, yyyy')}</p>
+                          <p className="font-medium text-sm">{payment.tenants?.name || 'Unknown'}</p>
+                          <p className="text-xs text-muted-foreground">{payment.payment_method}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold">৳{payment.amount?.toLocaleString()}</p>
-                        <Badge variant={payment.status === 'completed' ? 'success' : payment.status === 'pending' ? 'warning' : 'destructive'} className="text-xs">
+                        <p className="font-semibold text-sm">৳{payment.amount?.toLocaleString()}</p>
+                        <Badge variant={
+                          payment.status === 'completed' ? 'success' :
+                          payment.status === 'pending' ? 'warning' : 'destructive'
+                        } className="text-xs">
                           {payment.status}
                         </Badge>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <CreditCard className="h-10 w-10 mb-2 opacity-50" />
-                    <p>No payments yet</p>
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-8">No payments yet</p>
+              )}
             </CardContent>
           </Card>
 
@@ -538,22 +511,27 @@ export default function SuperAdminDashboard() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <Users className="h-5 w-5 text-primary" />
-                  Recent Tenants
+                  <Building2 className="h-5 w-5 text-primary" />
+                  Recent ISPs
                 </CardTitle>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/admin/tenants')}>
-                  View All
+                  View All <ExternalLink className="h-3 w-3 ml-1" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {data.recentTenants.length > 0 ? (
-                  data.recentTenants.map((tenant) => (
-                    <div key={tenant.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+              {data.recentTenants.length > 0 ? (
+                <div className="space-y-3">
+                  {data.recentTenants.map((tenant) => (
+                    <div key={tenant.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary/20 to-chart-1/20 flex items-center justify-center">
-                          <Building2 className="h-5 w-5 text-primary" />
+                        <div className={`p-2 rounded-full ${
+                          tenant.status === 'active' ? 'bg-success/10 text-success' :
+                          tenant.status === 'trial' ? 'bg-warning/10 text-warning' :
+                          tenant.status === 'suspended' ? 'bg-destructive/10 text-destructive' :
+                          'bg-muted text-muted-foreground'
+                        }`}>
+                          <Building2 className="h-4 w-4" />
                         </div>
                         <div>
                           <p className="font-medium text-sm">{tenant.name}</p>
@@ -562,60 +540,49 @@ export default function SuperAdminDashboard() {
                       </div>
                       <div className="text-right">
                         <Badge variant={
-                          tenant.status === 'active' ? 'success' : 
-                          tenant.status === 'trial' ? 'warning' : 
+                          tenant.status === 'active' ? 'success' :
+                          tenant.status === 'trial' ? 'warning' :
                           tenant.status === 'suspended' ? 'destructive' : 'secondary'
-                        }>
+                        } className="text-xs">
                           {tenant.status}
                         </Badge>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {format(new Date(tenant.created_at), 'MMM d')}
+                          {format(new Date(tenant.created_at), 'MMM dd, yyyy')}
                         </p>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <Building2 className="h-10 w-10 mb-2 opacity-50" />
-                    <p>No tenants yet</p>
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-8">No tenants yet</p>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* Quick Actions */}
-        <Card className="shadow-sm bg-gradient-to-r from-primary/5 via-chart-1/5 to-chart-2/5">
+        <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">Quick Actions</CardTitle>
-            <CardDescription>Frequently used management actions</CardDescription>
+            <CardDescription>Common administrative tasks</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" onClick={() => navigate('/admin/tenants')}>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => navigate('/admin/tenants')}>
                 <Building2 className="h-5 w-5" />
-                <span className="text-xs">Tenants</span>
+                <span>Add New ISP</span>
               </Button>
-              <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" onClick={() => navigate('/admin/packages')}>
+              <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => navigate('/admin/packages')}>
                 <Package className="h-5 w-5" />
-                <span className="text-xs">Packages</span>
+                <span>Manage Packages</span>
               </Button>
-              <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" onClick={() => navigate('/admin/payments')}>
-                <CreditCard className="h-5 w-5" />
-                <span className="text-xs">Payments</span>
-              </Button>
-              <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" onClick={() => navigate('/admin/sms-center')}>
+              <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => navigate('/admin/sms-center')}>
                 <MessageSquare className="h-5 w-5" />
-                <span className="text-xs">SMS Center</span>
+                <span>Send SMS</span>
               </Button>
-              <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" onClick={() => navigate('/admin/email-templates')}>
-                <Mail className="h-5 w-5" />
-                <span className="text-xs">Email</span>
-              </Button>
-              <Button variant="outline" className="h-auto py-4 flex flex-col gap-2" onClick={() => navigate('/admin/gateways')}>
-                <Globe className="h-5 w-5" />
-                <span className="text-xs">Gateways</span>
+              <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => navigate('/admin/settings')}>
+                <Settings className="h-5 w-5" />
+                <span>Platform Settings</span>
               </Button>
             </div>
           </CardContent>

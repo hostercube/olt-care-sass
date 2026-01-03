@@ -96,6 +96,7 @@ const superAdminItems: NavItem[] = [
   { title: 'SMS Gateway', href: '/admin/sms-gateway', icon: MessageSquare },
   { title: 'SMS Templates', href: '/admin/sms-templates', icon: MessageSquare },
   { title: 'SMS Center', href: '/admin/sms-center', icon: MessageSquare },
+  { title: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
 const tenantBillingItems: NavItem[] = [

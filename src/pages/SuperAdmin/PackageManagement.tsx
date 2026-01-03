@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, memo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -104,8 +104,8 @@ interface FormData {
   sort_order: number;
 }
 
-// Separate LimitInput component outside of the main component
-function LimitInput({ 
+// Memoized LimitInput component
+const LimitInput = memo(function LimitInput({ 
   label, 
   value, 
   onChange, 
@@ -143,7 +143,40 @@ function LimitInput({
       </div>
     </div>
   );
-}
+});
+
+// Memoized Module Toggle Item
+const ModuleToggleItem = memo(function ModuleToggleItem({
+  module,
+  isEnabled,
+  onToggle,
+  icon: Icon
+}: {
+  module: { id: string; name: string; description: string };
+  isEnabled: boolean;
+  onToggle: (id: string, value: boolean) => void;
+  icon: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <div 
+      className={`flex items-center justify-between p-3 rounded-lg border ${
+        isEnabled ? 'border-primary/50 bg-primary/5' : 'border-border'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <div>
+          <span className="text-sm font-medium">{module.name}</span>
+          <p className="text-xs text-muted-foreground">{module.description}</p>
+        </div>
+      </div>
+      <Switch
+        checked={isEnabled}
+        onCheckedChange={(v) => onToggle(module.id, v)}
+      />
+    </div>
+  );
+});
 
 export default function PackageManagement() {
   const { packages, loading, createPackage, updatePackage, deletePackage } = usePackages();
@@ -244,7 +277,7 @@ export default function PackageManagement() {
     }));
   }, []);
 
-  const handleInputChange = useCallback((field: keyof FormData, value: any) => {
+  const handleLimitChange = useCallback((field: keyof FormData, value: number | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
@@ -263,7 +296,7 @@ export default function PackageManagement() {
               <Label>Package Name *</Label>
               <Input
                 value={formData.name}
-                onChange={(e) => handleInputChange('name', e.target.value)}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 placeholder="Basic Plan"
               />
             </div>
@@ -272,14 +305,14 @@ export default function PackageManagement() {
               <Input
                 type="number"
                 value={formData.sort_order}
-                onChange={(e) => handleInputChange('sort_order', parseInt(e.target.value) || 0)}
+                onChange={(e) => setFormData(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 0 }))}
               />
             </div>
             <div className="col-span-2 space-y-2">
               <Label>Description</Label>
               <Textarea
                 value={formData.description}
-                onChange={(e) => handleInputChange('description', e.target.value)}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 placeholder="Package description..."
               />
             </div>
@@ -288,7 +321,7 @@ export default function PackageManagement() {
               <Input
                 type="number"
                 value={formData.price_monthly}
-                onChange={(e) => handleInputChange('price_monthly', parseFloat(e.target.value) || 0)}
+                onChange={(e) => setFormData(prev => ({ ...prev, price_monthly: parseFloat(e.target.value) || 0 }))}
               />
             </div>
             <div className="space-y-2">
@@ -296,14 +329,14 @@ export default function PackageManagement() {
               <Input
                 type="number"
                 value={formData.price_yearly}
-                onChange={(e) => handleInputChange('price_yearly', parseFloat(e.target.value) || 0)}
+                onChange={(e) => setFormData(prev => ({ ...prev, price_yearly: parseFloat(e.target.value) || 0 }))}
               />
             </div>
             <div className="flex items-center space-x-2">
               <Switch
                 id="is_active"
                 checked={formData.is_active}
-                onCheckedChange={(v) => handleInputChange('is_active', v)}
+                onCheckedChange={(v) => setFormData(prev => ({ ...prev, is_active: v }))}
               />
               <Label htmlFor="is_active">Active</Label>
             </div>
@@ -320,37 +353,37 @@ export default function PackageManagement() {
             <LimitInput
               label="Max OLTs"
               value={formData.max_olts}
-              onChange={(v) => handleInputChange('max_olts', v)}
+              onChange={(v) => handleLimitChange('max_olts', v)}
             />
             <LimitInput
               label="Max ONUs"
               value={formData.max_onus}
-              onChange={(v) => handleInputChange('max_onus', v)}
+              onChange={(v) => handleLimitChange('max_onus', v)}
             />
             <LimitInput
               label="Max MikroTiks"
               value={formData.max_mikrotiks}
-              onChange={(v) => handleInputChange('max_mikrotiks', v)}
+              onChange={(v) => handleLimitChange('max_mikrotiks', v)}
             />
             <LimitInput
               label="Max Users"
               value={formData.max_users}
-              onChange={(v) => handleInputChange('max_users', v)}
+              onChange={(v) => handleLimitChange('max_users', v)}
             />
             <LimitInput
               label="Max Customers"
               value={formData.max_customers}
-              onChange={(v) => handleInputChange('max_customers', v)}
+              onChange={(v) => handleLimitChange('max_customers', v)}
             />
             <LimitInput
               label="Max Areas"
               value={formData.max_areas}
-              onChange={(v) => handleInputChange('max_areas', v)}
+              onChange={(v) => handleLimitChange('max_areas', v)}
             />
             <LimitInput
               label="Max Resellers"
               value={formData.max_resellers}
-              onChange={(v) => handleInputChange('max_resellers', v)}
+              onChange={(v) => handleLimitChange('max_resellers', v)}
             />
           </div>
         </div>
@@ -375,30 +408,15 @@ export default function PackageManagement() {
               <div key={category} className="space-y-2">
                 <Label className="text-sm font-medium text-muted-foreground">{categoryLabel}</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  {categoryModules.map((module) => {
-                    const Icon = getModuleIcon(module.id);
-                    const isEnabled = formData.features[module.id] as boolean;
-                    return (
-                      <div 
-                        key={module.id} 
-                        className={`flex items-center justify-between p-3 rounded-lg border ${
-                          isEnabled ? 'border-primary/50 bg-primary/5' : 'border-border'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <span className="text-sm font-medium">{module.name}</span>
-                            <p className="text-xs text-muted-foreground">{module.description}</p>
-                          </div>
-                        </div>
-                        <Switch
-                          checked={isEnabled ?? false}
-                          onCheckedChange={(v) => handleFeatureChange(module.id, v)}
-                        />
-                      </div>
-                    );
-                  })}
+                  {categoryModules.map((module) => (
+                    <ModuleToggleItem
+                      key={module.id}
+                      module={module}
+                      isEnabled={(formData.features[module.id] as boolean) ?? false}
+                      onToggle={handleFeatureChange}
+                      icon={getModuleIcon(module.id)}
+                    />
+                  ))}
                 </div>
               </div>
             );
@@ -498,157 +516,118 @@ export default function PackageManagement() {
                 <DialogDescription>Define a new subscription package with limits and features</DialogDescription>
               </DialogHeader>
               <PackageFormContent />
-              <DialogFooter className="pt-4">
-                <Button variant="outline" onClick={() => { setIsCreateOpen(false); resetForm(); }}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreate} disabled={!formData.name}>
-                  Create Package
-                </Button>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreate}>Create Package</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
 
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="animate-pulse">
-                <CardHeader className="space-y-2">
-                  <div className="h-6 bg-muted rounded w-1/2" />
-                  <div className="h-4 bg-muted rounded w-3/4" />
-                </CardHeader>
-                <CardContent>
-                  <div className="h-20 bg-muted rounded" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {packages.map((pkg) => {
-              const features = pkg.features as TenantFeatures;
-              const enabledModules = AVAILABLE_MODULES.filter(m => features?.[m.id]);
-              
-              return (
-                <Card key={pkg.id} className="relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/10 to-transparent rounded-bl-full" />
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <CardTitle className="flex items-center gap-2">
-                          <Package className="h-5 w-5 text-primary" />
-                          {pkg.name}
-                        </CardTitle>
-                        <CardDescription>{pkg.description}</CardDescription>
-                      </div>
-                      <Badge variant={pkg.is_active ? 'default' : 'secondary'}>
-                        {pkg.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Pricing */}
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-primary">৳{pkg.price_monthly}</span>
-                      <span className="text-muted-foreground">/month</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      or ৳{pkg.price_yearly}/year (save {Math.round((1 - pkg.price_yearly / (pkg.price_monthly * 12)) * 100)}%)
-                    </p>
+        {/* Packages Grid */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {packages.map((pkg) => (
+            <Card key={pkg.id} className={`relative ${!pkg.is_active ? 'opacity-60' : ''}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Package className="h-5 w-5 text-primary" />
+                      {pkg.name}
+                    </CardTitle>
+                    <CardDescription className="mt-1">{pkg.description || 'No description'}</CardDescription>
+                  </div>
+                  <div className="flex gap-1">
+                    <Dialog open={editingPackage?.id === pkg.id} onOpenChange={(open) => {
+                      if (!open) {
+                        setEditingPackage(null);
+                        resetForm();
+                      }
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(pkg)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-3xl">
+                        <DialogHeader>
+                          <DialogTitle>Edit Package</DialogTitle>
+                          <DialogDescription>Modify package settings and features</DialogDescription>
+                        </DialogHeader>
+                        <PackageFormContent />
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setEditingPackage(null)}>Cancel</Button>
+                          <Button onClick={handleUpdate}>Save Changes</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deletePackage(pkg.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Pricing */}
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-bold">৳{pkg.price_monthly.toLocaleString()}</span>
+                  <span className="text-muted-foreground">/month</span>
+                </div>
+                <p className="text-sm text-muted-foreground">৳{pkg.price_yearly.toLocaleString()}/year</p>
 
-                    {/* Limits */}
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Resource Limits</Label>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="flex items-center gap-1">
-                          <Server className="h-3 w-3 text-muted-foreground" />
-                          <span>OLTs: {formatLimit(pkg.max_olts)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-3 w-3 text-muted-foreground" />
-                          <span>Users: {formatLimit(pkg.max_users)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Router className="h-3 w-3 text-muted-foreground" />
-                          <span>MikroTiks: {formatLimit(pkg.max_mikrotiks)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-3 w-3 text-muted-foreground" />
-                          <span>Customers: {formatLimit(pkg.max_customers)}</span>
-                        </div>
-                      </div>
-                    </div>
+                {/* Limits */}
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex items-center gap-1">
+                    <Server className="h-3 w-3 text-muted-foreground" />
+                    <span>OLTs: {formatLimit(pkg.max_olts)}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Users className="h-3 w-3 text-muted-foreground" />
+                    <span>Users: {formatLimit(pkg.max_users)}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Users className="h-3 w-3 text-muted-foreground" />
+                    <span>Customers: {formatLimit(pkg.max_customers)}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Router className="h-3 w-3 text-muted-foreground" />
+                    <span>MikroTiks: {formatLimit(pkg.max_mikrotiks)}</span>
+                  </div>
+                </div>
 
-                    {/* Enabled Modules */}
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Enabled Modules ({enabledModules.length})</Label>
-                      <div className="flex flex-wrap gap-1">
-                        {enabledModules.slice(0, 5).map((module) => (
-                          <Badge key={module.id} variant="outline" className="text-xs">
-                            {module.name}
-                          </Badge>
-                        ))}
-                        {enabledModules.length > 5 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{enabledModules.length - 5} more
-                          </Badge>
-                        )}
-                        {enabledModules.length === 0 && (
-                          <span className="text-xs text-muted-foreground">No modules enabled</span>
-                        )}
-                      </div>
-                    </div>
+                {/* Feature Badges */}
+                <div className="flex flex-wrap gap-1">
+                  {pkg.is_active ? (
+                    <Badge variant="success" className="text-xs"><Check className="h-3 w-3 mr-1" />Active</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs"><X className="h-3 w-3 mr-1" />Inactive</Badge>
+                  )}
+                  {(pkg.features as TenantFeatures)?.olt_care && (
+                    <Badge variant="outline" className="text-xs">OLT Care</Badge>
+                  )}
+                  {(pkg.features as TenantFeatures)?.isp_billing && (
+                    <Badge variant="outline" className="text-xs">Billing</Badge>
+                  )}
+                  {(pkg.features as TenantFeatures)?.sms_alerts && (
+                    <Badge variant="outline" className="text-xs">SMS</Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 pt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => openEdit(pkg)}
-                      >
-                        <Edit className="h-4 w-4 mr-1" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => deletePackage(pkg.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+        {packages.length === 0 && !loading && (
+          <Card className="p-12 text-center">
+            <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No packages yet</h3>
+            <p className="text-muted-foreground mb-4">Create your first subscription package to get started</p>
+            <Button onClick={() => setIsCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Package
+            </Button>
+          </Card>
         )}
-
-        {/* Edit Dialog */}
-        <Dialog open={!!editingPackage} onOpenChange={(open) => {
-          if (!open) {
-            setEditingPackage(null);
-            resetForm();
-          }
-        }}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Edit Package</DialogTitle>
-              <DialogDescription>Update package settings and features</DialogDescription>
-            </DialogHeader>
-            <PackageFormContent />
-            <DialogFooter className="pt-4">
-              <Button variant="outline" onClick={() => { setEditingPackage(null); resetForm(); }}>
-                Cancel
-              </Button>
-              <Button onClick={handleUpdate} disabled={!formData.name}>
-                Update Package
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   );
