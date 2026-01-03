@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { SuperAdminRoute } from "@/components/layout/SuperAdminRoute";
 import { TenantAccessGuard } from "@/components/layout/TenantAccessGuard";
+import { ModuleAccessGuard } from "@/components/layout/ModuleAccessGuard";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import OLTManagement from "./pages/OLTManagement";
@@ -247,21 +248,27 @@ const App = () => (
               <Route path="/isp/customers" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
-                    <CustomerManagement />
+                    <ModuleAccessGuard module="isp_customers" moduleName="Customer Management">
+                      <CustomerManagement />
+                    </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/isp/billing" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
-                    <ISPBilling />
+                    <ModuleAccessGuard module="isp_billing" moduleName="ISP Billing">
+                      <ISPBilling />
+                    </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/isp/automation" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
-                    <BillingAutomation />
+                    <ModuleAccessGuard module="isp_billing" moduleName="Billing Automation">
+                      <BillingAutomation />
+                    </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
@@ -282,14 +289,18 @@ const App = () => (
               <Route path="/isp/resellers" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
-                    <ResellersManagement />
+                    <ModuleAccessGuard module="isp_resellers" moduleName="Reseller Management">
+                      <ResellersManagement />
+                    </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/isp/mikrotik" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
-                    <MikroTikManagement />
+                    <ModuleAccessGuard module="isp_mikrotik" moduleName="MikroTik Integration">
+                      <MikroTikManagement />
+                    </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />

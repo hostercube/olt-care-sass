@@ -9,7 +9,10 @@ export type PaymentMethod = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'manua
 // Module names for package-based access
 export type ModuleName = 
   | 'olt_care'
-  | 'billing'
+  | 'isp_billing'
+  | 'isp_customers'
+  | 'isp_resellers'
+  | 'isp_mikrotik'
   | 'sms_alerts'
   | 'email_alerts'
   | 'api_access'
@@ -21,7 +24,11 @@ export type ModuleName =
 export interface TenantFeatures {
   // Core modules
   olt_care?: boolean;
-  billing?: boolean;
+  // ISP Management modules
+  isp_billing?: boolean;
+  isp_customers?: boolean;
+  isp_resellers?: boolean;
+  isp_mikrotik?: boolean;
   // Alert features
   sms_alerts?: boolean;
   email_alerts?: boolean;
@@ -246,6 +253,10 @@ export interface ModuleConfig {
 
 export const AVAILABLE_MODULES: ModuleConfig[] = [
   { id: 'olt_care', name: 'OLT Care', description: 'OLT and ONU device management' },
+  { id: 'isp_billing', name: 'ISP Billing', description: 'Customer billing and invoices' },
+  { id: 'isp_customers', name: 'Customer Management', description: 'Manage ISP customers' },
+  { id: 'isp_resellers', name: 'Reseller System', description: 'Manage resellers and sub-resellers' },
+  { id: 'isp_mikrotik', name: 'MikroTik Integration', description: 'PPPoE and queue management' },
   { id: 'sms_alerts', name: 'SMS Alerts', description: 'SMS notifications for alerts' },
   { id: 'email_alerts', name: 'Email Alerts', description: 'Email notifications for alerts' },
   { id: 'api_access', name: 'API Access', description: 'REST API access for integrations' },
