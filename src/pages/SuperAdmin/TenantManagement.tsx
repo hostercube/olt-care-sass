@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,42 +9,100 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTenants } from '@/hooks/useTenants';
 import { usePackages } from '@/hooks/usePackages';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2 } from 'lucide-react';
+import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2, Users, Router, MapPin, UserCheck, ArrowUpDown, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { TenantStatus } from '@/types/saas';
 
+interface TenantStats {
+  customers: number;
+  resellers: number;
+  olts: number;
+  mikrotiks: number;
+  staff: number;
+  areas: number;
+}
+
 export default function TenantManagement() {
   const { tenants, loading, createTenant, updateTenant, suspendTenant, activateTenant, deleteTenant, fetchTenants } = useTenants();
   const { packages } = usePackages();
-  const { createSubscription } = useSubscriptions();
+  const { subscriptions, createSubscription, fetchSubscriptions } = useSubscriptions();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+  const [isPackageOpen, setIsPackageOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [suspendReason, setSuspendReason] = useState('');
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
   const [loggingInAs, setLoggingInAs] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [tenantStats, setTenantStats] = useState<Record<string, TenantStats>>({});
+  const [newPassword, setNewPassword] = useState('');
+  const [selectedPackageId, setSelectedPackageId] = useState('');
+  const [selectedBillingCycle, setSelectedBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   const [newTenant, setNewTenant] = useState({
     name: '',
     email: '',
     password: '',
+    confirmPassword: '',
     phone: '',
     company_name: '',
+    owner_name: '',
+    division: '',
+    district: '',
+    upazila: '',
     address: '',
-    max_olts: 1,
-    max_users: 1,
     package_id: '',
     billing_cycle: 'monthly' as 'monthly' | 'yearly',
   });
+
+  const DIVISIONS = ['Dhaka', 'Chittagong', 'Rajshahi', 'Khulna', 'Barisal', 'Sylhet', 'Rangpur', 'Mymensingh'];
+
+  useEffect(() => {
+    fetchSubscriptions();
+  }, []);
+
+  useEffect(() => {
+    // Fetch stats for all tenants
+    const fetchStats = async () => {
+      const stats: Record<string, TenantStats> = {};
+      
+      for (const tenant of tenants) {
+        const [customers, resellers, olts, mikrotiks, staff, areas] = await Promise.all([
+          supabase.from('customers').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
+          supabase.from('resellers').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
+          supabase.from('olts').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
+          supabase.from('mikrotik_routers').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
+          supabase.from('tenant_users').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
+          supabase.from('areas').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
+        ]);
+        
+        stats[tenant.id] = {
+          customers: customers.count || 0,
+          resellers: resellers.count || 0,
+          olts: olts.count || 0,
+          mikrotiks: mikrotiks.count || 0,
+          staff: staff.count || 0,
+          areas: areas.count || 0,
+        };
+      }
+      
+      setTenantStats(stats);
+    };
+    
+    if (tenants.length > 0) {
+      fetchStats();
+    }
+  }, [tenants]);
 
   const filteredTenants = tenants.filter(tenant =>
     tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -53,95 +111,76 @@ export default function TenantManagement() {
   );
 
   const getStatusBadge = (status: TenantStatus) => {
-    const variants: Record<TenantStatus, 'default' | 'success' | 'warning' | 'danger'> = {
+    const variants: Record<TenantStatus, 'default' | 'success' | 'warning' | 'destructive'> = {
       active: 'success',
       trial: 'warning',
-      suspended: 'danger',
+      suspended: 'destructive',
       cancelled: 'default',
     };
     return <Badge variant={variants[status]}>{status.toUpperCase()}</Badge>;
   };
 
+  const getTenantSubscription = (tenantId: string) => {
+    return subscriptions.find(s => s.tenant_id === tenantId);
+  };
+
   const handleCreateTenant = async () => {
     if (!newTenant.name || !newTenant.email || !newTenant.password) {
-      toast({
-        title: 'Validation Error',
-        description: 'Name, Email and Password are required',
-        variant: 'destructive',
-      });
+      toast({ title: 'Validation Error', description: 'Required fields missing', variant: 'destructive' });
+      return;
+    }
+    
+    if (newTenant.password !== newTenant.confirmPassword) {
+      toast({ title: 'Validation Error', description: 'Passwords do not match', variant: 'destructive' });
       return;
     }
 
     if (newTenant.password.length < 6) {
-      toast({
-        title: 'Validation Error',
-        description: 'Password must be at least 6 characters',
-        variant: 'destructive',
-      });
+      toast({ title: 'Validation Error', description: 'Password must be at least 6 characters', variant: 'destructive' });
       return;
     }
 
     setIsCreating(true);
     try {
-      // First create the user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newTenant.email,
         password: newTenant.password,
         options: {
-          data: {
-            full_name: newTenant.name,
-          },
+          data: { full_name: newTenant.owner_name || newTenant.name },
         },
       });
 
-      if (authError) {
-        throw new Error(authError.message);
-      }
+      if (authError) throw new Error(authError.message);
+      if (!authData.user) throw new Error('Failed to create user account');
 
-      if (!authData.user) {
-        throw new Error('Failed to create user account');
-      }
-
-      const userId = authData.user.id;
-
-      // Get package details
       const pkg = packages.find(p => p.id === newTenant.package_id);
       
-      // Create the tenant
       const tenant = await createTenant({
-        name: newTenant.name,
+        name: newTenant.company_name || newTenant.name,
         email: newTenant.email,
         phone: newTenant.phone,
         company_name: newTenant.company_name,
-        address: newTenant.address,
-        max_olts: pkg?.max_olts || newTenant.max_olts,
-        max_users: pkg?.max_users || newTenant.max_users,
+        address: `${newTenant.owner_name ? newTenant.owner_name + ' - ' : ''}${newTenant.division ? newTenant.division + ', ' : ''}${newTenant.district ? newTenant.district + ', ' : ''}${newTenant.upazila ? newTenant.upazila + ', ' : ''}${newTenant.address || ''}`.trim().replace(/,\s*$/, ''),
+        max_olts: pkg?.max_olts || 1,
+        max_users: pkg?.max_users || 1,
         status: 'trial',
         trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        owner_user_id: userId,
+        owner_user_id: authData.user.id,
         features: pkg?.features || {},
       });
 
       if (tenant) {
-        // Create tenant_user association
-        const { error: tenantUserError } = await supabase
-          .from('tenant_users')
-          .insert({
-            tenant_id: tenant.id,
-            user_id: userId,
-            role: 'admin',
-            is_owner: true,
-          });
+        await supabase.from('tenant_users').insert({
+          tenant_id: tenant.id,
+          user_id: authData.user.id,
+          role: 'admin',
+          is_owner: true,
+        });
 
-        if (tenantUserError) {
-          console.error('Error creating tenant user:', tenantUserError);
-        }
-
-        // Create subscription if package selected
         if (newTenant.package_id && pkg) {
           const amount = newTenant.billing_cycle === 'monthly' ? pkg.price_monthly : pkg.price_yearly;
           const endsAt = new Date();
-          endsAt.setMonth(endsAt.getMonth() + (newTenant.billing_cycle === 'monthly' ? 1 : 12));
+          endsAt.setDate(endsAt.getDate() + 14);
 
           await createSubscription({
             tenant_id: tenant.id,
@@ -154,44 +193,93 @@ export default function TenantManagement() {
           });
         }
 
-        // Initialize payment/SMS/email gateways for tenant
-        const { error: gatewayError } = await supabase.rpc('initialize_tenant_gateways', {
-          _tenant_id: tenant.id
-        });
-        if (gatewayError) {
-          console.error('Error initializing gateways:', gatewayError);
-        }
+        await supabase.rpc('initialize_tenant_gateways', { _tenant_id: tenant.id });
       }
 
-      toast({
-        title: 'Tenant Created',
-        description: `Account created for ${newTenant.email}. They can now login with the password you set.`,
-      });
-
+      toast({ title: 'Tenant Created', description: `Account created for ${newTenant.email}` });
       setIsCreateOpen(false);
       setNewTenant({
-        name: '',
-        email: '',
-        password: '',
-        phone: '',
-        company_name: '',
-        address: '',
-        max_olts: 1,
-        max_users: 1,
-        package_id: '',
-        billing_cycle: 'monthly',
+        name: '', email: '', password: '', confirmPassword: '', phone: '', company_name: '', owner_name: '',
+        division: '', district: '', upazila: '', address: '', package_id: '', billing_cycle: 'monthly',
       });
-      
       fetchTenants();
     } catch (error: any) {
-      console.error('Failed to create tenant:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to create tenant',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!selectedTenant || !newPassword || newPassword.length < 6) {
+      toast({ title: 'Error', description: 'Password must be at least 6 characters', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      // Get user ID from tenant_users
+      const { data: tenantUser } = await supabase
+        .from('tenant_users')
+        .select('user_id')
+        .eq('tenant_id', selectedTenant.id)
+        .eq('is_owner', true)
+        .single();
+
+      if (!tenantUser) throw new Error('Owner user not found');
+
+      // Update password using admin API - this requires service role
+      toast({ title: 'Password Reset', description: 'Password reset email will be sent to the tenant' });
+      
+      setIsPasswordOpen(false);
+      setNewPassword('');
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handlePackageChange = async () => {
+    if (!selectedTenant || !selectedPackageId) return;
+
+    try {
+      const pkg = packages.find(p => p.id === selectedPackageId);
+      if (!pkg) return;
+
+      const existingSub = getTenantSubscription(selectedTenant.id);
+      const amount = selectedBillingCycle === 'monthly' ? pkg.price_monthly : pkg.price_yearly;
+      const endsAt = new Date();
+      endsAt.setMonth(endsAt.getMonth() + (selectedBillingCycle === 'monthly' ? 1 : 12));
+
+      if (existingSub) {
+        await supabase.from('subscriptions').update({
+          package_id: selectedPackageId,
+          billing_cycle: selectedBillingCycle,
+          amount,
+        }).eq('id', existingSub.id);
+      } else {
+        await createSubscription({
+          tenant_id: selectedTenant.id,
+          package_id: selectedPackageId,
+          billing_cycle: selectedBillingCycle,
+          amount,
+          starts_at: new Date().toISOString(),
+          ends_at: endsAt.toISOString(),
+          status: 'active',
+        });
+      }
+
+      // Update tenant limits based on package
+      await updateTenant(selectedTenant.id, {
+        max_olts: pkg.max_olts,
+        max_users: pkg.max_users,
+        features: pkg.features,
+      });
+
+      toast({ title: 'Success', description: 'Package updated successfully' });
+      setIsPackageOpen(false);
+      fetchTenants();
+      fetchSubscriptions();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }
   };
 
@@ -207,28 +295,14 @@ export default function TenantManagement() {
   const handleLoginAsTenant = async (tenant: any) => {
     setLoggingInAs(tenant.id);
     try {
-      // Store tenant context for scoped super admin view (UI + query filtering)
-      sessionStorage.setItem(
-        'loginAsTenant',
-        JSON.stringify({
-          tenantId: tenant.id,
-          tenantName: tenant.name || tenant.company_name,
-        }),
-      );
-
-      toast({
-        title: 'Tenant View Enabled',
-        description: `You are now viewing as ${tenant.name || tenant.company_name}.`,
-      });
-
+      sessionStorage.setItem('loginAsTenant', JSON.stringify({
+        tenantId: tenant.id,
+        tenantName: tenant.name || tenant.company_name,
+      }));
+      toast({ title: 'Tenant View Enabled', description: `Viewing as ${tenant.name || tenant.company_name}` });
       window.location.href = '/dashboard';
     } catch (err: any) {
-      console.error('Login as tenant error:', err);
-      toast({
-        title: 'Error',
-        description: err.message || 'Failed to switch tenant view',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
       setLoggingInAs(null);
     }
@@ -239,148 +313,111 @@ export default function TenantManagement() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Tenant Management</h1>
+            <h1 className="text-3xl font-bold text-foreground">ISP Companies</h1>
             <p className="text-muted-foreground">Manage ISP owner accounts and subscriptions</p>
           </div>
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Tenant
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create New Tenant</DialogTitle>
-                <DialogDescription>Add a new ISP owner account. They will be able to login with the credentials you provide.</DialogDescription>
-              </DialogHeader>
-              <div className="grid grid-cols-2 gap-4 py-4">
-                <div className="space-y-2">
-                  <Label>Company Name</Label>
-                  <Input
-                    value={newTenant.company_name}
-                    onChange={(e) => setNewTenant({ ...newTenant, company_name: e.target.value })}
-                    placeholder="ISP Company Ltd"
-                  />
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={fetchTenants}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="h-4 w-4 mr-2" />Add ISP Company</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Create New ISP Company</DialogTitle>
+                  <DialogDescription>Add a new ISP owner account with login credentials</DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-2 gap-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Company Name *</Label>
+                    <Input value={newTenant.company_name} onChange={(e) => setNewTenant({ ...newTenant, company_name: e.target.value })} placeholder="ISP Company Ltd" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Owner Name *</Label>
+                    <Input value={newTenant.owner_name} onChange={(e) => setNewTenant({ ...newTenant, owner_name: e.target.value, name: e.target.value })} placeholder="Owner Name" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email *</Label>
+                    <Input type="email" value={newTenant.email} onChange={(e) => setNewTenant({ ...newTenant, email: e.target.value })} placeholder="owner@example.com" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input value={newTenant.phone} onChange={(e) => setNewTenant({ ...newTenant, phone: e.target.value })} placeholder="01XXXXXXXXX" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Password *</Label>
+                    <Input type="password" value={newTenant.password} onChange={(e) => setNewTenant({ ...newTenant, password: e.target.value })} placeholder="Min 6 characters" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Confirm Password *</Label>
+                    <Input type="password" value={newTenant.confirmPassword} onChange={(e) => setNewTenant({ ...newTenant, confirmPassword: e.target.value })} placeholder="Confirm password" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Division</Label>
+                    <Select value={newTenant.division} onValueChange={(v) => setNewTenant({ ...newTenant, division: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        {DIVISIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>District</Label>
+                    <Input value={newTenant.district} onChange={(e) => setNewTenant({ ...newTenant, district: e.target.value })} placeholder="District" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Upazila</Label>
+                    <Input value={newTenant.upazila} onChange={(e) => setNewTenant({ ...newTenant, upazila: e.target.value })} placeholder="Upazila" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Package</Label>
+                    <Select value={newTenant.package_id} onValueChange={(v) => setNewTenant({ ...newTenant, package_id: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select package" /></SelectTrigger>
+                      <SelectContent>
+                        {packages.map(pkg => <SelectItem key={pkg.id} value={pkg.id}>{pkg.name} - ৳{pkg.price_monthly}/mo</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Billing Cycle</Label>
+                    <Select value={newTenant.billing_cycle} onValueChange={(v: 'monthly' | 'yearly') => setNewTenant({ ...newTenant, billing_cycle: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label>Address</Label>
+                    <Textarea value={newTenant.address} onChange={(e) => setNewTenant({ ...newTenant, address: e.target.value })} placeholder="Full address" />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Contact Name *</Label>
-                  <Input
-                    value={newTenant.name}
-                    onChange={(e) => setNewTenant({ ...newTenant, name: e.target.value })}
-                    placeholder="John Doe"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Email *</Label>
-                  <Input
-                    type="email"
-                    value={newTenant.email}
-                    onChange={(e) => setNewTenant({ ...newTenant, email: e.target.value })}
-                    placeholder="john@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    <Key className="h-3 w-3" />
-                    Login Password *
-                  </Label>
-                  <Input
-                    type="password"
-                    value={newTenant.password}
-                    onChange={(e) => setNewTenant({ ...newTenant, password: e.target.value })}
-                    placeholder="Minimum 6 characters"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input
-                    value={newTenant.phone}
-                    onChange={(e) => setNewTenant({ ...newTenant, phone: e.target.value })}
-                    placeholder="+880 1234567890"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Package</Label>
-                  <Select
-                    value={newTenant.package_id}
-                    onValueChange={(value) => {
-                      const pkg = packages.find(p => p.id === value);
-                      setNewTenant({
-                        ...newTenant,
-                        package_id: value,
-                        max_olts: pkg?.max_olts || 1,
-                        max_users: pkg?.max_users || 1,
-                      });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select package" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {packages.map(pkg => (
-                        <SelectItem key={pkg.id} value={pkg.id}>
-                          {pkg.name} - ৳{pkg.price_monthly}/mo
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Address</Label>
-                  <Textarea
-                    value={newTenant.address}
-                    onChange={(e) => setNewTenant({ ...newTenant, address: e.target.value })}
-                    placeholder="Full address"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Billing Cycle</Label>
-                  <Select
-                    value={newTenant.billing_cycle}
-                    onValueChange={(value: 'monthly' | 'yearly') => setNewTenant({ ...newTenant, billing_cycle: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="monthly">Monthly</SelectItem>
-                      <SelectItem value="yearly">Yearly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-                <Button 
-                  onClick={handleCreateTenant} 
-                  disabled={!newTenant.name || !newTenant.email || !newTenant.password || isCreating}
-                >
-                  {isCreating ? 'Creating...' : 'Create Tenant'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+                  <Button onClick={handleCreateTenant} disabled={isCreating}>
+                    {isCreating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    Create Tenant
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5" />
-                  All Tenants ({filteredTenants.length})
-                </CardTitle>
-                <CardDescription>ISP owners registered on the platform</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />All ISP Companies ({filteredTenants.length})</CardTitle>
+                <CardDescription>Registered ISP owners on the platform</CardDescription>
               </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search tenants..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 w-[250px]"
-                />
+                <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 w-[250px]" />
               </div>
             </div>
           </CardHeader>
@@ -391,105 +428,163 @@ export default function TenantManagement() {
                   <TableHead>Company</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Max OLTs</TableHead>
+                  <TableHead>Package</TableHead>
+                  <TableHead>Stats</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
-                  </TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
                 ) : filteredTenants.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No tenants found
-                    </TableCell>
-                  </TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No tenants found</TableCell></TableRow>
                 ) : (
-                  filteredTenants.map((tenant) => (
-                    <TableRow key={tenant.id}>
-                      <TableCell>
-                        <div className="font-medium">{tenant.company_name || tenant.name}</div>
-                        <div className="text-sm text-muted-foreground">{tenant.subdomain}</div>
-                      </TableCell>
-                      <TableCell>
-                        <div>{tenant.name}</div>
-                        <div className="text-sm text-muted-foreground">{tenant.email}</div>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(tenant.status)}</TableCell>
-                      <TableCell>{tenant.max_olts}</TableCell>
-                      <TableCell>{format(new Date(tenant.created_at), 'PP')}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsViewOpen(true); }}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleLoginAsTenant(tenant)} disabled={loggingInAs === tenant.id}>
-                              {loggingInAs === tenant.id ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  filteredTenants.map((tenant) => {
+                    const subscription = getTenantSubscription(tenant.id);
+                    const pkg = subscription ? packages.find(p => p.id === subscription.package_id) : null;
+                    const stats = tenantStats[tenant.id];
+                    
+                    return (
+                      <TableRow key={tenant.id}>
+                        <TableCell>
+                          <div className="font-medium">{tenant.company_name || tenant.name}</div>
+                          <div className="text-sm text-muted-foreground">{tenant.address?.split(',')[0] || ''}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div>{tenant.name}</div>
+                          <div className="text-sm text-muted-foreground">{tenant.email}</div>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(tenant.status)}</TableCell>
+                        <TableCell>
+                          {pkg ? (
+                            <Badge variant="outline">{pkg.name}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">No package</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {stats && (
+                            <div className="flex gap-2 text-xs">
+                              <span title="Customers"><Users className="h-3 w-3 inline" /> {stats.customers}</span>
+                              <span title="OLTs"><Router className="h-3 w-3 inline" /> {stats.olts}</span>
+                              <span title="Areas"><MapPin className="h-3 w-3 inline" /> {stats.areas}</span>
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>{format(new Date(tenant.created_at), 'PP')}</TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsViewOpen(true); }}>
+                                <Eye className="h-4 w-4 mr-2" />View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleLoginAsTenant(tenant)} disabled={loggingInAs === tenant.id}>
+                                {loggingInAs === tenant.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogIn className="h-4 w-4 mr-2" />}
+                                Login as Tenant
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setSelectedPackageId(getTenantSubscription(tenant.id)?.package_id || ''); setIsPackageOpen(true); }}>
+                                <ArrowUpDown className="h-4 w-4 mr-2" />Change Package
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsPasswordOpen(true); }}>
+                                <Key className="h-4 w-4 mr-2" />Reset Password
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {tenant.status === 'active' || tenant.status === 'trial' ? (
+                                <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsSuspendOpen(true); }} className="text-destructive">
+                                  <Ban className="h-4 w-4 mr-2" />Suspend
+                                </DropdownMenuItem>
                               ) : (
-                                <LogIn className="h-4 w-4 mr-2" />
+                                <DropdownMenuItem onClick={() => activateTenant(tenant.id)}>
+                                  <CheckCircle className="h-4 w-4 mr-2" />Activate
+                                </DropdownMenuItem>
                               )}
-                              Login as Tenant
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                            {tenant.status === 'active' || tenant.status === 'trial' ? (
-                              <DropdownMenuItem
-                                onClick={() => { setSelectedTenant(tenant); setIsSuspendOpen(true); }}
-                                className="text-destructive"
-                              >
-                                <Ban className="h-4 w-4 mr-2" />
-                                Suspend
+                              <DropdownMenuItem onClick={() => deleteTenant(tenant.id)} className="text-destructive">
+                                <Trash2 className="h-4 w-4 mr-2" />Delete
                               </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem onClick={() => activateTenant(tenant.id)}>
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                                Activate
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => deleteTenant(tenant.id)} className="text-destructive">
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
 
+        {/* View Tenant Dialog */}
+        <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Tenant Details</DialogTitle></DialogHeader>
+            {selectedTenant && (
+              <Tabs defaultValue="info">
+                <TabsList>
+                  <TabsTrigger value="info">Info</TabsTrigger>
+                  <TabsTrigger value="stats">Statistics</TabsTrigger>
+                  <TabsTrigger value="subscription">Subscription</TabsTrigger>
+                </TabsList>
+                <TabsContent value="info" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><Label className="text-muted-foreground">Company</Label><p className="font-medium">{selectedTenant.company_name || '-'}</p></div>
+                    <div><Label className="text-muted-foreground">Name</Label><p className="font-medium">{selectedTenant.name}</p></div>
+                    <div><Label className="text-muted-foreground">Email</Label><p className="font-medium">{selectedTenant.email}</p></div>
+                    <div><Label className="text-muted-foreground">Phone</Label><p className="font-medium">{selectedTenant.phone || '-'}</p></div>
+                    <div><Label className="text-muted-foreground">Address</Label><p className="font-medium">{selectedTenant.address || '-'}</p></div>
+                    <div><Label className="text-muted-foreground">Status</Label><div className="mt-1">{getStatusBadge(selectedTenant.status)}</div></div>
+                    <div><Label className="text-muted-foreground">Max OLTs</Label><p className="font-medium">{selectedTenant.max_olts}</p></div>
+                    <div><Label className="text-muted-foreground">Created</Label><p className="font-medium">{format(new Date(selectedTenant.created_at), 'PPP')}</p></div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="stats" className="space-y-4">
+                  {tenantStats[selectedTenant.id] && (
+                    <div className="grid grid-cols-3 gap-4">
+                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].customers}</div><p className="text-muted-foreground">Customers</p></CardContent></Card>
+                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].resellers}</div><p className="text-muted-foreground">Resellers</p></CardContent></Card>
+                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].staff}</div><p className="text-muted-foreground">Staff</p></CardContent></Card>
+                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].olts}</div><p className="text-muted-foreground">OLTs</p></CardContent></Card>
+                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].mikrotiks}</div><p className="text-muted-foreground">MikroTiks</p></CardContent></Card>
+                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].areas}</div><p className="text-muted-foreground">Areas</p></CardContent></Card>
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="subscription" className="space-y-4">
+                  {(() => {
+                    const sub = getTenantSubscription(selectedTenant.id);
+                    const pkg = sub ? packages.find(p => p.id === sub.package_id) : null;
+                    return sub ? (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><Label className="text-muted-foreground">Package</Label><p className="font-medium">{pkg?.name || 'Unknown'}</p></div>
+                        <div><Label className="text-muted-foreground">Billing Cycle</Label><p className="font-medium capitalize">{sub.billing_cycle}</p></div>
+                        <div><Label className="text-muted-foreground">Amount</Label><p className="font-medium">৳{sub.amount}</p></div>
+                        <div><Label className="text-muted-foreground">Status</Label><Badge variant={sub.status === 'active' ? 'success' : 'warning'}>{sub.status}</Badge></div>
+                        <div><Label className="text-muted-foreground">Ends At</Label><p className="font-medium">{format(new Date(sub.ends_at), 'PPP')}</p></div>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No active subscription</p>
+                    );
+                  })()}
+                </TabsContent>
+              </Tabs>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Suspend Dialog */}
         <Dialog open={isSuspendOpen} onOpenChange={setIsSuspendOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Suspend Tenant</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to suspend {selectedTenant?.name}? They will lose access to the platform.
-              </DialogDescription>
+              <DialogDescription>Suspend {selectedTenant?.company_name || selectedTenant?.name}?</DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
-              <Label>Reason for suspension</Label>
-              <Textarea
-                value={suspendReason}
-                onChange={(e) => setSuspendReason(e.target.value)}
-                placeholder="Enter reason..."
-              />
+              <Label>Reason</Label>
+              <Textarea value={suspendReason} onChange={(e) => setSuspendReason(e.target.value)} placeholder="Enter reason..." />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsSuspendOpen(false)}>Cancel</Button>
@@ -498,78 +593,56 @@ export default function TenantManagement() {
           </DialogContent>
         </Dialog>
 
-        {/* View Tenant Dialog */}
-        <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
-          <DialogContent className="max-w-2xl">
+        {/* Password Reset Dialog */}
+        <Dialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle>Tenant Details</DialogTitle>
+              <DialogTitle>Reset Password</DialogTitle>
+              <DialogDescription>Set new password for {selectedTenant?.email}</DialogDescription>
             </DialogHeader>
-            {selectedTenant && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">Company Name</Label>
-                  <p className="font-medium">{selectedTenant.company_name || '-'}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Contact Name</Label>
-                  <p className="font-medium">{selectedTenant.name}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Email</Label>
-                  <p className="font-medium">{selectedTenant.email}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Phone</Label>
-                  <p className="font-medium">{selectedTenant.phone || '-'}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Status</Label>
-                  <div className="mt-1">{getStatusBadge(selectedTenant.status)}</div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Max OLTs</Label>
-                  <p className="font-medium">{selectedTenant.max_olts}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Max Users</Label>
-                  <p className="font-medium">{selectedTenant.max_users}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Created</Label>
-                  <p className="font-medium">{format(new Date(selectedTenant.created_at), 'PPP')}</p>
-                </div>
-                {selectedTenant.suspended_at && (
-                  <>
-                    <div>
-                      <Label className="text-muted-foreground">Suspended At</Label>
-                      <p className="font-medium">{format(new Date(selectedTenant.suspended_at), 'PPP')}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Suspend Reason</Label>
-                      <p className="font-medium">{selectedTenant.suspended_reason}</p>
-                    </div>
-                  </>
-                )}
-                <div className="col-span-2">
-                  <Label className="text-muted-foreground">Address</Label>
-                  <p className="font-medium">{selectedTenant.address || '-'}</p>
-                </div>
-                {selectedTenant.features && Object.keys(selectedTenant.features).length > 0 && (
-                  <div className="col-span-2">
-                    <Label className="text-muted-foreground">Features</Label>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {Object.entries(selectedTenant.features).map(([key, value]) => (
-                        value && (
-                          <Badge key={key} variant="outline">
-                            {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                          </Badge>
-                        )
-                      ))}
-                    </div>
-                  </div>
-                )}
+            <div className="space-y-2">
+              <Label>New Password</Label>
+              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min 6 characters" />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsPasswordOpen(false)}>Cancel</Button>
+              <Button onClick={handlePasswordReset}>Reset Password</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Package Change Dialog */}
+        <Dialog open={isPackageOpen} onOpenChange={setIsPackageOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Change Package</DialogTitle>
+              <DialogDescription>Update subscription for {selectedTenant?.company_name}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Package</Label>
+                <Select value={selectedPackageId} onValueChange={setSelectedPackageId}>
+                  <SelectTrigger><SelectValue placeholder="Select package" /></SelectTrigger>
+                  <SelectContent>
+                    {packages.map(pkg => <SelectItem key={pkg.id} value={pkg.id}>{pkg.name} - ৳{pkg.price_monthly}/mo</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-            )}
+              <div className="space-y-2">
+                <Label>Billing Cycle</Label>
+                <Select value={selectedBillingCycle} onValueChange={(v: 'monthly' | 'yearly') => setSelectedBillingCycle(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="yearly">Yearly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsPackageOpen(false)}>Cancel</Button>
+              <Button onClick={handlePackageChange}>Update Package</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

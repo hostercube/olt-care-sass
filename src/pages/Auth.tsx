@@ -10,15 +10,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Wifi, Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Wifi, Loader2, ArrowLeft, Eye, EyeOff, Shield } from 'lucide-react';
 import { z } from 'zod';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
-
 
 interface Package {
   id: string;
   name: string;
   price_monthly: number;
+  price_yearly: number;
   description: string;
 }
 
@@ -31,6 +31,10 @@ const signupSchema = authSchema.extend({
   companyName: z.string().min(2, 'Company name is required'),
   ownerName: z.string().min(2, 'Owner name is required'),
   phone: z.string().min(10, 'Valid phone number required'),
+  confirmPassword: z.string().min(6, 'Confirm password is required'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 });
 
 const DIVISIONS = [
@@ -48,6 +52,7 @@ export default function Auth() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Login form
@@ -58,6 +63,7 @@ export default function Auth() {
   const [signupData, setSignupData] = useState({
     email: '',
     password: '',
+    confirmPassword: '',
     companyName: '',
     ownerName: '',
     phone: '',
@@ -66,6 +72,7 @@ export default function Auth() {
     upazila: '',
     address: '',
     packageId: searchParams.get('package') || '',
+    billingCycle: 'monthly' as 'monthly' | 'yearly',
   });
 
   useEffect(() => {
@@ -78,7 +85,7 @@ export default function Auth() {
     const fetchPackages = async () => {
       const { data } = await supabase
         .from('packages')
-        .select('id, name, price_monthly, description')
+        .select('id, name, price_monthly, price_yearly, description')
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
       setPackages((data as Package[]) || []);
@@ -106,6 +113,7 @@ export default function Auth() {
       signupSchema.parse({
         email: signupData.email,
         password: signupData.password,
+        confirmPassword: signupData.confirmPassword,
         companyName: signupData.companyName,
         ownerName: signupData.ownerName,
         phone: signupData.phone,
@@ -207,14 +215,16 @@ export default function Auth() {
           const endDate = new Date();
           endDate.setDate(endDate.getDate() + 14); // 14 day trial
           
+          const amount = signupData.billingCycle === 'monthly' ? pkg.price_monthly : pkg.price_yearly;
+          
           await supabase
             .from('subscriptions')
             .insert({
               tenant_id: tenantData.id,
               package_id: signupData.packageId,
               status: 'trial',
-              billing_cycle: 'monthly',
-              amount: pkg.price_monthly,
+              billing_cycle: signupData.billingCycle,
+              amount: amount,
               starts_at: startDate.toISOString(),
               ends_at: endDate.toISOString(),
             } as any);
@@ -241,6 +251,11 @@ export default function Auth() {
       setIsSubmitting(false);
     }
   };
+
+  const selectedPackage = packages.find(p => p.id === signupData.packageId);
+  const displayPrice = selectedPackage 
+    ? (signupData.billingCycle === 'monthly' ? selectedPackage.price_monthly : selectedPackage.price_yearly)
+    : 0;
 
   if (loading) {
     return (
@@ -320,11 +335,15 @@ export default function Auth() {
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                   </div>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex-col gap-2">
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
                     {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     Login
                   </Button>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Shield className="h-3 w-3" />
+                    Protected by Cloudflare
+                  </div>
                 </CardFooter>
               </form>
             </TabsContent>
@@ -379,27 +398,51 @@ export default function Auth() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Password *</Label>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? 'text' : 'password'}
-                        value={signupData.password}
-                        onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
-                        placeholder="Min 6 characters"
-                        required
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Password *</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? 'text' : 'password'}
+                          value={signupData.password}
+                          onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
+                          placeholder="Min 6 characters"
+                          required
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                     </div>
-                    {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                    <div className="space-y-2">
+                      <Label>Confirm Password *</Label>
+                      <div className="relative">
+                        <Input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          value={signupData.confirmPassword}
+                          onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                          placeholder="Confirm password"
+                          required
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
@@ -443,28 +486,55 @@ export default function Auth() {
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Select Package</Label>
-                    <Select value={signupData.packageId} onValueChange={(v) => setSignupData(prev => ({ ...prev, packageId: v }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a package" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {packages.map(pkg => (
-                          <SelectItem key={pkg.id} value={pkg.id}>
-                            {pkg.name} - ৳{pkg.price_monthly}/month
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">14-day free trial included</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Select Package</Label>
+                      <Select value={signupData.packageId} onValueChange={(v) => setSignupData(prev => ({ ...prev, packageId: v }))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a package" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {packages.map(pkg => (
+                            <SelectItem key={pkg.id} value={pkg.id}>
+                              {pkg.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Billing Cycle</Label>
+                      <Select value={signupData.billingCycle} onValueChange={(v: 'monthly' | 'yearly') => setSignupData(prev => ({ ...prev, billingCycle: v }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="yearly">Yearly (Save 20%)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
+                  
+                  {selectedPackage && (
+                    <div className="p-3 rounded-lg bg-muted/50 border">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm">{selectedPackage.name} - {signupData.billingCycle}</span>
+                        <span className="font-bold text-primary">৳{displayPrice}/{signupData.billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">14-day free trial included</p>
+                    </div>
+                  )}
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex-col gap-2">
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
                     {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     Create Account
                   </Button>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Shield className="h-3 w-3" />
+                    Protected by Cloudflare
+                  </div>
                 </CardFooter>
               </form>
             </TabsContent>

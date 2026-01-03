@@ -33,6 +33,7 @@ import GatewaySettings from "./pages/SuperAdmin/GatewaySettings";
 import SMSGatewaySettings from "./pages/SuperAdmin/SMSGatewaySettings";
 import EmailGatewaySettings from "./pages/SuperAdmin/EmailGatewaySettings";
 import EmailTemplates from "./pages/SuperAdmin/EmailTemplates";
+import SMSTemplates from "./pages/SuperAdmin/SMSTemplates";
 import SuperAdminDashboard from "./pages/SuperAdmin/SuperAdminDashboard";
 
 // ISP Billing Pages
@@ -190,6 +191,11 @@ const App = () => (
               <Route path="/admin/email-templates" element={
                 <SuperAdminRoute>
                   <EmailTemplates />
+                </SuperAdminRoute>
+              } />
+              <Route path="/admin/sms-templates" element={
+                <SuperAdminRoute>
+                  <SMSTemplates />
                 </SuperAdminRoute>
               } />
 
