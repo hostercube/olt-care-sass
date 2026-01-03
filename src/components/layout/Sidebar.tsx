@@ -1,38 +1,34 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard,
-  Server,
-  Router,
+  Activity,
   Bell,
-  Settings,
+  Building2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Network,
-  Activity,
-  Users,
-  Terminal,
-  Database,
-  Building2,
-  Package,
-  CreditCard,
-  Cog,
-  FileText,
-  DollarSign,
-  ClipboardList,
-  History,
-  MessageSquare,
-  Mail,
-  UserCircle,
-  MapPin,
-  Receipt,
-  Wifi,
-  ChevronDown,
   ChevronUp,
-  Zap,
-  Lock,
+  ClipboardList,
+  Cog,
+  CreditCard,
+  Database,
+  FileText,
+  LayoutDashboard,
+  Mail,
+  MapPin,
+  MessageSquare,
+  Network,
+  Package,
+  Receipt,
+  Router,
+  Server,
+  Settings,
+  Terminal,
+  Users,
   Wallet,
+  Wifi,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -48,31 +44,20 @@ interface NavItem {
   icon: React.ElementType;
   badge?: number;
   adminOnly?: boolean;
-  superAdminOnly?: boolean;
-  tenantOnly?: boolean;
   requiredModule?: ModuleName;
 }
 
-interface NavSection {
-  title: string;
-  items: NavItem[];
-  superAdminOnly?: boolean;
-  tenantOnly?: boolean;
-  collapsible?: boolean;
-  defaultOpen?: boolean;
-}
-
-const mainNavItems: NavItem[] = [
+const oltCareItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'OLT Management', href: '/olts', icon: Server },
   { title: 'ONU Devices', href: '/onus', icon: Router },
-  { title: 'Alerts', href: '/alerts', icon: Bell, badge: 2 },
+  { title: 'Alerts', href: '/alerts', icon: Bell },
   { title: 'Monitoring', href: '/monitoring', icon: Activity },
 ];
 
 const ispModuleItems: NavItem[] = [
   { title: 'ISP Dashboard', href: '/isp', icon: LayoutDashboard },
-  { title: 'Customers', href: '/isp/customers', icon: UserCircle, requiredModule: 'isp_customers' },
+  { title: 'Customers', href: '/isp/customers', icon: Users, requiredModule: 'isp_customers' },
   { title: 'Billing', href: '/isp/billing', icon: Receipt, requiredModule: 'isp_billing' },
   { title: 'Automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
   { title: 'Packages', href: '/isp/packages', icon: Package },
@@ -84,17 +69,17 @@ const ispModuleItems: NavItem[] = [
   { title: 'Gateways', href: '/isp/gateways', icon: CreditCard },
   { title: 'Inventory', href: '/isp/inventory', icon: Package, requiredModule: 'isp_inventory' },
   { title: 'Staff & Salary', href: '/isp/staff', icon: Users },
-  { title: 'Income/Expense', href: '/isp/transactions', icon: DollarSign },
+  { title: 'Income/Expense', href: '/isp/transactions', icon: CreditCard },
   { title: 'Reports', href: '/isp/reports', icon: FileText },
   { title: 'Custom Domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
 ];
 
-const systemNavItems: NavItem[] = [
+const tenantSystemItems: NavItem[] = [
   { title: 'DB Integrity', href: '/integrity', icon: Database },
   { title: 'Debug Logs', href: '/debug', icon: Terminal },
   { title: 'User Management', href: '/users', icon: Users, adminOnly: true },
   { title: 'Notification Settings', href: '/notifications', icon: Bell },
-  { title: 'Notification History', href: '/notifications/history', icon: History },
+  { title: 'Notification History', href: '/notifications/history', icon: ClipboardList },
   { title: 'Activity Logs', href: '/activity-logs', icon: ClipboardList },
   { title: 'Invoices', href: '/invoices', icon: FileText },
   { title: 'Settings', href: '/settings', icon: Settings },
@@ -113,40 +98,68 @@ const superAdminItems: NavItem[] = [
 
 const tenantBillingItems: NavItem[] = [
   { title: 'My Subscription', href: '/billing/subscription', icon: FileText },
-  { title: 'Make Payment', href: '/billing/pay', icon: DollarSign },
+  { title: 'Make Payment', href: '/billing/pay', icon: CreditCard },
 ];
+
+function readImpersonation(): { tenantId: string; tenantName?: string } | null {
+  try {
+    const raw = sessionStorage.getItem('loginAsTenant');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.tenantId) return null;
+    return { tenantId: String(parsed.tenantId), tenantName: parsed.tenantName };
+  } catch {
+    return null;
+  }
+}
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [ispExpanded, setIspExpanded] = useState(true);
   const [systemExpanded, setSystemExpanded] = useState(false);
+  const [impersonation, setImpersonation] = useState<{ tenantId: string; tenantName?: string } | null>(null);
+
   const location = useLocation();
   const { isAdmin } = useUserRole();
   const { isSuperAdmin } = useSuperAdmin();
-  const { tenantId } = useTenantContext();
+  const { tenantId, isImpersonating } = useTenantContext() as any;
   const { hasAccess } = useModuleAccess();
 
-  // Filter system nav items based on user role
-  const filteredSystemItems = systemNavItems.filter(item => !item.adminOnly || isAdmin);
+  // Keep state synced with storage for super admins.
+  useEffect(() => {
+    if (!isSuperAdmin) {
+      setImpersonation(null);
+      return;
+    }
+    setImpersonation(readImpersonation());
+  }, [isSuperAdmin, location.pathname]);
 
-  // Filter ISP items based on module access (super admins see all)
-  const filteredIspItems = ispModuleItems.filter(item => {
-    if (isSuperAdmin) return true;
-    if (!item.requiredModule) return true;
-    return hasAccess(item.requiredModule);
-  });
+  const inTenantView = isSuperAdmin && (isImpersonating || !!impersonation);
+  const showSuperAdminNav = isSuperAdmin && !inTenantView;
 
-  // Check if current path is in ISP section
-  const isInIspSection = location.pathname.startsWith('/isp');
-  
-  // Auto-expand ISP section if user is on an ISP page
-  useState(() => {
-    if (isInIspSection) setIspExpanded(true);
-  });
+  // Auto-expand ISP section when on ISP routes (tenant view only)
+  useEffect(() => {
+    if (location.pathname.startsWith('/isp')) setIspExpanded(true);
+  }, [location.pathname]);
+
+  const filteredTenantSystemItems = useMemo(
+    () => tenantSystemItems.filter((item) => !item.adminOnly || isAdmin),
+    [isAdmin],
+  );
+
+  const filteredIspItems = useMemo(
+    () =>
+      ispModuleItems.filter((item) => {
+        // When super admin is impersonating, show only package-enabled modules.
+        if (isSuperAdmin && !inTenantView) return true;
+        if (!item.requiredModule) return true;
+        return hasAccess(item.requiredModule);
+      }),
+    [hasAccess, inTenantView, isSuperAdmin],
+  );
 
   const renderNavItem = (item: NavItem) => {
-    const isActive = location.pathname === item.href || 
-      (item.href !== '/' && location.pathname.startsWith(item.href));
+    const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
     return (
       <Link
         key={item.href}
@@ -156,7 +169,7 @@ export function Sidebar() {
           isActive
             ? 'bg-primary/10 text-primary border border-primary/20'
             : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-          collapsed && 'justify-center px-2'
+          collapsed && 'justify-center px-2',
         )}
       >
         <item.icon className={cn('h-4 w-4 flex-shrink-0', isActive && 'text-primary')} />
@@ -174,42 +187,47 @@ export function Sidebar() {
     );
   };
 
-  const renderSection = (title: string, items: NavItem[], collapsible?: boolean, expanded?: boolean, onToggle?: () => void) => (
-    <div className="mt-3">
-      {!collapsed && (
-        <div 
-          className={cn(
-            "flex items-center justify-between px-3 mb-1",
-            collapsible && "cursor-pointer hover:bg-muted/50 rounded py-1"
-          )}
-          onClick={collapsible ? onToggle : undefined}
-        >
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            {title}
-          </p>
-          {collapsible && (
-            expanded ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />
-          )}
-        </div>
-      )}
-      {(!collapsible || expanded || collapsed) && (
-        <div className="flex flex-col gap-0.5">
-          {items.map(renderNavItem)}
-        </div>
-      )}
-    </div>
-  );
+  const renderSection = (
+    title: string,
+    items: NavItem[],
+    opts?: { collapsible?: boolean; expanded?: boolean; onToggle?: () => void },
+  ) => {
+    const collapsible = !!opts?.collapsible;
+    const expanded = !!opts?.expanded;
+
+    return (
+      <div className="mt-3">
+        {!collapsed && (
+          <div
+            className={cn(
+              'flex items-center justify-between px-3 mb-1',
+              collapsible && 'cursor-pointer hover:bg-muted/50 rounded py-1',
+            )}
+            onClick={collapsible ? opts?.onToggle : undefined}
+          >
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
+            {collapsible && (expanded ? (
+              <ChevronUp className="h-3 w-3 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            ))}
+          </div>
+        )}
+        {(!collapsible || expanded || collapsed) && <div className="flex flex-col gap-0.5">{items.map(renderNavItem)}</div>}
+      </div>
+    );
+  };
 
   return (
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300',
-        collapsed ? 'w-16' : 'w-64'
+        collapsed ? 'w-16' : 'w-64',
       )}
     >
       {/* Logo */}
       <div className="flex h-14 items-center justify-between px-3 border-b border-sidebar-border">
-        {!collapsed && (
+        {!collapsed ? (
           <div className="flex items-center gap-2">
             <div className="relative">
               <Network className="h-7 w-7 text-primary" />
@@ -217,38 +235,47 @@ export function Sidebar() {
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-base text-foreground">ISP Point</span>
-              <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Network Management</span>
+              <span className="text-[9px] text-muted-foreground uppercase tracking-wider">
+                {showSuperAdminNav ? 'SaaS Admin' : 'ISP Dashboard'}
+              </span>
             </div>
           </div>
-        )}
-        {collapsed && (
+        ) : (
           <Network className="h-7 w-7 text-primary mx-auto" />
         )}
       </div>
 
       {/* Navigation */}
       <nav className="flex flex-col gap-0.5 p-2 mt-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
-        {/* Main OLT Navigation */}
-        {!collapsed && (
-          <p className="px-3 mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            OLT Care
-          </p>
+        {showSuperAdminNav ? (
+          <>
+            {!collapsed && (
+              <p className="px-3 mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Super Admin</p>
+            )}
+            <div className="flex flex-col gap-0.5">{superAdminItems.map(renderNavItem)}</div>
+          </>
+        ) : (
+          <>
+            {!collapsed && (
+              <p className="px-3 mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">OLT Care</p>
+            )}
+            <div className="flex flex-col gap-0.5">{oltCareItems.map(renderNavItem)}</div>
+
+            {renderSection('ISP Management', filteredIspItems, {
+              collapsible: true,
+              expanded: ispExpanded,
+              onToggle: () => setIspExpanded((v) => !v),
+            })}
+
+            {renderSection('System', filteredTenantSystemItems, {
+              collapsible: true,
+              expanded: systemExpanded,
+              onToggle: () => setSystemExpanded((v) => !v),
+            })}
+
+            {tenantId && !isSuperAdmin && renderSection('Billing', tenantBillingItems)}
+          </>
         )}
-        <div className="flex flex-col gap-0.5">
-          {mainNavItems.map(renderNavItem)}
-        </div>
-
-        {/* ISP Management Section */}
-        {renderSection('ISP Management', filteredIspItems, true, ispExpanded, () => setIspExpanded(!ispExpanded))}
-
-        {/* System Section */}
-        {renderSection('System', filteredSystemItems, true, systemExpanded, () => setSystemExpanded(!systemExpanded))}
-
-        {/* Super Admin Section */}
-        {isSuperAdmin && renderSection('Super Admin', superAdminItems)}
-
-        {/* Tenant Billing Section */}
-        {tenantId && !isSuperAdmin && renderSection('Billing', tenantBillingItems)}
       </nav>
 
       {/* Collapse Button */}
@@ -258,11 +285,7 @@ export function Sidebar() {
         onClick={() => setCollapsed(!collapsed)}
         className="absolute bottom-4 right-2 h-7 w-7 rounded-full border border-border bg-background hover:bg-secondary"
       >
-        {collapsed ? (
-          <ChevronRight className="h-3 w-3" />
-        ) : (
-          <ChevronLeft className="h-3 w-3" />
-        )}
+        {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
       </Button>
 
       {/* VPS Connection Status */}

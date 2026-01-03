@@ -31,7 +31,7 @@ export function Header({ title, subtitle }: HeaderProps) {
     if (stored) {
       try {
         setLoginAsTenant(JSON.parse(stored));
-      } catch (e) {
+      } catch {
         setLoginAsTenant(null);
       }
     }
@@ -44,29 +44,25 @@ export function Header({ title, subtitle }: HeaderProps) {
 
   const handleSignOut = async () => {
     sessionStorage.removeItem('loginAsTenant');
-    sessionStorage.removeItem('superAdminSession');
     await signOut();
     navigate('/auth');
   };
 
   return (
     <>
-      {/* Login as Tenant Banner */}
+      {/* Super Admin Tenant View Banner */}
       {loginAsTenant && (
-        <div className="bg-orange-500 text-white px-4 py-2 flex items-center justify-between text-sm">
+        <div className="border-b border-warning/20 bg-warning/10 px-4 py-2 flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            <span>Viewing as: <strong>{loginAsTenant.tenantName}</strong></span>
-            <Badge variant="secondary" className="text-xs">Super Admin Mode</Badge>
+            <Building2 className="h-4 w-4 text-warning" />
+            <span>
+              Viewing as: <strong className="font-semibold">{loginAsTenant.tenantName}</strong>
+            </span>
+            <Badge variant="warning" className="text-xs">Super Admin</Badge>
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleExitTenantView}
-            className="text-white hover:bg-orange-600"
-          >
+          <Button variant="outline" size="sm" onClick={handleExitTenantView}>
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Exit to Admin
+            Exit
           </Button>
         </div>
       )}
@@ -74,19 +70,14 @@ export function Header({ title, subtitle }: HeaderProps) {
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur px-6">
         <div>
           <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-          {subtitle && (
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          )}
+          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
 
         <div className="flex items-center gap-4">
           {/* Search */}
           <div className="relative hidden md:block">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search devices..."
-              className="w-64 pl-9 bg-secondary border-border focus:border-primary"
-            />
+            <Input placeholder="Search..." className="w-64 pl-9 bg-secondary border-border focus:border-primary" />
           </div>
 
           {/* Refresh */}
@@ -117,9 +108,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/settings')}>
-                Profile Settings
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>Profile Settings</DropdownMenuItem>
               {loginAsTenant && (
                 <DropdownMenuItem onClick={handleExitTenantView}>
                   <ArrowLeft className="mr-2 h-4 w-4" />

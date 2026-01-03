@@ -44,18 +44,59 @@ export function useTenantContext() {
   const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [tenant, setTenant] = useState<any>(null);
+  const [isImpersonating, setIsImpersonating] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchTenant = useCallback(async () => {
     if (!user) {
       setTenantId(null);
       setTenant(null);
+      setIsImpersonating(false);
       setLoading(false);
       return;
     }
 
+    setLoading(true);
+
     try {
-      // First get tenant_user record
+      // Super admins: optionally scope to a tenant via "Login as Tenant" (stored in sessionStorage)
+      if (isSuperAdmin) {
+        let scopedTenantId: string | null = null;
+        let parsedName: string | null = null;
+
+        try {
+          const raw = sessionStorage.getItem('loginAsTenant');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            scopedTenantId = parsed?.tenantId ? String(parsed.tenantId) : null;
+            parsedName = parsed?.tenantName ? String(parsed.tenantName) : null;
+          }
+        } catch {
+          scopedTenantId = null;
+        }
+
+        if (!scopedTenantId) {
+          setTenantId(null);
+          setTenant(null);
+          setIsImpersonating(false);
+          return;
+        }
+
+        setIsImpersonating(true);
+        setTenantId(scopedTenantId);
+
+        const { data: tenantData, error: tError } = await supabase
+          .from('tenants')
+          .select('*')
+          .eq('id', scopedTenantId)
+          .single();
+
+        if (tError) throw tError;
+        setTenant({ ...tenantData, name: tenantData?.name || parsedName });
+        return;
+      }
+
+      // Tenant users: resolve tenant from tenant_users table
       const { data: tenantUser, error: tuError } = await supabase
         .from('tenant_users')
         .select('tenant_id')
@@ -67,7 +108,6 @@ export function useTenantContext() {
       if (tenantUser?.tenant_id) {
         setTenantId(tenantUser.tenant_id);
 
-        // Fetch full tenant details
         const { data: tenantData, error: tError } = await supabase
           .from('tenants')
           .select('*')
@@ -84,20 +124,22 @@ export function useTenantContext() {
       console.error('Error fetching tenant:', error);
       setTenantId(null);
       setTenant(null);
+      setIsImpersonating(false);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, isSuperAdmin]);
 
   useEffect(() => {
     fetchTenant();
   }, [fetchTenant]);
 
-  return { 
-    tenantId, 
-    tenant, 
-    loading: loading || superAdminLoading, 
+  return {
+    tenantId,
+    tenant,
+    loading: loading || superAdminLoading,
     refetch: fetchTenant,
     isSuperAdmin,
+    isImpersonating,
   };
 }

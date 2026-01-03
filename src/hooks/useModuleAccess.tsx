@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useTenantContext, useSuperAdmin } from '@/hooks/useSuperAdmin';
-import { 
-  SUPER_ADMIN_FEATURES, 
+import { useTenantContext } from '@/hooks/useSuperAdmin';
+import {
+  SUPER_ADMIN_FEATURES,
   SUPER_ADMIN_LIMITS,
-  type TenantFeatures, 
-  type ModuleName, 
-  type PaymentGatewayType, 
-  type SMSGatewayType, 
-  type PaymentGatewayPermissions, 
-  type SMSGatewayPermissions 
+  type TenantFeatures,
+  type ModuleName,
+  type PaymentGatewayType,
+  type SMSGatewayType,
+  type PaymentGatewayPermissions,
+  type SMSGatewayPermissions,
 } from '@/types/saas';
 
 interface PackageLimits {
@@ -47,16 +47,17 @@ const DEFAULT_LIMITS: PackageLimits = {
 };
 
 export function useModuleAccess(): ModuleAccessResult {
-  const { tenantId, tenant, loading: tenantLoading } = useTenantContext();
-  const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
+  const { tenantId, tenant, loading: tenantLoading, isSuperAdmin, isImpersonating } = useTenantContext() as any;
   const [features, setFeatures] = useState<TenantFeatures>({});
   const [limits, setLimits] = useState<PackageLimits>(DEFAULT_LIMITS);
   const [subscriptionActive, setSubscriptionActive] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const superAdminUnscoped = !!isSuperAdmin && !isImpersonating;
+
   const fetchSubscriptionFeatures = useCallback(async () => {
-    // Super admins have full access - no need to fetch subscription
-    if (isSuperAdmin) {
+    // Super admins (not impersonating) have full access - no need to fetch subscription
+    if (superAdminUnscoped) {
       setFeatures(SUPER_ADMIN_FEATURES);
       setLimits({
         maxOlts: SUPER_ADMIN_LIMITS.max_olts,
@@ -81,7 +82,8 @@ export function useModuleAccess(): ModuleAccessResult {
       // Get active subscription with package details
       const { data: subscription, error } = await supabase
         .from('subscriptions')
-        .select(`
+        .select(
+          `
           *,
           packages:package_id (
             features,
@@ -93,7 +95,8 @@ export function useModuleAccess(): ModuleAccessResult {
             max_areas,
             max_resellers
           )
-        `)
+        `,
+        )
         .eq('tenant_id', tenantId)
         .eq('status', 'active')
         .maybeSingle();
@@ -148,50 +151,47 @@ export function useModuleAccess(): ModuleAccessResult {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, tenant, isSuperAdmin]);
+  }, [superAdminUnscoped, tenantId, tenant]);
 
   useEffect(() => {
-    if (!tenantLoading && !superAdminLoading) {
+    if (!tenantLoading) {
       fetchSubscriptionFeatures();
     }
-  }, [tenantLoading, superAdminLoading, fetchSubscriptionFeatures]);
+  }, [tenantLoading, fetchSubscriptionFeatures]);
 
-  const hasAccess = useCallback((module: ModuleName): boolean => {
-    // Super admins have access to everything
-    if (isSuperAdmin) {
-      return true;
-    }
+  const hasAccess = useCallback(
+    (module: ModuleName): boolean => {
+      if (superAdminUnscoped) return true;
 
-    // OLT Care is always enabled for all tenants
-    if (module === 'olt_care') {
-      return true;
-    }
+      // OLT Care is always enabled for all tenants
+      if (module === 'olt_care') return true;
 
-    // Check if the feature is enabled in the subscription/package
-    return features[module] === true;
-  }, [features, isSuperAdmin]);
+      return features[module] === true;
+    },
+    [features, superAdminUnscoped],
+  );
 
-  const hasPaymentGatewayAccess = useCallback((gateway: PaymentGatewayType): boolean => {
-    // Super admins have access to all gateways
-    if (isSuperAdmin) {
-      return true;
-    }
+  const hasPaymentGatewayAccess = useCallback(
+    (gateway: PaymentGatewayType): boolean => {
+      if (superAdminUnscoped) return true;
 
-    const paymentGateways = features.payment_gateways as PaymentGatewayPermissions | undefined;
-    if (!paymentGateways) return gateway === 'manual'; // Manual always available by default
-    return paymentGateways[gateway] === true;
-  }, [features, isSuperAdmin]);
+      const paymentGateways = features.payment_gateways as PaymentGatewayPermissions | undefined;
+      if (!paymentGateways) return gateway === 'manual';
+      return paymentGateways[gateway] === true;
+    },
+    [features, superAdminUnscoped],
+  );
 
-  const hasSMSGatewayAccess = useCallback((gateway: SMSGatewayType): boolean => {
-    // Super admins have access to all gateways
-    if (isSuperAdmin) {
-      return true;
-    }
+  const hasSMSGatewayAccess = useCallback(
+    (gateway: SMSGatewayType): boolean => {
+      if (superAdminUnscoped) return true;
 
-    const smsGateways = features.sms_gateways as SMSGatewayPermissions | undefined;
-    if (!smsGateways) return false;
-    return smsGateways[gateway] === true;
-  }, [features, isSuperAdmin]);
+      const smsGateways = features.sms_gateways as SMSGatewayPermissions | undefined;
+      if (!smsGateways) return false;
+      return smsGateways[gateway] === true;
+    },
+    [features, superAdminUnscoped],
+  );
 
   return {
     hasAccess,
@@ -199,9 +199,9 @@ export function useModuleAccess(): ModuleAccessResult {
     hasSMSGatewayAccess,
     features,
     limits,
-    loading: loading || tenantLoading || superAdminLoading,
-    isActive: subscriptionActive || isSuperAdmin,
-    isSuperAdmin,
+    loading: loading || tenantLoading,
+    isActive: subscriptionActive || superAdminUnscoped,
+    isSuperAdmin: !!isSuperAdmin,
     maxOlts: limits.maxOlts,
     maxUsers: limits.maxUsers,
   };

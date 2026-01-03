@@ -1,5 +1,4 @@
 import { useModuleAccess } from '@/hooks/useModuleAccess';
-import { useSuperAdmin } from '@/hooks/useSuperAdmin';
 import { Lock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,9 +13,8 @@ interface ModuleAccessGuardProps {
 
 export function ModuleAccessGuard({ module, children, moduleName }: ModuleAccessGuardProps) {
   const { hasAccess, loading } = useModuleAccess();
-  const { isSuperAdmin, loading: saLoading } = useSuperAdmin();
 
-  if (loading || saLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -24,12 +22,6 @@ export function ModuleAccessGuard({ module, children, moduleName }: ModuleAccess
     );
   }
 
-  // Super admins have access to everything
-  if (isSuperAdmin) {
-    return <>{children}</>;
-  }
-
-  // Check module access
   if (!hasAccess(module)) {
     return (
       <div className="flex items-center justify-center min-h-[400px] p-6">
@@ -51,7 +43,7 @@ export function ModuleAccessGuard({ module, children, moduleName }: ModuleAccess
               <Link to="/billing/subscription">
                 <Button>View Subscription</Button>
               </Link>
-              <Link to="/">
+              <Link to="/dashboard">
                 <Button variant="outline">Go to Dashboard</Button>
               </Link>
             </div>
