@@ -12,25 +12,30 @@ import { Textarea } from '@/components/ui/textarea';
 import { useTenants } from '@/hooks/useTenants';
 import { usePackages } from '@/hooks/usePackages';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye } from 'lucide-react';
+import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key } from 'lucide-react';
 import { format } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import type { TenantStatus } from '@/types/saas';
 
 export default function TenantManagement() {
-  const { tenants, loading, createTenant, updateTenant, suspendTenant, activateTenant, deleteTenant } = useTenants();
+  const { tenants, loading, createTenant, updateTenant, suspendTenant, activateTenant, deleteTenant, fetchTenants } = useTenants();
   const { packages } = usePackages();
   const { createSubscription } = useSubscriptions();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [suspendReason, setSuspendReason] = useState('');
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   const [newTenant, setNewTenant] = useState({
     name: '',
     email: '',
+    password: '',
     phone: '',
     company_name: '',
     address: '',
@@ -57,8 +62,51 @@ export default function TenantManagement() {
   };
 
   const handleCreateTenant = async () => {
+    if (!newTenant.name || !newTenant.email || !newTenant.password) {
+      toast({
+        title: 'Validation Error',
+        description: 'Name, Email and Password are required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newTenant.password.length < 6) {
+      toast({
+        title: 'Validation Error',
+        description: 'Password must be at least 6 characters',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsCreating(true);
     try {
+      // First create the user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newTenant.email,
+        password: newTenant.password,
+        options: {
+          data: {
+            full_name: newTenant.name,
+          },
+        },
+      });
+
+      if (authError) {
+        throw new Error(authError.message);
+      }
+
+      if (!authData.user) {
+        throw new Error('Failed to create user account');
+      }
+
+      const userId = authData.user.id;
+
+      // Get package details
       const pkg = packages.find(p => p.id === newTenant.package_id);
+      
+      // Create the tenant
       const tenant = await createTenant({
         name: newTenant.name,
         email: newTenant.email,
@@ -69,28 +117,53 @@ export default function TenantManagement() {
         max_users: pkg?.max_users || newTenant.max_users,
         status: 'trial',
         trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        owner_user_id: userId,
+        features: pkg?.features || {},
       });
 
-      if (tenant && newTenant.package_id) {
-        const amount = newTenant.billing_cycle === 'monthly' ? pkg?.price_monthly : pkg?.price_yearly;
-        const endsAt = new Date();
-        endsAt.setMonth(endsAt.getMonth() + (newTenant.billing_cycle === 'monthly' ? 1 : 12));
+      if (tenant) {
+        // Create tenant_user association
+        const { error: tenantUserError } = await supabase
+          .from('tenant_users')
+          .insert({
+            tenant_id: tenant.id,
+            user_id: userId,
+            role: 'admin',
+            is_owner: true,
+          });
 
-        await createSubscription({
-          tenant_id: tenant.id,
-          package_id: newTenant.package_id,
-          billing_cycle: newTenant.billing_cycle,
-          amount: amount || 0,
-          starts_at: new Date().toISOString(),
-          ends_at: endsAt.toISOString(),
-          status: 'pending',
-        });
+        if (tenantUserError) {
+          console.error('Error creating tenant user:', tenantUserError);
+        }
+
+        // Create subscription if package selected
+        if (newTenant.package_id && pkg) {
+          const amount = newTenant.billing_cycle === 'monthly' ? pkg.price_monthly : pkg.price_yearly;
+          const endsAt = new Date();
+          endsAt.setMonth(endsAt.getMonth() + (newTenant.billing_cycle === 'monthly' ? 1 : 12));
+
+          await createSubscription({
+            tenant_id: tenant.id,
+            package_id: newTenant.package_id,
+            billing_cycle: newTenant.billing_cycle,
+            amount: amount || 0,
+            starts_at: new Date().toISOString(),
+            ends_at: endsAt.toISOString(),
+            status: 'pending',
+          });
+        }
       }
+
+      toast({
+        title: 'Tenant Created',
+        description: `Account created for ${newTenant.email}. They can now login with the password you set.`,
+      });
 
       setIsCreateOpen(false);
       setNewTenant({
         name: '',
         email: '',
+        password: '',
         phone: '',
         company_name: '',
         address: '',
@@ -99,8 +172,17 @@ export default function TenantManagement() {
         package_id: '',
         billing_cycle: 'monthly',
       });
-    } catch (error) {
+      
+      fetchTenants();
+    } catch (error: any) {
       console.error('Failed to create tenant:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create tenant',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -131,7 +213,7 @@ export default function TenantManagement() {
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Create New Tenant</DialogTitle>
-                <DialogDescription>Add a new ISP owner account</DialogDescription>
+                <DialogDescription>Add a new ISP owner account. They will be able to login with the credentials you provide.</DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-2 gap-4 py-4">
                 <div className="space-y-2">
@@ -160,19 +242,23 @@ export default function TenantManagement() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    <Key className="h-3 w-3" />
+                    Login Password *
+                  </Label>
+                  <Input
+                    type="password"
+                    value={newTenant.password}
+                    onChange={(e) => setNewTenant({ ...newTenant, password: e.target.value })}
+                    placeholder="Minimum 6 characters"
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label>Phone</Label>
                   <Input
                     value={newTenant.phone}
                     onChange={(e) => setNewTenant({ ...newTenant, phone: e.target.value })}
                     placeholder="+880 1234567890"
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Address</Label>
-                  <Textarea
-                    value={newTenant.address}
-                    onChange={(e) => setNewTenant({ ...newTenant, address: e.target.value })}
-                    placeholder="Full address"
                   />
                 </div>
                 <div className="space-y-2">
@@ -201,6 +287,14 @@ export default function TenantManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="col-span-2 space-y-2">
+                  <Label>Address</Label>
+                  <Textarea
+                    value={newTenant.address}
+                    onChange={(e) => setNewTenant({ ...newTenant, address: e.target.value })}
+                    placeholder="Full address"
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label>Billing Cycle</Label>
                   <Select
@@ -219,8 +313,11 @@ export default function TenantManagement() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreateTenant} disabled={!newTenant.name || !newTenant.email}>
-                  Create Tenant
+                <Button 
+                  onClick={handleCreateTenant} 
+                  disabled={!newTenant.name || !newTenant.email || !newTenant.password || isCreating}
+                >
+                  {isCreating ? 'Creating...' : 'Create Tenant'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -410,6 +507,20 @@ export default function TenantManagement() {
                   <Label className="text-muted-foreground">Address</Label>
                   <p className="font-medium">{selectedTenant.address || '-'}</p>
                 </div>
+                {selectedTenant.features && Object.keys(selectedTenant.features).length > 0 && (
+                  <div className="col-span-2">
+                    <Label className="text-muted-foreground">Features</Label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {Object.entries(selectedTenant.features).map(([key, value]) => (
+                        value && (
+                          <Badge key={key} variant="outline">
+                            {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </Badge>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </DialogContent>
