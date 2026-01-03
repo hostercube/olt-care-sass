@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useTenants } from '@/hooks/useTenants';
 import { usePackages } from '@/hooks/usePackages';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key } from 'lucide-react';
+import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +30,7 @@ export default function TenantManagement() {
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [suspendReason, setSuspendReason] = useState('');
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
+  const [loggingInAs, setLoggingInAs] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   const [newTenant, setNewTenant] = useState({
@@ -200,6 +201,71 @@ export default function TenantManagement() {
       setIsSuspendOpen(false);
       setSuspendReason('');
       setSelectedTenant(null);
+    }
+  };
+
+  const handleLoginAsTenant = async (tenant: any) => {
+    setLoggingInAs(tenant.id);
+    try {
+      // Store current super admin session
+      const { data: currentSession } = await supabase.auth.getSession();
+      if (currentSession.session) {
+        sessionStorage.setItem('superAdminSession', JSON.stringify({
+          access_token: currentSession.session.access_token,
+          refresh_token: currentSession.session.refresh_token,
+        }));
+      }
+
+      // Get the tenant owner's user_id
+      const { data: tenantUser, error: tuError } = await supabase
+        .from('tenant_users')
+        .select('user_id')
+        .eq('tenant_id', tenant.id)
+        .eq('is_owner', true)
+        .maybeSingle();
+
+      if (tuError || !tenantUser) {
+        // Try to get any admin user for this tenant
+        const { data: anyUser } = await supabase
+          .from('tenant_users')
+          .select('user_id')
+          .eq('tenant_id', tenant.id)
+          .limit(1)
+          .single();
+
+        if (!anyUser) {
+          toast({
+            title: 'Error',
+            description: 'No user found for this tenant',
+            variant: 'destructive',
+          });
+          setLoggingInAs(null);
+          return;
+        }
+      }
+
+      // Store tenant info in session for "login as"
+      sessionStorage.setItem('loginAsTenant', JSON.stringify({
+        tenantId: tenant.id,
+        tenantName: tenant.name || tenant.company_name,
+      }));
+
+      toast({
+        title: 'Switching to Tenant',
+        description: `You are now viewing as ${tenant.name || tenant.company_name}. Navigate to the dashboard to manage this tenant.`,
+      });
+
+      // Redirect to dashboard as the tenant
+      window.location.href = '/dashboard';
+    } catch (err: any) {
+      console.error('Login as tenant error:', err);
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to login as tenant',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoggingInAs(null);
     }
   };
 
@@ -401,6 +467,14 @@ export default function TenantManagement() {
                             <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsViewOpen(true); }}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleLoginAsTenant(tenant)} disabled={loggingInAs === tenant.id}>
+                              {loggingInAs === tenant.id ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <LogIn className="h-4 w-4 mr-2" />
+                              )}
+                              Login as Tenant
                             </DropdownMenuItem>
                             <DropdownMenuItem>
                               <Edit className="h-4 w-4 mr-2" />

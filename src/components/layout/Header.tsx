@@ -1,6 +1,8 @@
-import { Search, User, RefreshCw, LogOut } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, User, RefreshCw, LogOut, ArrowLeft, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,68 +24,117 @@ interface HeaderProps {
 export function Header({ title, subtitle }: HeaderProps) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const [loginAsTenant, setLoginAsTenant] = useState<{ tenantId: string; tenantName: string } | null>(null);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem('loginAsTenant');
+    if (stored) {
+      try {
+        setLoginAsTenant(JSON.parse(stored));
+      } catch (e) {
+        setLoginAsTenant(null);
+      }
+    }
+  }, []);
+
+  const handleExitTenantView = () => {
+    sessionStorage.removeItem('loginAsTenant');
+    window.location.href = '/admin/tenants';
+  };
 
   const handleSignOut = async () => {
+    sessionStorage.removeItem('loginAsTenant');
+    sessionStorage.removeItem('superAdminSession');
     await signOut();
     navigate('/auth');
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur px-6">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-        {subtitle && (
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
-        )}
-      </div>
+    <>
+      {/* Login as Tenant Banner */}
+      {loginAsTenant && (
+        <div className="bg-orange-500 text-white px-4 py-2 flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            <span>Viewing as: <strong>{loginAsTenant.tenantName}</strong></span>
+            <Badge variant="secondary" className="text-xs">Super Admin Mode</Badge>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleExitTenantView}
+            className="text-white hover:bg-orange-600"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Exit to Admin
+          </Button>
+        </div>
+      )}
 
-      <div className="flex items-center gap-4">
-        {/* Search */}
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search devices..."
-            className="w-64 pl-9 bg-secondary border-border focus:border-primary"
-          />
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur px-6">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+          {subtitle && (
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
+          )}
         </div>
 
-        {/* Refresh */}
-        <Button variant="outline" size="icon" className="border-border">
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-4">
+          {/* Search */}
+          <div className="relative hidden md:block">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search devices..."
+              className="w-64 pl-9 bg-secondary border-border focus:border-primary"
+            />
+          </div>
 
-        {/* Theme Toggle */}
-        <ThemeToggle />
+          {/* Refresh */}
+          <Button variant="outline" size="icon" className="border-border">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
 
-        {/* Real-time Alert Notifications */}
-        <AlertNotificationBell />
+          {/* Theme Toggle */}
+          <ThemeToggle />
 
-        {/* User Menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="rounded-full border-border">
-              <User className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-popover border-border">
-            <DropdownMenuLabel>
-              <div className="flex flex-col">
-                <span className="font-medium">{user?.email}</span>
-                <span className="text-xs text-muted-foreground">Authenticated</span>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/settings')}>
-              Profile Settings
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </header>
+          {/* Real-time Alert Notifications */}
+          <AlertNotificationBell />
+
+          {/* User Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="rounded-full border-border">
+                <User className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-popover border-border">
+              <DropdownMenuLabel>
+                <div className="flex flex-col">
+                  <span className="font-medium">{user?.email}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {loginAsTenant ? `Viewing: ${loginAsTenant.tenantName}` : 'Authenticated'}
+                  </span>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                Profile Settings
+              </DropdownMenuItem>
+              {loginAsTenant && (
+                <DropdownMenuItem onClick={handleExitTenantView}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Exit Tenant View
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+    </>
   );
 }
