@@ -102,10 +102,10 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         phone: formData.phone || null,
         email: formData.email || null,
         address: formData.address || null,
-        area_id: formData.area_id || null,
-        reseller_id: formData.reseller_id || null,
-        mikrotik_id: formData.mikrotik_id || null,
-        onu_id: formData.onu_id || null,
+        area_id: formData.area_id && formData.area_id !== 'none' ? formData.area_id : null,
+        reseller_id: formData.reseller_id && formData.reseller_id !== 'none' ? formData.reseller_id : null,
+        mikrotik_id: formData.mikrotik_id && formData.mikrotik_id !== 'none' ? formData.mikrotik_id : null,
+        onu_id: formData.onu_id && formData.onu_id !== 'none' ? formData.onu_id : null,
         onu_mac: formData.onu_mac || null,
         pon_port: formData.pon_port || null,
         onu_index: formData.onu_index ? parseInt(formData.onu_index) : null,
@@ -241,7 +241,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     <SelectValue placeholder="Select MikroTik router" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {routers.map((router) => (
                       <SelectItem key={router.id} value={router.id}>
                         {router.name} ({router.ip_address})
@@ -265,7 +265,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     <SelectValue placeholder="Select ONU device" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {onus.map((onu) => (
                       <SelectItem key={onu.id} value={onu.id}>
                         {onu.name} - {onu.pon_port}:{onu.onu_index} 
@@ -406,7 +406,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     <SelectValue placeholder="Select area" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {areas.map((area) => (
                       <SelectItem key={area.id} value={area.id}>
                         {area.name} 
@@ -429,7 +429,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     <SelectValue placeholder="Select reseller (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {resellers.filter(r => r.is_active).map((reseller) => (
                       <SelectItem key={reseller.id} value={reseller.id}>
                         {reseller.name} {reseller.phone && `(${reseller.phone})`}
