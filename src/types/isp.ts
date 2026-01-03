@@ -41,19 +41,42 @@ export interface Reseller {
   id: string;
   tenant_id: string;
   user_id: string | null;
+  parent_id: string | null;
+  level: number;
+  role: 'reseller' | 'sub_reseller' | 'sub_sub_reseller';
   name: string;
+  username: string | null;
   phone: string | null;
   email: string | null;
   address: string | null;
   area_id: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  nid_number: string | null;
+  profile_photo: string | null;
   commission_type: 'percentage' | 'flat';
   commission_value: number;
+  customer_rate: number;
+  rate_type: string;
   balance: number;
+  total_collections: number;
+  can_create_sub_reseller: boolean;
+  max_sub_resellers: number;
+  max_customers: number | null;
+  total_customers: number;
+  can_view_sub_customers: boolean;
+  can_control_sub_customers: boolean;
+  can_recharge_customers: boolean;
+  can_add_customers: boolean;
+  can_edit_customers: boolean;
+  can_delete_customers: boolean;
   is_active: boolean;
+  last_login: string | null;
   created_at: string;
   updated_at: string;
   // Joined
   area?: Area;
+  parent?: { id: string; name: string };
 }
 
 export interface Customer {

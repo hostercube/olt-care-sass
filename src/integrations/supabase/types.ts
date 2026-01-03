@@ -2150,6 +2150,143 @@ export type Database = {
         }
         Relationships: []
       }
+      reseller_branches: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          manager_reseller_id: string | null
+          name: string
+          phone: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          manager_reseller_id?: string | null
+          name: string
+          phone?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          manager_reseller_id?: string | null
+          name?: string
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_branches_manager_reseller_id_fkey"
+            columns: ["manager_reseller_id"]
+            isOneToOne: false
+            referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_branches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reseller_custom_roles: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          permissions: Json | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          permissions?: Json | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          permissions?: Json | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_custom_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reseller_permissions: {
+        Row: {
+          created_at: string
+          id: string
+          is_allowed: boolean | null
+          permission_name: string
+          reseller_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_allowed?: boolean | null
+          permission_name: string
+          reseller_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_allowed?: boolean | null
+          permission_name?: string
+          reseller_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_permissions_reseller_id_fkey"
+            columns: ["reseller_id"]
+            isOneToOne: false
+            referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_permissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reseller_transactions: {
         Row: {
           amount: number
@@ -2157,12 +2294,15 @@ export type Database = {
           balance_before: number
           created_at: string
           created_by: string | null
+          customer_id: string | null
           description: string | null
+          from_reseller_id: string | null
           id: string
           reference_id: string | null
           reference_type: string | null
           reseller_id: string
           tenant_id: string
+          to_reseller_id: string | null
           type: string
         }
         Insert: {
@@ -2171,12 +2311,15 @@ export type Database = {
           balance_before: number
           created_at?: string
           created_by?: string | null
+          customer_id?: string | null
           description?: string | null
+          from_reseller_id?: string | null
           id?: string
           reference_id?: string | null
           reference_type?: string | null
           reseller_id: string
           tenant_id: string
+          to_reseller_id?: string | null
           type: string
         }
         Update: {
@@ -2185,15 +2328,32 @@ export type Database = {
           balance_before?: number
           created_at?: string
           created_by?: string | null
+          customer_id?: string | null
           description?: string | null
+          from_reseller_id?: string | null
           id?: string
           reference_id?: string | null
           reference_type?: string | null
           reseller_id?: string
           tenant_id?: string
+          to_reseller_id?: string | null
           type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reseller_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_transactions_from_reseller_id_fkey"
+            columns: ["from_reseller_id"]
+            isOneToOne: false
+            referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reseller_transactions_reseller_id_fkey"
             columns: ["reseller_id"]
@@ -2208,6 +2368,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "reseller_transactions_to_reseller_id_fkey"
+            columns: ["to_reseller_id"]
+            isOneToOne: false
+            referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       resellers: {
@@ -2215,49 +2382,118 @@ export type Database = {
           address: string | null
           area_id: string | null
           balance: number | null
+          branch_id: string | null
+          branch_name: string | null
+          can_add_customers: boolean | null
+          can_control_sub_customers: boolean | null
+          can_create_sub_reseller: boolean | null
+          can_delete_customers: boolean | null
+          can_edit_customers: boolean | null
+          can_recharge_customers: boolean | null
+          can_view_sub_customers: boolean | null
           commission_type: string | null
           commission_value: number | null
           created_at: string
+          customer_rate: number | null
           email: string | null
           id: string
           is_active: boolean | null
+          last_login: string | null
+          level: number | null
+          max_customers: number | null
+          max_sub_resellers: number | null
           name: string
+          nid_number: string | null
+          parent_id: string | null
+          password_hash: string | null
           phone: string | null
+          profile_photo: string | null
+          rate_type: string | null
+          role: string | null
           tenant_id: string
+          total_collections: number | null
+          total_customers: number | null
           updated_at: string
           user_id: string | null
+          username: string | null
         }
         Insert: {
           address?: string | null
           area_id?: string | null
           balance?: number | null
+          branch_id?: string | null
+          branch_name?: string | null
+          can_add_customers?: boolean | null
+          can_control_sub_customers?: boolean | null
+          can_create_sub_reseller?: boolean | null
+          can_delete_customers?: boolean | null
+          can_edit_customers?: boolean | null
+          can_recharge_customers?: boolean | null
+          can_view_sub_customers?: boolean | null
           commission_type?: string | null
           commission_value?: number | null
           created_at?: string
+          customer_rate?: number | null
           email?: string | null
           id?: string
           is_active?: boolean | null
+          last_login?: string | null
+          level?: number | null
+          max_customers?: number | null
+          max_sub_resellers?: number | null
           name: string
+          nid_number?: string | null
+          parent_id?: string | null
+          password_hash?: string | null
           phone?: string | null
+          profile_photo?: string | null
+          rate_type?: string | null
+          role?: string | null
           tenant_id: string
+          total_collections?: number | null
+          total_customers?: number | null
           updated_at?: string
           user_id?: string | null
+          username?: string | null
         }
         Update: {
           address?: string | null
           area_id?: string | null
           balance?: number | null
+          branch_id?: string | null
+          branch_name?: string | null
+          can_add_customers?: boolean | null
+          can_control_sub_customers?: boolean | null
+          can_create_sub_reseller?: boolean | null
+          can_delete_customers?: boolean | null
+          can_edit_customers?: boolean | null
+          can_recharge_customers?: boolean | null
+          can_view_sub_customers?: boolean | null
           commission_type?: string | null
           commission_value?: number | null
           created_at?: string
+          customer_rate?: number | null
           email?: string | null
           id?: string
           is_active?: boolean | null
+          last_login?: string | null
+          level?: number | null
+          max_customers?: number | null
+          max_sub_resellers?: number | null
           name?: string
+          nid_number?: string | null
+          parent_id?: string | null
+          password_hash?: string | null
           phone?: string | null
+          profile_photo?: string | null
+          rate_type?: string | null
+          role?: string | null
           tenant_id?: string
+          total_collections?: number | null
+          total_customers?: number | null
           updated_at?: string
           user_id?: string | null
+          username?: string | null
         }
         Relationships: [
           {
@@ -2265,6 +2501,20 @@ export type Database = {
             columns: ["area_id"]
             isOneToOne: false
             referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resellers_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "reseller_branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resellers_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "resellers"
             referencedColumns: ["id"]
           },
           {
@@ -3420,9 +3670,60 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      count_sub_resellers: { Args: { p_reseller_id: string }; Returns: number }
       export_tenant_data: { Args: { _tenant_id: string }; Returns: Json }
       generate_bill_number: { Args: { _tenant_id: string }; Returns: string }
       generate_customer_code: { Args: { _tenant_id: string }; Returns: string }
+      get_reseller_all_customers: {
+        Args: { p_reseller_id: string }
+        Returns: {
+          address: string | null
+          area_id: string | null
+          connection_date: string | null
+          created_at: string
+          customer_code: string | null
+          due_amount: number | null
+          email: string | null
+          expiry_date: string | null
+          id: string
+          is_auto_disable: boolean | null
+          last_payment_date: string | null
+          mikrotik_id: string | null
+          monthly_bill: number | null
+          name: string
+          notes: string | null
+          onu_id: string | null
+          onu_index: number | null
+          onu_mac: string | null
+          package_id: string | null
+          phone: string | null
+          pon_port: string | null
+          pppoe_password: string | null
+          pppoe_username: string | null
+          reseller_id: string | null
+          router_mac: string | null
+          status: Database["public"]["Enums"]["customer_status"]
+          tenant_id: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "customers"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_reseller_descendants: {
+        Args: { p_reseller_id: string }
+        Returns: {
+          balance: number
+          id: string
+          level: number
+          name: string
+          parent_id: string
+          role: string
+        }[]
+      }
       get_user_tenant_id: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -3448,6 +3749,24 @@ export type Database = {
         Returns: Json
       }
       queue_subscription_reminders: { Args: never; Returns: undefined }
+      reseller_pay_customer: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_months?: number
+          p_reseller_id: string
+        }
+        Returns: Json
+      }
+      transfer_reseller_balance: {
+        Args: {
+          p_amount: number
+          p_description?: string
+          p_from_reseller_id: string
+          p_to_reseller_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       alert_severity: "critical" | "warning" | "info"
@@ -3490,6 +3809,15 @@ export type Database = {
         | "portwallet"
         | "piprapay"
       payment_status: "pending" | "completed" | "failed" | "refunded"
+      reseller_role: "reseller" | "sub_reseller" | "sub_sub_reseller"
+      reseller_transaction_type:
+        | "recharge"
+        | "deduction"
+        | "commission"
+        | "refund"
+        | "transfer_in"
+        | "transfer_out"
+        | "customer_payment"
       speed_unit: "mbps" | "gbps"
       staff_role: "admin" | "staff" | "technician" | "support" | "reseller"
       subscription_status: "active" | "expired" | "cancelled" | "pending"
@@ -3665,6 +3993,16 @@ export const Constants = {
         "piprapay",
       ],
       payment_status: ["pending", "completed", "failed", "refunded"],
+      reseller_role: ["reseller", "sub_reseller", "sub_sub_reseller"],
+      reseller_transaction_type: [
+        "recharge",
+        "deduction",
+        "commission",
+        "refund",
+        "transfer_in",
+        "transfer_out",
+        "customer_payment",
+      ],
       speed_unit: ["mbps", "gbps"],
       staff_role: ["admin", "staff", "technician", "support", "reseller"],
       subscription_status: ["active", "expired", "cancelled", "pending"],
