@@ -35,6 +35,15 @@ import SuperAdminDashboard from "./pages/SuperAdmin/SuperAdminDashboard";
 import MySubscription from "./pages/Billing/MySubscription";
 import MakePayment from "./pages/Billing/MakePayment";
 
+// ISP Management Pages
+import CustomerManagement from "./pages/ISP/CustomerManagement";
+import ISPBilling from "./pages/ISP/Billing";
+import ISPDashboard from "./pages/ISP/Dashboard";
+import ISPPackages from "./pages/ISP/Packages";
+import AreasManagement from "./pages/ISP/AreasManagement";
+import ResellersManagement from "./pages/ISP/ResellersManagement";
+import MikroTikManagement from "./pages/ISP/MikroTikManagement";
+
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
 import NotificationPreferences from "./pages/NotificationPreferences";
@@ -214,6 +223,57 @@ const App = () => (
                 <ProtectedRoute>
                   <TenantAccessGuard>
                     <Invoices />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+
+              {/* ISP Management Routes */}
+              <Route path="/isp/dashboard" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ISPDashboard />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/customers" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <CustomerManagement />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/billing" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ISPBilling />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/packages" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ISPPackages />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/areas" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <AreasManagement />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/resellers" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ResellersManagement />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/mikrotik" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <MikroTikManagement />
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />

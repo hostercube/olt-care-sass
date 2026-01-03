@@ -41,6 +41,7 @@ export function useSuperAdmin() {
 
 export function useTenantContext() {
   const { user } = useAuth();
+  const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [tenant, setTenant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -92,5 +93,11 @@ export function useTenantContext() {
     fetchTenant();
   }, [fetchTenant]);
 
-  return { tenantId, tenant, loading, refetch: fetchTenant };
+  return { 
+    tenantId, 
+    tenant, 
+    loading: loading || superAdminLoading, 
+    refetch: fetchTenant,
+    isSuperAdmin,
+  };
 }
