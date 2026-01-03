@@ -179,9 +179,16 @@ END $$;
 DO $$ 
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_method') THEN
-    CREATE TYPE public.payment_method AS ENUM ('sslcommerz', 'bkash', 'rocket', 'nagad', 'manual');
+    CREATE TYPE public.payment_method AS ENUM ('sslcommerz', 'bkash', 'rocket', 'nagad', 'uddoktapay', 'shurjopay', 'aamarpay', 'portwallet', 'piprapay', 'manual');
   END IF;
 END $$;
+
+-- Add new enum values if they don't exist
+ALTER TYPE payment_method ADD VALUE IF NOT EXISTS 'uddoktapay';
+ALTER TYPE payment_method ADD VALUE IF NOT EXISTS 'shurjopay';
+ALTER TYPE payment_method ADD VALUE IF NOT EXISTS 'aamarpay';
+ALTER TYPE payment_method ADD VALUE IF NOT EXISTS 'portwallet';
+ALTER TYPE payment_method ADD VALUE IF NOT EXISTS 'piprapay';
 
 
 -- =====================================================

@@ -40,9 +40,18 @@ export function useResellers() {
 
   const createReseller = async (data: Partial<Reseller>) => {
     try {
+      const resellerData: any = { ...data };
+      
+      // Only add tenant_id if available
+      if (tenantId) {
+        resellerData.tenant_id = tenantId;
+      } else if (!isSuperAdmin) {
+        throw new Error('No tenant context available');
+      }
+      
       const { data: newReseller, error } = await supabase
         .from('resellers')
-        .insert({ ...data, tenant_id: tenantId } as any)
+        .insert(resellerData)
         .select()
         .single();
 

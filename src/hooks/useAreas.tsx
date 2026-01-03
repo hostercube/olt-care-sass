@@ -37,9 +37,17 @@ export function useAreas() {
 
   const createArea = async (data: Partial<Area>) => {
     try {
+      const areaData: any = { ...data };
+      
+      if (tenantId) {
+        areaData.tenant_id = tenantId;
+      } else if (!isSuperAdmin) {
+        throw new Error('No tenant context available');
+      }
+      
       const { data: newArea, error } = await supabase
         .from('areas')
-        .insert({ ...data, tenant_id: tenantId } as any)
+        .insert(areaData)
         .select()
         .single();
 

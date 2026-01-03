@@ -38,9 +38,17 @@ export function useISPPackages() {
 
   const createPackage = async (data: Partial<ISPPackage>) => {
     try {
+      const pkgData: any = { ...data };
+      
+      if (tenantId) {
+        pkgData.tenant_id = tenantId;
+      } else if (!isSuperAdmin) {
+        throw new Error('No tenant context available');
+      }
+      
       const { data: newPkg, error } = await supabase
         .from('isp_packages')
-        .insert({ ...data, tenant_id: tenantId } as any)
+        .insert(pkgData)
         .select()
         .single();
 
