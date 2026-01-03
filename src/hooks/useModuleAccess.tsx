@@ -1,7 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useTenantContext } from '@/hooks/useSuperAdmin';
-import type { TenantFeatures, ModuleName, PaymentGatewayType, SMSGatewayType, PaymentGatewayPermissions, SMSGatewayPermissions } from '@/types/saas';
+import { useTenantContext, useSuperAdmin } from '@/hooks/useSuperAdmin';
+import { 
+  SUPER_ADMIN_FEATURES, 
+  SUPER_ADMIN_LIMITS,
+  type TenantFeatures, 
+  type ModuleName, 
+  type PaymentGatewayType, 
+  type SMSGatewayType, 
+  type PaymentGatewayPermissions, 
+  type SMSGatewayPermissions 
+} from '@/types/saas';
 
 interface PackageLimits {
   maxOlts: number;
@@ -21,6 +30,7 @@ interface ModuleAccessResult {
   limits: PackageLimits;
   loading: boolean;
   isActive: boolean;
+  isSuperAdmin: boolean;
   // Legacy support
   maxOlts: number;
   maxUsers: number;
@@ -38,12 +48,30 @@ const DEFAULT_LIMITS: PackageLimits = {
 
 export function useModuleAccess(): ModuleAccessResult {
   const { tenantId, tenant, loading: tenantLoading } = useTenantContext();
+  const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
   const [features, setFeatures] = useState<TenantFeatures>({});
   const [limits, setLimits] = useState<PackageLimits>(DEFAULT_LIMITS);
   const [subscriptionActive, setSubscriptionActive] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchSubscriptionFeatures = useCallback(async () => {
+    // Super admins have full access - no need to fetch subscription
+    if (isSuperAdmin) {
+      setFeatures(SUPER_ADMIN_FEATURES);
+      setLimits({
+        maxOlts: SUPER_ADMIN_LIMITS.max_olts,
+        maxUsers: SUPER_ADMIN_LIMITS.max_users,
+        maxOnus: SUPER_ADMIN_LIMITS.max_onus,
+        maxMikrotiks: SUPER_ADMIN_LIMITS.max_mikrotiks,
+        maxCustomers: SUPER_ADMIN_LIMITS.max_customers,
+        maxAreas: SUPER_ADMIN_LIMITS.max_areas,
+        maxResellers: SUPER_ADMIN_LIMITS.max_resellers,
+      });
+      setSubscriptionActive(true);
+      setLoading(false);
+      return;
+    }
+
     if (!tenantId) {
       setLoading(false);
       return;
@@ -120,15 +148,20 @@ export function useModuleAccess(): ModuleAccessResult {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, tenant]);
+  }, [tenantId, tenant, isSuperAdmin]);
 
   useEffect(() => {
-    if (!tenantLoading) {
+    if (!tenantLoading && !superAdminLoading) {
       fetchSubscriptionFeatures();
     }
-  }, [tenantLoading, fetchSubscriptionFeatures]);
+  }, [tenantLoading, superAdminLoading, fetchSubscriptionFeatures]);
 
   const hasAccess = useCallback((module: ModuleName): boolean => {
+    // Super admins have access to everything
+    if (isSuperAdmin) {
+      return true;
+    }
+
     // OLT Care is always enabled for all tenants
     if (module === 'olt_care') {
       return true;
@@ -136,19 +169,29 @@ export function useModuleAccess(): ModuleAccessResult {
 
     // Check if the feature is enabled in the subscription/package
     return features[module] === true;
-  }, [features]);
+  }, [features, isSuperAdmin]);
 
   const hasPaymentGatewayAccess = useCallback((gateway: PaymentGatewayType): boolean => {
+    // Super admins have access to all gateways
+    if (isSuperAdmin) {
+      return true;
+    }
+
     const paymentGateways = features.payment_gateways as PaymentGatewayPermissions | undefined;
     if (!paymentGateways) return gateway === 'manual'; // Manual always available by default
     return paymentGateways[gateway] === true;
-  }, [features]);
+  }, [features, isSuperAdmin]);
 
   const hasSMSGatewayAccess = useCallback((gateway: SMSGatewayType): boolean => {
+    // Super admins have access to all gateways
+    if (isSuperAdmin) {
+      return true;
+    }
+
     const smsGateways = features.sms_gateways as SMSGatewayPermissions | undefined;
     if (!smsGateways) return false;
     return smsGateways[gateway] === true;
-  }, [features]);
+  }, [features, isSuperAdmin]);
 
   return {
     hasAccess,
@@ -156,8 +199,9 @@ export function useModuleAccess(): ModuleAccessResult {
     hasSMSGatewayAccess,
     features,
     limits,
-    loading: loading || tenantLoading,
-    isActive: subscriptionActive,
+    loading: loading || tenantLoading || superAdminLoading,
+    isActive: subscriptionActive || isSuperAdmin,
+    isSuperAdmin,
     maxOlts: limits.maxOlts,
     maxUsers: limits.maxUsers,
   };

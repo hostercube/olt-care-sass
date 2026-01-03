@@ -4,7 +4,7 @@ export type TenantStatus = 'active' | 'suspended' | 'trial' | 'cancelled';
 export type SubscriptionStatus = 'active' | 'expired' | 'cancelled' | 'pending';
 export type BillingCycle = 'monthly' | 'yearly';
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
-export type PaymentMethod = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'manual';
+export type PaymentMethod = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'uddoktapay' | 'shurjopay' | 'aamarpay' | 'portwallet' | 'manual';
 
 // Module names for package-based access
 export type ModuleName = 
@@ -26,22 +26,31 @@ export type ModuleName =
   | 'reports_export'
   | 'backup_restore';
 
-// Payment gateway types
-export type PaymentGatewayType = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'manual';
+// Payment gateway types (all supported gateways)
+export type PaymentGatewayType = 'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'uddoktapay' | 'shurjopay' | 'aamarpay' | 'portwallet' | 'manual';
 
-// SMS gateway types
-export type SMSGatewayType = 'smsnoc' | 'custom';
+// SMS gateway types (all supported gateways)
+export type SMSGatewayType = 'smsnoc' | 'mimsms' | 'revesms' | 'greenweb' | 'bulksmsbd' | 'smsq' | 'custom';
 
 export interface PaymentGatewayPermissions {
   sslcommerz?: boolean;
   bkash?: boolean;
   rocket?: boolean;
   nagad?: boolean;
+  uddoktapay?: boolean;
+  shurjopay?: boolean;
+  aamarpay?: boolean;
+  portwallet?: boolean;
   manual?: boolean;
 }
 
 export interface SMSGatewayPermissions {
   smsnoc?: boolean;
+  mimsms?: boolean;
+  revesms?: boolean;
+  greenweb?: boolean;
+  bulksmsbd?: boolean;
+  smsq?: boolean;
   custom?: boolean;
 }
 
@@ -228,6 +237,38 @@ export interface SMSGatewaySettings {
   updated_at: string;
 }
 
+export interface SMSTemplate {
+  id: string;
+  tenant_id: string | null;
+  name: string;
+  template_type: string;
+  message: string;
+  variables: string[];
+  is_active: boolean;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SMSQueue {
+  id: string;
+  tenant_id: string;
+  template_id: string | null;
+  send_type: 'single' | 'bulk' | 'group';
+  recipients: string[];
+  group_filter: Record<string, unknown> | null;
+  message: string;
+  total_count: number;
+  sent_count: number;
+  failed_count: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  scheduled_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface SMSLog {
   id: string;
   tenant_id: string | null;
@@ -323,12 +364,21 @@ export const PAYMENT_GATEWAYS = [
   { id: 'bkash', name: 'bKash', description: 'Mobile banking' },
   { id: 'rocket', name: 'Rocket', description: 'DBBL mobile banking' },
   { id: 'nagad', name: 'Nagad', description: 'Bangladesh Post Office mobile banking' },
+  { id: 'uddoktapay', name: 'UddoktaPay', description: 'Digital payment gateway' },
+  { id: 'shurjopay', name: 'ShurjoPay', description: 'Online payment solution' },
+  { id: 'aamarpay', name: 'aamarPay', description: 'Multi-channel payment gateway' },
+  { id: 'portwallet', name: 'PortWallet', description: 'Digital wallet & payments' },
   { id: 'manual', name: 'Manual Payment', description: 'Cash/Bank transfer' },
 ];
 
 // SMS gateway configuration for packages
 export const SMS_GATEWAYS = [
   { id: 'smsnoc', name: 'SMS NOC', description: 'SMS NOC gateway' },
+  { id: 'mimsms', name: 'MIM SMS', description: 'MIM SMS gateway' },
+  { id: 'revesms', name: 'Reve SMS', description: 'Reve Systems SMS' },
+  { id: 'greenweb', name: 'Green Web', description: 'Green Web SMS' },
+  { id: 'bulksmsbd', name: 'Bulk SMS BD', description: 'Bulk SMS Bangladesh' },
+  { id: 'smsq', name: 'SMSQ', description: 'SMSQ gateway' },
   { id: 'custom', name: 'Custom Gateway', description: 'Custom SMS API' },
 ];
 
@@ -351,4 +401,56 @@ export const DEFAULT_PACKAGE_LIMITS: PackageLimits = {
   max_customers: null,
   max_areas: null,
   max_resellers: null,
+};
+
+// Super admin has unlimited access - used for checking permissions
+export const SUPER_ADMIN_LIMITS: PackageLimits = {
+  max_olts: 999999,
+  max_onus: null,
+  max_users: 999999,
+  max_mikrotiks: null,
+  max_customers: null,
+  max_areas: null,
+  max_resellers: null,
+};
+
+// All features enabled for super admin
+export const SUPER_ADMIN_FEATURES: TenantFeatures = {
+  olt_care: true,
+  isp_billing: true,
+  isp_customers: true,
+  isp_resellers: true,
+  isp_mikrotik: true,
+  isp_areas: true,
+  isp_crm: true,
+  isp_inventory: true,
+  sms_alerts: true,
+  email_alerts: true,
+  api_access: true,
+  custom_domain: true,
+  white_label: true,
+  advanced_monitoring: true,
+  multi_user: true,
+  reports_export: true,
+  backup_restore: true,
+  payment_gateways: {
+    sslcommerz: true,
+    bkash: true,
+    rocket: true,
+    nagad: true,
+    uddoktapay: true,
+    shurjopay: true,
+    aamarpay: true,
+    portwallet: true,
+    manual: true,
+  },
+  sms_gateways: {
+    smsnoc: true,
+    mimsms: true,
+    revesms: true,
+    greenweb: true,
+    bulksmsbd: true,
+    smsq: true,
+    custom: true,
+  },
 };

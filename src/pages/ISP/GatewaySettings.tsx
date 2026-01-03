@@ -304,10 +304,14 @@ export default function ISPGatewaySettings() {
               </Card>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <PaymentGatewayCard gateway="bkash" title="bKash" description="Mobile payment" />
-                <PaymentGatewayCard gateway="nagad" title="Nagad" description="Mobile payment" />
-                <PaymentGatewayCard gateway="rocket" title="Rocket" description="Mobile payment" />
-                <PaymentGatewayCard gateway="manual" title="Manual" description="Cash/Bank transfer" />
+                {PAYMENT_GATEWAYS.map((gw) => (
+                  <PaymentGatewayCard 
+                    key={gw.id} 
+                    gateway={gw.id} 
+                    title={gw.name} 
+                    description={gw.description} 
+                  />
+                ))}
               </div>
             )}
           </TabsContent>
