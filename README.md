@@ -120,7 +120,7 @@ npm install
 pm2 start ecosystem.config.cjs
 ```
 
-## 📊 Database Schema (27+ Tables)
+## 📊 Database Schema (40+ Tables)
 
 ### Core Tables
 - `olts` - OLT devices
@@ -147,6 +147,26 @@ pm2 start ecosystem.config.cjs
 - `packages` - SaaS pricing packages
 - `payments` - SaaS payments
 - `invoices` - SaaS invoices
+
+### Tenant-Specific Gateways (Each ISP has separate config)
+- `tenant_payment_gateways` - bKash, Nagad, Rocket per ISP
+- `tenant_sms_gateways` - SMS NOC config per ISP
+- `tenant_email_gateways` - SMTP config per ISP
+- `tenant_backups` - Backup metadata per ISP
+
+## 🏢 Multi-Tenant Architecture
+
+Each ISP owner is a **Tenant** with:
+- Isolated customer data
+- Own OLT/MikroTik configuration
+- Separate payment/SMS/email gateways
+- Package-based module access
+
+**Super Admin** can:
+- Create/manage all tenants
+- Configure global settings
+- View all tenant data
+- Export individual tenant backups
 
 ## 📋 Environment Variables
 

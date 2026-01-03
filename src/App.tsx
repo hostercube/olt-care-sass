@@ -44,6 +44,7 @@ import AreasManagement from "./pages/ISP/AreasManagement";
 import ResellersManagement from "./pages/ISP/ResellersManagement";
 import MikroTikManagement from "./pages/ISP/MikroTikManagement";
 import BillingAutomation from "./pages/ISP/BillingAutomation";
+import ISPGatewaySettings from "./pages/ISP/GatewaySettings";
 
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
@@ -289,6 +290,13 @@ const App = () => (
                 <ProtectedRoute>
                   <TenantAccessGuard>
                     <MikroTikManagement />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/gateways" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ISPGatewaySettings />
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />

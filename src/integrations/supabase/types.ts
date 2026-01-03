@@ -1931,6 +1931,209 @@ export type Database = {
         }
         Relationships: []
       }
+      tenant_backups: {
+        Row: {
+          backup_type: string
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          error_message: string | null
+          file_name: string
+          file_size: number | null
+          id: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          backup_type?: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          file_name: string
+          file_size?: number | null
+          id?: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          backup_type?: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          error_message?: string | null
+          file_name?: string
+          file_size?: number | null
+          id?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_backups_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_email_gateways: {
+        Row: {
+          config: Json | null
+          created_at: string | null
+          id: string
+          is_enabled: boolean | null
+          provider: string
+          sender_email: string | null
+          sender_name: string | null
+          smtp_host: string | null
+          smtp_password: string | null
+          smtp_port: number | null
+          smtp_username: string | null
+          tenant_id: string
+          updated_at: string | null
+          use_tls: boolean | null
+        }
+        Insert: {
+          config?: Json | null
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          provider?: string
+          sender_email?: string | null
+          sender_name?: string | null
+          smtp_host?: string | null
+          smtp_password?: string | null
+          smtp_port?: number | null
+          smtp_username?: string | null
+          tenant_id: string
+          updated_at?: string | null
+          use_tls?: boolean | null
+        }
+        Update: {
+          config?: Json | null
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          provider?: string
+          sender_email?: string | null
+          sender_name?: string | null
+          smtp_host?: string | null
+          smtp_password?: string | null
+          smtp_port?: number | null
+          smtp_username?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+          use_tls?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_email_gateways_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_payment_gateways: {
+        Row: {
+          config: Json | null
+          created_at: string | null
+          display_name: string
+          gateway: Database["public"]["Enums"]["payment_method"]
+          id: string
+          instructions: string | null
+          is_enabled: boolean | null
+          sandbox_mode: boolean | null
+          sort_order: number | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          config?: Json | null
+          created_at?: string | null
+          display_name: string
+          gateway: Database["public"]["Enums"]["payment_method"]
+          id?: string
+          instructions?: string | null
+          is_enabled?: boolean | null
+          sandbox_mode?: boolean | null
+          sort_order?: number | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          config?: Json | null
+          created_at?: string | null
+          display_name?: string
+          gateway?: Database["public"]["Enums"]["payment_method"]
+          id?: string
+          instructions?: string | null
+          is_enabled?: boolean | null
+          sandbox_mode?: boolean | null
+          sort_order?: number | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_payment_gateways_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_sms_gateways: {
+        Row: {
+          api_key: string | null
+          api_url: string | null
+          config: Json | null
+          created_at: string | null
+          id: string
+          is_enabled: boolean | null
+          provider: string
+          sender_id: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          api_key?: string | null
+          api_url?: string | null
+          config?: Json | null
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          provider?: string
+          sender_id?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          api_key?: string | null
+          api_url?: string | null
+          config?: Json | null
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          provider?: string
+          sender_id?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_sms_gateways_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_users: {
         Row: {
           created_at: string
@@ -2061,6 +2264,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      export_tenant_data: { Args: { _tenant_id: string }; Returns: Json }
       generate_bill_number: { Args: { _tenant_id: string }; Returns: string }
       generate_customer_code: { Args: { _tenant_id: string }; Returns: string }
       get_user_tenant_id: { Args: never; Returns: string }
@@ -2070,6 +2274,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      initialize_tenant_gateways: {
+        Args: { _tenant_id: string }
+        Returns: undefined
       }
       is_authenticated: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
