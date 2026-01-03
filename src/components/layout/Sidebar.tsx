@@ -93,6 +93,7 @@ const superAdminItems: NavItem[] = [
   { title: 'Payment Gateways', href: '/admin/gateways', icon: Wallet },
   { title: 'Email Gateway', href: '/admin/email-gateway', icon: Mail },
   { title: 'Email Templates', href: '/admin/email-templates', icon: FileText },
+  { title: 'SMS Gateway', href: '/admin/sms-gateway', icon: MessageSquare },
   { title: 'SMS Templates', href: '/admin/sms-templates', icon: MessageSquare },
   { title: 'SMS Center', href: '/admin/sms-center', icon: MessageSquare },
 ];

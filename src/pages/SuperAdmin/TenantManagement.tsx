@@ -19,6 +19,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { TenantStatus } from '@/types/saas';
+import { DIVISIONS, getDistricts, getUpazilas } from '@/data/bangladeshLocations';
+import { useTablePagination, PaginationControls, SearchAndFilterBar } from '@/components/common/TableWithPagination';
 
 interface TenantStats {
   customers: number;
@@ -65,8 +67,6 @@ export default function TenantManagement() {
     billing_cycle: 'monthly' as 'monthly' | 'yearly',
   });
 
-  const DIVISIONS = ['Dhaka', 'Chittagong', 'Rajshahi', 'Khulna', 'Barisal', 'Sylhet', 'Rangpur', 'Mymensingh'];
-
   useEffect(() => {
     fetchSubscriptions();
   }, []);
@@ -109,6 +109,19 @@ export default function TenantManagement() {
     tenant.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     tenant.company_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Pagination
+  const {
+    paginatedData: paginatedTenants,
+    currentPage,
+    totalPages,
+    pageSize,
+    totalItems,
+    startIndex,
+    endIndex,
+    goToPage,
+    handlePageSizeChange,
+  } = useTablePagination(filteredTenants, 10);
 
   const getStatusBadge = (status: TenantStatus) => {
     const variants: Record<TenantStatus, 'default' | 'success' | 'warning' | 'destructive'> = {
@@ -357,20 +370,30 @@ export default function TenantManagement() {
                   </div>
                   <div className="space-y-2">
                     <Label>Division</Label>
-                    <Select value={newTenant.division} onValueChange={(v) => setNewTenant({ ...newTenant, division: v })}>
+                    <Select value={newTenant.division} onValueChange={(v) => setNewTenant({ ...newTenant, division: v, district: '', upazila: '' })}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-popover border border-border z-50">
                         {DIVISIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>District</Label>
-                    <Input value={newTenant.district} onChange={(e) => setNewTenant({ ...newTenant, district: e.target.value })} placeholder="District" />
+                    <Select value={newTenant.district} onValueChange={(v) => setNewTenant({ ...newTenant, district: v, upazila: '' })} disabled={!newTenant.division}>
+                      <SelectTrigger><SelectValue placeholder={newTenant.division ? "Select" : "Select Division first"} /></SelectTrigger>
+                      <SelectContent className="bg-popover border border-border z-50 max-h-[300px]">
+                        {getDistricts(newTenant.division).map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Upazila</Label>
-                    <Input value={newTenant.upazila} onChange={(e) => setNewTenant({ ...newTenant, upazila: e.target.value })} placeholder="Upazila" />
+                    <Label>Upazila/Thana</Label>
+                    <Select value={newTenant.upazila} onValueChange={(v) => setNewTenant({ ...newTenant, upazila: v })} disabled={!newTenant.district}>
+                      <SelectTrigger><SelectValue placeholder={newTenant.district ? "Select" : "Select District first"} /></SelectTrigger>
+                      <SelectContent className="bg-popover border border-border z-50 max-h-[300px]">
+                        {getUpazilas(newTenant.district).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Package</Label>
@@ -437,10 +460,10 @@ export default function TenantManagement() {
               <TableBody>
                 {loading ? (
                   <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
-                ) : filteredTenants.length === 0 ? (
+                ) : paginatedTenants.length === 0 ? (
                   <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No tenants found</TableCell></TableRow>
                 ) : (
-                  filteredTenants.map((tenant) => {
+                  paginatedTenants.map((tenant) => {
                     const subscription = getTenantSubscription(tenant.id);
                     const pkg = subscription ? packages.find(p => p.id === subscription.package_id) : null;
                     const stats = tenantStats[tenant.id];
@@ -478,7 +501,7 @@ export default function TenantManagement() {
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            <DropdownMenuContent align="end" className="bg-popover border border-border">
                               <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsViewOpen(true); }}>
                                 <Eye className="h-4 w-4 mr-2" />View Details
                               </DropdownMenuItem>
@@ -515,6 +538,18 @@ export default function TenantManagement() {
                 )}
               </TableBody>
             </Table>
+            
+            {/* Pagination */}
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={totalItems}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              onPageChange={goToPage}
+              onPageSizeChange={handlePageSizeChange}
+            />
           </CardContent>
         </Card>
 
