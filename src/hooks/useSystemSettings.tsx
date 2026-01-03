@@ -63,6 +63,11 @@ interface SystemSettings {
   twoFactorAuth: boolean;
   sessionTimeout: number;
   allowUserRegistration: boolean;
+
+  // Cloudflare Captcha
+  cloudflareCaptchaEnabled: boolean;
+  cloudflareSiteKey: string;
+  cloudflareSecretKey: string;
 }
 
 const defaultSettings: SystemSettings = {
@@ -111,6 +116,10 @@ const defaultSettings: SystemSettings = {
   twoFactorAuth: false,
   sessionTimeout: 30,
   allowUserRegistration: true,
+  // Cloudflare
+  cloudflareCaptchaEnabled: false,
+  cloudflareSiteKey: '',
+  cloudflareSecretKey: '',
 };
 
 export function useSystemSettings() {

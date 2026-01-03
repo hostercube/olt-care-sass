@@ -41,6 +41,25 @@ const DIVISIONS = [
   'Dhaka', 'Chittagong', 'Rajshahi', 'Khulna', 'Barisal', 'Sylhet', 'Rangpur', 'Mymensingh'
 ];
 
+// Bangladesh districts by division
+const DISTRICTS_BY_DIVISION: Record<string, string[]> = {
+  'Dhaka': ['Dhaka', 'Faridpur', 'Gazipur', 'Gopalganj', 'Kishoreganj', 'Madaripur', 'Manikganj', 'Munshiganj', 'Narayanganj', 'Narsingdi', 'Rajbari', 'Shariatpur', 'Tangail'],
+  'Chittagong': ['Chittagong', 'Bandarban', 'Brahmanbaria', 'Chandpur', 'Comilla', 'Cox\'s Bazar', 'Feni', 'Khagrachari', 'Lakshmipur', 'Noakhali', 'Rangamati'],
+  'Rajshahi': ['Rajshahi', 'Bogra', 'Chapainawabganj', 'Joypurhat', 'Naogaon', 'Natore', 'Nawabganj', 'Pabna', 'Sirajganj'],
+  'Khulna': ['Khulna', 'Bagerhat', 'Chuadanga', 'Jessore', 'Jhenaidah', 'Kushtia', 'Magura', 'Meherpur', 'Narail', 'Satkhira'],
+  'Barisal': ['Barisal', 'Barguna', 'Bhola', 'Jhalokati', 'Patuakhali', 'Pirojpur'],
+  'Sylhet': ['Sylhet', 'Habiganj', 'Moulvibazar', 'Sunamganj'],
+  'Rangpur': ['Rangpur', 'Dinajpur', 'Gaibandha', 'Kurigram', 'Lalmonirhat', 'Nilphamari', 'Panchagarh', 'Thakurgaon'],
+  'Mymensingh': ['Mymensingh', 'Jamalpur', 'Netrokona', 'Sherpur'],
+};
+
+// Sample upazilas (common ones across districts)
+const COMMON_UPAZILAS = [
+  'Sadar', 'South', 'North', 'East', 'West', 'Central', 
+  'Uttara', 'Mirpur', 'Mohammadpur', 'Dhanmondi', 'Gulshan',
+  'Kotwali', 'Model', 'Cantonment', 'Railway', 'Port', 'Airport'
+];
+
 export default function Auth() {
   const { signIn, loading, user } = useAuth();
   const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
@@ -448,7 +467,15 @@ export default function Auth() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Division</Label>
-                      <Select value={signupData.division} onValueChange={(v) => setSignupData(prev => ({ ...prev, division: v }))}>
+                      <Select 
+                        value={signupData.division} 
+                        onValueChange={(v) => setSignupData(prev => ({ 
+                          ...prev, 
+                          division: v, 
+                          district: '', 
+                          upazila: '' 
+                        }))}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select" />
                         </SelectTrigger>
@@ -461,19 +488,37 @@ export default function Auth() {
                     </div>
                     <div className="space-y-2">
                       <Label>District</Label>
-                      <Input
-                        value={signupData.district}
-                        onChange={(e) => setSignupData(prev => ({ ...prev, district: e.target.value }))}
-                        placeholder="District"
-                      />
+                      <Select 
+                        value={signupData.district} 
+                        onValueChange={(v) => setSignupData(prev => ({ ...prev, district: v, upazila: '' }))}
+                        disabled={!signupData.division}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(DISTRICTS_BY_DIVISION[signupData.division] || []).map(d => (
+                            <SelectItem key={d} value={d}>{d}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>Upazila/Thana</Label>
-                      <Input
-                        value={signupData.upazila}
-                        onChange={(e) => setSignupData(prev => ({ ...prev, upazila: e.target.value }))}
-                        placeholder="Upazila"
-                      />
+                      <Select 
+                        value={signupData.upazila} 
+                        onValueChange={(v) => setSignupData(prev => ({ ...prev, upazila: v }))}
+                        disabled={!signupData.district}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {COMMON_UPAZILAS.map(u => (
+                            <SelectItem key={u} value={u}>{u}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 

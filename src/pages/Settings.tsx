@@ -381,6 +381,52 @@ export default function Settings() {
                 <CardDescription>Manage authentication and access control</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Cloudflare Captcha Settings */}
+                <div className="space-y-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-primary" />
+                    <Label className="text-sm font-medium">Cloudflare Turnstile (Captcha)</Label>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Captcha on Login/Signup</Label>
+                      <p className="text-sm text-muted-foreground">Protect forms with Cloudflare Turnstile</p>
+                    </div>
+                    <Switch 
+                      checked={settings.cloudflareCaptchaEnabled}
+                      onCheckedChange={(checked) => updateSetting('cloudflareCaptchaEnabled', checked)}
+                    />
+                  </div>
+                  {settings.cloudflareCaptchaEnabled && (
+                    <div className="space-y-4 mt-4">
+                      <div className="space-y-2">
+                        <Label>Site Key</Label>
+                        <Input
+                          value={settings.cloudflareSiteKey || ''}
+                          onChange={(e) => updateSetting('cloudflareSiteKey', e.target.value)}
+                          placeholder="0x4AAAAAAA..."
+                          className="bg-secondary"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Secret Key</Label>
+                        <Input
+                          type="password"
+                          value={settings.cloudflareSecretKey || ''}
+                          onChange={(e) => updateSetting('cloudflareSecretKey', e.target.value)}
+                          placeholder="0x4AAAAAAA..."
+                          className="bg-secondary"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Get keys from <a href="https://dash.cloudflare.com/turnstile" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Cloudflare Dashboard</a>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
                 {isAdmin && (
                   <div className="flex items-center justify-between p-4 rounded-lg bg-warning/10 border border-warning/20">
                     <div className="space-y-0.5">
