@@ -1,7 +1,7 @@
 import type { PaymentMethod } from "@/types/saas";
 
-// Get VPS URL from environment or default
-const VPS_URL = import.meta.env.VITE_VPS_URL || 'http://localhost:3001';
+// Get VPS URL from environment - fallback to polling server URL
+const VPS_URL = import.meta.env.VITE_VPS_URL || import.meta.env.VITE_POLLING_SERVER_URL || 'https://oltapp.isppoint.com/olt-polling-server';
 
 export interface PaymentInitiateRequest {
   gateway: PaymentMethod;
