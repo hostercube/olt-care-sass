@@ -10,7 +10,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { usePayments } from '@/hooks/usePayments';
 import { usePaymentGateways } from '@/hooks/usePaymentGateways';
-import { useTenantPaymentGateways } from '@/hooks/useTenantPaymentGateways';
 import { useInvoices } from '@/hooks/useInvoices';
 import { CreditCard, Smartphone, Banknote, CheckCircle, Loader2, ExternalLink, AlertCircle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -23,7 +22,6 @@ export default function MakePayment() {
   const { tenantId } = useTenantContext();
   const { createPayment } = usePayments();
   const { gateways: globalGateways, loading: globalGatewaysLoading } = usePaymentGateways();
-  const { gateways: tenantGateways, loading: tenantGatewaysLoading } = useTenantPaymentGateways();
   const { invoices } = useInvoices(tenantId || undefined);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -76,14 +74,22 @@ export default function MakePayment() {
   const unpaidInvoices = invoices.filter(i => i.status === 'unpaid' || i.status === 'overdue');
   
   // Use global gateways from SuperAdmin - always available to all ISP owners
-  // Tenant-specific gateways are optional overrides
-  const enabledGateways = tenantGateways.length > 0 
-    ? tenantGateways.filter(g => g.is_enabled)
-    : globalGateways.filter(g => g.is_enabled);
+  // Tenant-specific gateways are optional overrides  
+  // Filter only enabled gateways from global settings
+  const enabledGateways = globalGateways.filter(g => g.is_enabled);
 
-  const gatewaysLoading = globalGatewaysLoading || tenantGatewaysLoading;
+  const gatewaysLoading = globalGatewaysLoading;
 
-  // Auto-select invoice amount when invoice is selected
+  // Auto-select first unpaid invoice and set amount
+  useEffect(() => {
+    if (unpaidInvoices.length > 0 && !selectedInvoice) {
+      const firstInvoice = unpaidInvoices[0];
+      setSelectedInvoice(firstInvoice.id);
+      setAmount(firstInvoice.total_amount.toString());
+    }
+  }, [unpaidInvoices, selectedInvoice]);
+
+  // Auto-update amount when invoice is selected
   useEffect(() => {
     if (selectedInvoice) {
       const invoice = invoices.find(i => i.id === selectedInvoice);
@@ -346,23 +352,20 @@ export default function MakePayment() {
           </Card>
         )}
 
-        {/* Payment Amount */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Amount</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label>Amount (৳) *</Label>
-              <Input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="Enter amount"
-              />
-            </div>
-          </CardContent>
-        </Card>
+        {/* Payment Amount - Auto-filled from invoice */}
+        {selectedInvoice && amount && (
+          <Card className="border-primary/50 bg-primary/5">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Amount to Pay</p>
+                  <p className="text-3xl font-bold text-primary">৳{parseFloat(amount).toLocaleString()}</p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-primary" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Payment Method */}
         <Card>
