@@ -11,7 +11,6 @@ import { DeviceHealthChart } from '@/components/dashboard/DeviceHealthChart';
 import { SubscriptionAnalyticsWidget } from '@/components/dashboard/SubscriptionAnalyticsWidget';
 import { useOLTs, useONUs, useAlerts, useDashboardStats } from '@/hooks/useOLTData';
 import { useSuperAdmin } from '@/hooks/useSuperAdmin';
-import { useOnboardingRedirect } from '@/hooks/useOnboardingRedirect';
 import { Server, Router, AlertTriangle, Zap, Wifi, Loader2, Activity, Cpu } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -23,9 +22,6 @@ export default function Dashboard() {
   const { alerts, loading: alertsLoading } = useAlerts();
   const { isSuperAdmin } = useSuperAdmin();
   
-  // Check for onboarding redirect
-  useOnboardingRedirect();
-
   // Create a map of OLT IDs to names
   const oltNameMap = olts.reduce((acc, olt) => {
     acc[olt.id] = olt.name;
