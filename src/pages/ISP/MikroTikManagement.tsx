@@ -63,6 +63,8 @@ export default function MikroTikManagement() {
     sync_pppoe: true,
     sync_queues: true,
     auto_disable_expired: true,
+    allow_customer_delete: true,
+    allow_queue_delete: true,
   });
 
   const fetchRouters = useCallback(async () => {
@@ -102,6 +104,8 @@ export default function MikroTikManagement() {
       sync_pppoe: true,
       sync_queues: true,
       auto_disable_expired: true,
+      allow_customer_delete: true,
+      allow_queue_delete: true,
     });
     setEditingRouter(null);
     setTestResult(null);
@@ -119,6 +123,8 @@ export default function MikroTikManagement() {
       sync_pppoe: router.sync_pppoe,
       sync_queues: router.sync_queues,
       auto_disable_expired: router.auto_disable_expired,
+      allow_customer_delete: (router as any).allow_customer_delete ?? true,
+      allow_queue_delete: (router as any).allow_queue_delete ?? true,
     });
     setTestResult(null);
     setShowDialog(true);
@@ -138,6 +144,8 @@ export default function MikroTikManagement() {
         sync_pppoe: formData.sync_pppoe,
         sync_queues: formData.sync_queues,
         auto_disable_expired: formData.auto_disable_expired,
+        allow_customer_delete: formData.allow_customer_delete,
+        allow_queue_delete: formData.allow_queue_delete,
       };
 
       if (formData.password) {
@@ -747,6 +755,35 @@ export default function MikroTikManagement() {
                 <Switch
                   checked={formData.auto_disable_expired}
                   onCheckedChange={(checked) => setFormData(prev => ({ ...prev, auto_disable_expired: checked }))}
+                />
+              </div>
+            </div>
+
+            {/* MikroTik Control Options */}
+            <div className="space-y-4 pt-4 border-t">
+              <Label className="text-sm font-medium text-muted-foreground">MikroTik Control Options</Label>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Allow Customer Delete on MikroTik</Label>
+                  <p className="text-sm text-muted-foreground">
+                    When customer is deleted, also remove PPPoE secret from MikroTik
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.allow_customer_delete}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, allow_customer_delete: checked }))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Allow Queue Delete on MikroTik</Label>
+                  <p className="text-sm text-muted-foreground">
+                    When customer is deleted, also remove queue from MikroTik
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.allow_queue_delete}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, allow_queue_delete: checked }))}
                 />
               </div>
             </div>

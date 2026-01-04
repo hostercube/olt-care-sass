@@ -22,6 +22,14 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 
+// Billing cycle options
+const billingCycles = [
+  { value: 'monthly', label: 'Monthly', days: 30 },
+  { value: '3-monthly', label: '3 Monthly', days: 90 },
+  { value: '6-monthly', label: '6 Monthly', days: 180 },
+  { value: 'yearly', label: 'Yearly', days: 365 },
+];
+
 export default function ISPPackages() {
   const { packages, loading, createPackage, updatePackage, deletePackage } = useISPPackages();
   const [showDialog, setShowDialog] = useState(false);
@@ -36,7 +44,7 @@ export default function ISPPackages() {
     upload_speed: '10',
     speed_unit: 'mbps' as 'mbps' | 'gbps',
     price: '',
-    validity_days: '30',
+    billing_cycle: 'monthly',
   });
 
   const resetForm = () => {
@@ -47,13 +55,25 @@ export default function ISPPackages() {
       upload_speed: '10',
       speed_unit: 'mbps',
       price: '',
-      validity_days: '30',
+      billing_cycle: 'monthly',
     });
     setEditingPackage(null);
   };
 
   const handleEdit = (pkg: ISPPackage) => {
     setEditingPackage(pkg);
+    // Determine billing cycle from validity_days
+    let cycle = 'monthly';
+    if (pkg.validity_days >= 365) cycle = 'yearly';
+    else if (pkg.validity_days >= 180) cycle = '6-monthly';
+    else if (pkg.validity_days >= 90) cycle = '3-monthly';
+    
+    // Also check if billing_cycle column exists
+    const existingCycle = (pkg as any).billing_cycle;
+    if (existingCycle && billingCycles.some(c => c.value === existingCycle)) {
+      cycle = existingCycle;
+    }
+    
     setFormData({
       name: pkg.name,
       description: pkg.description || '',
@@ -61,7 +81,7 @@ export default function ISPPackages() {
       upload_speed: pkg.upload_speed.toString(),
       speed_unit: pkg.speed_unit,
       price: pkg.price.toString(),
-      validity_days: pkg.validity_days.toString(),
+      billing_cycle: cycle,
     });
     setShowDialog(true);
   };
@@ -71,6 +91,8 @@ export default function ISPPackages() {
     setSaving(true);
 
     try {
+      const selectedCycle = billingCycles.find(c => c.value === formData.billing_cycle);
+      
       const data = {
         name: formData.name,
         description: formData.description || null,
@@ -78,7 +100,8 @@ export default function ISPPackages() {
         upload_speed: parseInt(formData.upload_speed),
         speed_unit: formData.speed_unit,
         price: parseFloat(formData.price),
-        validity_days: parseInt(formData.validity_days),
+        validity_days: selectedCycle?.days || 30,
+        billing_cycle: formData.billing_cycle,
       };
 
       if (editingPackage) {
@@ -101,6 +124,20 @@ export default function ISPPackages() {
       await deletePackage(deleteConfirm.id);
       setDeleteConfirm(null);
     }
+  };
+
+  const getBillingCycleLabel = (pkg: ISPPackage) => {
+    // Check billing_cycle column first
+    const cycle = (pkg as any).billing_cycle;
+    if (cycle) {
+      const found = billingCycles.find(c => c.value === cycle);
+      if (found) return found.label;
+    }
+    // Fallback to deriving from validity_days
+    if (pkg.validity_days >= 365) return 'Yearly';
+    if (pkg.validity_days >= 180) return '6 Monthly';
+    if (pkg.validity_days >= 90) return '3 Monthly';
+    return 'Monthly';
   };
 
   return (
@@ -127,7 +164,7 @@ export default function ISPPackages() {
                   <TableHead>Name</TableHead>
                   <TableHead>Speed</TableHead>
                   <TableHead>Price</TableHead>
-                  <TableHead>Validity</TableHead>
+                  <TableHead>Billing Cycle</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -162,7 +199,9 @@ export default function ISPPackages() {
                       <TableCell className="font-medium">
                         ৳{pkg.price.toLocaleString()}
                       </TableCell>
-                      <TableCell>{pkg.validity_days} days</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{getBillingCycleLabel(pkg)}</Badge>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={pkg.is_active ? 'default' : 'secondary'}>
                           {pkg.is_active ? 'Active' : 'Inactive'}
@@ -262,14 +301,22 @@ export default function ISPPackages() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Validity (Days)</Label>
-                <Input
-                  type="number"
-                  value={formData.validity_days}
-                  onChange={(e) => setFormData(prev => ({ ...prev, validity_days: e.target.value }))}
-                  min="1"
-                  required
-                />
+                <Label>Billing Cycle</Label>
+                <Select
+                  value={formData.billing_cycle}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, billing_cycle: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {billingCycles.map((cycle) => (
+                      <SelectItem key={cycle.value} value={cycle.value}>
+                        {cycle.label} ({cycle.days} days)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

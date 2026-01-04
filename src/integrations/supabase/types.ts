@@ -2114,6 +2114,7 @@ export type Database = {
       }
       isp_packages: {
         Row: {
+          billing_cycle: string | null
           created_at: string
           description: string | null
           download_speed: number
@@ -2129,6 +2130,7 @@ export type Database = {
           validity_days: number
         }
         Insert: {
+          billing_cycle?: string | null
           created_at?: string
           description?: string | null
           download_speed?: number
@@ -2144,6 +2146,7 @@ export type Database = {
           validity_days?: number
         }
         Update: {
+          billing_cycle?: string | null
           created_at?: string
           description?: string | null
           download_speed?: number
@@ -2170,6 +2173,8 @@ export type Database = {
       }
       mikrotik_routers: {
         Row: {
+          allow_customer_delete: boolean | null
+          allow_queue_delete: boolean | null
           auto_disable_expired: boolean | null
           created_at: string
           id: string
@@ -2188,6 +2193,8 @@ export type Database = {
           username: string
         }
         Insert: {
+          allow_customer_delete?: boolean | null
+          allow_queue_delete?: boolean | null
           auto_disable_expired?: boolean | null
           created_at?: string
           id?: string
@@ -2206,6 +2213,8 @@ export type Database = {
           username: string
         }
         Update: {
+          allow_customer_delete?: boolean | null
+          allow_queue_delete?: boolean | null
           auto_disable_expired?: boolean | null
           created_at?: string
           id?: string

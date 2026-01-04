@@ -15,6 +15,7 @@ export interface ISPPackage {
   speed_unit: SpeedUnit;
   price: number;
   validity_days: number;
+  billing_cycle?: string; // 'monthly' | '3-monthly' | '6-monthly' | 'yearly'
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -238,6 +239,8 @@ export interface MikroTikRouter {
   sync_pppoe: boolean;
   sync_queues: boolean;
   auto_disable_expired: boolean;
+  allow_customer_delete?: boolean;
+  allow_queue_delete?: boolean;
   created_at: string;
   updated_at: string;
 }
