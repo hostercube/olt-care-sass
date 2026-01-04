@@ -298,7 +298,7 @@ export default function CustomerDashboard() {
                 <CardTitle className="text-lg">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-2">
-                <Button variant="outline" className="justify-start">
+                <Button variant="outline" className="justify-start" onClick={() => navigate('/portal/pay')}>
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Recharge
                 </Button>
@@ -306,7 +306,7 @@ export default function CustomerDashboard() {
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Reboot Router
                 </Button>
-                <Button variant="outline" className="justify-start">
+                <Button variant="outline" className="justify-start" onClick={() => navigate('/portal/pay')}>
                   <Receipt className="h-4 w-4 mr-2" />
                   Pay Bill
                 </Button>

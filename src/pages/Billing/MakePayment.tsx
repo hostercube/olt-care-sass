@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,20 +6,28 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { usePayments } from '@/hooks/usePayments';
 import { usePaymentGateways } from '@/hooks/usePaymentGateways';
+import { useTenantPaymentGateways } from '@/hooks/useTenantPaymentGateways';
 import { useInvoices } from '@/hooks/useInvoices';
-import { CreditCard, Smartphone, Banknote, CheckCircle } from 'lucide-react';
+import { CreditCard, Smartphone, Banknote, CheckCircle, Loader2, ExternalLink, AlertCircle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import type { PaymentMethod } from '@/types/saas';
+import { initiatePayment, redirectToCheckout, isOnlineGateway, getGatewayDisplayName } from '@/lib/payment-gateway';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function MakePayment() {
   const { tenantId } = useTenantContext();
   const { createPayment } = usePayments();
-  const { gateways, loading: gatewaysLoading } = usePaymentGateways();
+  const { gateways: globalGateways, loading: globalGatewaysLoading } = usePaymentGateways();
+  const { gateways: tenantGateways, loading: tenantGatewaysLoading } = useTenantPaymentGateways();
   const { invoices } = useInvoices(tenantId || undefined);
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | ''>('');
   const [transactionId, setTransactionId] = useState('');
@@ -27,14 +35,61 @@ export default function MakePayment() {
   const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentFailed, setPaymentFailed] = useState(false);
+  const [tenantInfo, setTenantInfo] = useState<any>(null);
+
+  // Check for payment callback status
+  useEffect(() => {
+    const status = searchParams.get('status');
+    const paymentId = searchParams.get('payment_id');
+    
+    if (status === 'success' && paymentId) {
+      setPaymentSuccess(true);
+      toast({
+        title: 'Payment Successful',
+        description: 'Your payment has been processed successfully.',
+      });
+    } else if (status === 'failed' || status === 'cancelled') {
+      setPaymentFailed(true);
+      toast({
+        title: 'Payment Failed',
+        description: 'Your payment could not be processed. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  }, [searchParams, toast]);
+
+  // Fetch tenant info for customer details
+  useEffect(() => {
+    const fetchTenant = async () => {
+      if (!tenantId) return;
+      const { data } = await supabase
+        .from('tenants')
+        .select('name, email, phone')
+        .eq('id', tenantId)
+        .single();
+      if (data) setTenantInfo(data);
+    };
+    fetchTenant();
+  }, [tenantId]);
 
   const unpaidInvoices = invoices.filter(i => i.status === 'unpaid' || i.status === 'overdue');
+  
+  // Combine global and tenant gateways, preferring tenant configs
+  const enabledGateways = tenantGateways.length > 0 
+    ? tenantGateways.filter(g => g.is_enabled)
+    : globalGateways.filter(g => g.is_enabled);
 
-  const enabledGateways = gateways.filter(g => g.is_enabled);
+  const gatewaysLoading = globalGatewaysLoading || tenantGatewaysLoading;
 
   const getGatewayIcon = (method: PaymentMethod) => {
     switch (method) {
       case 'sslcommerz':
+      case 'shurjopay':
+      case 'aamarpay':
+      case 'portwallet':
+      case 'piprapay':
+      case 'uddoktapay':
         return <CreditCard className="h-6 w-6" />;
       case 'bkash':
       case 'nagad':
@@ -47,11 +102,78 @@ export default function MakePayment() {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleOnlinePayment = async () => {
     if (!selectedMethod || !amount || !tenantId) {
       toast({
         title: 'Error',
         description: 'Please fill in all required fields',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      const baseUrl = window.location.origin;
+      const returnUrl = `${baseUrl}/billing/pay`;
+      const cancelUrl = `${baseUrl}/billing/pay`;
+
+      const selectedInvoiceData = selectedInvoice 
+        ? invoices.find(i => i.id === selectedInvoice) 
+        : null;
+
+      const response = await initiatePayment({
+        gateway: selectedMethod,
+        amount: parseFloat(amount),
+        tenant_id: tenantId,
+        invoice_id: selectedInvoiceData?.invoice_number,
+        description: `Subscription Payment${selectedInvoiceData ? ` - ${selectedInvoiceData.invoice_number}` : ''}`,
+        return_url: returnUrl,
+        cancel_url: cancelUrl,
+        customer_name: tenantInfo?.name || 'Customer',
+        customer_email: tenantInfo?.email || '',
+        customer_phone: tenantInfo?.phone || '',
+        payment_for: 'subscription',
+      });
+
+      if (response.success && response.checkout_url) {
+        toast({
+          title: 'Redirecting to Payment Gateway',
+          description: `You will be redirected to ${getGatewayDisplayName(selectedMethod)}...`,
+        });
+        
+        // Small delay to show toast before redirect
+        setTimeout(() => {
+          redirectToCheckout(response.checkout_url!);
+        }, 500);
+      } else if (response.success && !response.checkout_url) {
+        // Manual payment
+        setPaymentSuccess(true);
+        toast({
+          title: 'Payment Record Created',
+          description: 'Please complete your payment manually.',
+        });
+      } else {
+        throw new Error(response.error || 'Payment initiation failed');
+      }
+    } catch (error: any) {
+      console.error('Payment error:', error);
+      toast({
+        title: 'Payment Error',
+        description: error.message || 'Failed to initiate payment. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleManualPayment = async () => {
+    if (!selectedMethod || !amount || !tenantId || !transactionId) {
+      toast({
+        title: 'Error',
+        description: 'Please fill in all required fields including transaction ID',
         variant: 'destructive',
       });
       return;
@@ -63,10 +185,10 @@ export default function MakePayment() {
         tenant_id: tenantId,
         amount: parseFloat(amount),
         payment_method: selectedMethod,
-        transaction_id: transactionId || undefined,
+        transaction_id: transactionId,
         invoice_number: selectedInvoice ? invoices.find(i => i.id === selectedInvoice)?.invoice_number : undefined,
-        status: selectedMethod === 'sslcommerz' ? 'pending' : 'pending',
-        description: `Payment for invoice`,
+        status: 'pending',
+        description: `Manual Payment`,
       });
 
       setPaymentSuccess(true);
@@ -85,6 +207,14 @@ export default function MakePayment() {
     }
   };
 
+  const handleSubmit = () => {
+    if (selectedMethod && isOnlineGateway(selectedMethod)) {
+      handleOnlinePayment();
+    } else {
+      handleManualPayment();
+    }
+  };
+
   if (paymentSuccess) {
     return (
       <DashboardLayout title="Payment Successful">
@@ -94,15 +224,55 @@ export default function MakePayment() {
               <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="h-8 w-8 text-success" />
               </div>
-              <h2 className="text-2xl font-bold mb-2">Payment Submitted!</h2>
+              <h2 className="text-2xl font-bold mb-2">Payment Successful!</h2>
               <p className="text-muted-foreground mb-6">
-                Your payment has been submitted and is pending verification. You will be notified once it's verified.
+                {selectedMethod === 'manual' 
+                  ? 'Your payment has been submitted and is pending verification. You will be notified once it\'s verified.'
+                  : 'Your payment has been processed successfully. Your subscription has been updated.'}
               </p>
               <div className="space-y-2">
-                <Button className="w-full" onClick={() => setPaymentSuccess(false)}>
+                <Button className="w-full" onClick={() => {
+                  setPaymentSuccess(false);
+                  setSelectedMethod('');
+                  setAmount('');
+                  setTransactionId('');
+                  setSelectedInvoice(null);
+                  navigate('/billing/pay', { replace: true });
+                }}>
                   Make Another Payment
                 </Button>
-                <Button variant="outline" className="w-full" onClick={() => window.history.back()}>
+                <Button variant="outline" className="w-full" onClick={() => navigate('/billing/subscription')}>
+                  View Subscription
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (paymentFailed) {
+    return (
+      <DashboardLayout title="Payment Failed">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Card className="max-w-md w-full">
+            <CardContent className="pt-6 text-center">
+              <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <XCircle className="h-8 w-8 text-destructive" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">Payment Failed</h2>
+              <p className="text-muted-foreground mb-6">
+                Your payment could not be processed. Please try again or contact support if the problem persists.
+              </p>
+              <div className="space-y-2">
+                <Button className="w-full" onClick={() => {
+                  setPaymentFailed(false);
+                  navigate('/billing/pay', { replace: true });
+                }}>
+                  Try Again
+                </Button>
+                <Button variant="outline" className="w-full" onClick={() => navigate('/billing/subscription')}>
                   Back to Subscription
                 </Button>
               </div>
@@ -118,8 +288,16 @@ export default function MakePayment() {
       <div className="space-y-6 max-w-3xl mx-auto">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Make Payment</h1>
-          <p className="text-muted-foreground">Pay your subscription or invoice</p>
+          <p className="text-muted-foreground">Pay your subscription or invoice securely</p>
         </div>
+
+        {/* Online Payment Info */}
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Select a payment gateway below. You will be redirected to complete the payment securely.
+          </AlertDescription>
+        </Alert>
 
         {/* Select Invoice */}
         {unpaidInvoices.length > 0 && (
@@ -145,7 +323,7 @@ export default function MakePayment() {
                       </div>
                       <div className="text-right">
                         <p className="font-bold">৳{invoice.total_amount.toLocaleString()}</p>
-                        <Badge variant={invoice.status === 'overdue' ? 'danger' : 'warning'}>
+                        <Badge variant={invoice.status === 'overdue' ? 'destructive' : 'secondary'}>
                           {invoice.status.toUpperCase()}
                         </Badge>
                       </div>
@@ -183,7 +361,10 @@ export default function MakePayment() {
           </CardHeader>
           <CardContent>
             {gatewaysLoading ? (
-              <p>Loading payment methods...</p>
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <span className="ml-2">Loading payment methods...</span>
+              </div>
             ) : enabledGateways.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
                 No payment methods available. Please contact support.
@@ -191,38 +372,51 @@ export default function MakePayment() {
             ) : (
               <RadioGroup value={selectedMethod} onValueChange={(v) => setSelectedMethod(v as PaymentMethod)}>
                 <div className="grid gap-4 md:grid-cols-2">
-                  {enabledGateways.map((gateway) => (
-                    <label
-                      key={gateway.id}
-                      className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-colors ${
-                        selectedMethod === gateway.gateway ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
-                      }`}
-                    >
-                      <RadioGroupItem value={gateway.gateway} />
-                      {getGatewayIcon(gateway.gateway)}
-                      <div>
-                        <p className="font-medium">{gateway.display_name}</p>
-                        {gateway.instructions && (
-                          <p className="text-sm text-muted-foreground line-clamp-1">{gateway.instructions}</p>
-                        )}
-                      </div>
-                    </label>
-                  ))}
+                  {enabledGateways.map((gateway) => {
+                    const gatewayMethod = gateway.gateway as PaymentMethod;
+                    const isOnline = isOnlineGateway(gatewayMethod);
+                    
+                    return (
+                      <label
+                        key={gateway.id}
+                        className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-colors ${
+                          selectedMethod === gatewayMethod ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                        }`}
+                      >
+                        <RadioGroupItem value={gatewayMethod} />
+                        {getGatewayIcon(gatewayMethod)}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{gateway.display_name}</p>
+                            {isOnline && (
+                              <Badge variant="secondary" className="text-xs">
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                Online
+                              </Badge>
+                            )}
+                          </div>
+                          {gateway.instructions && (
+                            <p className="text-sm text-muted-foreground line-clamp-1">{gateway.instructions}</p>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               </RadioGroup>
             )}
           </CardContent>
         </Card>
 
-        {/* Transaction Details */}
-        {selectedMethod && selectedMethod !== 'sslcommerz' && (
+        {/* Transaction Details - Only for manual payments */}
+        {selectedMethod && !isOnlineGateway(selectedMethod) && (
           <Card>
             <CardHeader>
               <CardTitle>Transaction Details</CardTitle>
               <CardDescription>
                 {selectedMethod === 'manual'
                   ? 'Enter bank transfer reference number'
-                  : `Enter your ${selectedMethod.toUpperCase()} transaction ID`}
+                  : `Enter your ${selectedMethod.toUpperCase()} transaction ID after completing payment`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -247,14 +441,18 @@ export default function MakePayment() {
 
         {/* Submit */}
         <div className="flex justify-end gap-4">
-          <Button variant="outline" onClick={() => window.history.back()}>
+          <Button variant="outline" onClick={() => navigate('/billing/subscription')}>
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!selectedMethod || !amount || isSubmitting}
+            disabled={!selectedMethod || !amount || isSubmitting || (!isOnlineGateway(selectedMethod as PaymentMethod) && !transactionId)}
           >
-            {isSubmitting ? 'Processing...' : 'Submit Payment'}
+            {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {isSubmitting ? 'Processing...' : 
+              (selectedMethod && isOnlineGateway(selectedMethod as PaymentMethod)) 
+                ? `Pay with ${getGatewayDisplayName(selectedMethod as PaymentMethod)}` 
+                : 'Submit Payment'}
           </Button>
         </div>
       </div>
