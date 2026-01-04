@@ -31,8 +31,15 @@ const GATEWAY_CONFIGS = {
     live: 'https://api.pipra.com.bd/api/v1/checkout',
   },
   bkash: {
-    sandbox: 'https://tokenized.sandbox.bka.sh/v1.2.0-beta',
-    live: 'https://tokenized.pay.bka.sh/v1.2.0-beta',
+    // Tokenized API (new)
+    tokenizedSandbox: 'https://tokenized.sandbox.bka.sh/v1.2.0-beta',
+    tokenizedLive: 'https://tokenized.pay.bka.sh/v1.2.0-beta',
+    // PGW Checkout.js (old)
+    pgwSandbox: 'https://checkout.sandbox.bka.sh/v1.2.0-beta',
+    pgwLive: 'https://checkout.pay.bka.sh/v1.2.0-beta',
+    // Checkout.js script
+    checkoutJsSandbox: 'https://scripts.sandbox.bka.sh/versions/1.2.0-beta/checkout/bKash-checkout.js',
+    checkoutJsLive: 'https://scripts.pay.bka.sh/versions/1.2.0-beta/checkout/bKash-checkout.js',
   },
   nagad: {
     sandbox: 'https://api.mynagad.com/api/dfs/check-out/initialize',
@@ -315,11 +322,18 @@ async function initiatePipraPay(config, paymentData) {
 }
 
 /**
- * Initiate bKash payment
+ * Initiate bKash payment - supports both Tokenized and PGW Checkout.js modes
  */
 async function initiateBkash(config, paymentData) {
-  const { app_key, app_secret, username, password, is_sandbox } = config;
-  const baseUrl = is_sandbox ? GATEWAY_CONFIGS.bkash.sandbox : GATEWAY_CONFIGS.bkash.live;
+  const { app_key, app_secret, username, password, is_sandbox, bkash_mode } = config;
+  const mode = bkash_mode || 'tokenized';
+
+  if (mode === 'checkout_js') {
+    return initiateBkashCheckoutJS(config, paymentData);
+  }
+
+  // Default: Tokenized API
+  const baseUrl = is_sandbox ? GATEWAY_CONFIGS.bkash.tokenizedSandbox : GATEWAY_CONFIGS.bkash.tokenizedLive;
 
   try {
     // Get grant token
@@ -337,9 +351,10 @@ async function initiateBkash(config, paymentData) {
     });
 
     const grantData = await grantResponse.json();
+    logger.info('bKash Tokenized grant response:', grantData);
 
     if (!grantData.id_token) {
-      return { success: false, error: 'Failed to get bKash token' };
+      return { success: false, error: grantData.statusMessage || 'Failed to get bKash token' };
     }
 
     // Create payment
@@ -362,7 +377,7 @@ async function initiateBkash(config, paymentData) {
     });
 
     const paymentResult = await paymentResponse.json();
-    logger.info('bKash response:', paymentResult);
+    logger.info('bKash Tokenized create response:', paymentResult);
 
     if (paymentResult.bkashURL) {
       return {
@@ -374,7 +389,87 @@ async function initiateBkash(config, paymentData) {
       return { success: false, error: paymentResult.statusMessage || 'bKash initialization failed' };
     }
   } catch (error) {
-    logger.error('bKash error:', error);
+    logger.error('bKash Tokenized error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Initiate bKash payment using PGW Checkout.js (old method)
+ * This mode returns config for client-side Checkout.js popup instead of a redirect URL.
+ */
+async function initiateBkashCheckoutJS(config, paymentData) {
+  const { app_key, app_secret, username, password, is_sandbox } = config;
+  const baseUrl = is_sandbox ? GATEWAY_CONFIGS.bkash.pgwSandbox : GATEWAY_CONFIGS.bkash.pgwLive;
+  const scriptUrl = is_sandbox ? GATEWAY_CONFIGS.bkash.checkoutJsSandbox : GATEWAY_CONFIGS.bkash.checkoutJsLive;
+
+  try {
+    // Grant token
+    const grantResponse = await fetch(`${baseUrl}/checkout/token/grant`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        username,
+        password,
+      },
+      body: JSON.stringify({
+        app_key,
+        app_secret,
+      }),
+    });
+
+    const grantData = await grantResponse.json();
+    logger.info('bKash PGW grant response:', grantData);
+
+    if (!grantData.id_token) {
+      return { success: false, error: grantData.statusMessage || 'Failed to get bKash PGW token' };
+    }
+
+    // Create payment
+    const createResponse = await fetch(`${baseUrl}/checkout/payment/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: grantData.id_token,
+        'X-App-Key': app_key,
+      },
+      body: JSON.stringify({
+        mode: '0011',
+        payerReference: paymentData.customer_phone || '01700000000',
+        callbackURL: paymentData.return_url,
+        amount: paymentData.amount.toString(),
+        currency: 'BDT',
+        intent: 'sale',
+        merchantInvoiceNumber: paymentData.transaction_id,
+      }),
+    });
+
+    const createData = await createResponse.json();
+    logger.info('bKash PGW create response:', createData);
+
+    if (createData.paymentID) {
+      // PGW Checkout.js mode: return config for client-side popup
+      return {
+        success: true,
+        checkout_url: null, // No redirect; client will use popup
+        payment_id: createData.paymentID,
+        bkash_mode: 'checkout_js',
+        bkash_config: {
+          paymentID: createData.paymentID,
+          scriptUrl,
+          baseUrl,
+          app_key,
+          id_token: grantData.id_token,
+          merchantInvoiceNumber: paymentData.transaction_id,
+          amount: paymentData.amount.toString(),
+          currency: 'BDT',
+        },
+      };
+    } else {
+      return { success: false, error: createData.statusMessage || 'bKash PGW create failed' };
+    }
+  } catch (error) {
+    logger.error('bKash PGW Checkout.js error:', error);
     return { success: false, error: error.message };
   }
 }
@@ -496,9 +591,13 @@ export async function initiatePayment(supabase, gateway, paymentData) {
     };
   }
 
+  // bkash_mode from config (tenant gateway setting)
+  const bkashMode = tenantGateway?.bkash_mode || configData.bkash_mode || 'tokenized';
+
   const config = {
     ...configData,
     is_sandbox: isSandbox,
+    bkash_mode: bkashMode,
   };
 
   // Send gateways to backend callback URL (handles POST + redirects to SPA)
@@ -556,6 +655,7 @@ export async function initiatePayment(supabase, gateway, paymentData) {
           customer_id: paymentData.customer_id,
           gateway_callback_url: gatewayCallbackUrl,
           gateway_init: result,
+          bkash_mode: gateway === 'bkash' ? bkashMode : undefined,
         },
       })
       .select()
@@ -570,6 +670,8 @@ export async function initiatePayment(supabase, gateway, paymentData) {
       payment_id: payment?.id,
       transaction_id: transactionId,
       checkout_url: result.checkout_url,
+      bkash_mode: result.bkash_mode || null,
+      bkash_config: result.bkash_config || null,
     };
   }
 

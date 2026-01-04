@@ -394,9 +394,15 @@ export const PAYMENT_GATEWAYS = [
   { 
     id: 'bkash', 
     name: 'bKash', 
-    description: 'Mobile banking',
-    fields: ['app_key', 'app_secret', 'username', 'password'],
-    fieldLabels: { app_key: 'App Key', app_secret: 'App Secret', username: 'Username', password: 'Password' }
+    description: 'Mobile banking (Tokenized or PGW Checkout)',
+    fields: ['app_key', 'app_secret', 'username', 'password', 'bkash_mode'],
+    fieldLabels: { 
+      app_key: 'App Key', 
+      app_secret: 'App Secret', 
+      username: 'Username (PGW)', 
+      password: 'Password (PGW)',
+      bkash_mode: 'Mode (tokenized/checkout_js)'
+    }
   },
   { 
     id: 'rocket', 
