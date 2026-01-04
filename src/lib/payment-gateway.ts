@@ -103,7 +103,7 @@ export function isOnlineGateway(gateway: PaymentMethod): boolean {
 
 // Get callback URL for payment gateways
 export function getPaymentCallbackUrl(gateway: string): string {
-  // Use non-/api path because some Nginx setups don't proxy /api/* correctly.
-  // Backend supports both /payments/callback/:gateway and /api/payments/callback/:gateway.
+  // MUST use /olt-polling-server path because Nginx proxies this to the backend
+  // Without this prefix, Nginx tries to serve static files and returns 405 on POST
   return `${VPS_URL}/payments/callback/${gateway}`;
 }

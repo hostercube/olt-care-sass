@@ -1931,13 +1931,12 @@ app.post('/api/payments/initiate', async (req, res) => {
     }
 
     // Build a public base URL for gateway callbacks (handles POST callbacks safely)
-    const forwardedProto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').toString().split(',')[0].trim();
-    const forwardedHost = (req.headers['x-forwarded-host'] || req.get('host') || '').toString().split(',')[0].trim();
-    const baseUrl = process.env.PUBLIC_BASE_URL || `${forwardedProto}://${forwardedHost}`;
-
-    // NOTE: many Nginx configs only proxy /payments/* but not /api/*.
-    // So we use the non-/api callback URL (server still supports both).
-    const gatewayCallbackUrl = `${baseUrl}/payments/callback/${gateway}`;
+    // IMPORTANT: Nginx proxies /olt-polling-server/* to the backend, so we MUST use that path
+    // for payment gateway callbacks since they POST to the callback URL.
+    const baseUrl = process.env.PUBLIC_BASE_URL || 'https://oltapp.isppoint.com';
+    
+    // Use /olt-polling-server/payments/callback/:gateway because Nginx proxies this path to backend
+    const gatewayCallbackUrl = `${baseUrl}/olt-polling-server/payments/callback/${gateway}`;
 
     const result = await initiatePayment(supabase, gateway, {
       amount,
