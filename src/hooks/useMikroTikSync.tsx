@@ -51,89 +51,79 @@ export function useMikroTikSync() {
     };
   };
 
-  // Sync PPPoE users from MikroTik to software
+  // Sync PPPoE users from MikroTik to software (creates customers)
   const syncPPPoEUsers = useCallback(async (routerId: string): Promise<SyncResult> => {
     setSyncingRouter(routerId);
     try {
-      const mikrotik = await getRouterConfig(routerId);
-      if (!mikrotik) throw new Error('Router not found');
-
-      const response = await fetch(`${apiBase}/api/test-mikrotik`, {
+      const response = await fetch(`${apiBase}/api/mikrotik/sync/pppoe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mikrotik }),
+        body: JSON.stringify({ routerId, tenantId }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        await supabase
-          .from('mikrotik_routers')
-          .update({ last_synced: new Date().toISOString(), status: 'online' })
-          .eq('id', routerId);
-
-        toast.success(`PPPoE sync completed! ${result.data?.pppoe_count || 0} active sessions, ${result.data?.secrets_count || 0} secrets.`);
-        return { success: true, pppoeUsers: result.data?.secrets_count || 0 };
+        toast.success(`PPPoE sync: ${result.secrets || 0} secrets found, ${result.customersInserted || 0} customers created`);
+        return { success: true, pppoeUsers: result.secrets || 0 };
       } else {
         throw new Error(result.error || 'Sync failed');
       }
     } catch (err: any) {
       console.error('PPPoE sync error:', err);
-      toast.error('Failed to sync PPPoE users');
+      toast.error(err.message || 'Failed to sync PPPoE users');
       return { success: false, error: err.message };
     } finally {
       setSyncingRouter(null);
     }
-    }, [apiBase]);
+  }, [apiBase, tenantId]);
 
   // Sync packages/queues from MikroTik
   const syncQueues = useCallback(async (routerId: string): Promise<SyncResult> => {
     setSyncingRouter(routerId);
     try {
-      await supabase
-        .from('mikrotik_routers')
-        .update({ last_synced: new Date().toISOString(), status: 'online' })
-        .eq('id', routerId);
+      const response = await fetch(`${apiBase}/api/mikrotik/sync/queues`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ routerId, tenantId }),
+      });
 
-      toast.success('Queue sync completed!');
-      return { success: true, queues: 0 };
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success(`Package sync: ${result.profiles || 0} profiles, ${result.packagesCreated || 0} created, ${result.packagesUpdated || 0} updated`);
+        return { success: true, queues: result.profiles || 0 };
+      } else {
+        throw new Error(result.error || 'Sync failed');
+      }
     } catch (err: any) {
       console.error('Queue sync error:', err);
-      toast.error('Failed to sync queues');
+      toast.error(err.message || 'Failed to sync queues');
       return { success: false, error: err.message };
     } finally {
       setSyncingRouter(null);
     }
-  }, []);
+  }, [apiBase, tenantId]);
 
   // Full sync - PPPoE users + Queues + Active sessions
   const fullSync = useCallback(async (routerId: string): Promise<SyncResult> => {
     setSyncing(true);
     setSyncingRouter(routerId);
     try {
-      const mikrotik = await getRouterConfig(routerId);
-      if (!mikrotik) throw new Error('Router not found');
-
-      const response = await fetch(`${apiBase}/api/test-mikrotik`, {
+      const response = await fetch(`${apiBase}/api/mikrotik/sync/full`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mikrotik }),
+        body: JSON.stringify({ routerId, tenantId }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        await supabase
-          .from('mikrotik_routers')
-          .update({ last_synced: new Date().toISOString(), status: 'online' })
-          .eq('id', routerId);
-
         toast.success(
-          `Full sync: ${result.data?.pppoe_count || 0} PPPoE, ${result.data?.secrets_count || 0} secrets, ${result.data?.arp_count || 0} ARP`
+          `Full sync: ${result.profiles || 0} profiles, ${result.secrets || 0} secrets, ${result.packagesCreated || 0} packages, ${result.customersInserted || 0} customers`
         );
-        return { success: true, pppoeUsers: result.data?.secrets_count || 0, activeUsers: result.data?.pppoe_count || 0 };
+        return { success: true, pppoeUsers: result.secrets || 0, activeUsers: result.activeSessions || 0 };
       } else {
-        await supabase.from('mikrotik_routers').update({ status: 'offline' }).eq('id', routerId);
         throw new Error(result.error || 'Sync failed');
       }
     } catch (err: any) {
@@ -144,7 +134,7 @@ export function useMikroTikSync() {
       setSyncing(false);
       setSyncingRouter(null);
     }
-    }, [apiBase]);
+  }, [apiBase, tenantId]);
 
   // Create PPPoE user on MikroTik when customer is created
   const createPPPoEUser = useCallback(async (
