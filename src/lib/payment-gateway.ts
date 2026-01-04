@@ -10,8 +10,19 @@ export interface PaymentInitiateRequest {
   invoice_id?: string;
   customer_id?: string;
   description?: string;
+
+  /**
+   * Where the gateway should send success/fail callbacks (backend URL).
+   * If omitted, backend will fall back to return_url.
+   */
+  gateway_callback_url?: string;
+
+  /**
+   * SPA routes where user should finally land after backend processes callback.
+   */
   return_url: string;
   cancel_url: string;
+
   customer_name?: string;
   customer_email?: string;
   customer_phone?: string;
