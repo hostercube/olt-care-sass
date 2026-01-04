@@ -127,6 +127,7 @@ export default function TenantManagement() {
     const variants: Record<TenantStatus, 'default' | 'success' | 'warning' | 'destructive'> = {
       active: 'success',
       trial: 'warning',
+      pending: 'warning',
       suspended: 'destructive',
       cancelled: 'default',
     };
