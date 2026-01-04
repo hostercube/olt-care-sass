@@ -25,6 +25,7 @@ import { logger } from './utils/logger.js';
 import { updateUserPassword, isUserAdmin } from './admin/user-admin.js';
 import { getNotificationSettings, notifyAlert, testSmtpConnection, sendTestEmail, sendTestTelegram, sendTestWhatsApp } from './notifications/notifier.js';
 import { processPendingSMS, getSMSGatewaySettings, sendSMS } from './notifications/sms-sender.js';
+import { initiatePayment, handlePaymentCallback } from './payments/payment-handler.js';
 
 const app = express();
 app.use(cors());
@@ -1721,6 +1722,106 @@ cron.schedule('*/10 * * * * *', async () => {
     await processPendingSMS(supabase);
   } catch (err) {
     logger.error('SMS processing error:', err);
+  }
+});
+
+// ============= PAYMENT GATEWAY ENDPOINTS =============
+// Initiate payment
+app.post('/api/payments/initiate', async (req, res) => {
+  try {
+    const { gateway, amount, tenant_id, invoice_id, customer_id, description, return_url, cancel_url, customer_name, customer_email, customer_phone, payment_for } = req.body;
+
+    if (!gateway || !amount || !tenant_id || !return_url) {
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+
+    const result = await initiatePayment(supabase, gateway, {
+      amount,
+      tenant_id,
+      invoice_id,
+      customer_id,
+      description,
+      return_url,
+      cancel_url: cancel_url || return_url,
+      customer_name,
+      customer_email,
+      customer_phone,
+      payment_for,
+    });
+
+    res.json(result);
+  } catch (error) {
+    logger.error('Payment initiation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Also without /api prefix
+app.post('/payments/initiate', async (req, res) => {
+  req.url = '/api/payments/initiate';
+  app.handle(req, res);
+});
+
+// Payment callback handler (GET for redirects)
+app.get('/api/payments/callback/:gateway', async (req, res) => {
+  try {
+    const { gateway } = req.params;
+    const callbackData = req.query;
+
+    const result = await handlePaymentCallback(supabase, gateway, callbackData);
+
+    if (result.redirect_url) {
+      return res.redirect(result.redirect_url);
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error('Payment callback error:', error);
+    res.redirect('/?status=error&message=' + encodeURIComponent(error.message));
+  }
+});
+
+// Payment callback handler (POST for IPNs)
+app.post('/api/payments/callback/:gateway', async (req, res) => {
+  try {
+    const { gateway } = req.params;
+    const callbackData = { ...req.query, ...req.body };
+
+    const result = await handlePaymentCallback(supabase, gateway, callbackData);
+
+    res.json(result);
+  } catch (error) {
+    logger.error('Payment IPN error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Without /api prefix
+app.get('/payments/callback/:gateway', async (req, res) => {
+  req.url = '/api/payments/callback/' + req.params.gateway;
+  req.params = { gateway: req.params.gateway };
+  try {
+    const callbackData = req.query;
+    const result = await handlePaymentCallback(supabase, req.params.gateway, callbackData);
+    if (result.redirect_url) {
+      return res.redirect(result.redirect_url);
+    }
+    res.json(result);
+  } catch (error) {
+    logger.error('Payment callback error:', error);
+    res.redirect('/?status=error&message=' + encodeURIComponent(error.message));
+  }
+});
+
+app.post('/payments/callback/:gateway', async (req, res) => {
+  try {
+    const { gateway } = req.params;
+    const callbackData = { ...req.query, ...req.body };
+    const result = await handlePaymentCallback(supabase, gateway, callbackData);
+    res.json(result);
+  } catch (error) {
+    logger.error('Payment IPN error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

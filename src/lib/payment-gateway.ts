@@ -1,5 +1,7 @@
-import { supabase } from "@/integrations/supabase/client";
 import type { PaymentMethod } from "@/types/saas";
+
+// Get VPS URL from environment or default
+const VPS_URL = import.meta.env.VITE_VPS_URL || 'http://localhost:3001';
 
 export interface PaymentInitiateRequest {
   gateway: PaymentMethod;
@@ -26,15 +28,20 @@ export interface PaymentInitiateResponse {
 
 export async function initiatePayment(request: PaymentInitiateRequest): Promise<PaymentInitiateResponse> {
   try {
-    const { data, error } = await supabase.functions.invoke('initiate-payment', {
-      body: request,
+    const response = await fetch(`${VPS_URL}/api/payments/initiate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
     });
 
-    if (error) {
-      console.error('Payment initiation error:', error);
+    const data = await response.json();
+
+    if (!response.ok) {
       return {
         success: false,
-        error: error.message || 'Failed to initiate payment',
+        error: data.error || 'Failed to initiate payment',
       };
     }
 
@@ -79,4 +86,9 @@ export function getGatewayDisplayName(gateway: PaymentMethod): string {
 
 export function isOnlineGateway(gateway: PaymentMethod): boolean {
   return gateway !== 'manual' && gateway !== 'rocket';
+}
+
+// Get callback URL for payment gateways
+export function getPaymentCallbackUrl(gateway: string): string {
+  return `${VPS_URL}/api/payments/callback/${gateway}`;
 }
