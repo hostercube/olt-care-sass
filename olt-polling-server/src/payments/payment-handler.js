@@ -334,10 +334,22 @@ async function initiatePipraPay(config, paymentData) {
 async function initiateBkash(config, paymentData) {
   const { app_key, app_secret, username, password, is_sandbox, bkash_mode } = config;
   
-  // Validate required credentials
-  if (!app_key || !app_secret || !username || !password) {
-    logger.error('bKash credentials not configured:', { app_key: !!app_key, app_secret: !!app_secret, username: !!username, password: !!password });
-    return { success: false, error: 'bKash credentials not configured. Please configure app_key, app_secret, username and password in gateway settings.' };
+  // Validate required credentials with user-friendly error
+  if (!app_key) {
+    logger.error('bKash app_key not configured');
+    return { success: false, error: 'bKash App Key not configured. Please go to Gateway Settings and configure your bKash credentials.' };
+  }
+  if (!app_secret) {
+    logger.error('bKash app_secret not configured');
+    return { success: false, error: 'bKash App Secret not configured. Please go to Gateway Settings and configure your bKash credentials.' };
+  }
+  if (!username) {
+    logger.error('bKash username not configured');
+    return { success: false, error: 'bKash Username not configured. Please go to Gateway Settings and configure your bKash credentials.' };
+  }
+  if (!password) {
+    logger.error('bKash password not configured');
+    return { success: false, error: 'bKash Password not configured. Please go to Gateway Settings and configure your bKash credentials.' };
   }
   
   const mode = bkash_mode || 'tokenized';
