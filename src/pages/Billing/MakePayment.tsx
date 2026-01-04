@@ -157,76 +157,14 @@ export default function MakePayment() {
   };
 
   // Handle bKash payment - redirect to bKash URL
-  const handleBkashRedirect = async (bkashConfig: any, checkoutUrl: string | null, paymentId: string) => {
-    try {
-      // If checkout_url (bkashURL) is available, redirect directly
-      if (checkoutUrl) {
-        toast({
-          title: 'Redirecting to bKash',
-          description: 'You will be redirected to complete payment...',
-        });
-        setTimeout(() => {
-          window.location.href = checkoutUrl;
-        }, 500);
-        return;
-      }
-
-      // If bkashURL is in config, use that
-      if (bkashConfig?.bkashURL) {
-        toast({
-          title: 'Redirecting to bKash',
-          description: 'You will be redirected to complete payment...',
-        });
-        setTimeout(() => {
-          window.location.href = bkashConfig.bkashURL;
-        }, 500);
-        return;
-      }
-
-      // Fallback: Call backend to get redirect URL
-      const VPS_URL = import.meta.env.VITE_POLLING_SERVER_URL || import.meta.env.VITE_VPS_URL || 'https://oltapp.isppoint.com/olt-polling-server';
-      
-      toast({
-        title: 'Processing bKash Payment',
-        description: 'Setting up payment...',
-      });
-
-      const response = await fetch(`${VPS_URL}/api/payments/bkash/checkout-redirect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paymentID: bkashConfig?.paymentID,
-          payment_id: paymentId,
-          tenant_id: tenantId,
-          return_url: `${window.location.origin}/billing/pay`,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.bkashURL) {
-        window.location.href = data.bkashURL;
-      } else if (data.success) {
-        toast({
-          title: 'bKash Payment Created',
-          description: 'Please check your bKash app to complete the payment.',
-        });
-        // Wait and refresh to check status
-        setTimeout(() => {
-          window.location.href = `${window.location.origin}/billing/pay?payment_id=${paymentId}&status=pending`;
-        }, 3000);
-      } else {
-        throw new Error(data.error || 'Failed to process bKash payment');
-      }
-    } catch (error: any) {
-      console.error('bKash payment error:', error);
-      toast({
-        title: 'bKash Payment Error',
-        description: error.message || 'Failed to process bKash payment. Please try again.',
-        variant: 'destructive',
-      });
-      setIsSubmitting(false);
-    }
+  const handleBkashRedirect = (checkoutUrl: string) => {
+    toast({
+      title: 'Redirecting to bKash',
+      description: 'You will be redirected to complete payment...',
+    });
+    setTimeout(() => {
+      window.location.href = checkoutUrl;
+    }, 500);
   };
 
   const handleOnlinePayment = async () => {
@@ -263,21 +201,13 @@ export default function MakePayment() {
       });
 
       // bKash payment - handle redirect
-      if (response.success && (response.bkash_mode === 'checkout_js' || response.bkash_mode === 'tokenized' || selectedMethod === 'bkash')) {
-        // Redirect to bKash URL if available
+      if (response.success && selectedMethod === 'bkash') {
         if (response.checkout_url) {
-          toast({
-            title: 'Redirecting to bKash',
-            description: 'You will be redirected to complete payment...',
-          });
-          setTimeout(() => {
-            redirectToCheckout(response.checkout_url!);
-          }, 500);
+          handleBkashRedirect(response.checkout_url);
           return;
+        } else {
+          throw new Error('bKash payment initialization failed - no redirect URL received');
         }
-        // Handle via bkash_config or fallback
-        await handleBkashRedirect(response.bkash_config, response.checkout_url, response.payment_id || '');
-        return;
       }
 
       if (response.success && response.checkout_url) {

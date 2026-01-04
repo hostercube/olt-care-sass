@@ -410,9 +410,8 @@ async function initiateBkash(config, paymentData) {
 
 /**
  * Initiate bKash payment using PGW Checkout.js (old method)
- * This mode can either:
- * 1. Return a bkashURL for redirect (if available)
- * 2. Return config for client-side Checkout.js popup
+ * Now uses redirect flow (same as Tokenized) since popup requires complex client-side handling.
+ * PGW Checkout.js API actually supports the same redirect flow as Tokenized API.
  */
 async function initiateBkashCheckoutJS(config, paymentData) {
   const { app_key, app_secret, username, password, is_sandbox } = config;
@@ -423,8 +422,8 @@ async function initiateBkashCheckoutJS(config, paymentData) {
     return { success: false, error: 'bKash credentials not configured. Please configure app_key, app_secret, username and password in gateway settings.' };
   }
   
+  // Use the PGW endpoint which also supports redirect flow
   const baseUrl = is_sandbox ? GATEWAY_CONFIGS.bkash.pgwSandbox : GATEWAY_CONFIGS.bkash.pgwLive;
-  const scriptUrl = is_sandbox ? GATEWAY_CONFIGS.bkash.checkoutJsSandbox : GATEWAY_CONFIGS.bkash.checkoutJsLive;
 
   try {
     // Grant token
@@ -448,7 +447,7 @@ async function initiateBkashCheckoutJS(config, paymentData) {
       return { success: false, error: grantData.statusMessage || 'Failed to get bKash PGW token. Check your credentials.' };
     }
 
-    // Create payment
+    // Create payment with redirect mode
     const createResponse = await fetch(`${baseUrl}/checkout/payment/create`, {
       method: 'POST',
       headers: {
@@ -471,35 +470,89 @@ async function initiateBkashCheckoutJS(config, paymentData) {
     logger.info('bKash PGW create response:', createData);
 
     if (createData.paymentID) {
-      // Check if bkashURL is available for direct redirect
+      // bkashURL should be available for redirect
       if (createData.bkashURL) {
         return {
           success: true,
-          checkout_url: createData.bkashURL, // Direct redirect to bKash
+          checkout_url: createData.bkashURL,
           payment_id: createData.paymentID,
           bkash_mode: 'checkout_js',
         };
       }
       
-      // PGW Checkout.js mode: return config for client-side handling
-      return {
-        success: true,
-        checkout_url: null, // No direct redirect; client needs to handle
-        payment_id: createData.paymentID,
-        bkash_mode: 'checkout_js',
-        bkash_config: {
-          paymentID: createData.paymentID,
-          scriptUrl,
-          baseUrl,
+      // If bkashURL is not available, try to execute payment to get redirect URL
+      // This can happen with some bKash configurations
+      logger.warn('bKash PGW did not return bkashURL, trying execute endpoint');
+      
+      // Execute the payment to get the actual payment page
+      const executeResponse = await fetch(`${baseUrl}/checkout/payment/execute/${createData.paymentID}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: grantData.id_token,
+          'X-App-Key': app_key,
+        },
+      });
+      
+      const executeData = await executeResponse.json();
+      logger.info('bKash PGW execute response:', executeData);
+      
+      // If we still can't get a redirect URL, fall back to Tokenized API
+      logger.warn('bKash PGW execute did not return redirect, falling back to Tokenized API');
+      
+      // Use Tokenized API as fallback (it always provides bkashURL)
+      const tokenizedBaseUrl = config.is_sandbox ? GATEWAY_CONFIGS.bkash.tokenizedSandbox : GATEWAY_CONFIGS.bkash.tokenizedLive;
+      
+      const tokenGrantResponse = await fetch(`${tokenizedBaseUrl}/tokenized/checkout/token/grant`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          username,
+          password,
+        },
+        body: JSON.stringify({
           app_key,
-          id_token: grantData.id_token,
-          merchantInvoiceNumber: paymentData.transaction_id,
+          app_secret,
+        }),
+      });
+      
+      const tokenGrantData = await tokenGrantResponse.json();
+      
+      if (!tokenGrantData.id_token) {
+        return { success: false, error: 'bKash payment setup failed. Please try again.' };
+      }
+      
+      const tokenPaymentResponse = await fetch(`${tokenizedBaseUrl}/tokenized/checkout/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: tokenGrantData.id_token,
+          'X-App-Key': app_key,
+        },
+        body: JSON.stringify({
+          mode: '0011',
+          payerReference: paymentData.customer_phone || '01700000000',
+          callbackURL: paymentData.return_url,
           amount: paymentData.amount.toString(),
           currency: 'BDT',
-          // Include bkashURL if available for fallback
-          bkashURL: createData.bkashURL || null,
-        },
-      };
+          intent: 'sale',
+          merchantInvoiceNumber: paymentData.transaction_id,
+        }),
+      });
+      
+      const tokenPaymentResult = await tokenPaymentResponse.json();
+      logger.info('bKash Tokenized fallback response:', tokenPaymentResult);
+      
+      if (tokenPaymentResult.bkashURL) {
+        return {
+          success: true,
+          checkout_url: tokenPaymentResult.bkashURL,
+          payment_id: tokenPaymentResult.paymentID,
+          bkash_mode: 'tokenized',
+        };
+      }
+      
+      return { success: false, error: tokenPaymentResult.statusMessage || 'bKash payment initialization failed' };
     } else {
       return { success: false, error: createData.statusMessage || 'bKash PGW create failed' };
     }
@@ -626,8 +679,8 @@ export async function initiatePayment(supabase, gateway, paymentData) {
     };
   }
 
-  // bkash_mode from config (tenant gateway setting)
-  const bkashMode = tenantGateway?.bkash_mode || configData.bkash_mode || 'tokenized';
+  // bkash_mode from column first, then config fallback
+  const bkashMode = gatewayConfig?.bkash_mode || configData.bkash_mode || 'tokenized';
 
   const config = {
     ...configData,

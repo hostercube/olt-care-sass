@@ -60,7 +60,15 @@ export default function ISPGatewaySettings() {
     if (gateways.length > 0) {
       const configs: Record<string, TenantPaymentGateway> = {};
       gateways.forEach(gw => {
-        configs[gw.gateway] = gw;
+        // Include bkash_mode in config for UI display
+        const gwConfig = { ...(gw.config || {}) };
+        if (gw.gateway === 'bkash' && gw.bkash_mode) {
+          gwConfig.bkash_mode = gw.bkash_mode;
+        }
+        configs[gw.gateway] = {
+          ...gw,
+          config: gwConfig,
+        };
       });
       setPaymentConfigs(configs);
     }
@@ -217,14 +225,12 @@ export default function ISPGatewaySettings() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="tokenized">Tokenized (Redirect)</SelectItem>
-                  <SelectItem value="checkout_js">PGW Checkout.js (Popup)</SelectItem>
+                  <SelectItem value="tokenized">Tokenized API (Redirect)</SelectItem>
+                  <SelectItem value="checkout_js">PGW Checkout.js (Redirect)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {(config.config as any)?.bkash_mode === 'checkout_js' 
-                  ? 'Old PGW method using in-page popup.' 
-                  : 'New tokenized API with redirect to bKash.'}
+                Both modes redirect to bKash for payment. Tokenized uses newer API.
               </p>
             </div>
           )}
