@@ -65,7 +65,7 @@ export function ImportCustomersDialog({ open, onOpenChange, onSuccess }: ImportC
               <p className="font-medium text-sm">Download Template</p>
               <p className="text-xs text-muted-foreground">Get the CSV template with all required columns</p>
             </div>
-            <Button variant="outline" size="sm" onClick={downloading}>
+            <Button variant="outline" size="sm" onClick={() => downloading()}>
               <Download className="h-4 w-4 mr-2" />
               Template
             </Button>
