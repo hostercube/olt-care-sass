@@ -1725,15 +1725,192 @@ cron.schedule('*/10 * * * * *', async () => {
   }
 });
 
+// ============= AUTH / SIGNUP ENDPOINTS =============
+// Completes SaaS signup by creating tenant + linking user (uses service key, so avoids RLS issues on client)
+app.post('/api/auth/complete-signup', async (req, res) => {
+  try {
+    const {
+      user_id,
+      email,
+      company_name,
+      owner_name,
+      phone,
+      division,
+      district,
+      upazila,
+      address,
+      package_id,
+      billing_cycle,
+      trial_days,
+    } = req.body || {};
+
+    if (!user_id || !email || !company_name || !owner_name) {
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+
+    // Idempotency: if user already linked, return existing tenant
+    const { data: existingLink } = await supabase
+      .from('tenant_users')
+      .select('tenant_id')
+      .eq('user_id', user_id)
+      .maybeSingle();
+
+    if (existingLink?.tenant_id) {
+      return res.json({ success: true, tenant_id: existingLink.tenant_id, existing: true });
+    }
+
+    // Verify user exists (prevents creating tenants for non-existent users)
+    const { data: userResult, error: userErr } = await supabase.auth.admin.getUserById(user_id);
+    if (userErr || !userResult?.user) {
+      return res.status(400).json({ success: false, error: 'Invalid user' });
+    }
+    if ((userResult.user.email || '').toLowerCase() !== String(email).toLowerCase()) {
+      return res.status(400).json({ success: false, error: 'Email mismatch' });
+    }
+
+    const trialDaysNum = Number.isFinite(Number(trial_days)) ? Number(trial_days) : 14;
+    const requiresPayment = trialDaysNum === 0;
+    const tenantStatus = requiresPayment ? 'pending' : 'trial';
+    const trialEndsAt = requiresPayment
+      ? null
+      : new Date(Date.now() + trialDaysNum * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: tenant, error: tenantError } = await supabase
+      .from('tenants')
+      .insert({
+        name: company_name,
+        email,
+        phone: phone || null,
+        owner_name,
+        division: division || null,
+        district: district || null,
+        upazila: upazila || null,
+        address: address || null,
+        status: tenantStatus,
+        trial_ends_at: trialEndsAt,
+      })
+      .select()
+      .single();
+
+    if (tenantError || !tenant) {
+      return res.status(400).json({ success: false, error: tenantError?.message || 'Failed to create tenant' });
+    }
+
+    const { error: linkError } = await supabase
+      .from('tenant_users')
+      .insert({
+        tenant_id: tenant.id,
+        user_id,
+        role: 'admin',
+        is_owner: true,
+      });
+
+    if (linkError) {
+      return res.status(400).json({ success: false, error: linkError.message || 'Failed to link user' });
+    }
+
+    // Initialize default gateways/templates (ignore failure, but log it)
+    try {
+      await supabase.rpc('initialize_tenant_gateways', { _tenant_id: tenant.id });
+    } catch (e) {
+      logger.error('initialize_tenant_gateways failed:', e);
+    }
+
+    // Optional: create subscription + invoice (so signup works even if client is not yet authenticated)
+    if (package_id) {
+      const { data: pkg } = await supabase
+        .from('packages')
+        .select('id, name, price_monthly, price_yearly')
+        .eq('id', package_id)
+        .single();
+
+      if (pkg) {
+        const cycle = billing_cycle === 'yearly' ? 'yearly' : 'monthly';
+        const amount = cycle === 'yearly' ? pkg.price_yearly : pkg.price_monthly;
+
+        const startDate = new Date();
+        const endDate = new Date();
+        if (requiresPayment) {
+          endDate.setDate(endDate.getDate() + (cycle === 'monthly' ? 30 : 365));
+        } else {
+          endDate.setDate(endDate.getDate() + trialDaysNum);
+        }
+
+        const subscriptionStatus = requiresPayment ? 'pending' : 'trial';
+
+        const { data: subscription } = await supabase
+          .from('subscriptions')
+          .insert({
+            tenant_id: tenant.id,
+            package_id,
+            status: subscriptionStatus,
+            billing_cycle: cycle,
+            amount,
+            starts_at: startDate.toISOString(),
+            ends_at: endDate.toISOString(),
+          })
+          .select()
+          .single();
+
+        if (requiresPayment && subscription) {
+          const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
+          await supabase.from('invoices').insert({
+            tenant_id: tenant.id,
+            subscription_id: subscription.id,
+            invoice_number: invoiceNumber,
+            amount,
+            tax_amount: 0,
+            total_amount: amount,
+            status: 'unpaid',
+            due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            line_items: [
+              {
+                description: `${pkg.name} - ${cycle === 'monthly' ? 'Monthly' : 'Yearly'} Subscription`,
+                quantity: 1,
+                unit_price: amount,
+                total: amount,
+              },
+            ],
+          });
+        }
+      }
+    }
+
+    return res.json({ success: true, tenant_id: tenant.id, requires_payment: requiresPayment });
+  } catch (error) {
+    logger.error('Complete signup error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============= PAYMENT GATEWAY ENDPOINTS =============
 // Initiate payment
 app.post('/api/payments/initiate', async (req, res) => {
   try {
-    const { gateway, amount, tenant_id, invoice_id, customer_id, description, return_url, cancel_url, customer_name, customer_email, customer_phone, payment_for } = req.body;
+    const {
+      gateway,
+      amount,
+      tenant_id,
+      invoice_id,
+      customer_id,
+      description,
+      return_url,
+      cancel_url,
+      customer_name,
+      customer_email,
+      customer_phone,
+      payment_for,
+    } = req.body;
 
     if (!gateway || !amount || !tenant_id || !return_url) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
+
+    // Build a public base URL for gateway callbacks (handles POST callbacks safely)
+    const forwardedProto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').toString().split(',')[0].trim();
+    const forwardedHost = (req.headers['x-forwarded-host'] || req.get('host') || '').toString().split(',')[0].trim();
+    const baseUrl = process.env.PUBLIC_BASE_URL || `${forwardedProto}://${forwardedHost}`;
+    const gatewayCallbackUrl = `${baseUrl}/api/payments/callback/${gateway}`;
 
     const result = await initiatePayment(supabase, gateway, {
       amount,
@@ -1747,6 +1924,7 @@ app.post('/api/payments/initiate', async (req, res) => {
       customer_email,
       customer_phone,
       payment_for,
+      gateway_callback_url: gatewayCallbackUrl,
     });
 
     res.json(result);
@@ -1781,7 +1959,7 @@ app.get('/api/payments/callback/:gateway', async (req, res) => {
   }
 });
 
-// Payment callback handler (POST for IPNs)
+// Payment callback handler (POST for gateways that POST to success/fail URLs)
 app.post('/api/payments/callback/:gateway', async (req, res) => {
   try {
     const { gateway } = req.params;
@@ -1789,7 +1967,14 @@ app.post('/api/payments/callback/:gateway', async (req, res) => {
 
     const result = await handlePaymentCallback(supabase, gateway, callbackData);
 
-    res.json(result);
+    const accept = (req.headers.accept || '').toString();
+    const wantsHtml = accept.includes('text/html') || accept.includes('*/*');
+
+    if (result.redirect_url && wantsHtml) {
+      return res.redirect(result.redirect_url);
+    }
+
+    return res.json(result);
   } catch (error) {
     logger.error('Payment IPN error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -1818,6 +2003,14 @@ app.post('/payments/callback/:gateway', async (req, res) => {
     const { gateway } = req.params;
     const callbackData = { ...req.query, ...req.body };
     const result = await handlePaymentCallback(supabase, gateway, callbackData);
+
+    const accept = (req.headers.accept || '').toString();
+    const wantsHtml = accept.includes('text/html') || accept.includes('*/*');
+
+    if (result.redirect_url && wantsHtml) {
+      return res.redirect(result.redirect_url);
+    }
+
     res.json(result);
   } catch (error) {
     logger.error('Payment IPN error:', error);

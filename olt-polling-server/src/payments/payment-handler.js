@@ -411,6 +411,15 @@ export async function initiatePayment(supabase, gateway, paymentData) {
   const transactionId = generateTransactionId();
   paymentData.transaction_id = transactionId;
 
+  // IMPORTANT:
+  // - "return_url" and "cancel_url" coming from frontend are the SPA routes we want users to land on.
+  // - Many gateways (e.g. SSLCommerz) POST to success/fail URLs.
+  //   Static SPA hosts will return 405 for POST.
+  // So we send gateways to our backend callback URL, then backend redirects to the frontend URLs.
+  const frontendReturnUrl = paymentData.return_url;
+  const frontendCancelUrl = paymentData.cancel_url || paymentData.return_url;
+  const gatewayCallbackUrl = paymentData.gateway_callback_url || paymentData.return_url;
+
   // Try tenant-specific gateway first, then fall back to global settings
   let gatewayConfig = null;
   let isSandbox = true;
@@ -463,8 +472,8 @@ export async function initiatePayment(supabase, gateway, paymentData) {
         invoice_number: paymentData.invoice_id || null,
         description: paymentData.description,
         gateway_response: {
-          return_url: paymentData.return_url,
-          cancel_url: paymentData.cancel_url,
+          return_url: frontendReturnUrl,
+          cancel_url: frontendCancelUrl,
           payment_for: paymentData.payment_for,
           customer_id: paymentData.customer_id,
           instructions: gatewayConfig.instructions,
@@ -492,36 +501,44 @@ export async function initiatePayment(supabase, gateway, paymentData) {
     is_sandbox: isSandbox,
   };
 
+  // Send gateways to backend callback URL (handles POST + redirects to SPA)
+  const outboundPaymentData = {
+    ...paymentData,
+    return_url: gatewayCallbackUrl,
+    cancel_url: gatewayCallbackUrl,
+    ipn_url: gatewayCallbackUrl,
+  };
+
   let result;
 
   switch (gateway) {
     case 'sslcommerz':
-      result = await initiateSSLCommerz(config, paymentData);
+      result = await initiateSSLCommerz(config, outboundPaymentData);
       break;
     case 'shurjopay':
-      result = await initiateShurjoPay(config, paymentData);
+      result = await initiateShurjoPay(config, outboundPaymentData);
       break;
     case 'uddoktapay':
-      result = await initiateUddoktaPay(config, paymentData);
+      result = await initiateUddoktaPay(config, outboundPaymentData);
       break;
     case 'aamarpay':
-      result = await initiateAamarPay(config, paymentData);
+      result = await initiateAamarPay(config, outboundPaymentData);
       break;
     case 'piprapay':
-      result = await initiatePipraPay(config, paymentData);
+      result = await initiatePipraPay(config, outboundPaymentData);
       break;
     case 'bkash':
-      result = await initiateBkash(config, paymentData);
+      result = await initiateBkash(config, outboundPaymentData);
       break;
     case 'nagad':
-      result = await initiateNagad(config, paymentData);
+      result = await initiateNagad(config, outboundPaymentData);
       break;
     default:
       return { success: false, error: `Unsupported gateway: ${gateway}` };
   }
 
   if (result.success) {
-    // Create pending payment record with gateway_response containing return_url
+    // Create pending payment record with gateway_response containing FRONTEND return/cancel URLs
     const { data: payment, error: paymentError } = await supabase
       .from('payments')
       .insert({
@@ -533,10 +550,11 @@ export async function initiatePayment(supabase, gateway, paymentData) {
         invoice_number: paymentData.invoice_id || null,
         description: paymentData.description || `${gateway} Payment`,
         gateway_response: {
-          return_url: paymentData.return_url,
-          cancel_url: paymentData.cancel_url,
+          return_url: frontendReturnUrl,
+          cancel_url: frontendCancelUrl,
           payment_for: paymentData.payment_for,
           customer_id: paymentData.customer_id,
+          gateway_callback_url: gatewayCallbackUrl,
           gateway_init: result,
         },
       })
@@ -557,7 +575,6 @@ export async function initiatePayment(supabase, gateway, paymentData) {
 
   return result;
 }
-
 /**
  * Handle payment callback/verification
  */
