@@ -25,7 +25,7 @@ import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { 
   Router, Plus, Edit, Trash2, Loader2, RefreshCw, Wifi, WifiOff, Activity,
   Users, ListOrdered, Settings, CheckCircle, XCircle, MoreVertical, Search,
-  Zap, Database, Network
+  Zap, Database, Network, AlertTriangle, ShieldAlert
 } from 'lucide-react';
 import type { MikroTikRouter } from '@/types/isp';
 import { toast } from 'sonner';
@@ -63,8 +63,8 @@ export default function MikroTikManagement() {
     sync_pppoe: true,
     sync_queues: true,
     auto_disable_expired: true,
-    allow_customer_delete: true,
-    allow_queue_delete: true,
+    allow_customer_delete: false, // Default OFF for safety
+    allow_queue_delete: false,    // Default OFF for safety
   });
 
   const fetchRouters = useCallback(async () => {
@@ -104,8 +104,8 @@ export default function MikroTikManagement() {
       sync_pppoe: true,
       sync_queues: true,
       auto_disable_expired: true,
-      allow_customer_delete: true,
-      allow_queue_delete: true,
+      allow_customer_delete: false, // Default OFF for safety
+      allow_queue_delete: false,    // Default OFF for safety
     });
     setEditingRouter(null);
     setTestResult(null);
@@ -123,8 +123,8 @@ export default function MikroTikManagement() {
       sync_pppoe: router.sync_pppoe,
       sync_queues: router.sync_queues,
       auto_disable_expired: router.auto_disable_expired,
-      allow_customer_delete: (router as any).allow_customer_delete ?? true,
-      allow_queue_delete: (router as any).allow_queue_delete ?? true,
+      allow_customer_delete: (router as any).allow_customer_delete ?? false,
+      allow_queue_delete: (router as any).allow_queue_delete ?? false,
     });
     setTestResult(null);
     setShowDialog(true);
@@ -759,31 +759,50 @@ export default function MikroTikManagement() {
               </div>
             </div>
 
-            {/* MikroTik Control Options */}
-            <div className="space-y-4 pt-4 border-t">
-              <Label className="text-sm font-medium text-muted-foreground">MikroTik Control Options</Label>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Allow Customer Delete on MikroTik</Label>
-                  <p className="text-sm text-muted-foreground">
-                    When customer is deleted, also remove PPPoE secret from MikroTik
+            {/* MikroTik Danger Zone */}
+            <div className="space-y-4 pt-4 border-t border-destructive/30 bg-destructive/5 p-4 rounded-lg">
+              <div className="flex items-center gap-2 text-destructive">
+                <ShieldAlert className="h-5 w-5" />
+                <Label className="text-sm font-semibold">Danger Zone - MikroTik Delete Permissions</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                These settings control what happens on MikroTik when you delete data from this software.
+                <strong className="text-destructive"> Enabling these will permanently delete data from your router!</strong>
+              </p>
+              
+              <div className="flex items-center justify-between p-3 border border-destructive/30 rounded-md bg-background">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <Label className="text-destructive font-medium">Allow Customer Delete on MikroTik</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    When a customer is deleted from software, also remove the PPPoE secret from MikroTik.
+                    <span className="block text-destructive font-medium">If disabled: Only software record is deleted. MikroTik keeps the PPPoE secret.</span>
                   </p>
                 </div>
                 <Switch
                   checked={formData.allow_customer_delete}
                   onCheckedChange={(checked) => setFormData(prev => ({ ...prev, allow_customer_delete: checked }))}
+                  className="data-[state=checked]:bg-destructive"
                 />
               </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Allow Queue Delete on MikroTik</Label>
-                  <p className="text-sm text-muted-foreground">
-                    When customer is deleted, also remove queue from MikroTik
+              
+              <div className="flex items-center justify-between p-3 border border-destructive/30 rounded-md bg-background">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <Label className="text-destructive font-medium">Allow Queue/Profile Delete on MikroTik</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    When a package is deleted from software, also remove the profile/queue from MikroTik.
+                    <span className="block text-destructive font-medium">If disabled: Only software record is deleted. MikroTik keeps the profile.</span>
                   </p>
                 </div>
                 <Switch
                   checked={formData.allow_queue_delete}
                   onCheckedChange={(checked) => setFormData(prev => ({ ...prev, allow_queue_delete: checked }))}
+                  className="data-[state=checked]:bg-destructive"
                 />
               </div>
             </div>

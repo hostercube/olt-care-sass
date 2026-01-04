@@ -388,7 +388,8 @@ export function useMikroTikSync() {
 
       // Check if deletion from MikroTik is allowed
       if (!config.allow_customer_delete) {
-        // Just return true - software can delete, but MikroTik untouched
+        // Permission disabled - only software record will be deleted, MikroTik untouched
+        console.info(`MikroTik delete permission disabled for router ${routerId} - PPPoE ${username} kept on router`);
         return true;
       }
 
@@ -421,6 +422,51 @@ export function useMikroTikSync() {
     }
   }, [apiBase]);
 
+  // Delete MikroTik profile/queue (respects router permission setting)
+  const deleteProfile = useCallback(async (
+    routerId: string,
+    profileName: string
+  ): Promise<boolean> => {
+    try {
+      const config = await getRouterConfig(routerId);
+      if (!config) return false;
+
+      // Check if deletion from MikroTik is allowed
+      if (!config.allow_queue_delete) {
+        // Permission disabled - only software record will be deleted, MikroTik untouched
+        console.info(`MikroTik queue delete permission disabled for router ${routerId} - Profile ${profileName} kept on router`);
+        return true;
+      }
+
+      const mikrotik = {
+        ip: config.ip,
+        port: config.port,
+        username: config.username,
+        password: config.password,
+      };
+
+      const response = await fetch(`${apiBase}/api/mikrotik/profile/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mikrotik, profileName }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success(`Profile ${profileName} deleted from MikroTik`);
+        return true;
+      } else {
+        toast.error(result.error || 'Failed to delete profile');
+        return false;
+      }
+    } catch (err: any) {
+      console.error('Delete profile error:', err);
+      toast.error('Failed to delete profile');
+      return false;
+    }
+  }, [apiBase]);
+
   return {
     syncing,
     syncingRouter,
@@ -436,5 +482,6 @@ export function useMikroTikSync() {
     saveCallerId,
     removeCallerId,
     deletePPPoEUser,
+    deleteProfile,
   };
 }
