@@ -17,15 +17,14 @@ import { format } from 'date-fns';
 
 export default function BillingHistory() {
   const { tenantId, loading: tenantLoading } = useTenantContext();
-  const { payments, loading: paymentsLoading } = usePayments();
+  const { payments, loading: paymentsLoading } = usePayments(tenantId || undefined);
   const { invoices, loading: invoicesLoading } = useInvoices(tenantId || undefined);
   const { subscriptions, loading: subscriptionsLoading } = useSubscriptions(tenantId || undefined);
   
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Filter data for current tenant
-  const tenantPayments = payments.filter(p => p.tenant_id === tenantId);
-  const filteredPayments = tenantPayments.filter(p => 
+  // Filter payments by search term (already filtered by tenant in hook)
+  const filteredPayments = payments.filter(p => 
     p.transaction_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())
   );
