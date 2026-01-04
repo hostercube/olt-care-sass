@@ -66,6 +66,7 @@ import CustomDomain from "./pages/ISP/CustomDomain";
 // Customer Portal Pages
 import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
 import CustomerDashboard from "./pages/CustomerPortal/CustomerDashboard";
+import CustomerPayBill from "./pages/CustomerPortal/CustomerPayBill";
 
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
@@ -422,6 +423,7 @@ const App = () => (
               {/* Customer Portal Routes (Public) */}
               <Route path="/portal/login" element={<CustomerLogin />} />
               <Route path="/portal/dashboard" element={<CustomerDashboard />} />
+              <Route path="/portal/pay" element={<CustomerPayBill />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -1,0 +1,82 @@
+import { supabase } from "@/integrations/supabase/client";
+import type { PaymentMethod } from "@/types/saas";
+
+export interface PaymentInitiateRequest {
+  gateway: PaymentMethod;
+  amount: number;
+  tenant_id: string;
+  invoice_id?: string;
+  customer_id?: string;
+  description?: string;
+  return_url: string;
+  cancel_url: string;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  payment_for: 'subscription' | 'customer_bill';
+}
+
+export interface PaymentInitiateResponse {
+  success: boolean;
+  payment_id?: string;
+  checkout_url?: string | null;
+  error?: string;
+  message?: string;
+}
+
+export async function initiatePayment(request: PaymentInitiateRequest): Promise<PaymentInitiateResponse> {
+  try {
+    const { data, error } = await supabase.functions.invoke('initiate-payment', {
+      body: request,
+    });
+
+    if (error) {
+      console.error('Payment initiation error:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to initiate payment',
+      };
+    }
+
+    return data as PaymentInitiateResponse;
+  } catch (error: any) {
+    console.error('Payment initiation error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to initiate payment',
+    };
+  }
+}
+
+export function redirectToCheckout(checkoutUrl: string): void {
+  window.location.href = checkoutUrl;
+}
+
+export function getPaymentStatus(searchParams: URLSearchParams): {
+  paymentId: string | null;
+  status: 'success' | 'failed' | 'cancelled' | null;
+} {
+  const paymentId = searchParams.get('payment_id');
+  const status = searchParams.get('status') as 'success' | 'failed' | 'cancelled' | null;
+  return { paymentId, status };
+}
+
+export function getGatewayDisplayName(gateway: PaymentMethod): string {
+  const names: Record<PaymentMethod, string> = {
+    sslcommerz: 'SSLCommerz',
+    bkash: 'bKash',
+    rocket: 'Rocket',
+    nagad: 'Nagad',
+    uddoktapay: 'UddoktaPay',
+    shurjopay: 'ShurjoPay',
+    aamarpay: 'aamarPay',
+    portwallet: 'PortWallet',
+    piprapay: 'PipraPay',
+    manual: 'Manual Payment',
+  };
+  return names[gateway] || gateway;
+}
+
+export function isOnlineGateway(gateway: PaymentMethod): boolean {
+  return gateway !== 'manual' && gateway !== 'rocket';
+}
