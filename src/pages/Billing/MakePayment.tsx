@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { usePayments } from '@/hooks/usePayments';
 import { usePaymentGateways } from '@/hooks/usePaymentGateways';
+import { useTenantPaymentGateways } from '@/hooks/useTenantPaymentGateways';
 import { useInvoices } from '@/hooks/useInvoices';
 import { CreditCard, Smartphone, Banknote, CheckCircle, Loader2, ExternalLink, AlertCircle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -19,18 +20,31 @@ import { initiatePayment, redirectToCheckout, isOnlineGateway, getGatewayDisplay
 import { supabase } from '@/integrations/supabase/client';
 
 export default function MakePayment() {
-  const { tenantId } = useTenantContext();
+  const { tenantId, isSuperAdmin, isImpersonating } = useTenantContext();
   const { createPayment } = usePayments();
   const { gateways: globalGateways, loading: globalGatewaysLoading } = usePaymentGateways();
-  const { invoices } = useInvoices(tenantId || undefined);
+  const {
+    gateways: tenantGateways,
+    loading: tenantGatewaysLoading,
+    initializeGateways,
+  } = useTenantPaymentGateways();
+
+  // NOTE: when tenantId is null (e.g. Super Admin not impersonating), avoid fetching ALL invoices
+  const effectiveTenantId = tenantId ?? '00000000-0000-0000-0000-000000000000';
+  const { invoices, fetchInvoices } = useInvoices(effectiveTenantId);
+
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  const invoiceParam = searchParams.get('invoice');
 
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | ''>('');
   const [transactionId, setTransactionId] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isInitializingTenantGateways, setIsInitializingTenantGateways] = useState(false);
+  const [didInitTenantGateways, setDidInitTenantGateways] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
   const [tenantInfo, setTenantInfo] = useState<any>(null);
@@ -39,13 +53,14 @@ export default function MakePayment() {
   useEffect(() => {
     const status = searchParams.get('status');
     const paymentId = searchParams.get('payment_id');
-    
+
     if (status === 'success' && paymentId) {
       setPaymentSuccess(true);
       toast({
         title: 'Payment Successful',
         description: 'Your payment has been processed successfully.',
       });
+      fetchInvoices();
     } else if (status === 'failed' || status === 'cancelled') {
       setPaymentFailed(true);
       toast({
@@ -53,8 +68,28 @@ export default function MakePayment() {
         description: 'Your payment could not be processed. Please try again.',
         variant: 'destructive',
       });
+      fetchInvoices();
     }
-  }, [searchParams, toast]);
+  }, [searchParams, toast, fetchInvoices]);
+
+  // Ensure tenant gateways exist for ISP owners
+  useEffect(() => {
+    if (!tenantId) return;
+    if (didInitTenantGateways) return;
+    if (tenantGatewaysLoading) return;
+
+    (async () => {
+      try {
+        if (tenantGateways.length === 0) {
+          setIsInitializingTenantGateways(true);
+          await initializeGateways(tenantId);
+        }
+      } finally {
+        setIsInitializingTenantGateways(false);
+        setDidInitTenantGateways(true);
+      }
+    })();
+  }, [tenantId, didInitTenantGateways, tenantGatewaysLoading, tenantGateways.length, initializeGateways]);
 
   // Fetch tenant info for customer details
   useEffect(() => {
@@ -70,22 +105,33 @@ export default function MakePayment() {
     fetchTenant();
   }, [tenantId]);
 
-  const unpaidInvoices = invoices.filter(i => i.status === 'unpaid' || i.status === 'overdue');
-  
-  // Use global gateways from SuperAdmin - always available to all ISP owners
-  const enabledGateways = globalGateways.filter(g => g.is_enabled);
-  const gatewaysLoading = globalGatewaysLoading;
+  const unpaidInvoices = invoices.filter((i) => i.status === 'unpaid' || i.status === 'overdue');
+
+  // Prefer tenant-specific gateways for ISP owners; fall back to global only when super admin (not impersonating)
+  const visibleGateways = tenantId ? tenantGateways : globalGateways;
+  const enabledGateways = visibleGateways.filter((g: any) => g.is_enabled);
+
+  const gatewaysLoading = tenantId
+    ? tenantGatewaysLoading || isInitializingTenantGateways
+    : globalGatewaysLoading;
 
   // Get selected invoice data and amount
-  const selectedInvoiceData = selectedInvoice ? invoices.find(i => i.id === selectedInvoice) : null;
+  const selectedInvoiceData = selectedInvoice ? invoices.find((i) => i.id === selectedInvoice) : null;
   const paymentAmount = selectedInvoiceData?.total_amount || 0;
 
-  // Auto-select first unpaid invoice
+  // Preselect invoice from URL (?invoice=...)
   useEffect(() => {
-    if (unpaidInvoices.length > 0 && !selectedInvoice) {
+    if (!invoiceParam) return;
+    const exists = unpaidInvoices.some((inv) => inv.id === invoiceParam);
+    if (exists) setSelectedInvoice(invoiceParam);
+  }, [invoiceParam, unpaidInvoices]);
+
+  // Auto-select first unpaid invoice (only when URL didn't specify)
+  useEffect(() => {
+    if (unpaidInvoices.length > 0 && !selectedInvoice && !invoiceParam) {
       setSelectedInvoice(unpaidInvoices[0].id);
     }
-  }, [unpaidInvoices, selectedInvoice]);
+  }, [unpaidInvoices, selectedInvoice, invoiceParam]);
 
   const getGatewayIcon = (method: PaymentMethod) => {
     switch (method) {

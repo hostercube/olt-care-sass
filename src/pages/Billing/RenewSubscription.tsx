@@ -53,11 +53,80 @@ export default function RenewSubscription() {
     setIsSubmitting(true);
     try {
       const startDate = new Date();
-      const endDate = billingCycle === 'monthly' 
-        ? addMonths(startDate, 1)
-        : addYears(startDate, 1);
+      const endDate = billingCycle === 'monthly' ? addMonths(startDate, 1) : addYears(startDate, 1);
 
-      // Create new subscription as pending
+      // 1) Reuse existing pending subscription + unpaid invoice (prevents duplicates)
+      const { data: existingPendingSub, error: pendingErr } = await supabase
+        .from('subscriptions')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('status', 'pending')
+        .eq('package_id', effectivePackage)
+        .eq('billing_cycle', billingCycle)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (pendingErr) throw pendingErr;
+
+      if (existingPendingSub?.id) {
+        const { data: existingInvoice, error: invErr } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('subscription_id', existingPendingSub.id)
+          .in('status', ['unpaid', 'overdue'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (invErr) throw invErr;
+
+        if (existingInvoice?.id) {
+          toast({
+            title: 'Existing Invoice Found',
+            description: 'Redirecting you to pay the existing invoice (no new invoice created).',
+          });
+          navigate(`/billing/pay?invoice=${existingInvoice.id}`);
+          return;
+        }
+
+        // No invoice yet for that pending subscription, create one and pay it
+        const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+        const { data: newInvoice, error: createInvErr } = await supabase
+          .from('invoices')
+          .insert({
+            tenant_id: tenantId,
+            subscription_id: existingPendingSub.id,
+            invoice_number: invoiceNumber,
+            amount: amount,
+            tax_amount: 0,
+            total_amount: amount,
+            status: 'unpaid',
+            due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            line_items: [
+              {
+                description: `${selectedPkg?.name} - ${billingCycle === 'monthly' ? 'Monthly' : 'Yearly'} Subscription Renewal`,
+                quantity: 1,
+                unit_price: amount,
+                total: amount,
+              },
+            ],
+          } as any)
+          .select('id')
+          .single();
+
+        if (createInvErr) throw createInvErr;
+
+        toast({
+          title: 'Invoice Created',
+          description: 'Please complete the payment to activate your subscription.',
+        });
+        navigate(`/billing/pay?invoice=${newInvoice.id}`);
+        return;
+      }
+
+      // 2) No pending renewal exists → create new pending subscription + single invoice
       const { data: subscriptionData, error: subError } = await supabase
         .from('subscriptions')
         .insert({
@@ -69,14 +138,13 @@ export default function RenewSubscription() {
           starts_at: startDate.toISOString(),
           ends_at: endDate.toISOString(),
         } as any)
-        .select()
+        .select('id')
         .single();
 
       if (subError) throw subError;
 
-      // Create invoice
-      const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
-      await supabase
+      const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      const { data: invoice, error: invError } = await supabase
         .from('invoices')
         .insert({
           tenant_id: tenantId,
@@ -87,20 +155,26 @@ export default function RenewSubscription() {
           total_amount: amount,
           status: 'unpaid',
           due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          line_items: [{
-            description: `${selectedPkg?.name} - ${billingCycle === 'monthly' ? 'Monthly' : 'Yearly'} Subscription Renewal`,
-            quantity: 1,
-            unit_price: amount,
-            total: amount,
-          }],
-        } as any);
+          line_items: [
+            {
+              description: `${selectedPkg?.name} - ${billingCycle === 'monthly' ? 'Monthly' : 'Yearly'} Subscription Renewal`,
+              quantity: 1,
+              unit_price: amount,
+              total: amount,
+            },
+          ],
+        } as any)
+        .select('id')
+        .single();
+
+      if (invError) throw invError;
 
       toast({
         title: 'Renewal Created',
         description: 'Please complete the payment to activate your subscription.',
       });
 
-      navigate('/billing/pay');
+      navigate(`/billing/pay?invoice=${invoice.id}`);
     } catch (error: any) {
       console.error('Renewal error:', error);
       toast({
