@@ -1864,9 +1864,10 @@ async function createPPPSecretPlain(mikrotik, userConfig, connectionInfo) {
               '/ppp/secret/add',
               `=name=${userConfig.name}`,
               `=password=${userConfig.password}`,
-              `=profile=${userConfig.profile}`,
               `=service=pppoe`,
             ];
+            // Only add profile if it exists
+            if (userConfig.profile) cmd.push(`=profile=${userConfig.profile}`);
             if (userConfig.comment) cmd.push(`=comment=${userConfig.comment}`);
             if (userConfig.callerId) cmd.push(`=caller-id=${userConfig.callerId}`);
             sendPlainCommand(socket, cmd);

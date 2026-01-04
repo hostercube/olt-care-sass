@@ -264,19 +264,21 @@ export default function MikroTikManagement() {
 
     try {
       const apiBase = (vpsUrl || '').replace(/\/$/, '');
+      
+      // Determine endpoint based on sync type
+      const endpoint = syncType === 'pppoe' 
+        ? '/api/mikrotik/sync/pppoe'
+        : syncType === 'queues'
+        ? '/api/mikrotik/sync/queues'
+        : '/api/mikrotik/sync/full';
 
-      const mikrotik = {
-        ip: router.ip_address,
-        port: router.port,
-        username: router.username,
-        password: router.password_encrypted,
-      };
-
-      // First test connection and get data
-      const response = await fetch(`${apiBase}/api/test-mikrotik`, {
+      const response = await fetch(`${apiBase}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mikrotik }),
+        body: JSON.stringify({ 
+          routerId, 
+          tenantId 
+        }),
       });
 
       const result = await response.json();
@@ -284,36 +286,23 @@ export default function MikroTikManagement() {
       if (!result.success) {
         await supabase.from('mikrotik_routers').update({ status: 'offline' }).eq('id', routerId);
         fetchRouters();
-        toast.error(result.error || 'Connection failed');
+        toast.error(result.error || 'Sync failed');
         return;
       }
 
-      // Update router status
-      await supabase
-        .from('mikrotik_routers')
-        .update({
-          last_synced: new Date().toISOString(),
-          status: 'online',
-        })
-        .eq('id', routerId);
-
-      const data = result.data;
+      // Build success message based on sync type
       let message = '';
 
-      if (syncType === 'pppoe' || syncType === 'full') {
-        message += `${data.pppoe_count} active PPPoE sessions, ${data.secrets_count} secrets. `;
-      }
-
-      if (syncType === 'queues' || syncType === 'full') {
-        message += 'Queues synced. ';
-      }
-
-      if (syncType === 'full') {
-        message = `Full sync: ${data.pppoe_count} PPPoE, ${data.secrets_count} secrets, ${data.arp_count} ARP, ${data.dhcp_count} DHCP`;
+      if (syncType === 'pppoe') {
+        message = `PPPoE Sync: ${result.secrets || 0} secrets found, ${result.customersInserted || 0} customers created`;
+      } else if (syncType === 'queues') {
+        message = `Package Sync: ${result.profiles || 0} profiles found, ${result.packagesCreated || 0} created, ${result.packagesUpdated || 0} updated`;
+      } else {
+        message = `Full Sync: ${result.profiles || 0} profiles, ${result.secrets || 0} secrets, ${result.packagesCreated || 0} packages created, ${result.customersInserted || 0} customers created`;
       }
 
       fetchRouters();
-      toast.success(message || `${syncType} sync completed!`);
+      toast.success(message);
     } catch (err: any) {
       console.error('Sync error:', err);
 
