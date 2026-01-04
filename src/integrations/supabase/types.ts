@@ -2816,6 +2816,7 @@ export type Database = {
       }
       packages: {
         Row: {
+          allowed_payment_gateways: string[] | null
           created_at: string
           description: string | null
           features: Json | null
@@ -2835,6 +2836,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          allowed_payment_gateways?: string[] | null
           created_at?: string
           description?: string | null
           features?: Json | null
@@ -2854,6 +2856,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          allowed_payment_gateways?: string[] | null
           created_at?: string
           description?: string | null
           features?: Json | null
@@ -4446,6 +4449,7 @@ export type Database = {
       }
       tenant_payment_gateways: {
         Row: {
+          bkash_mode: string | null
           config: Json | null
           created_at: string | null
           display_name: string
@@ -4459,6 +4463,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          bkash_mode?: string | null
           config?: Json | null
           created_at?: string | null
           display_name: string
@@ -4472,6 +4477,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          bkash_mode?: string | null
           config?: Json | null
           created_at?: string | null
           display_name?: string

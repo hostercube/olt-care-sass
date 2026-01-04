@@ -115,6 +115,7 @@ export default function ISPGatewaySettings() {
         sandbox_mode: config.sandbox_mode,
         config: config.config,
         instructions: config.instructions,
+        bkash_mode: gateway === 'bkash' ? ((config.config as any)?.bkash_mode || 'tokenized') : undefined,
       });
     }
   };
@@ -198,10 +199,40 @@ export default function ISPGatewaySettings() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* bKash-specific: Mode selector */}
+          {gatewayInfo.id === 'bkash' && (
+            <div className="space-y-1">
+              <Label className="text-xs">bKash API Mode</Label>
+              <Select
+                value={(config.config as any)?.bkash_mode || 'tokenized'}
+                onValueChange={(v) => setPaymentConfigs({
+                  ...paymentConfigs,
+                  [gatewayInfo.id]: {
+                    ...config,
+                    config: { ...config.config, bkash_mode: v }
+                  }
+                })}
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tokenized">Tokenized (Redirect)</SelectItem>
+                  <SelectItem value="checkout_js">PGW Checkout.js (Popup)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {(config.config as any)?.bkash_mode === 'checkout_js' 
+                  ? 'Old PGW method using in-page popup.' 
+                  : 'New tokenized API with redirect to bKash.'}
+              </p>
+            </div>
+          )}
+
           {/* Dynamic API fields based on gateway */}
           {gatewayInfo.fields && gatewayInfo.fields.length > 0 && (
             <div className="grid gap-3">
-              {gatewayInfo.fields.map((field) => (
+              {gatewayInfo.fields.filter(f => f !== 'bkash_mode').map((field) => (
                 <div key={field} className="space-y-1">
                   <Label className="text-xs">{gatewayInfo.fieldLabels[field] || field}</Label>
                   <div className="relative">

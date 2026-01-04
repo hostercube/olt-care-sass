@@ -2045,6 +2045,149 @@ app.post('/payments/callback/:gateway', async (req, res) => {
   }
 });
 
+// ============= BKASH PGW CHECKOUT.JS EXECUTE ENDPOINT =============
+// Called from frontend after customer confirms payment in bKash popup
+app.post('/api/payments/bkash/execute', async (req, res) => {
+  try {
+    const { paymentID, transaction_id, tenant_id } = req.body;
+
+    if (!paymentID || !transaction_id) {
+      return res.status(400).json({ success: false, error: 'Missing paymentID or transaction_id' });
+    }
+
+    // Find the pending payment
+    const { data: payment, error: findError } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('transaction_id', transaction_id)
+      .single();
+
+    if (findError || !payment) {
+      return res.status(404).json({ success: false, error: 'Payment not found' });
+    }
+
+    const gatewayResponse = payment.gateway_response || {};
+    const bkashConfig = gatewayResponse?.gateway_init?.bkash_config;
+
+    if (!bkashConfig) {
+      return res.status(400).json({ success: false, error: 'bKash config not found' });
+    }
+
+    // Get tenant gateway to find credentials
+    const { data: tenantGateway } = await supabase
+      .from('tenant_payment_gateways')
+      .select('*')
+      .eq('tenant_id', tenant_id || payment.tenant_id)
+      .eq('gateway', 'bkash')
+      .single();
+
+    if (!tenantGateway) {
+      return res.status(400).json({ success: false, error: 'bKash gateway not configured' });
+    }
+
+    const config = tenantGateway.config || {};
+    const isSandbox = tenantGateway.sandbox_mode !== false;
+    const baseUrl = isSandbox 
+      ? 'https://checkout.sandbox.bka.sh/v1.2.0-beta'
+      : 'https://checkout.pay.bka.sh/v1.2.0-beta';
+
+    // Get fresh token
+    const grantResponse = await fetch(`${baseUrl}/checkout/token/grant`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        username: config.username,
+        password: config.password,
+      },
+      body: JSON.stringify({
+        app_key: config.app_key,
+        app_secret: config.app_secret,
+      }),
+    });
+
+    const grantData = await grantResponse.json();
+
+    if (!grantData.id_token) {
+      logger.error('bKash execute - token grant failed:', grantData);
+      return res.status(400).json({ success: false, error: 'Failed to get bKash token' });
+    }
+
+    // Execute payment
+    const executeResponse = await fetch(`${baseUrl}/checkout/payment/execute/${paymentID}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: grantData.id_token,
+        'X-App-Key': config.app_key,
+      },
+    });
+
+    const executeData = await executeResponse.json();
+    logger.info('bKash execute response:', executeData);
+
+    const isSuccess = executeData.transactionStatus === 'Completed';
+
+    // Update payment record
+    await supabase
+      .from('payments')
+      .update({
+        status: isSuccess ? 'completed' : 'failed',
+        paid_at: isSuccess ? new Date().toISOString() : null,
+        gateway_response: {
+          ...gatewayResponse,
+          execute_response: executeData,
+          completed_at: new Date().toISOString(),
+        },
+      })
+      .eq('id', payment.id);
+
+    // Handle subscription/invoice update if successful
+    if (isSuccess && payment.invoice_number) {
+      const { data: invoice } = await supabase
+        .from('invoices')
+        .select('id, subscription_id')
+        .eq('invoice_number', payment.invoice_number)
+        .single();
+
+      if (invoice) {
+        await supabase
+          .from('invoices')
+          .update({ status: 'paid', paid_at: new Date().toISOString(), payment_id: payment.id })
+          .eq('id', invoice.id);
+
+        if (invoice.subscription_id) {
+          await supabase
+            .from('subscriptions')
+            .update({ status: 'active' })
+            .eq('id', invoice.subscription_id);
+        }
+      }
+    }
+
+    const returnUrl = gatewayResponse.return_url || '/billing/history';
+    const redirectUrl = isSuccess
+      ? `${returnUrl}?status=success&payment_id=${payment.id}`
+      : `${returnUrl}?status=failed&payment_id=${payment.id}`;
+
+    res.json({
+      success: isSuccess,
+      payment_id: payment.id,
+      trxID: executeData.trxID,
+      transactionStatus: executeData.transactionStatus,
+      redirect_url: redirectUrl,
+    });
+  } catch (error) {
+    logger.error('bKash execute error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Also without /api prefix
+app.post('/payments/bkash/execute', (req, res) => {
+  req.url = '/api/payments/bkash/execute';
+  app.handle(req, res);
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {

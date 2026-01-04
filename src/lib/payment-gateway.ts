@@ -25,6 +25,18 @@ export interface PaymentInitiateResponse {
   error?: string;
   message?: string;
   transaction_id?: string;
+  // bKash PGW Checkout.js mode
+  bkash_mode?: 'tokenized' | 'checkout_js' | null;
+  bkash_config?: {
+    paymentID: string;
+    scriptUrl: string;
+    baseUrl: string;
+    app_key: string;
+    id_token: string;
+    merchantInvoiceNumber: string;
+    amount: string;
+    currency: string;
+  } | null;
 }
 
 export async function initiatePayment(request: PaymentInitiateRequest): Promise<PaymentInitiateResponse> {
