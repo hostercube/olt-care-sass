@@ -411,26 +411,85 @@ export async function initiatePayment(supabase, gateway, paymentData) {
   const transactionId = generateTransactionId();
   paymentData.transaction_id = transactionId;
 
-  // Get gateway configuration
-  const { data: gatewayConfig, error: configError } = await supabase
+  // Try tenant-specific gateway first, then fall back to global settings
+  let gatewayConfig = null;
+  let isSandbox = true;
+  let configData = {};
+
+  // First try tenant-specific gateways
+  const { data: tenantGateway } = await supabase
     .from('tenant_payment_gateways')
     .select('*')
     .eq('tenant_id', paymentData.tenant_id)
-    .eq('gateway_type', gateway)
+    .eq('gateway', gateway)
     .eq('is_enabled', true)
     .single();
 
-  if (configError || !gatewayConfig) {
-    logger.error(`Gateway config not found for ${gateway}:`, configError);
+  if (tenantGateway) {
+    gatewayConfig = tenantGateway;
+    configData = tenantGateway.config || {};
+    isSandbox = tenantGateway.sandbox_mode !== false;
+  } else {
+    // Fall back to global payment gateway settings
+    const { data: globalGateway, error: globalError } = await supabase
+      .from('payment_gateway_settings')
+      .select('*')
+      .eq('gateway', gateway)
+      .eq('is_enabled', true)
+      .single();
+
+    if (globalError || !globalGateway) {
+      logger.error(`Gateway config not found for ${gateway}:`, globalError);
+      return {
+        success: false,
+        error: `Payment gateway ${gateway} is not configured or enabled`,
+      };
+    }
+    gatewayConfig = globalGateway;
+    configData = globalGateway.config || {};
+    isSandbox = globalGateway.sandbox_mode !== false;
+  }
+
+  // For manual payment, just create the payment record and return
+  if (gateway === 'manual' || gateway === 'rocket') {
+    const { data: payment, error: paymentError } = await supabase
+      .from('payments')
+      .insert({
+        tenant_id: paymentData.tenant_id,
+        amount: paymentData.amount,
+        payment_method: gateway,
+        status: 'pending',
+        transaction_id: transactionId,
+        invoice_number: paymentData.invoice_id || null,
+        description: paymentData.description,
+        gateway_response: {
+          return_url: paymentData.return_url,
+          cancel_url: paymentData.cancel_url,
+          payment_for: paymentData.payment_for,
+          customer_id: paymentData.customer_id,
+          instructions: gatewayConfig.instructions,
+        },
+      })
+      .select()
+      .single();
+
+    if (paymentError) {
+      logger.error('Failed to create manual payment record:', paymentError);
+      return { success: false, error: 'Failed to create payment record' };
+    }
+
     return {
-      success: false,
-      error: `Payment gateway ${gateway} is not configured or enabled`,
+      success: true,
+      payment_id: payment?.id,
+      transaction_id: transactionId,
+      checkout_url: null, // No redirect for manual payments
+      message: gatewayConfig.instructions || 'Please complete the payment manually',
     };
   }
 
   const config = {
-    ...gatewayConfig.config,
-    is_sandbox: gatewayConfig.is_sandbox,
+    ...configData,
+    is_sandbox: isSandbox,
   };
 
   let result;
@@ -462,22 +521,23 @@ export async function initiatePayment(supabase, gateway, paymentData) {
   }
 
   if (result.success) {
-    // Create pending payment record
+    // Create pending payment record with gateway_response containing return_url
     const { data: payment, error: paymentError } = await supabase
       .from('payments')
       .insert({
         tenant_id: paymentData.tenant_id,
         amount: paymentData.amount,
-        gateway: gateway,
+        payment_method: gateway,
         status: 'pending',
         transaction_id: transactionId,
-        invoice_id: paymentData.invoice_id || null,
-        metadata: {
+        invoice_number: paymentData.invoice_id || null,
+        description: paymentData.description || `${gateway} Payment`,
+        gateway_response: {
+          return_url: paymentData.return_url,
+          cancel_url: paymentData.cancel_url,
           payment_for: paymentData.payment_for,
           customer_id: paymentData.customer_id,
-          customer_name: paymentData.customer_name,
-          checkout_url: result.checkout_url,
-          gateway_response: result,
+          gateway_init: result,
         },
       })
       .select()
@@ -560,15 +620,23 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
     return { success: false, error: 'Payment not found' };
   }
 
+  // Get original gateway_response to extract return_url
+  const originalGatewayResponse = payment.gateway_response || {};
+  const returnUrl = originalGatewayResponse.return_url || '/billing/history';
+  const cancelUrl = originalGatewayResponse.cancel_url || returnUrl;
+  const paymentFor = originalGatewayResponse.payment_for;
+  const customerId = originalGatewayResponse.customer_id;
+
   // Update payment status
   const newStatus = isSuccess ? 'completed' : 'failed';
   const { error: updateError } = await supabase
     .from('payments')
     .update({
       status: newStatus,
-      metadata: {
-        ...payment.metadata,
-        callback_response: gatewayResponse,
+      paid_at: isSuccess ? new Date().toISOString() : null,
+      gateway_response: {
+        ...originalGatewayResponse,
+        callback_data: gatewayResponse,
         completed_at: new Date().toISOString(),
       },
     })
@@ -579,12 +647,16 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
     return { success: false, error: 'Failed to update payment' };
   }
 
-  // If successful payment, process based on payment type
-  if (isSuccess) {
-    const paymentFor = payment.metadata?.payment_for;
-
-    if (paymentFor === 'subscription' && payment.invoice_id) {
-      // Update invoice status
+  // If successful payment for subscription
+  if (isSuccess && payment.invoice_number) {
+    // Update invoice status by invoice number
+    const { data: invoice } = await supabase
+      .from('invoices')
+      .select('id, subscription_id')
+      .eq('invoice_number', payment.invoice_number)
+      .single();
+    
+    if (invoice) {
       await supabase
         .from('invoices')
         .update({
@@ -592,74 +664,54 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
           paid_at: new Date().toISOString(),
           payment_id: payment.id,
         })
-        .eq('id', payment.invoice_id);
+        .eq('id', invoice.id);
 
       // Update subscription status
-      const { data: invoice } = await supabase
-        .from('invoices')
-        .select('subscription_id')
-        .eq('id', payment.invoice_id)
-        .single();
-
-      if (invoice?.subscription_id) {
-        await supabase
+      if (invoice.subscription_id) {
+        // Get the subscription to extend it
+        const { data: subscription } = await supabase
           .from('subscriptions')
-          .update({ status: 'active' })
-          .eq('id', invoice.subscription_id);
-      }
-    } else if (paymentFor === 'customer_bill') {
-      // Handle customer bill payment
-      const customerId = payment.metadata?.customer_id;
-      if (customerId) {
-        const { data: customer } = await supabase
-          .from('customers')
-          .select('*')
-          .eq('id', customerId)
+          .select('*, package:packages(*)')
+          .eq('id', invoice.subscription_id)
           .single();
 
-        if (customer) {
-          // Calculate new expiry date
-          const currentExpiry = customer.expiry_date ? new Date(customer.expiry_date) : new Date();
+        if (subscription) {
+          const currentEnd = new Date(subscription.ends_at);
           const now = new Date();
-          const startDate = currentExpiry > now ? currentExpiry : now;
-          const newExpiry = new Date(startDate);
-          newExpiry.setMonth(newExpiry.getMonth() + 1);
+          const startDate = currentEnd > now ? currentEnd : now;
+          
+          // Calculate new end date based on billing cycle
+          let newEndDate = new Date(startDate);
+          if (subscription.billing_cycle === 'yearly') {
+            newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+          } else if (subscription.billing_cycle === 'quarterly') {
+            newEndDate.setMonth(newEndDate.getMonth() + 3);
+          } else {
+            newEndDate.setMonth(newEndDate.getMonth() + 1);
+          }
 
-          // Update customer
           await supabase
-            .from('customers')
-            .update({
-              expiry_date: newExpiry.toISOString().split('T')[0],
-              due_amount: Math.max(0, (customer.due_amount || 0) - payment.amount),
-              last_payment_date: new Date().toISOString().split('T')[0],
+            .from('subscriptions')
+            .update({ 
               status: 'active',
+              ends_at: newEndDate.toISOString(),
             })
-            .eq('id', customerId);
-
-          // Create recharge record
-          await supabase.from('customer_recharges').insert({
-            customer_id: customerId,
-            tenant_id: payment.tenant_id,
-            amount: payment.amount,
-            payment_method: gateway,
-            transaction_id: transactionId,
-            old_expiry: customer.expiry_date,
-            new_expiry: newExpiry.toISOString().split('T')[0],
-            status: 'completed',
-            months: 1,
-          });
+            .eq('id', invoice.subscription_id);
         }
       }
     }
   }
 
+  // Build redirect URL using stored return_url from payment record
+  const redirectUrl = isSuccess
+    ? `${returnUrl}?status=success&payment_id=${payment.id}`
+    : `${cancelUrl}?status=failed&payment_id=${payment.id}`;
+
   return {
     success: true,
     payment_id: payment.id,
     status: newStatus,
-    redirect_url: isSuccess
-      ? `${payment.metadata?.return_url || '/'}?status=success&payment_id=${payment.id}`
-      : `${payment.metadata?.cancel_url || '/'}?status=failed&payment_id=${payment.id}`,
+    redirect_url: redirectUrl,
   };
 }
 

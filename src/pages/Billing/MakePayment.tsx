@@ -75,12 +75,23 @@ export default function MakePayment() {
 
   const unpaidInvoices = invoices.filter(i => i.status === 'unpaid' || i.status === 'overdue');
   
-  // Combine global and tenant gateways, preferring tenant configs
+  // Use global gateways from SuperAdmin - always available to all ISP owners
+  // Tenant-specific gateways are optional overrides
   const enabledGateways = tenantGateways.length > 0 
     ? tenantGateways.filter(g => g.is_enabled)
     : globalGateways.filter(g => g.is_enabled);
 
   const gatewaysLoading = globalGatewaysLoading || tenantGatewaysLoading;
+
+  // Auto-select invoice amount when invoice is selected
+  useEffect(() => {
+    if (selectedInvoice) {
+      const invoice = invoices.find(i => i.id === selectedInvoice);
+      if (invoice) {
+        setAmount(invoice.total_amount.toString());
+      }
+    }
+  }, [selectedInvoice, invoices]);
 
   const getGatewayIcon = (method: PaymentMethod) => {
     switch (method) {
