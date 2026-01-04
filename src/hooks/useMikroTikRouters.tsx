@@ -9,6 +9,13 @@ export function useMikroTikRouters() {
   const [loading, setLoading] = useState(true);
 
   const fetchRouters = useCallback(async () => {
+    // Always require tenant context for ISP users
+    if (!isSuperAdmin && !tenantId) {
+      setRouters([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       let query = supabase
@@ -16,6 +23,7 @@ export function useMikroTikRouters() {
         .select('*')
         .order('name', { ascending: true });
 
+      // CRITICAL: Always filter by tenant_id for non-super-admins
       if (!isSuperAdmin && tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
@@ -25,6 +33,7 @@ export function useMikroTikRouters() {
       setRouters((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching MikroTik routers:', err);
+      setRouters([]);
     } finally {
       setLoading(false);
     }

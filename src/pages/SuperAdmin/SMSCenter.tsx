@@ -176,11 +176,20 @@ export default function SuperAdminSMSCenter() {
 
     setSending(true);
     try {
+      // Normalize phone number helper
+      const normalizePhone = (phone: string) => {
+        let cleaned = phone.replace(/[^\d+]/g, '');
+        if (cleaned.startsWith('+880')) cleaned = cleaned.substring(1);
+        else if (cleaned.startsWith('0')) cleaned = '880' + cleaned.substring(1);
+        else if (!cleaned.startsWith('880')) cleaned = '880' + cleaned;
+        return cleaned;
+      };
+
       const recipients = sendMode === 'single'
-        ? [{ phone: singlePhone, name: 'Direct' }]
+        ? [{ phone: normalizePhone(singlePhone), name: 'Direct' }]
         : tenants
             .filter(t => selectedTenants.includes(t.id) && t.phone)
-            .map(t => ({ phone: t.phone, name: t.name }));
+            .map(t => ({ phone: normalizePhone(t.phone), name: t.name }));
 
       // Queue all SMS in sms_logs - polling server will send them
       const smsRecords = recipients.map(r => ({
@@ -276,9 +285,18 @@ export default function SuperAdminSMSCenter() {
                           <Label>Phone Number</Label>
                           <Input
                             value={singlePhone}
-                            onChange={(e) => setSinglePhone(e.target.value)}
+                            onChange={(e) => {
+                              // Auto-format phone number
+                              let value = e.target.value.replace(/[^\d+]/g, '');
+                              if (value.startsWith('+880')) value = '0' + value.substring(4);
+                              else if (value.startsWith('880')) value = '0' + value.substring(3);
+                              setSinglePhone(value);
+                            }}
                             placeholder="01XXXXXXXXX"
                           />
+                          <p className="text-xs text-muted-foreground">
+                            Enter 11 digit number (01XXXXXXXXX). +88 prefix will be auto-added.
+                          </p>
                         </div>
                       </TabsContent>
 

@@ -83,9 +83,19 @@ export function useTenantSMSGateway() {
     if (!tenantId) return;
 
     try {
+      // Normalize phone number before queuing
+      let normalizedPhone = phoneNumber.replace(/[^\d+]/g, '');
+      if (normalizedPhone.startsWith('+880')) {
+        normalizedPhone = normalizedPhone.substring(1);
+      } else if (normalizedPhone.startsWith('0')) {
+        normalizedPhone = '880' + normalizedPhone.substring(1);
+      } else if (!normalizedPhone.startsWith('880')) {
+        normalizedPhone = '880' + normalizedPhone;
+      }
+
       const { error } = await supabase.from('sms_logs').insert({
         tenant_id: tenantId,
-        phone_number: phoneNumber,
+        phone_number: normalizedPhone,
         message: message,
         status: 'pending',
       });
