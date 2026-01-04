@@ -7,8 +7,9 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePaymentGateways } from '@/hooks/usePaymentGateways';
-import { CreditCard, Save, Loader2, ExternalLink, RefreshCw } from 'lucide-react';
+import { CreditCard, Save, Loader2, ExternalLink, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +18,7 @@ const GATEWAY_CONFIGS: Record<string, {
   title: string;
   description: string;
   docsUrl?: string;
+  hasModeSelector?: boolean;
   fields: { key: string; label: string; type: 'text' | 'password' | 'textarea'; placeholder: string }[];
 }> = {
   sslcommerz: {
@@ -41,13 +43,14 @@ const GATEWAY_CONFIGS: Record<string, {
   },
   bkash: {
     title: 'bKash',
-    description: 'Mobile financial services',
+    description: 'Mobile banking (Tokenized or PGW Checkout)',
     docsUrl: 'https://developer.bka.sh/docs',
+    hasModeSelector: true, // special flag for bKash mode
     fields: [
       { key: 'app_key', label: 'App Key', type: 'text', placeholder: 'App Key' },
       { key: 'app_secret', label: 'App Secret', type: 'password', placeholder: 'App Secret' },
-      { key: 'username', label: 'Username', type: 'text', placeholder: 'Merchant Username' },
-      { key: 'password', label: 'Password', type: 'password', placeholder: 'Merchant Password' },
+      { key: 'username', label: 'Username (PGW)', type: 'text', placeholder: 'Merchant Username' },
+      { key: 'password', label: 'Password (PGW)', type: 'password', placeholder: 'Merchant Password' },
     ]
   },
   nagad: {
@@ -114,6 +117,11 @@ export default function GatewaySettings() {
   const { toast } = useToast();
   const [paymentConfigs, setPaymentConfigs] = useState<Record<string, any>>({});
   const [isInitializing, setIsInitializing] = useState(false);
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+
+  const togglePasswordVisibility = (key: string) => {
+    setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   useEffect(() => {
     fetchGateways();
@@ -175,10 +183,16 @@ export default function GatewaySettings() {
   const handlePaymentSave = async (gateway: string) => {
     const config = paymentConfigs[gateway];
     if (config) {
+      // Store bkash_mode inside config object
+      const configData = { ...config.config };
+      if (gateway === 'bkash' && !configData.bkash_mode) {
+        configData.bkash_mode = 'tokenized';
+      }
+      
       await updateGateway(config.id, {
         is_enabled: config.is_enabled,
         sandbox_mode: config.sandbox_mode,
-        config: config.config,
+        config: configData,
         instructions: config.instructions,
       });
     }
@@ -190,10 +204,13 @@ export default function GatewaySettings() {
       title: config?.display_name || gateway.charAt(0).toUpperCase() + gateway.slice(1),
       description: 'Payment gateway',
       docsUrl: undefined,
+      hasModeSelector: false,
       fields: [] as { key: string; label: string; type: 'text' | 'password' | 'textarea'; placeholder: string }[]
     };
     
     if (!config) return null;
+
+    const isBkash = gateway === 'bkash';
 
     return (
       <Card>
@@ -233,6 +250,36 @@ export default function GatewaySettings() {
             </a>
           )}
 
+          {/* bKash Mode Selector */}
+          {isBkash && (
+            <div className="space-y-2">
+              <Label>bKash API Mode</Label>
+              <Select
+                value={config.config?.bkash_mode || 'tokenized'}
+                onValueChange={(v) => setPaymentConfigs({
+                  ...paymentConfigs,
+                  [gateway]: { 
+                    ...config, 
+                    config: { ...config.config, bkash_mode: v } 
+                  }
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tokenized">Tokenized (Redirect)</SelectItem>
+                  <SelectItem value="checkout_js">PGW Checkout.js (Popup)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {config.config?.bkash_mode === 'checkout_js' 
+                  ? 'Old PGW method using in-page popup.' 
+                  : 'New tokenized API with redirect to bKash.'}
+              </p>
+            </div>
+          )}
+
           {gatewayDef.fields.map(field => (
             <div key={field.key} className="space-y-2">
               <Label>{field.label}</Label>
@@ -247,15 +294,30 @@ export default function GatewaySettings() {
                   rows={3}
                 />
               ) : (
-                <Input
-                  type={field.type}
-                  value={config.config?.[field.key] || ''}
-                  onChange={(e) => setPaymentConfigs({
-                    ...paymentConfigs,
-                    [gateway]: { ...config, config: { ...config.config, [field.key]: e.target.value } }
-                  })}
-                  placeholder={field.placeholder}
-                />
+                <div className="relative">
+                  <Input
+                    type={field.type === 'password' && !showPasswords[`${gateway}-${field.key}`] ? 'password' : 'text'}
+                    value={config.config?.[field.key] || ''}
+                    onChange={(e) => setPaymentConfigs({
+                      ...paymentConfigs,
+                      [gateway]: { ...config, config: { ...config.config, [field.key]: e.target.value } }
+                    })}
+                    placeholder={field.placeholder}
+                    className="pr-10"
+                  />
+                  {field.type === 'password' && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={() => togglePasswordVisibility(`${gateway}-${field.key}`)}
+                    >
+                      {showPasswords[`${gateway}-${field.key}`] ? 
+                        <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           ))}
