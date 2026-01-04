@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,9 @@ import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { usePackages } from '@/hooks/usePackages';
 import { useInvoices } from '@/hooks/useInvoices';
-import { CreditCard, Package, Calendar, AlertTriangle, CheckCircle, FileText, Download, Clock, History } from 'lucide-react';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { downloadInvoicePDF } from '@/lib/invoice-pdf';
+import { CreditCard, Package, AlertTriangle, CheckCircle, FileText, Download, Clock, History, Eye, XCircle } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 
 export default function MySubscription() {
@@ -17,7 +19,8 @@ export default function MySubscription() {
   const { tenant, tenantId, loading: tenantLoading } = useTenantContext();
   const { subscriptions, loading: subsLoading } = useSubscriptions(tenantId || undefined);
   const { packages } = usePackages();
-  const { invoices, loading: invoicesLoading } = useInvoices(tenantId || undefined);
+  const { invoices, loading: invoicesLoading, cancelInvoice } = useInvoices(tenantId || undefined);
+  const { settings } = useSystemSettings();
 
   // Find active subscription (can be active, trial, or pending)
   const activeSubscription = subscriptions.find(s => 
@@ -34,6 +37,7 @@ export default function MySubscription() {
   const usagePercent = tenant?.max_olts ? Math.min(100, (3 / tenant.max_olts) * 100) : 0;
 
   const unpaidInvoices = invoices.filter(i => i.status === 'unpaid' || i.status === 'overdue');
+  const firstUnpaidInvoiceId = useMemo(() => unpaidInvoices[0]?.id || null, [unpaidInvoices]);
 
   if (tenantLoading || subsLoading) {
     return (
@@ -64,7 +68,10 @@ export default function MySubscription() {
                   Your subscription is pending activation. Please complete the payment to start using the service.
                 </p>
               </div>
-              <Button className="ml-auto" onClick={() => navigate('/billing/pay')}>
+              <Button className="ml-auto" onClick={() => {
+                if (firstUnpaidInvoiceId) return navigate(`/billing/pay?invoice=${firstUnpaidInvoiceId}`);
+                navigate('/billing/pay');
+              }}>
                 Pay Now
               </Button>
             </CardContent>
@@ -99,7 +106,10 @@ export default function MySubscription() {
                   You have {unpaidInvoices.length} unpaid invoice(s). Please pay to avoid service interruption.
                 </p>
               </div>
-              <Button variant="destructive" className="ml-auto" onClick={() => navigate('/billing/pay')}>
+              <Button variant="destructive" className="ml-auto" onClick={() => {
+                if (firstUnpaidInvoiceId) return navigate(`/billing/pay?invoice=${firstUnpaidInvoiceId}`);
+                navigate('/billing/pay');
+              }}>
                 Pay Now
               </Button>
             </CardContent>
@@ -235,12 +245,15 @@ export default function MySubscription() {
 
         {/* Invoices */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Recent Invoices
-            </CardTitle>
-            <CardDescription>Your billing history</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Recent Invoices
+              </CardTitle>
+              <CardDescription>Your billing history</CardDescription>
+            </div>
+            <Button variant="outline" onClick={() => navigate('/invoices')}>View all</Button>
           </CardHeader>
           <CardContent>
             {invoicesLoading ? (
@@ -249,30 +262,66 @@ export default function MySubscription() {
               <p className="text-center py-8 text-muted-foreground">No invoices yet</p>
             ) : (
               <div className="space-y-4">
-                {invoices.slice(0, 5).map((invoice) => (
-                  <div key={invoice.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <FileText className="h-8 w-8 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">{invoice.invoice_number}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Due: {format(new Date(invoice.due_date), 'PP')}
-                        </p>
+                {invoices.slice(0, 5).map((invoice) => {
+                  const canPay = invoice.status === 'unpaid' || invoice.status === 'overdue';
+                  const canCancel = invoice.status === 'unpaid' || invoice.status === 'overdue';
+
+                  return (
+                    <div key={invoice.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4 border rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <FileText className="h-8 w-8 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">{invoice.invoice_number}</p>
+                          <p className="text-sm text-muted-foreground">Due: {format(new Date(invoice.due_date), 'PP')}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 justify-end">
+                        <div className="text-right mr-2">
+                          <p className="font-bold">৳{invoice.total_amount.toLocaleString()}</p>
+                          <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'overdue' ? 'danger' : invoice.status === 'cancelled' ? 'secondary' : 'warning'}>
+                            {invoice.status.toUpperCase()}
+                          </Badge>
+                        </div>
+
+                        <Button variant="outline" className="gap-2" onClick={() => navigate(`/invoices?view=${invoice.id}`)}>
+                          <Eye className="h-4 w-4" />
+                          View
+                        </Button>
+
+                        {canPay && (
+                          <Button className="gap-2" onClick={() => navigate(`/billing/pay?invoice=${invoice.id}`)}>
+                            <CreditCard className="h-4 w-4" />
+                            Pay
+                          </Button>
+                        )}
+
+                        {canCancel && (
+                          <Button
+                            variant="outline"
+                            className="gap-2"
+                            onClick={async () => {
+                              if (!confirm(`Cancel invoice ${invoice.invoice_number}?`)) return;
+                              await cancelInvoice(invoice.id);
+                            }}
+                          >
+                            <XCircle className="h-4 w-4" />
+                            Cancel
+                          </Button>
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          className="gap-2"
+                          onClick={() => downloadInvoicePDF(invoice as any, settings)}
+                        >
+                          <Download className="h-4 w-4" />
+                          PDF
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="font-bold">৳{invoice.total_amount.toLocaleString()}</p>
-                        <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'overdue' ? 'danger' : 'warning'}>
-                          {invoice.status.toUpperCase()}
-                        </Badge>
-                      </div>
-                      <Button variant="ghost" size="icon">
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

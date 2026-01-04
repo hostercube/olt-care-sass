@@ -688,38 +688,58 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
   let gatewayResponse = callbackData;
 
   // Extract transaction ID and status based on gateway
+  // NOTE: many gateways send slightly different payloads between GET/POST/webhook.
+  // We try multiple fields and also normalize JSON string fields.
+  const safeJsonParse = (v) => {
+    if (!v || typeof v !== 'string') return v;
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v;
+    }
+  };
+
   switch (gateway) {
     case 'sslcommerz':
-      transactionId = callbackData.tran_id;
-      isSuccess = callbackData.status === 'VALID' || callbackData.status === 'VALIDATED';
+      transactionId = callbackData.tran_id || callbackData.tranId || callbackData.transaction_id;
+      isSuccess = ['VALID', 'VALIDATED', 'SUCCESS'].includes(String(callbackData.status || '').toUpperCase());
       break;
     case 'shurjopay':
-      transactionId = callbackData.order_id;
-      isSuccess = callbackData.sp_code === '1000';
+      transactionId = callbackData.order_id || callbackData.orderId || callbackData.transaction_id;
+      isSuccess = String(callbackData.sp_code || '') === '1000' || String(callbackData.spCode || '') === '1000';
       break;
-    case 'uddoktapay':
-      transactionId = callbackData.metadata?.transaction_id;
-      isSuccess = callbackData.status === 'COMPLETED';
+    case 'uddoktapay': {
+      const md = safeJsonParse(callbackData.metadata);
+      transactionId = md?.transaction_id || callbackData.transaction_id || callbackData.tran_id;
+      isSuccess = String(callbackData.status || '').toUpperCase() === 'COMPLETED';
       break;
+    }
     case 'aamarpay':
-      transactionId = callbackData.mer_txnid;
-      isSuccess = callbackData.pay_status === 'Successful';
+      transactionId = callbackData.mer_txnid || callbackData.mer_txn_id || callbackData.tran_id || callbackData.transaction_id;
+      isSuccess = String(callbackData.pay_status || callbackData.payStatus || '').toLowerCase() === 'successful';
       break;
     case 'piprapay':
-      transactionId = callbackData.order_id;
-      isSuccess = callbackData.status === 'success';
+      transactionId = callbackData.order_id || callbackData.orderId || callbackData.order_id || callbackData.transaction_id;
+      isSuccess = String(callbackData.status || '').toLowerCase() === 'success';
       break;
     case 'bkash':
-      transactionId = callbackData.merchantInvoiceNumber;
-      isSuccess = callbackData.transactionStatus === 'Completed';
+      transactionId =
+        callbackData.merchantInvoiceNumber ||
+        callbackData.merchantInvoiceNo ||
+        callbackData.merchantInvoice ||
+        callbackData.tran_id ||
+        callbackData.transaction_id;
+      isSuccess =
+        String(callbackData.transactionStatus || callbackData.status || '').toLowerCase() === 'completed' ||
+        String(callbackData.transactionStatus || callbackData.status || '').toLowerCase() === 'success';
       break;
     case 'nagad':
-      transactionId = callbackData.order_id;
-      isSuccess = callbackData.status === 'Success';
+      transactionId = callbackData.order_id || callbackData.orderId || callbackData.transaction_id;
+      isSuccess = String(callbackData.status || '').toLowerCase() === 'success';
       break;
     default:
-      transactionId = callbackData.transaction_id || callbackData.tran_id || callbackData.order_id;
-      isSuccess = callbackData.status === 'success' || callbackData.status === 'completed';
+      transactionId = callbackData.transaction_id || callbackData.tran_id || callbackData.order_id || callbackData.mer_txnid;
+      isSuccess = ['success', 'completed', 'valid', 'validated'].includes(String(callbackData.status || '').toLowerCase());
   }
 
   if (!transactionId) {

@@ -107,9 +107,12 @@ export default function MakePayment() {
 
   const unpaidInvoices = invoices.filter((i) => i.status === 'unpaid' || i.status === 'overdue');
 
-  // Prefer tenant-specific gateways for ISP owners; fall back to global only when super admin (not impersonating)
-  const visibleGateways = tenantId ? tenantGateways : globalGateways;
-  const enabledGateways = visibleGateways.filter((g: any) => g.is_enabled);
+  // ISP owners: show tenant-specific gateways if any are enabled; otherwise fall back to global gateways enabled by Super Admin
+  const enabledTenantGateways = tenantId ? tenantGateways.filter((g: any) => g.is_enabled === true) : [];
+  const enabledGlobalGateways = globalGateways.filter((g: any) => g.is_enabled === true);
+  const enabledGateways = tenantId && enabledTenantGateways.length > 0 ? enabledTenantGateways : enabledGlobalGateways;
+
+  const isUsingFallbackGateways = !!tenantId && enabledTenantGateways.length === 0 && enabledGlobalGateways.length > 0;
 
   const gatewaysLoading = tenantId
     ? tenantGatewaysLoading || isInitializingTenantGateways
@@ -435,6 +438,11 @@ export default function MakePayment() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             Select a payment gateway below. You will be redirected to complete the payment securely.
+            {isUsingFallbackGateways && (
+              <span className="block mt-1 text-muted-foreground">
+                Showing admin-enabled gateways (your company gateways are not configured yet).
+              </span>
+            )}
           </AlertDescription>
         </Alert>
 
