@@ -1504,8 +1504,8 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
   }
 
   try {
-    // NOTE: We run the logic inline (no internal HTTP calls).
-
+    logger.info(`Starting full MikroTik sync for router ${routerId}, tenant ${tenantId}`);
+    
     const { data: router, error: routerErr } = await supabase
       .from('mikrotik_routers')
       .select('*')
@@ -1513,6 +1513,7 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
       .single();
 
     if (routerErr || !router) {
+      logger.error('Router not found:', routerErr);
       return res.status(404).json({ success: false, error: 'Router not found' });
     }
 
@@ -1527,11 +1528,21 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
       password: router.password_encrypted,
     };
 
+    logger.info(`Connecting to MikroTik ${mikrotik.ip}:${mikrotik.port}`);
+
     const { fetchMikroTikPPPProfiles, fetchMikroTikPPPSecrets, fetchMikroTikPPPoE } = await import(
       './polling/mikrotik-client.js'
     );
 
-    const profiles = await fetchMikroTikPPPProfiles(mikrotik);
+    // Fetch profiles first
+    logger.info('Fetching PPP profiles...');
+    let profiles = [];
+    try {
+      profiles = await fetchMikroTikPPPProfiles(mikrotik);
+      logger.info(`Fetched ${profiles?.length || 0} PPP profiles`);
+    } catch (profileErr) {
+      logger.error('Failed to fetch profiles:', profileErr);
+    }
 
     const { data: existingPkgs } = await supabase
       .from('isp_packages')
@@ -1565,8 +1576,12 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
           is_active: true,
           sort_order: 999,
         });
-        if (insErr) throw insErr;
-        packagesCreated++;
+        if (!insErr) {
+          packagesCreated++;
+          logger.info(`Created package: ${name}`);
+        } else if (!insErr.message?.includes('duplicate')) {
+          logger.warn(`Package insert error: ${insErr.message}`);
+        }
       } else {
         const { error: upErr } = await supabase
           .from('isp_packages')
@@ -1577,10 +1592,13 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
             updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id);
-        if (upErr) throw upErr;
-        packagesUpdated++;
+        if (!upErr) {
+          packagesUpdated++;
+        }
       }
     }
+
+    logger.info(`Packages sync complete: ${packagesCreated} created, ${packagesUpdated} updated`);
 
     // Refresh packages for mapping
     const { data: pkgs } = await supabase
@@ -1592,10 +1610,20 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
       (pkgs || []).map((p) => [String(p.name).toLowerCase(), { id: p.id, price: p.price }])
     );
 
-    const [secrets, activeSessions] = await Promise.all([
-      fetchMikroTikPPPSecrets(mikrotik),
-      fetchMikroTikPPPoE(mikrotik),
-    ]);
+    // Fetch secrets and active sessions
+    logger.info('Fetching PPP secrets and active sessions...');
+    let secrets = [];
+    let activeSessions = [];
+    
+    try {
+      [secrets, activeSessions] = await Promise.all([
+        fetchMikroTikPPPSecrets(mikrotik),
+        fetchMikroTikPPPoE(mikrotik),
+      ]);
+      logger.info(`Fetched ${secrets?.length || 0} secrets, ${activeSessions?.length || 0} active sessions`);
+    } catch (secretErr) {
+      logger.error('Failed to fetch secrets/sessions:', secretErr);
+    }
 
     const { data: existingCustomers } = await supabase
       .from('customers')
@@ -1640,6 +1668,7 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
 
     let customersInserted = 0;
     if (inserts.length > 0) {
+      logger.info(`Inserting ${inserts.length} new customers...`);
       // Insert one by one to skip duplicates gracefully (unique constraint on pppoe_username)
       for (const rec of inserts) {
         try {
@@ -1649,7 +1678,7 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
 
           if (!insErr) {
             customersInserted++;
-          } else if (!insErr.message.includes('duplicate key')) {
+          } else if (!insErr.message?.includes('duplicate key')) {
             logger.warn(`Customer insert warning: ${insErr.message}`);
           }
         } catch (e) {
@@ -1662,6 +1691,8 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
       .from('mikrotik_routers')
       .update({ last_synced: new Date().toISOString(), status: 'online' })
       .eq('id', routerId);
+
+    logger.info(`Full sync complete: ${profiles?.length || 0} profiles, ${secrets?.length || 0} secrets, ${customersInserted} customers inserted`);
 
     return res.json({
       success: true,

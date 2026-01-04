@@ -334,6 +334,14 @@ async function initiatePipraPay(config, paymentData) {
 async function initiateBkash(config, paymentData) {
   const { app_key, app_secret, username, password, is_sandbox, bkash_mode } = config;
   
+  logger.info(`Initiating bKash payment with mode: ${bkash_mode || 'tokenized'}`, {
+    is_sandbox,
+    hasAppKey: !!app_key,
+    hasAppSecret: !!app_secret,
+    hasUsername: !!username,
+    hasPassword: !!password,
+  });
+  
   // Validate required credentials with user-friendly error
   if (!app_key) {
     logger.error('bKash app_key not configured');
@@ -353,6 +361,7 @@ async function initiateBkash(config, paymentData) {
   }
   
   const mode = bkash_mode || 'tokenized';
+  logger.info(`Using bKash mode: ${mode}`);
 
   if (mode === 'checkout_js') {
     return initiateBkashCheckoutJS(config, paymentData);
@@ -693,6 +702,17 @@ export async function initiatePayment(supabase, gateway, paymentData) {
 
   // bkash_mode from column first, then config fallback
   const bkashMode = gatewayConfig?.bkash_mode || configData.bkash_mode || 'tokenized';
+  
+  logger.info(`Payment gateway ${gateway} config:`, {
+    bkash_mode: bkashMode,
+    isSandbox,
+    hasAppKey: !!configData.app_key,
+    hasAppSecret: !!configData.app_secret,
+    hasUsername: !!configData.username,
+    hasPassword: !!configData.password,
+    gatewayConfigBkashMode: gatewayConfig?.bkash_mode,
+    configDataBkashMode: configData.bkash_mode,
+  });
 
   const config = {
     ...configData,
