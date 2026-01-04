@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -12,15 +13,16 @@ import { useTenantContext, useSuperAdmin } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { downloadInvoicePDF } from '@/lib/invoice-pdf';
 import { format } from 'date-fns';
-import { 
-  Search, 
-  Download, 
-  FileText, 
+import {
+  Search,
+  Download,
+  FileText,
   Filter,
   RefreshCw,
   CheckCircle,
   Clock,
   XCircle,
+  CreditCard,
 } from 'lucide-react';
 import type { Invoice } from '@/types/saas';
 
@@ -32,27 +34,37 @@ const statusConfig: Record<string, { icon: React.ElementType; color: string; lab
 };
 
 export default function Invoices() {
+  const navigate = useNavigate();
   const { tenantId } = useTenantContext();
   const { isSuperAdmin } = useSuperAdmin();
-  const { invoices, loading, fetchInvoices } = useInvoices(isSuperAdmin ? undefined : tenantId || undefined);
+  const { invoices, loading, fetchInvoices, cancelInvoice } = useInvoices(isSuperAdmin ? undefined : tenantId || undefined);
   const { settings } = useSystemSettings();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Filter invoices
-  const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = 
+  const filteredInvoices = invoices.filter((invoice) => {
+    const matchesSearch =
       invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice.tenant?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice.tenant?.company_name?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
   const handleDownloadPDF = (invoice: Invoice) => {
     downloadInvoicePDF(invoice, settings);
+  };
+
+  const handlePayInvoice = (invoice: Invoice) => {
+    navigate(`/billing/pay?invoice=${invoice.id}`);
+  };
+
+  const handleCancelInvoice = async (invoice: Invoice) => {
+    if (!confirm(`Cancel invoice ${invoice.invoice_number}?`)) return;
+    await cancelInvoice(invoice.id);
   };
 
   const getStatusConfig = (status: string) => {
@@ -232,15 +244,38 @@ export default function Invoices() {
                             {format(new Date(invoice.created_at), 'MMM d, yyyy')}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDownloadPDF(invoice)}
-                              className="gap-2"
-                            >
-                              <Download className="h-4 w-4" />
-                              PDF
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              {!isSuperAdmin && (invoice.status === 'unpaid' || invoice.status === 'overdue') && (
+                                <Button
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={() => handlePayInvoice(invoice)}
+                                >
+                                  <CreditCard className="h-4 w-4" />
+                                  Pay
+                                </Button>
+                              )}
+
+                              {!isSuperAdmin && (invoice.status === 'unpaid' || invoice.status === 'overdue') && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleCancelInvoice(invoice)}
+                                >
+                                  Cancel
+                                </Button>
+                              )}
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDownloadPDF(invoice)}
+                                className="gap-2"
+                              >
+                                <Download className="h-4 w-4" />
+                                PDF
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

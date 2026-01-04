@@ -146,11 +146,39 @@ export function useInvoices(tenantId?: string) {
     }
   };
 
+  const cancelInvoice = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ status: 'cancelled' })
+        .eq('id', id)
+        .in('status', ['unpaid', 'overdue']);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Invoice Cancelled',
+        description: 'The invoice has been cancelled.',
+      });
+
+      await fetchInvoices();
+    } catch (error: any) {
+      console.error('Error cancelling invoice:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to cancel invoice',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
   return {
     invoices,
     loading,
     fetchInvoices,
     generateInvoice,
     markInvoicePaid,
+    cancelInvoice,
   };
 }
