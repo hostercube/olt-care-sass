@@ -343,10 +343,12 @@ export function Sidebar() {
         {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
       </Button>
 
-      {/* VPS Connection Status */}
-      <div className="absolute bottom-14 left-2 right-2">
-        <VPSStatusIndicator collapsed={collapsed} />
-      </div>
+      {/* VPS Connection Status - Only visible for Super Admin */}
+      {showSuperAdminNav && (
+        <div className="absolute bottom-14 left-2 right-2">
+          <VPSStatusIndicator collapsed={collapsed} />
+        </div>
+      )}
     </aside>
   );
 }
