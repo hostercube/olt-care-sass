@@ -24,6 +24,7 @@ export interface PaymentInitiateResponse {
   checkout_url?: string | null;
   error?: string;
   message?: string;
+  transaction_id?: string;
 }
 
 export async function initiatePayment(request: PaymentInitiateRequest): Promise<PaymentInitiateResponse> {
