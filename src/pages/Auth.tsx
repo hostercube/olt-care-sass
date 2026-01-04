@@ -183,8 +183,7 @@ export default function Auth() {
     try {
       const redirectUrl = `${window.location.origin}/`;
       const trialDays = platformSettings.defaultTrialDays;
-      const requiresPayment = trialDays === 0;
-      
+
       // Create the user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: signupData.email,
@@ -194,144 +193,80 @@ export default function Auth() {
           data: {
             full_name: signupData.ownerName,
             company_name: signupData.companyName,
-          }
-        }
+          },
+        },
       });
-      
+
       if (authError) throw authError;
       if (!authData.user) throw new Error('Failed to create user');
 
-      // Determine tenant status based on trial days
-      const tenantStatus = requiresPayment ? 'pending' : 'trial';
-      const trialEndsAt = requiresPayment 
-        ? null 
-        : new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
+      const VPS_URL =
+        import.meta.env.VITE_VPS_URL ||
+        import.meta.env.VITE_POLLING_SERVER_URL ||
+        'https://oltapp.isppoint.com/olt-polling-server';
 
-      // Create the tenant
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
-        .insert({
-          name: signupData.companyName,
+      // Complete signup via your VPS backend (avoids client-side RLS issues)
+      const completeRes = await fetch(`${VPS_URL}/api/auth/complete-signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: authData.user.id,
           email: signupData.email,
-          phone: signupData.phone,
+          company_name: signupData.companyName,
           owner_name: signupData.ownerName,
+          phone: signupData.phone,
           division: signupData.division || null,
           district: signupData.district || null,
           upazila: signupData.upazila || null,
           address: signupData.address || null,
-          status: tenantStatus,
-          trial_ends_at: trialEndsAt,
-        } as any)
-        .select()
-        .single();
-      
-      if (tenantError) throw tenantError;
+          package_id: signupData.packageId || null,
+          billing_cycle: signupData.billingCycle,
+          trial_days: trialDays,
+        }),
+      });
 
-      // Link user to tenant
-      await supabase
-        .from('tenant_users')
-        .insert({
-          tenant_id: tenantData.id,
-          user_id: authData.user.id,
-          role: 'admin',
-          is_owner: true,
-        } as any);
-
-      // Initialize tenant gateways
-      await supabase.rpc('initialize_tenant_gateways', { _tenant_id: tenantData.id });
-
-      // Create subscription if package selected
-      if (signupData.packageId) {
-        const pkg = packages.find(p => p.id === signupData.packageId);
-        if (pkg) {
-          const startDate = new Date();
-          const endDate = new Date();
-          
-          // For paid plans without trial, set subscription as pending
-          if (requiresPayment) {
-            // Don't set ends_at until payment is made
-            endDate.setDate(endDate.getDate() + (signupData.billingCycle === 'monthly' ? 30 : 365));
-          } else {
-            endDate.setDate(endDate.getDate() + trialDays);
-          }
-          
-          const amount = signupData.billingCycle === 'monthly' ? pkg.price_monthly : pkg.price_yearly;
-          const subscriptionStatus = requiresPayment ? 'pending' : 'trial';
-          
-          const { data: subscriptionData } = await supabase
-            .from('subscriptions')
-            .insert({
-              tenant_id: tenantData.id,
-              package_id: signupData.packageId,
-              status: subscriptionStatus,
-              billing_cycle: signupData.billingCycle,
-              amount: amount,
-              starts_at: startDate.toISOString(),
-              ends_at: endDate.toISOString(),
-            } as any)
-            .select()
-            .single();
-          
-          // If payment is required, create an invoice
-          if (requiresPayment && subscriptionData) {
-            const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
-            await supabase
-              .from('invoices')
-              .insert({
-                tenant_id: tenantData.id,
-                subscription_id: subscriptionData.id,
-                invoice_number: invoiceNumber,
-                amount: amount,
-                tax_amount: 0,
-                total_amount: amount,
-                status: 'unpaid',
-                due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                line_items: [{
-                  description: `${pkg.name} - ${signupData.billingCycle === 'monthly' ? 'Monthly' : 'Yearly'} Subscription`,
-                  quantity: 1,
-                  unit_price: amount,
-                  total: amount,
-                }],
-              } as any);
-          }
-        }
+      const completeData = await completeRes.json().catch(() => ({}));
+      if (!completeRes.ok || !completeData?.success) {
+        throw new Error(completeData?.error || 'Failed to complete signup');
       }
+
+      const requiresPayment = !!completeData.requires_payment;
 
       if (requiresPayment) {
         toast({
-          title: "Account Created!",
-          description: "Please complete your payment to activate your account.",
+          title: 'Account Created!',
+          description: 'Please complete your payment to activate your account.',
         });
-        
-        // Auto login and redirect to payment page
+
+        // Auto login and redirect to payment page (if email confirmation is disabled)
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: signupData.email,
           password: signupData.password,
         });
-        
+
         if (!signInError) {
           navigate('/billing/pay');
           return;
         }
       } else {
         toast({
-          title: "Account Created!",
-          description: trialDays > 0 
-            ? `Your ${trialDays}-day trial has started. Please check your email to verify your account.`
-            : "Please check your email to verify your account, or login directly.",
+          title: 'Account Created!',
+          description:
+            trialDays > 0
+              ? `Your ${trialDays}-day trial has started. Please check your email to verify your account.`
+              : 'Please check your email to verify your account, or login directly.',
         });
       }
-      
+
       // Switch to login mode
       setMode('login');
       setEmail(signupData.email);
-      
     } catch (err: any) {
       console.error('Signup error:', err);
       toast({
-        variant: "destructive",
-        title: "Signup Failed",
-        description: err.message || "Failed to create account",
+        variant: 'destructive',
+        title: 'Signup Failed',
+        description: err.message || 'Failed to create account',
       });
     } finally {
       setIsSubmitting(false);
