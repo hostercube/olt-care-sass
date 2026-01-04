@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '@/components/ui/table';
@@ -15,22 +16,26 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useISPPackages } from '@/hooks/useISPPackages';
 import { useMikroTikSync } from '@/hooks/useMikroTikSync';
+import { supabase } from '@/integrations/supabase/client';
 import { AddCustomerDialog } from '@/components/isp/AddCustomerDialog';
 import { EditCustomerDialog } from '@/components/isp/EditCustomerDialog';
 import { ImportCustomersDialog } from '@/components/isp/ImportCustomersDialog';
+import { BulkActionsToolbar } from '@/components/isp/BulkActionsToolbar';
 import { 
   Users, UserPlus, Search, MoreHorizontal, Eye, Edit, Trash2, 
   RefreshCw, UserCheck, UserX, Clock, Ban, Download, Upload
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Customer, CustomerStatus } from '@/types/isp';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { useTablePagination, PaginationControls } from '@/components/common/TableWithPagination';
+import { toast } from 'sonner';
 
 const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any }> = {
   active: { label: 'Active', variant: 'default', icon: UserCheck },
@@ -43,13 +48,15 @@ const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' |
 export default function CustomerManagement() {
   const navigate = useNavigate();
   const { customers, loading, stats, refetch, deleteCustomer, updateStatus } = useCustomers();
-  const { deletePPPoEUser } = useMikroTikSync();
+  const { packages } = useISPPackages();
+  const { deletePPPoEUser, togglePPPoEUser } = useMikroTikSync();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Customer | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredCustomers = useMemo(() => {
     return customers.filter(customer => {
@@ -78,6 +85,32 @@ export default function CustomerManagement() {
     handlePageSizeChange,
   } = useTablePagination(filteredCustomers, 10);
 
+  const selectedCustomers = useMemo(() => {
+    return customers.filter(c => selectedIds.has(c.id));
+  }, [customers, selectedIds]);
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === paginatedCustomers.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginatedCustomers.map(c => c.id)));
+    }
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
   const handleDelete = async () => {
     if (!deleteConfirm) return;
 
@@ -90,6 +123,114 @@ export default function CustomerManagement() {
     await deleteCustomer(deleteConfirm.id);
     setDeleteConfirm(null);
   };
+
+  // Bulk action handlers
+  const handleBulkDelete = useCallback(async (customerIds: string[]) => {
+    let deleted = 0;
+    for (const id of customerIds) {
+      const customer = customers.find(c => c.id === id);
+      if (!customer) continue;
+
+      // Delete from MikroTik if linked
+      if (customer.mikrotik_id && customer.pppoe_username) {
+        await deletePPPoEUser(customer.mikrotik_id, customer.pppoe_username);
+      }
+
+      await deleteCustomer(id);
+      deleted++;
+    }
+    toast.success(`${deleted} customers deleted`);
+    refetch();
+  }, [customers, deletePPPoEUser, deleteCustomer, refetch]);
+
+  const handleBulkRecharge = useCallback(async (customerIds: string[], months: number) => {
+    let recharged = 0;
+    for (const id of customerIds) {
+      const customer = customers.find(c => c.id === id);
+      if (!customer) continue;
+
+      // Calculate new expiry
+      const currentExpiry = customer.expiry_date 
+        ? new Date(customer.expiry_date)
+        : new Date();
+      
+      // Get package validity or default to 30 days per month
+      const pkg = packages.find(p => p.id === customer.package_id);
+      const daysPerMonth = pkg?.validity_days || 30;
+      
+      const newExpiry = addDays(currentExpiry, daysPerMonth * months);
+
+      const { error } = await supabase
+        .from('customers')
+        .update({
+          expiry_date: newExpiry.toISOString().split('T')[0],
+          status: 'active',
+          last_payment_date: new Date().toISOString().split('T')[0],
+        })
+        .eq('id', id);
+
+      if (!error) recharged++;
+    }
+    toast.success(`${recharged} customers recharged for ${months} month(s)`);
+    refetch();
+  }, [customers, packages, refetch]);
+
+  const handleBulkPackageChange = useCallback(async (customerIds: string[], packageId: string) => {
+    const pkg = packages.find(p => p.id === packageId);
+    if (!pkg) return;
+
+    const { error } = await supabase
+      .from('customers')
+      .update({
+        package_id: packageId,
+        monthly_bill: pkg.price,
+      })
+      .in('id', customerIds);
+
+    if (error) {
+      toast.error('Failed to update packages');
+      return;
+    }
+
+    toast.success(`${customerIds.length} customers updated to ${pkg.name}`);
+    refetch();
+  }, [packages, refetch]);
+
+  const handleBulkNetworkEnable = useCallback(async (customerIds: string[]) => {
+    let enabled = 0;
+    for (const id of customerIds) {
+      const customer = customers.find(c => c.id === id);
+      if (!customer) continue;
+
+      // Enable on MikroTik if linked
+      if (customer.mikrotik_id && customer.pppoe_username) {
+        await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, false);
+      }
+
+      await updateStatus(id, 'active');
+      enabled++;
+    }
+    toast.success(`${enabled} customers enabled`);
+    refetch();
+  }, [customers, togglePPPoEUser, updateStatus, refetch]);
+
+  const handleBulkNetworkDisable = useCallback(async (customerIds: string[]) => {
+    let disabled = 0;
+    for (const id of customerIds) {
+      const customer = customers.find(c => c.id === id);
+      if (!customer) continue;
+
+      // Disable on MikroTik if linked
+      if (customer.mikrotik_id && customer.pppoe_username) {
+        await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, true);
+      }
+
+      await updateStatus(id, 'suspended');
+      disabled++;
+    }
+    toast.success(`${disabled} customers disabled`);
+    refetch();
+  }, [customers, togglePPPoEUser, updateStatus, refetch]);
 
   const exportCSV = () => {
     const headers = ['Code', 'Name', 'Phone', 'PPPoE', 'Package', 'Status', 'Expiry', 'Due'];
@@ -237,6 +378,18 @@ export default function CustomerManagement() {
             </Select>
           </div>
 
+          {/* Bulk Actions Toolbar */}
+          <BulkActionsToolbar
+            selectedCustomers={selectedCustomers}
+            packages={packages}
+            onClearSelection={clearSelection}
+            onBulkDelete={handleBulkDelete}
+            onBulkRecharge={handleBulkRecharge}
+            onBulkPackageChange={handleBulkPackageChange}
+            onBulkNetworkEnable={handleBulkNetworkEnable}
+            onBulkNetworkDisable={handleBulkNetworkDisable}
+          />
+
           {/* Table */}
           {loading ? (
             <div className="space-y-2">
@@ -249,6 +402,12 @@ export default function CustomerManagement() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedIds.size === paginatedCustomers.length && paginatedCustomers.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead>Code</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Phone</TableHead>
@@ -263,7 +422,7 @@ export default function CustomerManagement() {
                 <TableBody>
                   {paginatedCustomers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                         No customers found
                       </TableCell>
                     </TableRow>
@@ -272,7 +431,13 @@ export default function CustomerManagement() {
                       const statusInfo = statusConfig[customer.status];
                       const StatusIcon = statusInfo.icon;
                       return (
-                        <TableRow key={customer.id}>
+                        <TableRow key={customer.id} className={selectedIds.has(customer.id) ? 'bg-primary/5' : ''}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedIds.has(customer.id)}
+                              onCheckedChange={() => toggleSelection(customer.id)}
+                            />
+                          </TableCell>
                           <TableCell className="font-mono text-sm">
                             {customer.customer_code || '-'}
                           </TableCell>

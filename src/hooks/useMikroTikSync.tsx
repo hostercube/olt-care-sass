@@ -32,7 +32,7 @@ export function useMikroTikSync() {
   const [syncing, setSyncing] = useState(false);
   const [syncingRouter, setSyncingRouter] = useState<string | null>(null);
 
-  // Helper to get router credentials
+  // Helper to get router credentials and configuration
   const getRouterConfig = async (routerId: string) => {
     const { data, error } = await supabase
       .from('mikrotik_routers')
@@ -47,6 +47,8 @@ export function useMikroTikSync() {
       port: data.port,
       username: data.username,
       password: data.password_encrypted,
+      allow_customer_delete: (data as any).allow_customer_delete ?? true,
+      allow_queue_delete: (data as any).allow_queue_delete ?? true,
     };
   };
 
@@ -375,14 +377,27 @@ export function useMikroTikSync() {
     return updatePPPoEUser(routerId, username, { callerId: '' });
   }, [updatePPPoEUser]);
 
-  // Delete PPPoE user from MikroTik
+  // Delete PPPoE user from MikroTik (respects router permission setting)
   const deletePPPoEUser = useCallback(async (
     routerId: string,
     username: string
   ): Promise<boolean> => {
     try {
-      const mikrotik = await getRouterConfig(routerId);
-      if (!mikrotik) return false;
+      const config = await getRouterConfig(routerId);
+      if (!config) return false;
+
+      // Check if deletion from MikroTik is allowed
+      if (!config.allow_customer_delete) {
+        // Just return true - software can delete, but MikroTik untouched
+        return true;
+      }
+
+      const mikrotik = {
+        ip: config.ip,
+        port: config.port,
+        username: config.username,
+        password: config.password,
+      };
 
       const response = await fetch(`${apiBase}/api/mikrotik/pppoe/delete`, {
         method: 'POST',

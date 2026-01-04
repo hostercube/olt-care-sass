@@ -281,6 +281,7 @@ app.post('/test-all-protocols', async (req, res) => {
 });
 
 // Test MikroTik connection and fetch data summary
+// OPTIMIZED: Single connection test, then reuse for data fetch (no multiple logins)
 app.post('/api/test-mikrotik', async (req, res) => {
   const { mikrotik } = req.body;
   
@@ -289,9 +290,9 @@ app.post('/api/test-mikrotik', async (req, res) => {
       return res.status(400).json({ error: 'MikroTik configuration required' });
     }
     
-    logger.info(`Testing MikroTik and fetching data: ${mikrotik.ip}:${mikrotik.port}`);
+    logger.info(`Testing MikroTik: ${mikrotik.ip}:${mikrotik.port}`);
     
-    // First test connection
+    // Single connection test that also fetches version info
     const connectionResult = await testMikrotikConnection(mikrotik);
     
     if (!connectionResult.success) {
@@ -303,22 +304,17 @@ app.post('/api/test-mikrotik', async (req, res) => {
       });
     }
     
-    // If connection successful, fetch data
-    const data = await fetchAllMikroTikData(mikrotik);
-    
+    // Return just connection info - don't fetch data again (which causes multiple logins)
+    // Data fetch should only happen during full sync
     res.json({
       success: true,
       connection: connectionResult,
       data: {
-        pppoe_count: data.pppoe.length,
-        arp_count: data.arp.length,
-        dhcp_count: data.dhcp.length,
-        secrets_count: data.secrets.length,
-        // Sample data (first 5 of each)
-        pppoe_sample: data.pppoe.slice(0, 5),
-        arp_sample: data.arp.slice(0, 5),
-        dhcp_sample: data.dhcp.slice(0, 5),
-        secrets_sample: data.secrets.slice(0, 5).map(s => ({ ...s, pppoe_password: '***' })),
+        pppoe_count: 0,
+        arp_count: 0,
+        dhcp_count: 0,
+        secrets_count: 0,
+        note: 'Use Sync button to fetch PPPoE/Secrets data',
       }
     });
   } catch (error) {
@@ -330,7 +326,7 @@ app.post('/api/test-mikrotik', async (req, res) => {
   }
 });
 
-// Also without /api prefix
+// Also without /api prefix - OPTIMIZED same as above
 app.post('/test-mikrotik', async (req, res) => {
   const { mikrotik } = req.body;
   
@@ -339,7 +335,7 @@ app.post('/test-mikrotik', async (req, res) => {
       return res.status(400).json({ error: 'MikroTik configuration required' });
     }
     
-    logger.info(`Testing MikroTik and fetching data: ${mikrotik.ip}:${mikrotik.port}`);
+    logger.info(`Testing MikroTik: ${mikrotik.ip}:${mikrotik.port}`);
     
     const connectionResult = await testMikrotikConnection(mikrotik);
     
@@ -352,20 +348,15 @@ app.post('/test-mikrotik', async (req, res) => {
       });
     }
     
-    const data = await fetchAllMikroTikData(mikrotik);
-    
     res.json({
       success: true,
       connection: connectionResult,
       data: {
-        pppoe_count: data.pppoe.length,
-        arp_count: data.arp.length,
-        dhcp_count: data.dhcp.length,
-        secrets_count: data.secrets.length,
-        pppoe_sample: data.pppoe.slice(0, 5),
-        arp_sample: data.arp.slice(0, 5),
-        dhcp_sample: data.dhcp.slice(0, 5),
-        secrets_sample: data.secrets.slice(0, 5).map(s => ({ ...s, pppoe_password: '***' })),
+        pppoe_count: 0,
+        arp_count: 0,
+        dhcp_count: 0,
+        secrets_count: 0,
+        note: 'Use Sync button to fetch PPPoE/Secrets data',
       }
     });
   } catch (error) {
@@ -1360,15 +1351,23 @@ app.post('/api/mikrotik/sync/pppoe', async (req, res) => {
 
     let inserted = 0;
     if (inserts.length > 0) {
-      const { error: insErr, data: insData } = await supabase
-        .from('customers')
-        .insert(inserts)
-        .select('id');
+      // Insert one by one to skip duplicates gracefully (unique constraint on pppoe_username)
+      for (const rec of inserts) {
+        try {
+          const { error: insErr } = await supabase
+            .from('customers')
+            .insert(rec);
 
-      if (insErr) {
-        throw insErr;
+          if (!insErr) {
+            inserted++;
+          } else if (!insErr.message.includes('duplicate key')) {
+            // Log non-duplicate errors
+            logger.warn(`Customer insert warning: ${insErr.message}`);
+          }
+        } catch (e) {
+          // Skip duplicates silently
+        }
       }
-      inserted = insData?.length || 0;
     }
 
     await supabase
@@ -1641,13 +1640,22 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
 
     let customersInserted = 0;
     if (inserts.length > 0) {
-      const { error: insErr, data: insData } = await supabase
-        .from('customers')
-        .insert(inserts)
-        .select('id');
+      // Insert one by one to skip duplicates gracefully (unique constraint on pppoe_username)
+      for (const rec of inserts) {
+        try {
+          const { error: insErr } = await supabase
+            .from('customers')
+            .insert(rec);
 
-      if (insErr) throw insErr;
-      customersInserted = insData?.length || 0;
+          if (!insErr) {
+            customersInserted++;
+          } else if (!insErr.message.includes('duplicate key')) {
+            logger.warn(`Customer insert warning: ${insErr.message}`);
+          }
+        } catch (e) {
+          // Skip duplicates silently
+        }
+      }
     }
 
     await supabase
