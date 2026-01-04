@@ -63,7 +63,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
         reseller_id: customer.reseller_id || '',
         router_mac: customer.router_mac || '',
         pppoe_username: customer.pppoe_username || '',
-        pppoe_password: customer.pppoe_password || '',
+        pppoe_password: '',
         package_id: customer.package_id || '',
         expiry_date: customer.expiry_date || '',
         monthly_bill: customer.monthly_bill?.toString() || '',

@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
-import type { MikroTikRouter } from '@/types/isp';
 import { toast } from 'sonner';
 
 interface SyncResult {
@@ -29,7 +28,7 @@ export function useMikroTikSync() {
   const { tenantId } = useTenantContext();
   const { settings } = useSystemSettings();
   const apiBase = (settings?.apiServerUrl || '').replace(/\/$/, '');
-  
+
   const [syncing, setSyncing] = useState(false);
   const [syncingRouter, setSyncingRouter] = useState<string | null>(null);
 
@@ -40,9 +39,9 @@ export function useMikroTikSync() {
       .select('*')
       .eq('id', routerId)
       .single();
-    
+
     if (error || !data) return null;
-    
+
     return {
       ip: data.ip_address,
       port: data.port,
@@ -182,7 +181,7 @@ export function useMikroTikSync() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success(`PPPoE user ${username} created on MikroTik`);
         return true;
@@ -195,7 +194,7 @@ export function useMikroTikSync() {
       toast.warning('Note: Could not create PPPoE user on MikroTik');
       return false;
     }
-   }, [apiBase]);
+  }, [apiBase]);
 
   // Enable/Disable PPPoE user
   const togglePPPoEUser = useCallback(async (
@@ -214,7 +213,7 @@ export function useMikroTikSync() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success(`PPPoE user ${username} ${disabled ? 'disabled' : 'enabled'}`);
         return true;
@@ -227,7 +226,7 @@ export function useMikroTikSync() {
       toast.error(`Failed to ${disabled ? 'disable' : 'enable'} PPPoE user`);
       return false;
     }
-    }, [apiBase]);
+  }, [apiBase]);
 
   // Get customer network status (online/offline, bandwidth)
   const getCustomerNetworkStatus = useCallback(async (
@@ -245,7 +244,7 @@ export function useMikroTikSync() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         return {
           pppoeUsername,
@@ -257,13 +256,13 @@ export function useMikroTikSync() {
           txBytes: result.txBytes,
         };
       }
-      
+
       return { pppoeUsername, isOnline: false };
     } catch (err: any) {
       console.error('Get network status error:', err);
       return null;
     }
-    }, [apiBase]);
+  }, [apiBase]);
 
   // Get live bandwidth for customer
   const getLiveBandwidth = useCallback(async (
@@ -285,7 +284,7 @@ export function useMikroTikSync() {
     } catch (err) {
       return null;
     }
-    }, [apiBase]);
+  }, [apiBase]);
 
   // Disconnect PPPoE session
   const disconnectSession = useCallback(async (
@@ -303,7 +302,7 @@ export function useMikroTikSync() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success('PPPoE session disconnected');
         return true;
@@ -316,7 +315,48 @@ export function useMikroTikSync() {
       toast.error('Failed to disconnect session');
       return false;
     }
-    }, [apiBase]);
+  }, [apiBase]);
+
+  // Update PPPoE user (rename/password/profile/comment/caller-id)
+  const updatePPPoEUser = useCallback(async (
+    routerId: string,
+    username: string,
+    updates: {
+      newUsername?: string;
+      password?: string;
+      profile?: string;
+      comment?: string;
+      callerId?: string;
+    }
+  ): Promise<boolean> => {
+    try {
+      const mikrotik = await getRouterConfig(routerId);
+      if (!mikrotik) {
+        toast.error('Router not found');
+        return false;
+      }
+
+      const response = await fetch(`${apiBase}/api/mikrotik/pppoe/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mikrotik, username, ...updates }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (result.success) {
+        toast.success('MikroTik updated');
+        return true;
+      }
+
+      toast.error(result.error || 'Failed to update MikroTik');
+      return false;
+    } catch (err: any) {
+      console.error('Update PPPoE user error:', err);
+      toast.error(err.message || 'Failed to update MikroTik');
+      return false;
+    }
+  }, [apiBase]);
 
   // Save Caller-ID (MAC binding)
   const saveCallerId = useCallback(async (
@@ -324,32 +364,16 @@ export function useMikroTikSync() {
     username: string,
     callerId: string
   ): Promise<boolean> => {
-    try {
-      console.log('Saving Caller-ID:', { username, callerId });
-      toast.success('Caller-ID saved successfully');
-      return true;
-    } catch (err: any) {
-      console.error('Save Caller-ID error:', err);
-      toast.error('Failed to save Caller-ID');
-      return false;
-    }
-  }, []);
+    return updatePPPoEUser(routerId, username, { callerId });
+  }, [updatePPPoEUser]);
 
   // Remove Caller-ID (unbind MAC)
   const removeCallerId = useCallback(async (
     routerId: string,
     username: string
   ): Promise<boolean> => {
-    try {
-      console.log('Removing Caller-ID for:', username);
-      toast.success('Caller-ID removed successfully');
-      return true;
-    } catch (err: any) {
-      console.error('Remove Caller-ID error:', err);
-      toast.error('Failed to remove Caller-ID');
-      return false;
-    }
-  }, []);
+    return updatePPPoEUser(routerId, username, { callerId: '' });
+  }, [updatePPPoEUser]);
 
   // Delete PPPoE user from MikroTik
   const deletePPPoEUser = useCallback(async (
@@ -367,7 +391,7 @@ export function useMikroTikSync() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success(`PPPoE user ${username} deleted from MikroTik`);
         return true;
@@ -380,7 +404,7 @@ export function useMikroTikSync() {
       toast.error('Failed to delete PPPoE user');
       return false;
     }
-    }, [apiBase]);
+  }, [apiBase]);
 
   return {
     syncing,
