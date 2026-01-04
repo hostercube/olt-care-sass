@@ -15,6 +15,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useMikroTikSync } from '@/hooks/useMikroTikSync';
 import { AddCustomerDialog } from '@/components/isp/AddCustomerDialog';
 import { EditCustomerDialog } from '@/components/isp/EditCustomerDialog';
 import { ImportCustomersDialog } from '@/components/isp/ImportCustomersDialog';
@@ -42,6 +43,7 @@ const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' |
 export default function CustomerManagement() {
   const navigate = useNavigate();
   const { customers, loading, stats, refetch, deleteCustomer, updateStatus } = useCustomers();
+  const { deletePPPoEUser } = useMikroTikSync();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -77,10 +79,16 @@ export default function CustomerManagement() {
   } = useTablePagination(filteredCustomers, 10);
 
   const handleDelete = async () => {
-    if (deleteConfirm) {
-      await deleteCustomer(deleteConfirm.id);
-      setDeleteConfirm(null);
+    if (!deleteConfirm) return;
+
+    // Keep DB + MikroTik consistent: delete from MikroTik first (if linked)
+    if (deleteConfirm.mikrotik_id && deleteConfirm.pppoe_username) {
+      const ok = await deletePPPoEUser(deleteConfirm.mikrotik_id, deleteConfirm.pppoe_username);
+      if (!ok) return;
     }
+
+    await deleteCustomer(deleteConfirm.id);
+    setDeleteConfirm(null);
   };
 
   const exportCSV = () => {

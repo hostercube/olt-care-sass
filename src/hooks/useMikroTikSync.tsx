@@ -51,14 +51,28 @@ export function useMikroTikSync() {
     };
   };
 
+  const getRouterTenantId = async (routerId: string): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from('mikrotik_routers')
+      .select('tenant_id')
+      .eq('id', routerId)
+      .single();
+
+    if (error) return tenantId || null;
+    return (data as any)?.tenant_id || tenantId || null;
+  };
+
   // Sync PPPoE users from MikroTik to software (creates customers)
   const syncPPPoEUsers = useCallback(async (routerId: string): Promise<SyncResult> => {
     setSyncingRouter(routerId);
     try {
+      const effectiveTenantId = await getRouterTenantId(routerId);
+      if (!effectiveTenantId) throw new Error('Tenant not selected');
+
       const response = await fetch(`${apiBase}/api/mikrotik/sync/pppoe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ routerId, tenantId }),
+        body: JSON.stringify({ routerId, tenantId: effectiveTenantId }),
       });
 
       const result = await response.json();
@@ -82,10 +96,13 @@ export function useMikroTikSync() {
   const syncQueues = useCallback(async (routerId: string): Promise<SyncResult> => {
     setSyncingRouter(routerId);
     try {
+      const effectiveTenantId = await getRouterTenantId(routerId);
+      if (!effectiveTenantId) throw new Error('Tenant not selected');
+
       const response = await fetch(`${apiBase}/api/mikrotik/sync/queues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ routerId, tenantId }),
+        body: JSON.stringify({ routerId, tenantId: effectiveTenantId }),
       });
 
       const result = await response.json();
@@ -110,10 +127,13 @@ export function useMikroTikSync() {
     setSyncing(true);
     setSyncingRouter(routerId);
     try {
+      const effectiveTenantId = await getRouterTenantId(routerId);
+      if (!effectiveTenantId) throw new Error('Tenant not selected');
+
       const response = await fetch(`${apiBase}/api/mikrotik/sync/full`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ routerId, tenantId }),
+        body: JSON.stringify({ routerId, tenantId: effectiveTenantId }),
       });
 
       const result = await response.json();
@@ -373,6 +393,7 @@ export function useMikroTikSync() {
     getCustomerNetworkStatus,
     getLiveBandwidth,
     disconnectSession,
+    updatePPPoEUser,
     saveCallerId,
     removeCallerId,
     deletePPPoEUser,

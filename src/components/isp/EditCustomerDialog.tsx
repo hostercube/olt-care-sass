@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
@@ -13,6 +14,8 @@ import { useCustomers } from '@/hooks/useCustomers';
 import { useISPPackages } from '@/hooks/useISPPackages';
 import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
+import { useMikroTikSync } from '@/hooks/useMikroTikSync';
+import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import type { Customer } from '@/types/isp';
 
@@ -28,7 +31,9 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
   const { packages } = useISPPackages();
   const { areas } = useAreas();
   const { resellers } = useResellers();
+  const { updatePPPoEUser } = useMikroTikSync();
   const [loading, setLoading] = useState(false);
+  const [updateMikroTik, setUpdateMikroTik] = useState(true);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -73,7 +78,49 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
     setLoading(true);
 
     try {
-      await updateCustomer(customer.id, {
+      const oldUsername = (customer.pppoe_username || '').trim();
+      const newUsername = (formData.pppoe_username || '').trim();
+      const routerId = customer.mikrotik_id || '';
+
+      const nextPackage = packages.find((p) => p.id === formData.package_id);
+      const prevPackage = packages.find((p) => p.id === customer.package_id);
+
+      const shouldUpdateMikroTik = updateMikroTik && !!routerId && !!oldUsername;
+
+      if (shouldUpdateMikroTik) {
+        const updates: any = {};
+
+        if (newUsername && newUsername.toLowerCase() !== oldUsername.toLowerCase()) {
+          updates.newUsername = newUsername;
+        }
+
+        if (formData.pppoe_password && formData.pppoe_password.trim().length > 0) {
+          updates.password = formData.pppoe_password.trim();
+        }
+
+        // Profile update when package changed
+        if ((customer.package_id || '') !== (formData.package_id || '')) {
+          const desiredProfile = nextPackage?.name || 'default';
+          if ((prevPackage?.name || 'default') !== desiredProfile) {
+            updates.profile = desiredProfile;
+          }
+        }
+
+        // MAC binding update when router_mac changed
+        if ((customer.router_mac || '') !== (formData.router_mac || '')) {
+          updates.callerId = (formData.router_mac || '').trim();
+        }
+
+        if (Object.keys(updates).length > 0) {
+          const ok = await updatePPPoEUser(routerId, oldUsername, updates);
+          if (!ok) {
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      const updateData: any = {
         name: formData.name,
         phone: formData.phone || null,
         email: formData.email || null,
@@ -82,17 +129,23 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
         reseller_id: formData.reseller_id || null,
         router_mac: formData.router_mac || null,
         pppoe_username: formData.pppoe_username || null,
-        pppoe_password: formData.pppoe_password || null,
         package_id: formData.package_id || null,
         expiry_date: formData.expiry_date || null,
         monthly_bill: parseFloat(formData.monthly_bill) || 0,
         notes: formData.notes || null,
         status: formData.status,
-      });
-      
+      };
+
+      // Only update PPPoE password if user explicitly typed one.
+      if (formData.pppoe_password && formData.pppoe_password.trim().length > 0) {
+        updateData.pppoe_password = formData.pppoe_password.trim();
+      }
+
+      await updateCustomer(customer.id, updateData);
       onSuccess?.();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating customer:', err);
+      toast.error(err?.message || 'Failed to update customer');
     } finally {
       setLoading(false);
     }
@@ -156,6 +209,19 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
               />
             </div>
           </div>
+
+          {/* MikroTik sync toggle */}
+          {customer.mikrotik_id && customer.pppoe_username && (
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <p className="text-sm font-medium">Update MikroTik</p>
+                <p className="text-xs text-muted-foreground">
+                  PPPoE username/password/package change router এও update হবে
+                </p>
+              </div>
+              <Switch checked={updateMikroTik} onCheckedChange={setUpdateMikroTik} />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Package</Label>

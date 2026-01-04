@@ -1312,6 +1312,9 @@ async function updatePPPSecretREST(mikrotik, secretId, updates, connectionInfo) 
   const auth = Buffer.from(`${username}:${password}`).toString('base64');
 
   const body = {};
+  if (updates.name !== undefined) body.name = updates.name;
+  if (updates.password !== undefined) body.password = updates.password;
+  if (updates.profile !== undefined) body.profile = updates.profile;
   if (updates.comment !== undefined) body.comment = updates.comment;
   if (updates.callerId !== undefined) body['caller-id'] = updates.callerId;
 
