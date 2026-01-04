@@ -156,11 +156,23 @@ export default function MakePayment() {
     }
   };
 
-  // Handle bKash Checkout.js mode - redirect or call backend for redirect URL
-  const handleBkashCheckoutJS = async (bkashConfig: any, paymentId: string) => {
+  // Handle bKash payment - redirect to bKash URL
+  const handleBkashRedirect = async (bkashConfig: any, checkoutUrl: string | null, paymentId: string) => {
     try {
-      // Check if bkashURL is directly available in config
-      if (bkashConfig.bkashURL) {
+      // If checkout_url (bkashURL) is available, redirect directly
+      if (checkoutUrl) {
+        toast({
+          title: 'Redirecting to bKash',
+          description: 'You will be redirected to complete payment...',
+        });
+        setTimeout(() => {
+          window.location.href = checkoutUrl;
+        }, 500);
+        return;
+      }
+
+      // If bkashURL is in config, use that
+      if (bkashConfig?.bkashURL) {
         toast({
           title: 'Redirecting to bKash',
           description: 'You will be redirected to complete payment...',
@@ -171,7 +183,7 @@ export default function MakePayment() {
         return;
       }
 
-      // Otherwise, call backend to get redirect URL or handle via execute
+      // Fallback: Call backend to get redirect URL
       const VPS_URL = import.meta.env.VITE_POLLING_SERVER_URL || import.meta.env.VITE_VPS_URL || 'https://oltapp.isppoint.com/olt-polling-server';
       
       toast({
@@ -183,7 +195,7 @@ export default function MakePayment() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          paymentID: bkashConfig.paymentID,
+          paymentID: bkashConfig?.paymentID,
           payment_id: paymentId,
           tenant_id: tenantId,
           return_url: `${window.location.origin}/billing/pay`,
@@ -193,20 +205,21 @@ export default function MakePayment() {
       const data = await response.json();
 
       if (data.bkashURL) {
-        // Redirect to bKash payment page
         window.location.href = data.bkashURL;
       } else if (data.success) {
-        // No direct URL available - show instructions
         toast({
           title: 'bKash Payment Created',
           description: 'Please check your bKash app to complete the payment.',
         });
-        setIsSubmitting(false);
+        // Wait and refresh to check status
+        setTimeout(() => {
+          window.location.href = `${window.location.origin}/billing/pay?payment_id=${paymentId}&status=pending`;
+        }, 3000);
       } else {
         throw new Error(data.error || 'Failed to process bKash payment');
       }
     } catch (error: any) {
-      console.error('bKash Checkout.js error:', error);
+      console.error('bKash payment error:', error);
       toast({
         title: 'bKash Payment Error',
         description: error.message || 'Failed to process bKash payment. Please try again.',
@@ -249,9 +262,9 @@ export default function MakePayment() {
         payment_for: 'subscription',
       });
 
-      // bKash PGW Checkout.js mode
-      if (response.success && response.bkash_mode === 'checkout_js') {
-        // If checkout_url is available (bkashURL), redirect directly
+      // bKash payment - handle redirect
+      if (response.success && (response.bkash_mode === 'checkout_js' || response.bkash_mode === 'tokenized' || selectedMethod === 'bkash')) {
+        // Redirect to bKash URL if available
         if (response.checkout_url) {
           toast({
             title: 'Redirecting to bKash',
@@ -262,11 +275,9 @@ export default function MakePayment() {
           }, 500);
           return;
         }
-        // Otherwise use the config for client-side handling
-        if (response.bkash_config) {
-          await handleBkashCheckoutJS(response.bkash_config, response.payment_id || '');
-          return;
-        }
+        // Handle via bkash_config or fallback
+        await handleBkashRedirect(response.bkash_config, response.checkout_url, response.payment_id || '');
+        return;
       }
 
       if (response.success && response.checkout_url) {
