@@ -456,9 +456,9 @@ export default function SMSGatewaySettings() {
                           value={senderId}
                           onChange={(e) => setSenderId(e.target.value)}
                           placeholder={selectedProvider?.fields?.sender_id?.placeholder || 'Your Sender ID'}
-                          maxLength={11}
+                          maxLength={13}
                         />
-                        <p className="text-xs text-muted-foreground">Max 11 characters</p>
+                        <p className="text-xs text-muted-foreground">Max 11 characters for text, 13 for phone numbers</p>
                       </div>
 
                       {selectedProvider?.authType === 'apikey_secret' && (

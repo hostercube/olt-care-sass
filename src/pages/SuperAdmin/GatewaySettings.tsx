@@ -68,6 +68,23 @@ const GATEWAY_CONFIGS: Record<string, {
       { key: 'merchant_number', label: 'Merchant Number', type: 'text', placeholder: 'Merchant Number' },
     ]
   },
+  portwallet: {
+    title: 'PortWallet',
+    description: 'Digital payment gateway',
+    docsUrl: 'https://portwallet.com/developers',
+    fields: [
+      { key: 'app_key', label: 'App Key', type: 'text', placeholder: 'App Key' },
+      { key: 'secret_key', label: 'Secret Key', type: 'password', placeholder: 'Secret Key' },
+    ]
+  },
+  piprapay: {
+    title: 'PipraPay',
+    description: 'Payment aggregator',
+    fields: [
+      { key: 'api_key', label: 'API Key', type: 'text', placeholder: 'API Key' },
+      { key: 'api_secret', label: 'API Secret', type: 'password', placeholder: 'API Secret' },
+    ]
+  },
   manual: {
     title: 'Manual Payment',
     description: 'Bank transfer, cash, or other manual methods',
@@ -148,9 +165,14 @@ export default function GatewaySettings() {
 
   const PaymentGatewayCard = ({ gateway }: { gateway: string }) => {
     const config = paymentConfigs[gateway];
-    const gatewayDef = GATEWAY_CONFIGS[gateway];
+    const gatewayDef = GATEWAY_CONFIGS[gateway] || {
+      title: config?.display_name || gateway.charAt(0).toUpperCase() + gateway.slice(1),
+      description: 'Payment gateway',
+      docsUrl: undefined,
+      fields: [] as { key: string; label: string; type: 'text' | 'password' | 'textarea'; placeholder: string }[]
+    };
     
-    if (!config || !gatewayDef) return null;
+    if (!config) return null;
 
     return (
       <Card>
@@ -280,8 +302,8 @@ export default function GatewaySettings() {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {Object.keys(GATEWAY_CONFIGS).map(gateway => (
-              paymentConfigs[gateway] && <PaymentGatewayCard key={gateway} gateway={gateway} />
+            {gateways.map(gw => (
+              <PaymentGatewayCard key={gw.id} gateway={gw.gateway} />
             ))}
           </div>
         )}
