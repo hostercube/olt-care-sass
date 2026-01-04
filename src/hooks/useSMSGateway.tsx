@@ -122,20 +122,22 @@ export function useSMSGateway() {
 
   const sendTestSMS = async (phoneNumber: string, message: string) => {
     try {
-      // Log the SMS attempt with pending status
-      const { error } = await supabase
-        .from('sms_logs')
-        .insert({
-          phone_number: phoneNumber,
-          message: message,
-          status: 'pending',
-        });
+      // Send SMS instantly via edge function
+      const response = await supabase.functions.invoke('send-sms', {
+        body: { phone: phoneNumber, message }
+      });
 
-      if (error) throw error;
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || 'Failed to send SMS');
+      }
 
       toast({
-        title: 'Test SMS Queued',
-        description: `Test SMS queued for ${phoneNumber}. The polling server will process it.`,
+        title: 'SMS Sent',
+        description: `Test SMS sent to ${phoneNumber} successfully.`,
       });
 
       await fetchLogs();
@@ -143,7 +145,7 @@ export function useSMSGateway() {
       console.error('Error sending test SMS:', error);
       toast({
         title: 'Error',
-        description: 'Failed to queue test SMS',
+        description: error.message || 'Failed to send test SMS',
         variant: 'destructive',
       });
     }
