@@ -18,6 +18,9 @@ import {
 import { useCustomers } from '@/hooks/useCustomers';
 import { useISPPackages } from '@/hooks/useISPPackages';
 import { useMikroTikSync } from '@/hooks/useMikroTikSync';
+import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
+import { useAreas } from '@/hooks/useAreas';
+import { useResellerSystem } from '@/hooks/useResellerSystem';
 import { supabase } from '@/integrations/supabase/client';
 import { AddCustomerDialog } from '@/components/isp/AddCustomerDialog';
 import { EditCustomerDialog } from '@/components/isp/EditCustomerDialog';
@@ -25,17 +28,23 @@ import { ImportCustomersDialog } from '@/components/isp/ImportCustomersDialog';
 import { BulkActionsToolbar } from '@/components/isp/BulkActionsToolbar';
 import { 
   Users, UserPlus, Search, MoreHorizontal, Eye, Edit, Trash2, 
-  RefreshCw, UserCheck, UserX, Clock, Ban, Download, Upload
+  RefreshCw, UserCheck, UserX, Clock, Ban, Download, Upload,
+  Filter, CreditCard, RotateCcw, X
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Customer, CustomerStatus } from '@/types/isp';
-import { format, addDays } from 'date-fns';
+import { format, addDays, parseISO, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { useTablePagination, PaginationControls } from '@/components/common/TableWithPagination';
 import { toast } from 'sonner';
+import {
+  Popover, PopoverContent, PopoverTrigger
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Label } from '@/components/ui/label';
 
 const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any }> = {
   active: { label: 'Active', variant: 'default', icon: UserCheck },
@@ -45,32 +54,148 @@ const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' |
   cancelled: { label: 'Cancelled', variant: 'outline', icon: UserX },
 };
 
+interface FilterState {
+  status: string;
+  package: string;
+  area: string;
+  mikrotik: string;
+  reseller: string;
+  expiryFilter: string;
+  connectionDateFrom: Date | undefined;
+  connectionDateTo: Date | undefined;
+  expiryDateFrom: Date | undefined;
+  expiryDateTo: Date | undefined;
+}
+
 export default function CustomerManagement() {
   const navigate = useNavigate();
   const { customers, loading, stats, refetch, deleteCustomer } = useCustomers();
   const { packages } = useISPPackages();
+  const { routers } = useMikroTikRouters();
+  const { areas } = useAreas();
+  const { resellers } = useResellerSystem();
   const { deletePPPoEUser, togglePPPoEUser } = useMikroTikSync();
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Customer | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showFilters, setShowFilters] = useState(false);
+  
+  const [filters, setFilters] = useState<FilterState>({
+    status: 'all',
+    package: 'all',
+    area: 'all',
+    mikrotik: 'all',
+    reseller: 'all',
+    expiryFilter: 'all',
+    connectionDateFrom: undefined,
+    connectionDateTo: undefined,
+    expiryDateFrom: undefined,
+    expiryDateTo: undefined,
+  });
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.status !== 'all') count++;
+    if (filters.package !== 'all') count++;
+    if (filters.area !== 'all') count++;
+    if (filters.mikrotik !== 'all') count++;
+    if (filters.reseller !== 'all') count++;
+    if (filters.expiryFilter !== 'all') count++;
+    if (filters.connectionDateFrom || filters.connectionDateTo) count++;
+    if (filters.expiryDateFrom || filters.expiryDateTo) count++;
+    return count;
+  }, [filters]);
+
+  const clearFilters = () => {
+    setFilters({
+      status: 'all',
+      package: 'all',
+      area: 'all',
+      mikrotik: 'all',
+      reseller: 'all',
+      expiryFilter: 'all',
+      connectionDateFrom: undefined,
+      connectionDateTo: undefined,
+      expiryDateFrom: undefined,
+      expiryDateTo: undefined,
+    });
+  };
 
   const filteredCustomers = useMemo(() => {
+    const today = startOfDay(new Date());
+    
     return customers.filter(customer => {
+      // Search filter
       const matchesSearch = 
         customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         customer.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         customer.pppoe_username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         customer.customer_code?.toLowerCase().includes(searchTerm.toLowerCase());
       
-      const matchesStatus = statusFilter === 'all' || customer.status === statusFilter;
-      
-      return matchesSearch && matchesStatus;
+      if (!matchesSearch) return false;
+
+      // Status filter
+      if (filters.status !== 'all' && customer.status !== filters.status) return false;
+
+      // Package filter
+      if (filters.package !== 'all' && customer.package_id !== filters.package) return false;
+
+      // Area filter
+      if (filters.area !== 'all' && customer.area_id !== filters.area) return false;
+
+      // MikroTik filter
+      if (filters.mikrotik !== 'all' && customer.mikrotik_id !== filters.mikrotik) return false;
+
+      // Reseller filter
+      if (filters.reseller !== 'all' && customer.reseller_id !== filters.reseller) return false;
+
+      // Expiry status filter
+      if (filters.expiryFilter !== 'all') {
+        const expiryDate = customer.expiry_date ? startOfDay(parseISO(customer.expiry_date)) : null;
+        
+        switch (filters.expiryFilter) {
+          case 'expired':
+            if (!expiryDate || !isBefore(expiryDate, today)) return false;
+            break;
+          case 'expiring_today':
+            if (!expiryDate || expiryDate.getTime() !== today.getTime()) return false;
+            break;
+          case 'expiring_week':
+            const weekFromNow = addDays(today, 7);
+            if (!expiryDate || isBefore(expiryDate, today) || isAfter(expiryDate, weekFromNow)) return false;
+            break;
+          case 'expiring_month':
+            const monthFromNow = addDays(today, 30);
+            if (!expiryDate || isBefore(expiryDate, today) || isAfter(expiryDate, monthFromNow)) return false;
+            break;
+          case 'not_expired':
+            if (!expiryDate || isBefore(expiryDate, today)) return false;
+            break;
+        }
+      }
+
+      // Connection date range filter
+      if (filters.connectionDateFrom || filters.connectionDateTo) {
+        const connDate = customer.connection_date ? parseISO(customer.connection_date) : null;
+        if (!connDate) return false;
+        if (filters.connectionDateFrom && isBefore(connDate, startOfDay(filters.connectionDateFrom))) return false;
+        if (filters.connectionDateTo && isAfter(connDate, endOfDay(filters.connectionDateTo))) return false;
+      }
+
+      // Expiry date range filter
+      if (filters.expiryDateFrom || filters.expiryDateTo) {
+        const expDate = customer.expiry_date ? parseISO(customer.expiry_date) : null;
+        if (!expDate) return false;
+        if (filters.expiryDateFrom && isBefore(expDate, startOfDay(filters.expiryDateFrom))) return false;
+        if (filters.expiryDateTo && isAfter(expDate, endOfDay(filters.expiryDateTo))) return false;
+      }
+
+      return true;
     });
-  }, [customers, searchTerm, statusFilter]);
+  }, [customers, searchTerm, filters]);
 
   // Pagination
   const {
@@ -371,29 +496,176 @@ export default function CustomerManagement() {
         </CardHeader>
         <CardContent>
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, phone, PPPoE..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
+          <div className="flex flex-col gap-4 mb-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, phone, PPPoE, code..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={filters.status} onValueChange={(v) => setFilters(f => ({ ...f, status: v }))}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                  <SelectItem value="suspended">Suspended</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button 
+                variant={showFilters ? "default" : "outline"} 
+                size="sm" 
+                onClick={() => setShowFilters(!showFilters)}
+                className="gap-2"
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  <X className="h-4 w-4 mr-1" />
+                  Clear
+                </Button>
+              )}
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="expired">Expired</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
+
+            {/* Advanced Filters */}
+            {showFilters && (
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 p-4 bg-muted/50 rounded-lg">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Package</Label>
+                  <Select value={filters.package} onValueChange={(v) => setFilters(f => ({ ...f, package: v }))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All Packages" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Packages</SelectItem>
+                      {packages.map(pkg => (
+                        <SelectItem key={pkg.id} value={pkg.id}>{pkg.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Area</Label>
+                  <Select value={filters.area} onValueChange={(v) => setFilters(f => ({ ...f, area: v }))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All Areas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Areas</SelectItem>
+                      {areas.map(area => (
+                        <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">MikroTik</Label>
+                  <Select value={filters.mikrotik} onValueChange={(v) => setFilters(f => ({ ...f, mikrotik: v }))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All Routers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Routers</SelectItem>
+                      {routers.map(router => (
+                        <SelectItem key={router.id} value={router.id}>{router.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Reseller</Label>
+                  <Select value={filters.reseller} onValueChange={(v) => setFilters(f => ({ ...f, reseller: v }))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All Resellers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Resellers</SelectItem>
+                      {resellers.map(reseller => (
+                        <SelectItem key={reseller.id} value={reseller.id}>{reseller.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Expiry Status</Label>
+                  <Select value={filters.expiryFilter} onValueChange={(v) => setFilters(f => ({ ...f, expiryFilter: v }))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="expired">Already Expired</SelectItem>
+                      <SelectItem value="expiring_today">Expiring Today</SelectItem>
+                      <SelectItem value="expiring_week">Expiring in 7 Days</SelectItem>
+                      <SelectItem value="expiring_month">Expiring in 30 Days</SelectItem>
+                      <SelectItem value="not_expired">Not Expired</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Expiry Date Range</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="w-full h-9 justify-start text-left font-normal">
+                        {filters.expiryDateFrom || filters.expiryDateTo ? (
+                          <span className="text-xs">
+                            {filters.expiryDateFrom ? format(filters.expiryDateFrom, 'MMM d') : '...'} - {filters.expiryDateTo ? format(filters.expiryDateTo, 'MMM d') : '...'}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Select range</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <div className="flex gap-2 p-3">
+                        <div>
+                          <Label className="text-xs">From</Label>
+                          <Calendar
+                            mode="single"
+                            selected={filters.expiryDateFrom}
+                            onSelect={(d) => setFilters(f => ({ ...f, expiryDateFrom: d }))}
+                            initialFocus
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">To</Label>
+                          <Calendar
+                            mode="single"
+                            selected={filters.expiryDateTo}
+                            onSelect={(d) => setFilters(f => ({ ...f, expiryDateTo: d }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="p-2 border-t">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="w-full"
+                          onClick={() => setFilters(f => ({ ...f, expiryDateFrom: undefined, expiryDateTo: undefined }))}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Bulk Actions Toolbar */}
@@ -459,7 +731,14 @@ export default function CustomerManagement() {
                           <TableCell className="font-mono text-sm">
                             {customer.customer_code || '-'}
                           </TableCell>
-                          <TableCell className="font-medium">{customer.name}</TableCell>
+                          <TableCell>
+                            <button 
+                              onClick={() => navigate(`/isp/customers/${customer.id}`)}
+                              className="font-medium text-primary hover:underline cursor-pointer text-left"
+                            >
+                              {customer.name}
+                            </button>
+                          </TableCell>
                           <TableCell>{customer.phone || '-'}</TableCell>
                           <TableCell className="font-mono text-sm">
                             {customer.pppoe_username || '-'}
@@ -487,43 +766,72 @@ export default function CustomerManagement() {
                               {statusInfo.label}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="bg-popover border border-border">
-                                <DropdownMenuItem onClick={() => navigate(`/isp/customers/${customer.id}`)}>
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View Profile
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setEditCustomer(customer)}>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit
-                                </DropdownMenuItem>
-                                {customer.status !== 'active' && (
-                                  <DropdownMenuItem onClick={() => setServiceStatus(customer, 'active')}>
-                                    <UserCheck className="h-4 w-4 mr-2" />
-                                    Activate
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8"
+                                onClick={() => navigate(`/isp/customers/${customer.id}`)}
+                                title="View Profile"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8"
+                                onClick={() => navigate(`/isp/customers/${customer.id}?action=recharge`)}
+                                title="Recharge"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8"
+                                onClick={() => navigate(`/isp/customers/${customer.id}?action=collect`)}
+                                title="Collect Payment"
+                              >
+                                <CreditCard className="h-4 w-4" />
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="bg-popover border border-border">
+                                  <DropdownMenuItem onClick={() => navigate(`/isp/customers/${customer.id}`)}>
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View Profile
                                   </DropdownMenuItem>
-                                )}
-                                {customer.status === 'active' && (
-                                  <DropdownMenuItem onClick={() => setServiceStatus(customer, 'suspended')}>
-                                    <Ban className="h-4 w-4 mr-2" />
-                                    Suspend
+                                  <DropdownMenuItem onClick={() => setEditCustomer(customer)}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit
                                   </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem 
-                                  className="text-destructive"
-                                  onClick={() => setDeleteConfirm(customer)}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                  {customer.status !== 'active' && (
+                                    <DropdownMenuItem onClick={() => setServiceStatus(customer, 'active')}>
+                                      <UserCheck className="h-4 w-4 mr-2" />
+                                      Activate
+                                    </DropdownMenuItem>
+                                  )}
+                                  {customer.status === 'active' && (
+                                    <DropdownMenuItem onClick={() => setServiceStatus(customer, 'suspended')}>
+                                      <Ban className="h-4 w-4 mr-2" />
+                                      Suspend
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem 
+                                    className="text-destructive"
+                                    onClick={() => setDeleteConfirm(customer)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

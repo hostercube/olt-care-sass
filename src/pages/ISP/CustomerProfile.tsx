@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,28 +8,36 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger 
-} from '@/components/ui/sheet';
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { useMikroTikSync } from '@/hooks/useMikroTikSync';
+import { useISPPackages } from '@/hooks/useISPPackages';
+import { EditCustomerDialog } from '@/components/isp/EditCustomerDialog';
 import { 
   User, Phone, Mail, MapPin, Package, Calendar, CreditCard, 
   Activity, Wifi, WifiOff, RefreshCw, Power, PowerOff, 
   Router, Network, Clock, Download, Upload, ArrowLeft,
   Edit, Receipt, History, MessageSquare, Settings, Play,
   Ban, Check, Trash2, Link, Unlink, RotateCcw, Loader2,
-  Eye, EyeOff, Copy, ChevronRight, Zap, Signal, AlertTriangle
+  Eye, EyeOff, Copy, ChevronRight, Zap, Signal, AlertTriangle,
+  Thermometer
 } from 'lucide-react';
-import type { Customer, CustomerProfile as CustomerProfileType } from '@/types/isp';
-import { format, formatDistanceToNow } from 'date-fns';
+import type { Customer, CustomerProfile as CustomerProfileType, ISPPackage } from '@/types/isp';
+import { format, formatDistanceToNow, addDays } from 'date-fns';
 import { toast } from 'sonner';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 const statusColors: Record<string, string> = {
   active: 'bg-green-500',
@@ -41,32 +49,19 @@ const statusColors: Record<string, string> = {
   offline: 'bg-red-500',
 };
 
-// Simulated bandwidth data
-const generateBandwidthData = () => {
-  const data = [];
-  const now = new Date();
-  for (let i = 60; i >= 0; i--) {
-    const time = new Date(now.getTime() - i * 60000);
-    data.push({
-      time: format(time, 'HH:mm'),
-      rx: Math.floor(Math.random() * 80),
-      tx: Math.floor(Math.random() * 20),
-    });
-  }
-  return data;
-};
-
 export default function CustomerProfile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { tenantId, isSuperAdmin } = useTenantContext();
   const { hasAccess } = useModuleAccess();
-  const { getCustomerNetworkStatus, togglePPPoEUser, saveCallerId, removeCallerId } = useMikroTikSync();
+  const { getCustomerNetworkStatus, togglePPPoEUser, saveCallerId, removeCallerId, updatePPPoEUser, disconnectSession, getLiveBandwidth } = useMikroTikSync();
+  const { packages } = useISPPackages();
   
   const [customer, setCustomer] = useState<CustomerProfileType | null>(null);
   const [loading, setLoading] = useState(true);
   const [networkStatus, setNetworkStatus] = useState<any>(null);
-  const [bandwidthData, setBandwidthData] = useState(generateBandwidthData());
+  const [bandwidthData, setBandwidthData] = useState<{ time: string; rx: number; tx: number }[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -75,6 +70,14 @@ export default function CustomerProfile() {
   } | null>(null);
   const [bills, setBills] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showPackageDialog, setShowPackageDialog] = useState(false);
+  const [showExpiryDialog, setShowExpiryDialog] = useState(false);
+  const [showRechargeDialog, setShowRechargeDialog] = useState(false);
+  const [selectedPackageId, setSelectedPackageId] = useState<string>('');
+  const [expiryDays, setExpiryDays] = useState<number>(30);
+  const [rechargeMonths, setRechargeMonths] = useState<number>(1);
+  const [onuInfo, setOnuInfo] = useState<any>(null);
 
   const hasOltAccess = hasAccess('olt_care');
   const hasMikrotikAccess = hasAccess('isp_mikrotik');
@@ -98,11 +101,43 @@ export default function CustomerProfile() {
 
       if (error) throw error;
       setCustomer(data as any);
+      setSelectedPackageId(data?.package_id || '');
 
       // Fetch network status if mikrotik is linked
       if (data?.mikrotik_id && data?.pppoe_username) {
         const status = await getCustomerNetworkStatus(data.mikrotik_id, data.pppoe_username);
         setNetworkStatus(status);
+        
+        // Update customer's last_caller_id and last_ip_address if changed
+        if (status?.callerId && status.callerId !== data.last_caller_id) {
+          await supabase.from('customers').update({
+            last_caller_id: status.callerId,
+            last_ip_address: status.address || null,
+            router_mac: status.callerId || data.router_mac,
+          }).eq('id', id);
+        }
+      }
+
+      // Fetch ONU info if OLT access and ONU is linked
+      if (hasOltAccess && data?.onu_id) {
+        const { data: onuData } = await supabase
+          .from('onus')
+          .select('*, olt:olts(*)')
+          .eq('id', data.onu_id)
+          .single();
+        setOnuInfo(onuData);
+      } else if (hasOltAccess && data?.onu_mac) {
+        // Try to find ONU by MAC
+        const { data: onuData } = await supabase
+          .from('onus')
+          .select('*, olt:olts(*)')
+          .eq('mac_address', data.onu_mac)
+          .single();
+        if (onuData) {
+          setOnuInfo(onuData);
+          // Link ONU to customer
+          await supabase.from('customers').update({ onu_id: onuData.id }).eq('id', id);
+        }
       }
 
       // Fetch bills
@@ -129,61 +164,99 @@ export default function CustomerProfile() {
     } finally {
       setLoading(false);
     }
-  }, [id, getCustomerNetworkStatus]);
+  }, [id, getCustomerNetworkStatus, hasOltAccess]);
 
   useEffect(() => {
     fetchCustomer();
-    
-    // Refresh bandwidth data every 5 seconds
-    const interval = setInterval(() => {
-      setBandwidthData(prev => {
-        const newData = [...prev.slice(1)];
-        const time = format(new Date(), 'HH:mm');
-        newData.push({
-          time,
-          rx: Math.floor(Math.random() * 80),
-          tx: Math.floor(Math.random() * 20),
-        });
-        return newData;
-      });
-    }, 5000);
-
-    return () => clearInterval(interval);
   }, [fetchCustomer]);
+
+  // Live bandwidth polling
+  useEffect(() => {
+    if (!customer?.mikrotik_id || !customer?.pppoe_username) return;
+
+    const pollBandwidth = async () => {
+      const bw = await getLiveBandwidth(customer.mikrotik_id!, customer.pppoe_username!);
+      if (bw) {
+        setBandwidthData(prev => {
+          const newData = [...prev.slice(-59)];
+          newData.push({
+            time: format(new Date(), 'HH:mm:ss'),
+            rx: Math.round((bw.rxBytes || 0) / 1024 / 1024 * 8), // Convert to Mbps
+            tx: Math.round((bw.txBytes || 0) / 1024 / 1024 * 8),
+          });
+          return newData;
+        });
+      }
+    };
+
+    const interval = setInterval(pollBandwidth, 5000);
+    pollBandwidth(); // Initial fetch
+    
+    return () => clearInterval(interval);
+  }, [customer?.mikrotik_id, customer?.pppoe_username, getLiveBandwidth]);
+
+  // Handle action from URL params
+  useEffect(() => {
+    const action = searchParams.get('action');
+    if (action === 'recharge') setShowRechargeDialog(true);
+    // Collection would open a payment dialog
+  }, [searchParams]);
 
   const handleAction = async (action: string) => {
     if (!customer) return;
     
     setActionLoading(action);
     try {
+      const now = new Date().toISOString();
+      
       switch (action) {
         case 'enable':
           if (customer.mikrotik_id && customer.pppoe_username) {
             await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, false);
-            await supabase.from('customers').update({ status: 'active' }).eq('id', customer.id);
+            await supabase.from('customers').update({ 
+              status: 'active',
+              last_activated_at: now 
+            }).eq('id', customer.id);
             toast.success('Network enabled successfully');
           }
           break;
         case 'disable':
           if (customer.mikrotik_id && customer.pppoe_username) {
             await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, true);
-            await supabase.from('customers').update({ status: 'suspended' }).eq('id', customer.id);
+            await supabase.from('customers').update({ 
+              status: 'suspended',
+              last_deactivated_at: now 
+            }).eq('id', customer.id);
             toast.success('Network disabled successfully');
           }
           break;
         case 'bind':
-          if (customer.mikrotik_id && customer.pppoe_username && customer.router_mac) {
-            await saveCallerId(customer.mikrotik_id, customer.pppoe_username, customer.router_mac);
+          if (customer.mikrotik_id && customer.pppoe_username) {
+            // Use last_caller_id from network status or router_mac
+            const macToBind = networkStatus?.callerId || customer.router_mac || customer.last_caller_id;
+            if (!macToBind) {
+              toast.error('No MAC address found. Customer must connect first.');
+              break;
+            }
+            await saveCallerId(customer.mikrotik_id, customer.pppoe_username, macToBind);
+            await supabase.from('customers').update({ router_mac: macToBind }).eq('id', customer.id);
+            toast.success('MAC binding saved');
           }
           break;
         case 'unbind':
           if (customer.mikrotik_id && customer.pppoe_username) {
             await removeCallerId(customer.mikrotik_id, customer.pppoe_username);
+            await supabase.from('customers').update({ router_mac: null }).eq('id', customer.id);
+            toast.success('MAC binding removed');
+          }
+          break;
+        case 'disconnect':
+          if (customer.mikrotik_id && customer.pppoe_username) {
+            await disconnectSession(customer.mikrotik_id, customer.pppoe_username);
           }
           break;
         case 'refresh':
           await fetchCustomer();
-          setBandwidthData(generateBandwidthData());
           toast.success('Data refreshed');
           break;
       }
@@ -197,6 +270,106 @@ export default function CustomerProfile() {
     }
   };
 
+  const handlePackageChange = async () => {
+    if (!customer || !selectedPackageId) return;
+    
+    const pkg = packages.find(p => p.id === selectedPackageId);
+    if (!pkg) return;
+
+    setActionLoading('package');
+    try {
+      // Update MikroTik profile if linked
+      if (customer.mikrotik_id && customer.pppoe_username) {
+        await updatePPPoEUser(customer.mikrotik_id, customer.pppoe_username, {
+          profile: pkg.name,
+        });
+      }
+
+      // Update database
+      await supabase.from('customers').update({
+        package_id: selectedPackageId,
+        monthly_bill: pkg.price,
+      }).eq('id', customer.id);
+
+      toast.success(`Package changed to ${pkg.name}`);
+      setShowPackageDialog(false);
+      await fetchCustomer();
+    } catch (err) {
+      console.error('Package change error:', err);
+      toast.error('Failed to change package');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleExtendExpiry = async () => {
+    if (!customer) return;
+
+    setActionLoading('expiry');
+    try {
+      const currentExpiry = customer.expiry_date ? new Date(customer.expiry_date) : new Date();
+      const newExpiry = addDays(currentExpiry, expiryDays);
+
+      await supabase.from('customers').update({
+        expiry_date: newExpiry.toISOString().split('T')[0],
+      }).eq('id', customer.id);
+
+      toast.success(`Expiry extended to ${format(newExpiry, 'dd MMM yyyy')}`);
+      setShowExpiryDialog(false);
+      await fetchCustomer();
+    } catch (err) {
+      console.error('Extend expiry error:', err);
+      toast.error('Failed to extend expiry');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRecharge = async () => {
+    if (!customer) return;
+
+    setActionLoading('recharge');
+    try {
+      const pkg = packages.find(p => p.id === customer.package_id);
+      const validityDays = pkg?.validity_days || 30;
+      const currentExpiry = customer.expiry_date ? new Date(customer.expiry_date) : new Date();
+      const newExpiry = addDays(currentExpiry < new Date() ? new Date() : currentExpiry, validityDays * rechargeMonths);
+
+      // Enable on MikroTik if suspended
+      if (customer.status === 'suspended' && customer.mikrotik_id && customer.pppoe_username) {
+        await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, false);
+      }
+
+      await supabase.from('customers').update({
+        expiry_date: newExpiry.toISOString().split('T')[0],
+        status: 'active',
+        last_payment_date: new Date().toISOString().split('T')[0],
+        last_activated_at: new Date().toISOString(),
+      }).eq('id', customer.id);
+
+      // Record recharge
+      await supabase.from('customer_recharges').insert({
+        tenant_id: customer.tenant_id,
+        customer_id: customer.id,
+        amount: (pkg?.price || 0) * rechargeMonths,
+        months: rechargeMonths,
+        old_expiry: customer.expiry_date,
+        new_expiry: newExpiry.toISOString().split('T')[0],
+        payment_method: 'cash',
+        status: 'completed',
+      });
+
+      toast.success(`Recharged for ${rechargeMonths} month(s)`);
+      setShowRechargeDialog(false);
+      await fetchCustomer();
+    } catch (err) {
+      console.error('Recharge error:', err);
+      toast.error('Failed to recharge');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('Copied to clipboard');
@@ -207,12 +380,6 @@ export default function CustomerProfile() {
     if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MiB';
     if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KiB';
     return bytes + ' B';
-  };
-
-  const formatSpeed = (bps: number): string => {
-    if (bps >= 1000000) return (bps / 1000000).toFixed(1) + ' Mbps';
-    if (bps >= 1000) return (bps / 1000).toFixed(1) + ' Kbps';
-    return bps + ' bps';
   };
 
   if (loading) {
@@ -265,11 +432,13 @@ export default function CustomerProfile() {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${isOnline ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
-                <Clock className={`h-5 w-5 ${isOnline ? 'text-green-500' : 'text-red-500'}`} />
+                {isOnline ? <Wifi className="h-5 w-5 text-green-500" /> : <WifiOff className="h-5 w-5 text-red-500" />}
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Online Uptime</p>
-                <p className="text-lg font-bold">{networkStatus?.uptime || 'Offline'}</p>
+                <p className="text-xs text-muted-foreground">Router Status</p>
+                <p className={`text-lg font-bold ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
+                  {isOnline ? 'ONLINE' : 'OFFLINE'}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -278,11 +447,11 @@ export default function CustomerProfile() {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-500/10">
-                <Download className="h-5 w-5 text-blue-500" />
+                <Clock className="h-5 w-5 text-blue-500" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total Download</p>
-                <p className="text-lg font-bold">{formatBytes(networkStatus?.rxBytes || 0)}</p>
+                <p className="text-xs text-muted-foreground">Online Uptime</p>
+                <p className="text-lg font-bold">{networkStatus?.uptime || 'N/A'}</p>
               </div>
             </div>
           </CardContent>
@@ -291,11 +460,11 @@ export default function CustomerProfile() {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-green-500/10">
-                <Upload className="h-5 w-5 text-green-500" />
+                <Download className="h-5 w-5 text-green-500" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total Upload</p>
-                <p className="text-lg font-bold">{formatBytes(networkStatus?.txBytes || 0)}</p>
+                <p className="text-xs text-muted-foreground">Download</p>
+                <p className="text-lg font-bold">{formatBytes(networkStatus?.rxBytes || 0)}</p>
               </div>
             </div>
           </CardContent>
@@ -307,7 +476,7 @@ export default function CustomerProfile() {
                 <CreditCard className={`h-5 w-5 ${customer.due_amount > 0 ? 'text-red-500' : 'text-green-500'}`} />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Current Balance</p>
+                <p className="text-xs text-muted-foreground">Due Balance</p>
                 <p className={`text-lg font-bold ${customer.due_amount > 0 ? 'text-red-600' : 'text-green-600'}`}>
                   ৳{customer.due_amount || 0}
                 </p>
@@ -377,12 +546,12 @@ export default function CustomerProfile() {
                 {customer.status === 'active' ? (
                   <>
                     <PowerOff className="h-4 w-4 mr-2 text-red-500" />
-                    Network Disable
+                    Disable
                   </>
                 ) : (
                   <>
                     <Power className="h-4 w-4 mr-2 text-green-500" />
-                    Network Enable
+                    Enable
                   </>
                 )}
               </Button>
@@ -394,27 +563,19 @@ export default function CustomerProfile() {
                 )}
                 Refresh
               </Button>
-              <Button variant="outline" className="justify-start" size="sm">
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Send SMS
-              </Button>
-              <Button variant="outline" className="justify-start" size="sm">
-                <Receipt className="h-4 w-4 mr-2" />
-                Collection
-              </Button>
-              <Button variant="outline" className="justify-start" size="sm" onClick={() => navigate(`/isp/customers/edit/${customer.id}`)}>
+              <Button variant="outline" className="justify-start" size="sm" onClick={() => setShowEditDialog(true)}>
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Profile
               </Button>
-              <Button variant="outline" className="justify-start" size="sm">
+              <Button variant="outline" className="justify-start" size="sm" onClick={() => setShowPackageDialog(true)}>
                 <Package className="h-4 w-4 mr-2" />
-                Package Change
+                Change Package
               </Button>
-              <Button variant="outline" className="justify-start" size="sm">
+              <Button variant="outline" className="justify-start" size="sm" onClick={() => setShowExpiryDialog(true)}>
                 <Calendar className="h-4 w-4 mr-2" />
                 Extend Expiry
               </Button>
-              <Button variant="outline" className="justify-start" size="sm">
+              <Button variant="outline" className="justify-start" size="sm" onClick={() => setShowRechargeDialog(true)}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Recharge
               </Button>
@@ -438,6 +599,15 @@ export default function CustomerProfile() {
                     <Unlink className="h-4 w-4 mr-2" />
                     MAC Unbind
                   </Button>
+                  <Button 
+                    variant="outline" 
+                    className="justify-start col-span-2" 
+                    size="sm"
+                    onClick={() => setConfirmAction({ type: 'disconnect', show: true })}
+                  >
+                    <Ban className="h-4 w-4 mr-2 text-orange-500" />
+                    Disconnect Session
+                  </Button>
                 </>
               )}
             </CardContent>
@@ -458,7 +628,7 @@ export default function CustomerProfile() {
               <div className="grid md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground flex items-center gap-2">
-                    <Wifi className="h-4 w-4" /> Connection Status
+                    <Router className="h-4 w-4" /> Router Status
                   </span>
                   <Badge className={isOnline ? 'bg-green-500' : 'bg-red-500'}>
                     {isOnline ? 'ONLINE' : 'OFFLINE'}
@@ -483,44 +653,40 @@ export default function CustomerProfile() {
                 </div>
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground flex items-center gap-2">
-                    <Clock className="h-4 w-4" /> Last Logout
+                    <Router className="h-4 w-4" /> Router Name
                   </span>
-                  <span>{networkStatus?.lastLogout || 'N/A'}</span>
+                  <span>{customer.mikrotik?.name || 'Not Assigned'}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground flex items-center gap-2">
-                    <Calendar className="h-4 w-4" /> Last Activated Date
+                    <Calendar className="h-4 w-4" /> Last Activated
                   </span>
                   <span>
-                    {customer.connection_date ? format(new Date(customer.connection_date), 'dd MMM, yyyy h:mm a') : 'N/A'}
+                    {customer.last_activated_at ? format(new Date(customer.last_activated_at), 'dd MMM yyyy HH:mm') : 'N/A'}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground flex items-center gap-2">
-                    <Calendar className="h-4 w-4" /> Last Deactivated Date
+                    <Calendar className="h-4 w-4" /> Last Deactivated
                   </span>
-                  <span>{networkStatus?.lastDeactivated || 'N/A'}</span>
+                  <span>
+                    {customer.last_deactivated_at ? format(new Date(customer.last_deactivated_at), 'dd MMM yyyy HH:mm') : 'N/A'}
+                  </span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground flex items-center gap-2">
-                    <Settings className="h-4 w-4" /> Line Expir ON/OFF
+                    <Network className="h-4 w-4" /> IP Address
                   </span>
-                  <span>{customer.is_auto_disable ? 'Auto' : 'Manual'}</span>
+                  <span className="font-mono">{networkStatus?.address || customer.last_ip_address || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground flex items-center gap-2">
-                    <CreditCard className="h-4 w-4" /> Payment Method
-                  </span>
-                  <span>Cash</span>
-                </div>
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <Network className="h-4 w-4" /> Mac Address
+                    <Link className="h-4 w-4" /> Caller-ID (MAC)
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono">{customer.router_mac || 'N/A'}</span>
-                    {customer.router_mac && (
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(customer.router_mac!)}>
+                    <span className="font-mono text-xs">{networkStatus?.callerId || customer.last_caller_id || customer.router_mac || 'Not Bound'}</span>
+                    {(networkStatus?.callerId || customer.last_caller_id || customer.router_mac) && (
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(networkStatus?.callerId || customer.last_caller_id || customer.router_mac!)}>
                         <Copy className="h-3 w-3" />
                       </Button>
                     )}
@@ -528,54 +694,26 @@ export default function CustomerProfile() {
                 </div>
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground flex items-center gap-2">
-                    <Network className="h-4 w-4" /> IP Address
+                    <Download className="h-4 w-4" /> Live RX (Download)
                   </span>
-                  <span className="font-mono">{networkStatus?.address || 'N/A'}</span>
+                  <span className="font-medium text-blue-600">
+                    {bandwidthData.length > 0 ? `${bandwidthData[bandwidthData.length - 1]?.rx || 0} Mbps` : 'N/A'}
+                  </span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground flex items-center gap-2">
-                    <Router className="h-4 w-4" /> Router Name
+                    <Upload className="h-4 w-4" /> Live TX (Upload)
                   </span>
-                  <span>{customer.mikrotik?.name || 'N/A'}</span>
+                  <span className="font-medium text-green-600">
+                    {bandwidthData.length > 0 ? `${bandwidthData[bandwidthData.length - 1]?.tx || 0} Mbps` : 'N/A'}
+                  </span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-muted-foreground flex items-center gap-2">
-                    <Link className="h-4 w-4" /> Caller-ID
-                  </span>
-                  <span>{networkStatus?.callerId || 'No'}</span>
-                </div>
-                
-                {/* ONU Details (if OLT enabled) */}
-                {hasOltAccess && customer.onu_mac && (
-                  <>
-                    <Separator className="col-span-2 my-2" />
-                    <div className="col-span-2 flex items-center gap-2 text-sm font-medium text-primary">
-                      <Signal className="h-4 w-4" />
-                      ONU Details
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Signal className="h-4 w-4" /> RX Power (dBm)
-                      </span>
-                      <span className={`font-mono ${(customer.onu_rx_power || 0) < -25 ? 'text-red-500' : 'text-green-500'}`}>
-                        {customer.onu_rx_power || 'N/A'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Network className="h-4 w-4" /> ONU Mac
-                      </span>
-                      <span className="font-mono">{customer.onu_mac || 'N/A'}</span>
-                    </div>
-                  </>
-                )}
-
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <Calendar className="h-4 w-4" /> Expire Date
+                    <Calendar className="h-4 w-4" /> Expiry Date
                   </span>
                   <span className={customer.expiry_date && new Date(customer.expiry_date) < new Date() ? 'text-red-600 font-medium' : ''}>
-                    {customer.expiry_date ? format(new Date(customer.expiry_date), 'yyyy-MM-dd') : 'N/A'}
+                    {customer.expiry_date ? format(new Date(customer.expiry_date), 'dd MMM yyyy') : 'N/A'}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 border-b">
@@ -584,6 +722,63 @@ export default function CustomerProfile() {
                   </span>
                   <span className="font-medium">৳{customer.monthly_bill || 0}</span>
                 </div>
+
+                {/* ONU Details (if OLT enabled and ONU linked) */}
+                {hasOltAccess && onuInfo && (
+                  <>
+                    <Separator className="col-span-2 my-2" />
+                    <div className="col-span-2 flex items-center gap-2 text-sm font-medium text-primary">
+                      <Signal className="h-4 w-4" />
+                      ONU Details
+                    </div>
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        <Signal className="h-4 w-4" /> ONU Status
+                      </span>
+                      <Badge className={onuInfo.status === 'online' ? 'bg-green-500' : 'bg-red-500'}>
+                        {(onuInfo.status || 'UNKNOWN').toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        <Network className="h-4 w-4" /> ONU Name
+                      </span>
+                      <span>{onuInfo.description || onuInfo.name || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        <Network className="h-4 w-4" /> ONU MAC
+                      </span>
+                      <span className="font-mono text-xs">{onuInfo.mac_address || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        <Download className="h-4 w-4" /> RX Power (dBm)
+                      </span>
+                      <span className={`font-mono ${(onuInfo.rx_power || 0) < -25 ? 'text-red-500' : 'text-green-500'}`}>
+                        {onuInfo.rx_power || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        <Upload className="h-4 w-4" /> TX Power (dBm)
+                      </span>
+                      <span className="font-mono">{onuInfo.tx_power || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        <Thermometer className="h-4 w-4" /> Temperature
+                      </span>
+                      <span>{onuInfo.temperature ? `${onuInfo.temperature}°C` : 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        <Router className="h-4 w-4" /> OLT
+                      </span>
+                      <span>{onuInfo.olt?.name || 'N/A'}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* PPPoE Credentials */}
@@ -628,52 +823,54 @@ export default function CustomerProfile() {
           </Card>
 
           {/* Live Bandwidth Chart */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5" />
-                  Live Bandwidth
-                </CardTitle>
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-blue-500" />
-                    <span>Rx: {bandwidthData[bandwidthData.length - 1]?.rx || 0} Mbps</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-green-500" />
-                    <span>Tx: {bandwidthData[bandwidthData.length - 1]?.tx || 0} Mbps</span>
+          {bandwidthData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="h-5 w-5" />
+                    Live Bandwidth
+                  </CardTitle>
+                  <div className="flex items-center gap-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500" />
+                      <span>Rx: {bandwidthData[bandwidthData.length - 1]?.rx || 0} Mbps</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-green-500" />
+                      <span>Tx: {bandwidthData[bandwidthData.length - 1]?.tx || 0} Mbps</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={bandwidthData}>
-                    <defs>
-                      <linearGradient id="rxGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="txGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
-                      formatter={(value: number, name: string) => [`${value} Mbps`, name === 'rx' ? 'Download' : 'Upload']}
-                    />
-                    <Area type="monotone" dataKey="rx" stroke="#3b82f6" fill="url(#rxGradient)" strokeWidth={2} />
-                    <Area type="monotone" dataKey="tx" stroke="#22c55e" fill="url(#txGradient)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={bandwidthData}>
+                      <defs>
+                        <linearGradient id="rxGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="txGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
+                        formatter={(value: number, name: string) => [`${value} Mbps`, name === 'rx' ? 'Download' : 'Upload']}
+                      />
+                      <Area type="monotone" dataKey="rx" stroke="#3b82f6" fill="url(#rxGradient)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="tx" stroke="#22c55e" fill="url(#txGradient)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Tabs for Bills, Payments, Activity */}
           <Tabs defaultValue="bills">
@@ -747,6 +944,118 @@ export default function CustomerProfile() {
         </div>
       </div>
 
+      {/* Edit Dialog */}
+      {showEditDialog && customer && (
+        <EditCustomerDialog
+          customer={customer as any}
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          onSuccess={() => {
+            setShowEditDialog(false);
+            fetchCustomer();
+          }}
+        />
+      )}
+
+      {/* Package Change Dialog */}
+      <Dialog open={showPackageDialog} onOpenChange={setShowPackageDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Package</DialogTitle>
+            <DialogDescription>
+              Select a new package for this customer. MikroTik profile will be updated automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Select Package</Label>
+            <Select value={selectedPackageId} onValueChange={setSelectedPackageId}>
+              <SelectTrigger className="mt-2">
+                <SelectValue placeholder="Select a package" />
+              </SelectTrigger>
+              <SelectContent>
+                {packages.map(pkg => (
+                  <SelectItem key={pkg.id} value={pkg.id}>
+                    {pkg.name} - {pkg.download_speed}/{pkg.upload_speed} {pkg.speed_unit} (৳{pkg.price})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPackageDialog(false)}>Cancel</Button>
+            <Button onClick={handlePackageChange} disabled={actionLoading === 'package'}>
+              {actionLoading === 'package' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Change Package
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Extend Expiry Dialog */}
+      <Dialog open={showExpiryDialog} onOpenChange={setShowExpiryDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Extend Expiry Date</DialogTitle>
+            <DialogDescription>
+              Current expiry: {customer?.expiry_date ? format(new Date(customer.expiry_date), 'dd MMM yyyy') : 'Not set'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Days to Extend</Label>
+            <Input 
+              type="number" 
+              value={expiryDays} 
+              onChange={(e) => setExpiryDays(parseInt(e.target.value) || 0)}
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExpiryDialog(false)}>Cancel</Button>
+            <Button onClick={handleExtendExpiry} disabled={actionLoading === 'expiry'}>
+              {actionLoading === 'expiry' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Extend Expiry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Recharge Dialog */}
+      <Dialog open={showRechargeDialog} onOpenChange={setShowRechargeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Recharge Customer</DialogTitle>
+            <DialogDescription>
+              Package: {customer?.package?.name || 'N/A'} | Monthly: ৳{customer?.monthly_bill || 0}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Months to Recharge</Label>
+            <Select value={rechargeMonths.toString()} onValueChange={(v) => setRechargeMonths(parseInt(v))}>
+              <SelectTrigger className="mt-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 Month</SelectItem>
+                <SelectItem value="2">2 Months</SelectItem>
+                <SelectItem value="3">3 Months</SelectItem>
+                <SelectItem value="6">6 Months</SelectItem>
+                <SelectItem value="12">12 Months</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="mt-4 text-sm text-muted-foreground">
+              Amount: ৳{(customer?.monthly_bill || 0) * rechargeMonths}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRechargeDialog(false)}>Cancel</Button>
+            <Button onClick={handleRecharge} disabled={actionLoading === 'recharge'}>
+              {actionLoading === 'recharge' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Recharge
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Confirmation Dialog */}
       <AlertDialog open={!!confirmAction?.show} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <AlertDialogContent>
@@ -760,17 +1069,17 @@ export default function CustomerProfile() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmAction?.type === 'enable' && 'This will enable the PPPoE connection for this customer.'}
-              {confirmAction?.type === 'disable' && 'This will disable the PPPoE connection. The customer will not be able to connect.'}
-              {confirmAction?.type === 'bind' && 'This will bind the MAC address. The customer can only connect from this device.'}
+              {confirmAction?.type === 'disable' && 'This will disable the PPPoE connection and disconnect any active session. The customer will not be able to connect.'}
+              {confirmAction?.type === 'bind' && `This will bind MAC address "${networkStatus?.callerId || customer?.router_mac || 'current'}". The customer can only connect from this device.`}
               {confirmAction?.type === 'unbind' && 'This will remove the MAC binding. The customer can connect from any device.'}
-              {confirmAction?.type === 'disconnect' && 'This will disconnect the current PPPoE session.'}
+              {confirmAction?.type === 'disconnect' && 'This will disconnect the current PPPoE session immediately.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => confirmAction && handleAction(confirmAction.type)}
-              className={confirmAction?.type === 'disable' ? 'bg-destructive text-destructive-foreground' : ''}
+              className={confirmAction?.type === 'disable' || confirmAction?.type === 'disconnect' ? 'bg-destructive text-destructive-foreground' : ''}
             >
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm'}
             </AlertDialogAction>
