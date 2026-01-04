@@ -182,35 +182,20 @@ export default function SuperAdminSMSCenter() {
             .filter(t => selectedTenants.includes(t.id) && t.phone)
             .map(t => ({ phone: t.phone, name: t.name }));
 
-      let successCount = 0;
-      let failCount = 0;
+      // Queue all SMS in sms_logs - polling server will send them
+      const smsRecords = recipients.map(r => ({
+        phone_number: r.phone,
+        message: message.replace(/\{\{tenant_name\}\}/g, r.name),
+        status: 'pending',
+      }));
 
-      // Send SMS instantly via edge function for each recipient
-      for (const r of recipients) {
-        const finalMessage = message.replace(/\{\{tenant_name\}\}/g, r.name);
-        
-        try {
-          const response = await supabase.functions.invoke('send-sms', {
-            body: { phone: r.phone, message: finalMessage }
-          });
+      const { error } = await supabase
+        .from('sms_logs')
+        .insert(smsRecords);
 
-          if (response.error || !response.data?.success) {
-            failCount++;
-            console.error(`Failed to send to ${r.phone}:`, response.error || response.data?.error);
-          } else {
-            successCount++;
-          }
-        } catch (err) {
-          failCount++;
-          console.error(`Error sending to ${r.phone}:`, err);
-        }
-      }
+      if (error) throw error;
 
-      if (successCount > 0) {
-        toast.success(`${successCount} SMS sent successfully${failCount > 0 ? `, ${failCount} failed` : ''}`);
-      } else {
-        toast.error(`All ${failCount} SMS failed to send`);
-      }
+      toast.success(`${recipients.length} SMS queued - will be sent within 10 seconds`);
       
       // Reset form
       setMessage('');
@@ -218,10 +203,10 @@ export default function SuperAdminSMSCenter() {
       setSinglePhone('');
       setSelectedTemplate('');
       
-      // Refresh logs
-      fetchData();
+      // Refresh logs after delay to show updated status
+      setTimeout(() => fetchData(), 3000);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to send SMS');
+      toast.error(err.message || 'Failed to queue SMS');
     } finally {
       setSending(false);
     }
