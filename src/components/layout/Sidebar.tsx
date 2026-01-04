@@ -102,6 +102,8 @@ const superAdminItems: NavItem[] = [
 const tenantBillingItems: NavItem[] = [
   { title: 'My Subscription', href: '/billing/subscription', icon: FileText },
   { title: 'Make Payment', href: '/billing/pay', icon: CreditCard },
+  { title: 'Billing History', href: '/billing/history', icon: Receipt },
+  { title: 'Renew', href: '/billing/renew', icon: Zap },
 ];
 
 function readImpersonation(): { tenantId: string; tenantName?: string } | null {

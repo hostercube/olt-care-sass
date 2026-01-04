@@ -41,6 +41,8 @@ import SuperAdminSettings from "./pages/SuperAdmin/Settings";
 // ISP Billing Pages
 import MySubscription from "./pages/Billing/MySubscription";
 import MakePayment from "./pages/Billing/MakePayment";
+import BillingHistory from "./pages/Billing/BillingHistory";
+import RenewSubscription from "./pages/Billing/RenewSubscription";
 
 // ISP Management Pages
 import CustomerManagement from "./pages/ISP/CustomerManagement";
@@ -225,6 +227,16 @@ const App = () => (
               <Route path="/billing/pay" element={
                 <ProtectedRoute>
                   <MakePayment />
+                </ProtectedRoute>
+              } />
+              <Route path="/billing/history" element={
+                <ProtectedRoute>
+                  <BillingHistory />
+                </ProtectedRoute>
+              } />
+              <Route path="/billing/renew" element={
+                <ProtectedRoute>
+                  <RenewSubscription />
                 </ProtectedRoute>
               } />
 

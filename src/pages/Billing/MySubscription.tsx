@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,23 +9,29 @@ import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { usePackages } from '@/hooks/usePackages';
 import { useInvoices } from '@/hooks/useInvoices';
-import { CreditCard, Package, Calendar, AlertTriangle, CheckCircle, FileText, Download } from 'lucide-react';
+import { CreditCard, Package, Calendar, AlertTriangle, CheckCircle, FileText, Download, Clock, History } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 
 export default function MySubscription() {
+  const navigate = useNavigate();
   const { tenant, tenantId, loading: tenantLoading } = useTenantContext();
   const { subscriptions, loading: subsLoading } = useSubscriptions(tenantId || undefined);
   const { packages } = usePackages();
   const { invoices, loading: invoicesLoading } = useInvoices(tenantId || undefined);
 
-  const activeSubscription = subscriptions.find(s => s.status === 'active');
-  const currentPackage = packages.find(p => p.id === activeSubscription?.package_id);
+  // Find active subscription (can be active, trial, or pending)
+  const activeSubscription = subscriptions.find(s => 
+    s.status === 'active' || (s.status as string) === 'trial'
+  );
+  const pendingSubscription = subscriptions.find(s => s.status === 'pending');
+  const displaySubscription = activeSubscription || pendingSubscription;
+  const currentPackage = packages.find(p => p.id === displaySubscription?.package_id);
 
-  const daysRemaining = activeSubscription
-    ? differenceInDays(new Date(activeSubscription.ends_at), new Date())
+  const daysRemaining = displaySubscription
+    ? differenceInDays(new Date(displaySubscription.ends_at), new Date())
     : 0;
 
-  const usagePercent = tenant?.max_olts ? Math.min(100, (3 / tenant.max_olts) * 100) : 0; // Replace 3 with actual OLT count
+  const usagePercent = tenant?.max_olts ? Math.min(100, (3 / tenant.max_olts) * 100) : 0;
 
   const unpaidInvoices = invoices.filter(i => i.status === 'unpaid' || i.status === 'overdue');
 
@@ -46,8 +53,26 @@ export default function MySubscription() {
           <p className="text-muted-foreground">Manage your subscription and billing</p>
         </div>
 
+        {/* Pending Payment Alert */}
+        {pendingSubscription && !activeSubscription && (
+          <Card className="border-warning bg-warning/10">
+            <CardContent className="flex items-center gap-4 pt-6">
+              <Clock className="h-8 w-8 text-warning" />
+              <div>
+                <h3 className="font-semibold">Payment Required</h3>
+                <p className="text-sm text-muted-foreground">
+                  Your subscription is pending activation. Please complete the payment to start using the service.
+                </p>
+              </div>
+              <Button className="ml-auto" onClick={() => navigate('/billing/pay')}>
+                Pay Now
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Alerts */}
-        {daysRemaining <= 7 && daysRemaining > 0 && (
+        {daysRemaining <= 7 && daysRemaining > 0 && activeSubscription && (
           <Card className="border-warning bg-warning/10">
             <CardContent className="flex items-center gap-4 pt-6">
               <AlertTriangle className="h-8 w-8 text-warning" />
@@ -57,7 +82,9 @@ export default function MySubscription() {
                   Your subscription will expire in {daysRemaining} days. Please renew to continue using the service.
                 </p>
               </div>
-              <Button className="ml-auto">Renew Now</Button>
+              <Button className="ml-auto" onClick={() => navigate('/billing/renew')}>
+                Renew Now
+              </Button>
             </CardContent>
           </Card>
         )}
@@ -72,7 +99,9 @@ export default function MySubscription() {
                   You have {unpaidInvoices.length} unpaid invoice(s). Please pay to avoid service interruption.
                 </p>
               </div>
-              <Button variant="destructive" className="ml-auto">Pay Now</Button>
+              <Button variant="destructive" className="ml-auto" onClick={() => navigate('/billing/pay')}>
+                Pay Now
+              </Button>
             </CardContent>
           </Card>
         )}
@@ -87,16 +116,21 @@ export default function MySubscription() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {activeSubscription && currentPackage ? (
+              {displaySubscription && currentPackage ? (
                 <>
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-2xl font-bold">{currentPackage.name}</h3>
                       <p className="text-muted-foreground">{currentPackage.description}</p>
                     </div>
-                    <Badge variant="success">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Active
+                    <Badge variant={displaySubscription.status === 'pending' ? 'warning' : 'success'}>
+                      {displaySubscription.status === 'pending' ? (
+                        <><Clock className="h-3 w-3 mr-1" />Pending</>
+                      ) : (displaySubscription.status as string) === 'trial' ? (
+                        <><Clock className="h-3 w-3 mr-1" />Trial</>
+                      ) : (
+                        <><CheckCircle className="h-3 w-3 mr-1" />Active</>
+                      )}
                     </Badge>
                   </div>
 
@@ -111,32 +145,47 @@ export default function MySubscription() {
                   <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                     <div>
                       <p className="text-sm text-muted-foreground">Billing Cycle</p>
-                      <p className="font-medium capitalize">{activeSubscription.billing_cycle}</p>
+                      <p className="font-medium capitalize">{displaySubscription.billing_cycle}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Amount</p>
-                      <p className="font-medium">৳{activeSubscription.amount.toLocaleString()}</p>
+                      <p className="font-medium">৳{displaySubscription.amount.toLocaleString()}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Next Billing</p>
-                      <p className="font-medium">{format(new Date(activeSubscription.ends_at), 'PP')}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {displaySubscription.status === 'pending' ? 'Activation After Payment' : 'Next Billing'}
+                      </p>
+                      <p className="font-medium">{format(new Date(displaySubscription.ends_at), 'PP')}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Days Remaining</p>
-                      <p className="font-medium">{daysRemaining} days</p>
+                      <p className="font-medium">{Math.max(0, daysRemaining)} days</p>
                     </div>
                   </div>
 
                   <div className="flex gap-2 pt-4">
-                    <Button variant="outline" className="flex-1">Change Plan</Button>
-                    <Button className="flex-1">Renew Early</Button>
+                    <Button variant="outline" className="flex-1" onClick={() => navigate('/billing/history')}>
+                      <History className="h-4 w-4 mr-2" />
+                      History
+                    </Button>
+                    {displaySubscription.status === 'pending' ? (
+                      <Button className="flex-1" onClick={() => navigate('/billing/pay')}>
+                        Complete Payment
+                      </Button>
+                    ) : (
+                      <Button className="flex-1" onClick={() => navigate('/billing/renew')}>
+                        Renew Early
+                      </Button>
+                    )}
                   </div>
                 </>
               ) : (
                 <div className="text-center py-8">
                   <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">No active subscription</p>
-                  <Button className="mt-4">Choose a Plan</Button>
+                  <Button className="mt-4" onClick={() => navigate('/billing/renew')}>
+                    Choose a Plan
+                  </Button>
                 </div>
               )}
             </CardContent>
