@@ -278,7 +278,7 @@ export function Sidebar() {
               onToggle: () => setSystemExpanded((v) => !v),
             })}
 
-            {tenantId && !isSuperAdmin && renderSection('Billing', tenantBillingItems)}
+            {tenantId && renderSection('Subscription & Billing', tenantBillingItems)}
           </>
         )}
       </nav>

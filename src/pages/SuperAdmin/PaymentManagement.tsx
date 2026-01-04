@@ -7,21 +7,33 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePayments } from '@/hooks/usePayments';
 import { useInvoices } from '@/hooks/useInvoices';
-import { CreditCard, Search, CheckCircle, XCircle, Clock, Eye, FileText, DollarSign } from 'lucide-react';
+import { CreditCard, Search, CheckCircle, XCircle, Clock, Eye, FileText, DollarSign, Trash2, Ban, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
-import type { PaymentStatus } from '@/types/saas';
+import type { PaymentStatus, Payment } from '@/types/saas';
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export default function PaymentManagement() {
-  const { payments, loading: paymentsLoading, verifyPayment, refundPayment } = usePayments();
+  const { payments, loading: paymentsLoading, verifyPayment, rejectPayment, deletePayment } = usePayments();
   const { invoices, loading: invoicesLoading } = useInvoices();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
+  const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
   const [verifyNotes, setVerifyNotes] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const getStatusBadge = (status: PaymentStatus) => {
     const config: Record<PaymentStatus, { variant: 'success' | 'warning' | 'danger' | 'default'; icon: any }> = {
@@ -44,15 +56,62 @@ export default function PaymentManagement() {
 
   const filteredPayments = payments.filter(payment =>
     payment.transaction_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    payment.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase())
+    payment.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    payment.tenant?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    payment.tenant?.company_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredPayments.length / pageSize);
+  const paginatedPayments = filteredPayments.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
   );
 
   const handleVerify = async () => {
     if (selectedPayment) {
-      await verifyPayment(selectedPayment.id, verifyNotes);
-      setIsVerifyOpen(false);
-      setSelectedPayment(null);
-      setVerifyNotes('');
+      setIsSubmitting(true);
+      try {
+        await verifyPayment(selectedPayment.id, verifyNotes);
+        setIsVerifyOpen(false);
+        setSelectedPayment(null);
+        setVerifyNotes('');
+      } catch (error) {
+        // Error handled by hook
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const handleReject = async () => {
+    if (selectedPayment && rejectReason.trim()) {
+      setIsSubmitting(true);
+      try {
+        await rejectPayment(selectedPayment.id, rejectReason);
+        setIsRejectOpen(false);
+        setSelectedPayment(null);
+        setRejectReason('');
+      } catch (error) {
+        // Error handled by hook
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const handleDelete = async () => {
+    if (selectedPayment) {
+      setIsSubmitting(true);
+      try {
+        await deletePayment(selectedPayment.id);
+        setIsDeleteOpen(false);
+        setSelectedPayment(null);
+      } catch (error) {
+        // Error handled by hook
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -83,8 +142,49 @@ export default function PaymentManagement() {
     },
   ];
 
+  const renderPagination = () => (
+    <div className="flex items-center justify-between pt-4 border-t">
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Rows per page:</span>
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setCurrentPage(1);
+          }}
+          className="h-8 rounded border bg-background px-2 text-sm"
+        >
+          {PAGE_SIZE_OPTIONS.map(size => (
+            <option key={size} value={size}>{size}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">
+          Page {currentPage} of {totalPages || 1} ({filteredPayments.length} total)
+        </span>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+          disabled={currentPage === 1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+          disabled={currentPage >= totalPages}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
-    <DashboardLayout title="Payment Management" subtitle="Verify payments and billing">
+    <DashboardLayout title="Payment Management" subtitle="Verify payments and manage billing">
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Payment Management</h1>
@@ -136,6 +236,7 @@ export default function PaymentManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Tenant</TableHead>
                         <TableHead>Transaction ID</TableHead>
                         <TableHead>Payment Method</TableHead>
                         <TableHead>Amount</TableHead>
@@ -146,19 +247,40 @@ export default function PaymentManagement() {
                     <TableBody>
                       {pendingPayments.map((payment) => (
                         <TableRow key={payment.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{payment.tenant?.company_name || payment.tenant?.name || '-'}</p>
+                              <p className="text-xs text-muted-foreground">{payment.tenant?.email}</p>
+                            </div>
+                          </TableCell>
                           <TableCell className="font-mono">{payment.transaction_id || '-'}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{payment.payment_method.toUpperCase()}</Badge>
                           </TableCell>
                           <TableCell className="font-medium">৳{payment.amount.toLocaleString()}</TableCell>
                           <TableCell>{format(new Date(payment.created_at), 'PP')}</TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => { setSelectedPayment(payment); setIsViewOpen(true); }}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                             <Button
                               size="sm"
                               onClick={() => { setSelectedPayment(payment); setIsVerifyOpen(true); }}
                             >
                               <CheckCircle className="h-4 w-4 mr-1" />
                               Verify
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => { setSelectedPayment(payment); setIsRejectOpen(true); }}
+                            >
+                              <Ban className="h-4 w-4 mr-1" />
+                              Reject
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -183,7 +305,10 @@ export default function PaymentManagement() {
                     <Input
                       placeholder="Search transactions..."
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(1);
+                      }}
                       className="pl-9 w-[250px]"
                     />
                   </div>
@@ -193,6 +318,7 @@ export default function PaymentManagement() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Tenant</TableHead>
                       <TableHead>Transaction ID</TableHead>
                       <TableHead>Method</TableHead>
                       <TableHead>Amount</TableHead>
@@ -204,17 +330,23 @@ export default function PaymentManagement() {
                   <TableBody>
                     {paymentsLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
+                        <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
                       </TableRow>
-                    ) : filteredPayments.length === 0 ? (
+                    ) : paginatedPayments.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           No payments found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredPayments.map((payment) => (
+                      paginatedPayments.map((payment) => (
                         <TableRow key={payment.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{payment.tenant?.company_name || payment.tenant?.name || '-'}</p>
+                              <p className="text-xs text-muted-foreground">{payment.tenant?.email}</p>
+                            </div>
+                          </TableCell>
                           <TableCell className="font-mono">{payment.transaction_id || '-'}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{payment.payment_method.toUpperCase()}</Badge>
@@ -222,9 +354,41 @@ export default function PaymentManagement() {
                           <TableCell className="font-medium">৳{payment.amount.toLocaleString()}</TableCell>
                           <TableCell>{getStatusBadge(payment.status)}</TableCell>
                           <TableCell>{format(new Date(payment.created_at), 'PP')}</TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="icon">
+                          <TableCell className="text-right space-x-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => { setSelectedPayment(payment); setIsViewOpen(true); }}
+                            >
                               <Eye className="h-4 w-4" />
+                            </Button>
+                            {payment.status === 'pending' && (
+                              <>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => { setSelectedPayment(payment); setIsVerifyOpen(true); }}
+                                  className="text-success hover:text-success"
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => { setSelectedPayment(payment); setIsRejectOpen(true); }}
+                                  className="text-warning hover:text-warning"
+                                >
+                                  <Ban className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => { setSelectedPayment(payment); setIsDeleteOpen(true); }}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -232,6 +396,7 @@ export default function PaymentManagement() {
                     )}
                   </TableBody>
                 </Table>
+                {renderPagination()}
               </CardContent>
             </Card>
           </TabsContent>
@@ -247,6 +412,7 @@ export default function PaymentManagement() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Invoice #</TableHead>
+                      <TableHead>Tenant</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Due Date</TableHead>
@@ -256,11 +422,11 @@ export default function PaymentManagement() {
                   <TableBody>
                     {invoicesLoading ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8">Loading...</TableCell>
+                        <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
                       </TableRow>
                     ) : invoices.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                           No invoices found
                         </TableCell>
                       </TableRow>
@@ -268,6 +434,7 @@ export default function PaymentManagement() {
                       invoices.map((invoice) => (
                         <TableRow key={invoice.id}>
                           <TableCell className="font-mono">{invoice.invoice_number}</TableCell>
+                          <TableCell>{invoice.tenant?.company_name || invoice.tenant?.name || '-'}</TableCell>
                           <TableCell className="font-medium">৳{invoice.total_amount.toLocaleString()}</TableCell>
                           <TableCell>
                             <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'overdue' ? 'danger' : 'warning'}>
@@ -286,6 +453,70 @@ export default function PaymentManagement() {
           </TabsContent>
         </Tabs>
 
+        {/* View Payment Dialog */}
+        <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Payment Details</DialogTitle>
+            </DialogHeader>
+            {selectedPayment && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                  <div>
+                    <Label className="text-muted-foreground">Tenant</Label>
+                    <p className="font-medium">{selectedPayment.tenant?.company_name || selectedPayment.tenant?.name || '-'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Email</Label>
+                    <p>{selectedPayment.tenant?.email || '-'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Transaction ID</Label>
+                    <p className="font-mono">{selectedPayment.transaction_id || '-'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Amount</Label>
+                    <p className="font-bold text-lg">৳{selectedPayment.amount.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Method</Label>
+                    <p>{selectedPayment.payment_method.toUpperCase()}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Status</Label>
+                    <div>{getStatusBadge(selectedPayment.status)}</div>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Date</Label>
+                    <p>{format(new Date(selectedPayment.created_at), 'PPP')}</p>
+                  </div>
+                  {selectedPayment.invoice_number && (
+                    <div>
+                      <Label className="text-muted-foreground">Invoice</Label>
+                      <p className="font-mono">{selectedPayment.invoice_number}</p>
+                    </div>
+                  )}
+                </div>
+                {selectedPayment.description && (
+                  <div>
+                    <Label className="text-muted-foreground">Description</Label>
+                    <p>{selectedPayment.description}</p>
+                  </div>
+                )}
+                {selectedPayment.notes && (
+                  <div>
+                    <Label className="text-muted-foreground">Notes</Label>
+                    <p>{selectedPayment.notes}</p>
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsViewOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Verify Dialog */}
         <Dialog open={isVerifyOpen} onOpenChange={setIsVerifyOpen}>
           <DialogContent>
@@ -299,24 +530,24 @@ export default function PaymentManagement() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
                   <div>
-                    <Label className="text-muted-foreground">Transaction ID</Label>
-                    <p className="font-mono">{selectedPayment.transaction_id || '-'}</p>
+                    <Label className="text-muted-foreground">Tenant</Label>
+                    <p className="font-medium">{selectedPayment.tenant?.company_name || selectedPayment.tenant?.name || '-'}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Amount</Label>
                     <p className="font-bold">৳{selectedPayment.amount.toLocaleString()}</p>
                   </div>
                   <div>
+                    <Label className="text-muted-foreground">Transaction ID</Label>
+                    <p className="font-mono">{selectedPayment.transaction_id || '-'}</p>
+                  </div>
+                  <div>
                     <Label className="text-muted-foreground">Method</Label>
                     <p>{selectedPayment.payment_method.toUpperCase()}</p>
                   </div>
-                  <div>
-                    <Label className="text-muted-foreground">Date</Label>
-                    <p>{format(new Date(selectedPayment.created_at), 'PPP')}</p>
-                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Verification Notes</Label>
+                  <Label>Verification Notes (Optional)</Label>
                   <Textarea
                     value={verifyNotes}
                     onChange={(e) => setVerifyNotes(e.target.value)}
@@ -326,14 +557,102 @@ export default function PaymentManagement() {
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsVerifyOpen(false)}>Cancel</Button>
-              <Button onClick={handleVerify}>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Verify Payment
+              <Button variant="outline" onClick={() => setIsVerifyOpen(false)} disabled={isSubmitting}>Cancel</Button>
+              <Button onClick={handleVerify} disabled={isSubmitting}>
+                {isSubmitting ? 'Verifying...' : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Verify Payment
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Reject Dialog */}
+        <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reject Payment</DialogTitle>
+              <DialogDescription>
+                Reject this payment with a reason
+              </DialogDescription>
+            </DialogHeader>
+            {selectedPayment && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                  <div>
+                    <Label className="text-muted-foreground">Transaction ID</Label>
+                    <p className="font-mono">{selectedPayment.transaction_id || '-'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Amount</Label>
+                    <p className="font-bold">৳{selectedPayment.amount.toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Rejection Reason *</Label>
+                  <Textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Enter the reason for rejection..."
+                    required
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRejectOpen(false)} disabled={isSubmitting}>Cancel</Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleReject} 
+                disabled={isSubmitting || !rejectReason.trim()}
+              >
+                {isSubmitting ? 'Rejecting...' : (
+                  <>
+                    <Ban className="h-4 w-4 mr-2" />
+                    Reject Payment
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation */}
+        <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Payment</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this payment? This action cannot be undone.
+                {selectedPayment && (
+                  <div className="mt-2 p-3 bg-muted rounded">
+                    <p><strong>Transaction ID:</strong> {selectedPayment.transaction_id || '-'}</p>
+                    <p><strong>Amount:</strong> ৳{selectedPayment.amount.toLocaleString()}</p>
+                    <p><strong>Status:</strong> {selectedPayment.status.toUpperCase()}</p>
+                  </div>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDelete}
+                disabled={isSubmitting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isSubmitting ? 'Deleting...' : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );

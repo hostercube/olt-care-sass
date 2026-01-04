@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Payment, PaymentStatus, PaymentMethod } from '@/types/saas';
 
-export function usePayments() {
+export function usePayments(tenantId?: string) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -11,13 +11,19 @@ export function usePayments() {
   const fetchPayments = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('payments')
         .select(`
           *,
           tenant:tenants(name, email, company_name)
         `)
         .order('created_at', { ascending: false });
+
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       
@@ -41,21 +47,24 @@ export function usePayments() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, tenantId]);
 
   useEffect(() => {
     fetchPayments();
   }, [fetchPayments]);
 
-  const verifyPayment = async (id: string, verifiedBy: string) => {
+  const verifyPayment = async (id: string, notes?: string) => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
       const { error } = await supabase
         .from('payments')
         .update({
           status: 'completed' as PaymentStatus,
-          verified_by: verifiedBy,
+          verified_by: user?.id,
           verified_at: new Date().toISOString(),
           paid_at: new Date().toISOString(),
+          notes: notes || null,
         })
         .eq('id', id);
 
@@ -74,6 +83,7 @@ export function usePayments() {
         description: 'Failed to verify payment',
         variant: 'destructive',
       });
+      throw error;
     }
   };
 
@@ -102,6 +112,7 @@ export function usePayments() {
         description: 'Failed to reject payment',
         variant: 'destructive',
       });
+      throw error;
     }
   };
 
@@ -130,6 +141,33 @@ export function usePayments() {
         description: 'Failed to refund payment',
         variant: 'destructive',
       });
+      throw error;
+    }
+  };
+
+  const deletePayment = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('payments')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Payment Deleted',
+        description: 'The payment has been deleted',
+      });
+
+      await fetchPayments();
+    } catch (error: any) {
+      console.error('Error deleting payment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete payment',
+        variant: 'destructive',
+      });
+      throw error;
     }
   };
 
@@ -177,5 +215,6 @@ export function usePayments() {
     verifyPayment,
     rejectPayment,
     refundPayment,
+    deletePayment,
   };
 }
