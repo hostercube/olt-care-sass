@@ -123,28 +123,58 @@ export function useModuleAccess(): ModuleAccessResult {
 
       if (subscription && subscription.packages) {
         const pkg = subscription.packages as any;
-        setFeatures((pkg.features as TenantFeatures) || {});
+        const pkgFeatures = (pkg.features as TenantFeatures) || {};
+        
+        // Merge tenant features with package features (tenant features take priority)
+        const tenantFeatures = (tenant?.features as TenantFeatures) || {};
+        const mergedFeatures = { ...pkgFeatures, ...tenantFeatures };
+        
+        setFeatures(mergedFeatures);
         setLimits({
-          maxOlts: pkg.max_olts || 1,
-          maxUsers: pkg.max_users || 1,
-          maxOnus: pkg.max_onus,
-          maxMikrotiks: pkg.max_mikrotiks,
-          maxCustomers: pkg.max_customers,
-          maxAreas: pkg.max_areas,
-          maxResellers: pkg.max_resellers,
+          maxOlts: pkg.max_olts || tenant?.max_olts || 1,
+          maxUsers: pkg.max_users || tenant?.max_users || 1,
+          maxOnus: pkg.max_onus || tenant?.max_onus || null,
+          maxMikrotiks: pkg.max_mikrotiks || tenant?.max_mikrotiks || null,
+          maxCustomers: pkg.max_customers || tenant?.max_customers || null,
+          maxAreas: pkg.max_areas || tenant?.max_areas || null,
+          maxResellers: pkg.max_resellers || tenant?.max_resellers || null,
         });
         setSubscriptionActive(true);
       } else if (tenant) {
-        // No active subscription, use tenant defaults (trial mode)
-        setFeatures((tenant.features as TenantFeatures) || {});
+        // No active subscription, use tenant defaults (trial or active mode)
+        // Enable all modules by default for trial/active tenants
+        const tenantFeatures = (tenant.features as TenantFeatures) || {};
+        
+        // Default features for trial/active tenants without subscription
+        // Enable all core ISP modules by default
+        const defaultFeatures: TenantFeatures = {
+          olt_care: true,
+          isp_billing: true,
+          isp_customers: true,
+          isp_resellers: true,
+          isp_mikrotik: true,
+          isp_areas: true,
+          isp_crm: true,
+          isp_inventory: true,
+          isp_salary_payroll: true,
+          isp_btrc_reports: true,
+          isp_tickets: true,
+          sms_alerts: true,
+          email_alerts: true,
+          multi_user: true,
+          reports_export: true,
+          ...tenantFeatures, // Override with tenant-specific features
+        };
+        
+        setFeatures(defaultFeatures);
         setLimits({
-          maxOlts: tenant.max_olts || 1,
-          maxUsers: tenant.max_users || 1,
-          maxOnus: 100,
-          maxMikrotiks: 1,
-          maxCustomers: null,
-          maxAreas: null,
-          maxResellers: null,
+          maxOlts: tenant.max_olts || 10,
+          maxUsers: tenant.max_users || 10,
+          maxOnus: tenant.max_onus || 1000,
+          maxMikrotiks: tenant.max_mikrotiks || 5,
+          maxCustomers: tenant.max_customers || null,
+          maxAreas: tenant.max_areas || null,
+          maxResellers: tenant.max_resellers || null,
         });
         setSubscriptionActive(tenant.status === 'trial' || tenant.status === 'active');
       }
@@ -167,6 +197,12 @@ export function useModuleAccess(): ModuleAccessResult {
 
       // OLT Care is always enabled for all tenants
       if (module === 'olt_care') return true;
+
+      // If features is empty or undefined, allow access (trial mode defaults)
+      // This allows trial tenants to access all modules
+      if (!features || Object.keys(features).length === 0) {
+        return true; // Default to allowing access for trial/new tenants
+      }
 
       return features[module] === true;
     },
