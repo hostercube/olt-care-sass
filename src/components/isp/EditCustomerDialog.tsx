@@ -75,6 +75,12 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!formData.name.trim()) {
+      toast.error('Name is required');
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -112,16 +118,17 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
         }
 
         if (Object.keys(updates).length > 0) {
+          console.log('Updating MikroTik with:', updates);
           const ok = await updatePPPoEUser(routerId, oldUsername, updates);
           if (!ok) {
-            setLoading(false);
-            return;
+            // MikroTik update failed but continue with DB update
+            console.warn('MikroTik update failed, continuing with database update');
           }
         }
       }
 
       const updateData: any = {
-        name: formData.name,
+        name: formData.name.trim(),
         phone: formData.phone || null,
         email: formData.email || null,
         address: formData.address || null,
@@ -141,6 +148,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
         updateData.pppoe_password = formData.pppoe_password.trim();
       }
 
+      console.log('Updating customer with:', updateData);
       await updateCustomer(customer.id, updateData);
       onSuccess?.();
     } catch (err: any) {
