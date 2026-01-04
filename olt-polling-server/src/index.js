@@ -24,6 +24,7 @@ import { rebootONU, deauthorizeONU, executeBulkOperation } from './onu-commands.
 import { logger } from './utils/logger.js';
 import { updateUserPassword, isUserAdmin } from './admin/user-admin.js';
 import { getNotificationSettings, notifyAlert, testSmtpConnection, sendTestEmail, sendTestTelegram, sendTestWhatsApp } from './notifications/notifier.js';
+import { processPendingSMS, getSMSGatewaySettings, sendSMS } from './notifications/sms-sender.js';
 
 const app = express();
 app.use(cors());
@@ -1713,6 +1714,16 @@ app.post('/refresh-polling-settings', async (req, res) => {
   app.handle(req, res);
 });
 
+// ============= SMS PROCESSING CRON =============
+// Process pending SMS every 10 seconds for near-instant delivery
+cron.schedule('*/10 * * * * *', async () => {
+  try {
+    await processPendingSMS(supabase);
+  } catch (err) {
+    logger.error('SMS processing error:', err);
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {
@@ -1722,8 +1733,12 @@ app.listen(PORT, async () => {
   // Setup cron polling based on settings
   await setupCronPolling();
   
+  // Process any pending SMS on startup
+  processPendingSMS(supabase).catch(err => logger.warn('Initial SMS processing failed:', err));
+  
   // NO initial poll - wait for user to trigger manually or view ONU page
   logger.info('✅ Server ready - polling will be triggered on-demand or by cron settings');
+  logger.info('✅ SMS processing active - checking every 10 seconds');
 });
 
 // Handle uncaught exceptions
