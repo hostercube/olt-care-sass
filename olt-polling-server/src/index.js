@@ -2187,6 +2187,141 @@ app.post('/payments/bkash/execute', (req, res) => {
   app.handle(req, res);
 });
 
+// ============= BKASH PGW CHECKOUT REDIRECT ENDPOINT =============
+// For bKash PGW Checkout.js mode - get redirect URL for payment
+app.post('/api/payments/bkash/checkout-redirect', async (req, res) => {
+  try {
+    const { paymentID, payment_id, tenant_id, return_url } = req.body;
+
+    if (!paymentID) {
+      return res.status(400).json({ success: false, error: 'Missing paymentID' });
+    }
+
+    // Find payment record by payment_id if provided
+    let payment = null;
+    if (payment_id) {
+      const { data } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('id', payment_id)
+        .single();
+      payment = data;
+    }
+
+    // Get gateway config
+    const targetTenantId = tenant_id || payment?.tenant_id;
+    let config = null;
+    let isSandbox = true;
+
+    if (targetTenantId) {
+      const { data: tenantGateway } = await supabase
+        .from('tenant_payment_gateways')
+        .select('*')
+        .eq('tenant_id', targetTenantId)
+        .eq('gateway', 'bkash')
+        .eq('is_enabled', true)
+        .single();
+
+      if (tenantGateway) {
+        config = tenantGateway.config || {};
+        isSandbox = tenantGateway.sandbox_mode !== false;
+      }
+    }
+
+    if (!config) {
+      // Try global gateway
+      const { data: globalGateway } = await supabase
+        .from('payment_gateway_settings')
+        .select('*')
+        .eq('gateway', 'bkash')
+        .eq('is_enabled', true)
+        .single();
+
+      if (globalGateway) {
+        config = globalGateway.config || {};
+        isSandbox = globalGateway.sandbox_mode !== false;
+      }
+    }
+
+    if (!config || !config.app_key) {
+      return res.status(400).json({ success: false, error: 'bKash gateway not configured' });
+    }
+
+    const baseUrl = isSandbox 
+      ? 'https://checkout.sandbox.bka.sh/v1.2.0-beta'
+      : 'https://checkout.pay.bka.sh/v1.2.0-beta';
+
+    // Get fresh token
+    const grantResponse = await fetch(`${baseUrl}/checkout/token/grant`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        username: config.username,
+        password: config.password,
+      },
+      body: JSON.stringify({
+        app_key: config.app_key,
+        app_secret: config.app_secret,
+      }),
+    });
+
+    const grantData = await grantResponse.json();
+    logger.info('bKash checkout-redirect grant response:', grantData);
+
+    if (!grantData.id_token) {
+      return res.status(400).json({ success: false, error: grantData.statusMessage || 'Failed to get bKash token' });
+    }
+
+    // For PGW Checkout mode, the bkashURL from create response should be used
+    // If we have it stored in payment record, use that
+    const gatewayResponse = payment?.gateway_response || {};
+    const gatewayInit = gatewayResponse.gateway_init || {};
+    const bkashConfig = gatewayInit.bkash_config || {};
+
+    if (bkashConfig.paymentID === paymentID) {
+      // We already have the payment created, now we need to get the redirect URL
+      // For PGW mode, there's no direct redirect URL - the popup is required
+      // But for simplicity, we can try to query payment status or recreate
+    }
+
+    // Query payment to get bkashURL if available
+    const queryResponse = await fetch(`${baseUrl}/checkout/payment/query/${paymentID}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: grantData.id_token,
+        'X-App-Key': config.app_key,
+      },
+    });
+
+    const queryData = await queryResponse.json();
+    logger.info('bKash payment query response:', queryData);
+
+    // For PGW Checkout, payment needs to be executed after user authorizes
+    // Return information for client to handle
+    const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'https://oltapp.isppoint.com';
+    const callbackUrl = `${publicBaseUrl}/olt-polling-server/payments/callback/bkash`;
+
+    res.json({
+      success: true,
+      paymentID,
+      paymentStatus: queryData.transactionStatus,
+      bkashURL: queryData.bkashURL || null,
+      // For PGW mode, provide execute endpoint
+      execute_url: `${publicBaseUrl}/olt-polling-server/api/payments/bkash/execute`,
+      redirect_url: return_url ? `${return_url}?payment_id=${payment_id || paymentID}` : null,
+    });
+  } catch (error) {
+    logger.error('bKash checkout-redirect error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/payments/bkash/checkout-redirect', (req, res) => {
+  req.url = '/api/payments/bkash/checkout-redirect';
+  app.handle(req, res);
+});
+
 // Start server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {

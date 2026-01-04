@@ -410,7 +410,9 @@ async function initiateBkash(config, paymentData) {
 
 /**
  * Initiate bKash payment using PGW Checkout.js (old method)
- * This mode returns config for client-side Checkout.js popup instead of a redirect URL.
+ * This mode can either:
+ * 1. Return a bkashURL for redirect (if available)
+ * 2. Return config for client-side Checkout.js popup
  */
 async function initiateBkashCheckoutJS(config, paymentData) {
   const { app_key, app_secret, username, password, is_sandbox } = config;
@@ -469,10 +471,20 @@ async function initiateBkashCheckoutJS(config, paymentData) {
     logger.info('bKash PGW create response:', createData);
 
     if (createData.paymentID) {
-      // PGW Checkout.js mode: return config for client-side popup
+      // Check if bkashURL is available for direct redirect
+      if (createData.bkashURL) {
+        return {
+          success: true,
+          checkout_url: createData.bkashURL, // Direct redirect to bKash
+          payment_id: createData.paymentID,
+          bkash_mode: 'checkout_js',
+        };
+      }
+      
+      // PGW Checkout.js mode: return config for client-side handling
       return {
         success: true,
-        checkout_url: null, // No redirect; client will use popup
+        checkout_url: null, // No direct redirect; client needs to handle
         payment_id: createData.paymentID,
         bkash_mode: 'checkout_js',
         bkash_config: {
@@ -484,6 +496,8 @@ async function initiateBkashCheckoutJS(config, paymentData) {
           merchantInvoiceNumber: paymentData.transaction_id,
           amount: paymentData.amount.toString(),
           currency: 'BDT',
+          // Include bkashURL if available for fallback
+          bkashURL: createData.bkashURL || null,
         },
       };
     } else {
