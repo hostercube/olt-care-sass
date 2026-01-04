@@ -79,7 +79,7 @@ export function useModuleAccess(): ModuleAccessResult {
     }
 
     try {
-      // Get active subscription with package details
+      // Get active or trial subscription with package details
       const { data: subscription, error } = await supabase
         .from('subscriptions')
         .select(
@@ -98,7 +98,9 @@ export function useModuleAccess(): ModuleAccessResult {
         `,
         )
         .eq('tenant_id', tenantId)
-        .eq('status', 'active')
+        .in('status', ['active', 'trial'] as any[])
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (error) {

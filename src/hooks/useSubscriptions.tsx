@@ -91,7 +91,7 @@ export function useSubscriptions(tenantId?: string) {
     try {
       const { error } = await supabase
         .from('subscriptions')
-        .update(updates)
+        .update(updates as any)
         .eq('id', id);
 
       if (error) throw error;
@@ -118,11 +118,11 @@ export function useSubscriptions(tenantId?: string) {
       const { error } = await supabase
         .from('subscriptions')
         .update({
-          status: 'cancelled' as SubscriptionStatus,
+          status: 'cancelled',
           cancelled_at: new Date().toISOString(),
           cancelled_reason: reason,
           auto_renew: false,
-        })
+        } as any)
         .eq('id', id);
 
       if (error) throw error;
@@ -148,11 +148,11 @@ export function useSubscriptions(tenantId?: string) {
       const { error } = await supabase
         .from('subscriptions')
         .update({
-          status: 'active' as SubscriptionStatus,
+          status: 'active',
           ends_at: endDate,
           cancelled_at: null,
           cancelled_reason: null,
-        })
+        } as any)
         .eq('id', id);
 
       if (error) throw error;

@@ -15,6 +15,11 @@ import { z } from 'zod';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { DIVISIONS, getDistricts, getUpazilas } from '@/data/bangladeshLocations';
 
+interface PlatformSettings {
+  defaultTrialDays: number;
+  enableSignup: boolean;
+}
+
 interface Package {
   id: string;
   name: string;
@@ -47,6 +52,7 @@ export default function Auth() {
 
   const [mode, setMode] = useState<'login' | 'signup'>(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
   const [packages, setPackages] = useState<Package[]>([]);
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({ defaultTrialDays: 14, enableSignup: true });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -79,15 +85,31 @@ export default function Auth() {
   }, [user, navigate, isSuperAdmin, superAdminLoading]);
 
   useEffect(() => {
-    const fetchPackages = async () => {
-      const { data } = await supabase
+    const fetchData = async () => {
+      // Fetch packages
+      const { data: pkgData } = await supabase
         .from('packages')
         .select('id, name, price_monthly, price_yearly, description')
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
-      setPackages((data as Package[]) || []);
+      setPackages((pkgData as Package[]) || []);
+
+      // Fetch platform settings for trial days
+      const { data: settingsData } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'platform_settings')
+        .single();
+      
+      if (settingsData?.value) {
+        const settings = settingsData.value as any;
+        setPlatformSettings({
+          defaultTrialDays: settings.defaultTrialDays ?? 14,
+          enableSignup: settings.enableSignup ?? true,
+        });
+      }
     };
-    fetchPackages();
+    fetchData();
   }, []);
 
   const validateLogin = () => {
@@ -154,6 +176,8 @@ export default function Auth() {
     
     try {
       const redirectUrl = `${window.location.origin}/`;
+      const trialDays = platformSettings.defaultTrialDays;
+      const requiresPayment = trialDays === 0;
       
       // Create the user
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -171,6 +195,12 @@ export default function Auth() {
       if (authError) throw authError;
       if (!authData.user) throw new Error('Failed to create user');
 
+      // Determine tenant status based on trial days
+      const tenantStatus = requiresPayment ? 'pending' : 'trial';
+      const trialEndsAt = requiresPayment 
+        ? null 
+        : new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
+
       // Create the tenant
       const { data: tenantData, error: tenantError } = await supabase
         .from('tenants')
@@ -183,8 +213,8 @@ export default function Auth() {
           district: signupData.district || null,
           upazila: signupData.upazila || null,
           address: signupData.address || null,
-          status: 'trial',
-          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          status: tenantStatus,
+          trial_ends_at: trialEndsAt,
         } as any)
         .select()
         .single();
@@ -210,28 +240,81 @@ export default function Auth() {
         if (pkg) {
           const startDate = new Date();
           const endDate = new Date();
-          endDate.setDate(endDate.getDate() + 14); // 14 day trial
+          
+          // For paid plans without trial, set subscription as pending
+          if (requiresPayment) {
+            // Don't set ends_at until payment is made
+            endDate.setDate(endDate.getDate() + (signupData.billingCycle === 'monthly' ? 30 : 365));
+          } else {
+            endDate.setDate(endDate.getDate() + trialDays);
+          }
           
           const amount = signupData.billingCycle === 'monthly' ? pkg.price_monthly : pkg.price_yearly;
+          const subscriptionStatus = requiresPayment ? 'pending' : 'trial';
           
-          await supabase
+          const { data: subscriptionData } = await supabase
             .from('subscriptions')
             .insert({
               tenant_id: tenantData.id,
               package_id: signupData.packageId,
-              status: 'trial',
+              status: subscriptionStatus,
               billing_cycle: signupData.billingCycle,
               amount: amount,
               starts_at: startDate.toISOString(),
               ends_at: endDate.toISOString(),
-            } as any);
+            } as any)
+            .select()
+            .single();
+          
+          // If payment is required, create an invoice
+          if (requiresPayment && subscriptionData) {
+            const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
+            await supabase
+              .from('invoices')
+              .insert({
+                tenant_id: tenantData.id,
+                subscription_id: subscriptionData.id,
+                invoice_number: invoiceNumber,
+                amount: amount,
+                tax_amount: 0,
+                total_amount: amount,
+                status: 'unpaid',
+                due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                line_items: [{
+                  description: `${pkg.name} - ${signupData.billingCycle === 'monthly' ? 'Monthly' : 'Yearly'} Subscription`,
+                  quantity: 1,
+                  unit_price: amount,
+                  total: amount,
+                }],
+              } as any);
+          }
         }
       }
 
-      toast({
-        title: "Account Created!",
-        description: "Please check your email to verify your account, or login directly.",
-      });
+      if (requiresPayment) {
+        toast({
+          title: "Account Created!",
+          description: "Please complete your payment to activate your account.",
+        });
+        
+        // Auto login and redirect to payment page
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: signupData.email,
+          password: signupData.password,
+        });
+        
+        if (!signInError) {
+          navigate('/billing/pay');
+          return;
+        }
+      } else {
+        toast({
+          title: "Account Created!",
+          description: trialDays > 0 
+            ? `Your ${trialDays}-day trial has started. Please check your email to verify your account.`
+            : "Please check your email to verify your account, or login directly.",
+        });
+      }
       
       // Switch to login mode
       setMode('login');
