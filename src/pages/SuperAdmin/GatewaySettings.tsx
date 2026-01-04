@@ -85,6 +85,23 @@ const GATEWAY_CONFIGS: Record<string, {
       { key: 'api_secret', label: 'API Secret', type: 'password', placeholder: 'API Secret' },
     ]
   },
+  uddoktapay: {
+    title: 'UddoktaPay',
+    description: 'Digital payment solution',
+    docsUrl: 'https://uddoktapay.com/documentation',
+    fields: [
+      { key: 'api_key', label: 'API Key', type: 'text', placeholder: 'API Key' },
+    ]
+  },
+  aamarpay: {
+    title: 'aamarPay',
+    description: 'Payment gateway for Bangladesh',
+    docsUrl: 'https://aamarpay.com/developers',
+    fields: [
+      { key: 'store_id', label: 'Store ID', type: 'text', placeholder: 'Store ID' },
+      { key: 'signature_key', label: 'Signature Key', type: 'password', placeholder: 'Signature Key' },
+    ]
+  },
   manual: {
     title: 'Manual Payment',
     description: 'Bank transfer, cash, or other manual methods',
@@ -124,7 +141,11 @@ export default function GatewaySettings() {
         { gateway: 'bkash', display_name: 'bKash', sort_order: 3 },
         { gateway: 'nagad', display_name: 'Nagad', sort_order: 4 },
         { gateway: 'rocket', display_name: 'Rocket', sort_order: 5 },
-        { gateway: 'manual', display_name: 'Manual Payment', sort_order: 6, is_enabled: true, instructions: 'Please transfer to:\nBank Account: XXXXXX\nbKash: 01XXXXXXXXX' },
+        { gateway: 'portwallet', display_name: 'PortWallet', sort_order: 6 },
+        { gateway: 'piprapay', display_name: 'PipraPay', sort_order: 7 },
+        { gateway: 'uddoktapay', display_name: 'UddoktaPay', sort_order: 8 },
+        { gateway: 'aamarpay', display_name: 'aamarPay', sort_order: 9 },
+        { gateway: 'manual', display_name: 'Manual Payment', sort_order: 10, is_enabled: true, instructions: 'Please transfer to:\nBank Account: XXXXXX\nbKash: 01XXXXXXXXX' },
       ];
 
       for (const gw of defaultGateways) {
@@ -188,10 +209,15 @@ export default function GatewaySettings() {
             </div>
             <Switch
               checked={config.is_enabled}
-              onCheckedChange={(v) => setPaymentConfigs({
-                ...paymentConfigs,
-                [gateway]: { ...config, is_enabled: v }
-              })}
+              onCheckedChange={async (v) => {
+                // Immediately update local state
+                setPaymentConfigs({
+                  ...paymentConfigs,
+                  [gateway]: { ...config, is_enabled: v }
+                });
+                // Also save to database immediately
+                await updateGateway(config.id, { is_enabled: v });
+              }}
             />
           </div>
         </CardHeader>
