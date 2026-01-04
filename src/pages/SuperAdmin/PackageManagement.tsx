@@ -285,7 +285,7 @@ export default function PackageManagement() {
     return value === null ? 'Unlimited' : value;
   };
 
-  const PackageFormContent = () => (
+  const packageFormContent = (
     <ScrollArea className="max-h-[70vh]">
       <div className="space-y-6 pr-4">
         {/* Basic Info */}
@@ -515,7 +515,7 @@ export default function PackageManagement() {
                 <DialogTitle>Create New Package</DialogTitle>
                 <DialogDescription>Define a new subscription package with limits and features</DialogDescription>
               </DialogHeader>
-              <PackageFormContent />
+              {packageFormContent}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
                 <Button onClick={handleCreate}>Create Package</Button>
@@ -554,7 +554,7 @@ export default function PackageManagement() {
                           <DialogTitle>Edit Package</DialogTitle>
                           <DialogDescription>Modify package settings and features</DialogDescription>
                         </DialogHeader>
-                        <PackageFormContent />
+                        {packageFormContent}
                         <DialogFooter>
                           <Button variant="outline" onClick={() => setEditingPackage(null)}>Cancel</Button>
                           <Button onClick={handleUpdate}>Save Changes</Button>
