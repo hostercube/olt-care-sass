@@ -1689,6 +1689,16 @@ export async function createPPPSecret(mikrotik, userConfig) {
   }
 
   try {
+    // Prevent duplicate usernames
+    const existing = await fetchMikroTikPPPSecrets(mikrotik);
+    const alreadyExists = existing.some(
+      (s) => String(s?.pppoe_username || '').toLowerCase() === String(name).toLowerCase()
+    );
+
+    if (alreadyExists) {
+      return { success: false, error: `PPPoE username "${name}" already exists on MikroTik` };
+    }
+
     const connectionInfo = await detectRouterOSVersion(mikrotik);
     logger.info(`Creating PPP secret ${name} via ${connectionInfo.method} API`);
 

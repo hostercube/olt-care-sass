@@ -12,13 +12,15 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
+import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useISPPackages } from '@/hooks/useISPPackages';
 import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
 import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
-import { 
+import {
   Loader2, User, Network, Package, MapPin, ChevronLeft, ChevronRight,
   Check, Router, Key, Calendar
 } from 'lucide-react';
@@ -46,8 +48,10 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   const { resellers } = useResellers();
   const { routers } = useMikroTikRouters();
   const { settings } = useSystemSettings();
-  const vpsUrl = settings?.apiServerUrl || '';
-  
+  const { tenantId } = useTenantContext();
+
+  const apiBase = (settings?.apiServerUrl || '').replace(/\/$/, '');
+
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [creatingPPPoE, setCreatingPPPoE] = useState(false);
@@ -102,9 +106,9 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     }
   }, [formData.name]);
 
-  const validateStep = (step: number): boolean => {
+  const validateStep = async (step: number): Promise<boolean> => {
     const newErrors: Record<string, string> = {};
-    
+
     switch (step) {
       case 0: // Basic
         if (!formData.name.trim()) newErrors.name = 'Name is required';
@@ -125,41 +129,63 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         break;
     }
 
+    // PPPoE username uniqueness (same tenant)
+    if (step === 1 && !newErrors.pppoe_username) {
+      const username = formData.pppoe_username.trim();
+      if (username) {
+        try {
+          let q = supabase
+            .from('customers')
+            .select('id')
+            .ilike('pppoe_username', username)
+            .limit(1);
+
+          if (tenantId) q = q.eq('tenant_id', tenantId);
+
+          const { data, error } = await q;
+
+          if (!error && data && data.length > 0) {
+            newErrors.pppoe_username = 'This PPPoE username already exists';
+          }
+        } catch {
+          // If check fails, do not block step navigation
+        }
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, STEPS.length - 1));
+  const handleNext = async () => {
+    if (await validateStep(currentStep)) {
+      setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
     }
   };
 
   const handlePrevious = () => {
-    setCurrentStep(prev => Math.max(prev - 1, 0));
+    setCurrentStep((prev) => Math.max(prev - 1, 0));
   };
 
   const createPPPoEOnMikroTik = async (): Promise<boolean> => {
-    if (!formData.create_mikrotik_user || !formData.mikrotik_id) {
-      return true; // Skip if not creating on MikroTik
+    if (!formData.create_mikrotik_user || !formData.mikrotik_id || formData.mikrotik_id === 'none') {
+      return true;
     }
 
-    const router = routers.find(r => r.id === formData.mikrotik_id);
-    if (!router) return true;
-
-    if (!vpsUrl) {
-      console.warn('VPS URL not configured, skipping MikroTik user creation');
-      return true;
+    const router = routers.find((r) => r.id === formData.mikrotik_id);
+    if (!router) {
+      toast.error('Selected MikroTik router not found');
+      return false;
     }
 
     try {
       setCreatingPPPoE(true);
-      
+
       // Get package profile name
-      const pkg = packages.find(p => p.id === formData.package_id);
+      const pkg = packages.find((p) => p.id === formData.package_id);
       const profileName = pkg?.name || 'default';
 
-      const response = await fetch(`${vpsUrl}/api/mikrotik/pppoe/create`, {
+      const response = await fetch(`${apiBase}/api/mikrotik/pppoe/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -174,24 +200,23 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
             password: formData.pppoe_password,
             profile: profileName,
             comment: `Customer: ${formData.name}`,
-          }
+          },
         }),
       });
 
-      const result = await response.json();
-      
-      if (result.success) {
+      const result = await response.json().catch(() => ({}));
+
+      if (result?.success) {
         toast.success('PPPoE user created on MikroTik');
         return true;
-      } else {
-        // Don't fail customer creation, just warn
-        toast.warning(`Note: PPPoE user not created on MikroTik - ${result.error || 'API not available'}`);
-        return true;
       }
+
+      toast.error(result?.error || 'PPPoE user was not created on MikroTik');
+      return false;
     } catch (err) {
       console.warn('MikroTik PPPoE creation failed:', err);
-      toast.warning('Note: Could not create PPPoE user on MikroTik. You may need to add it manually.');
-      return true; // Still allow customer creation
+      toast.error('Could not create PPPoE user on MikroTik');
+      return false;
     } finally {
       setCreatingPPPoE(false);
     }
@@ -199,10 +224,12 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate all steps
-    for (let i = 0; i <= currentStep; i++) {
-      if (!validateStep(i)) {
+    for (let i = 0; i < STEPS.length; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      const ok = await validateStep(i);
+      if (!ok) {
         setCurrentStep(i);
         return;
       }
@@ -211,8 +238,9 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     setLoading(true);
 
     try {
-      // First, try to create PPPoE user on MikroTik
-      await createPPPoEOnMikroTik();
+      // First, create PPPoE user on MikroTik (if enabled)
+      const pppoeOk = await createPPPoEOnMikroTik();
+      if (!pppoeOk) return;
 
       // Then create customer in database
       await createCustomer({
@@ -291,8 +319,8 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 <div key={step.id} className="flex items-center flex-1">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (index < currentStep || validateStep(currentStep)) {
+                    onClick={async () => {
+                      if (index < currentStep || (await validateStep(currentStep))) {
                         setCurrentStep(index);
                       }
                     }}
@@ -383,10 +411,60 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 <Textarea
                   id="address"
                   value={formData.address}
-                  onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))}
                   placeholder="Full address"
                   rows={2}
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Area</Label>
+                  <Select
+                    value={formData.area_id}
+                    onValueChange={(value) => setFormData((prev) => ({ ...prev, area_id: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select area" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {areas.map((area) => (
+                        <SelectItem key={area.id} value={area.id}>
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4" />
+                            {area.name}
+                            {area.village && `, ${area.village}`}
+                            {area.upazila && `, ${area.upazila}`}
+                            {area.district && ` (${area.district})`}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Reseller</Label>
+                  <Select
+                    value={formData.reseller_id}
+                    onValueChange={(value) => setFormData((prev) => ({ ...prev, reseller_id: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select reseller (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {resellers
+                        .filter((r) => r.is_active)
+                        .map((reseller) => (
+                          <SelectItem key={reseller.id} value={reseller.id}>
+                            {reseller.name} {reseller.phone && `(${reseller.phone})`}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           )}
@@ -589,57 +667,11 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           {currentStep === 3 && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Area</Label>
-                <Select
-                  value={formData.area_id}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, area_id: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select area" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {areas.map((area) => (
-                      <SelectItem key={area.id} value={area.id}>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4" />
-                          {area.name} 
-                          {area.village && `, ${area.village}`}
-                          {area.upazila && `, ${area.upazila}`}
-                          {area.district && ` (${area.district})`}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Reseller</Label>
-                <Select
-                  value={formData.reseller_id}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, reseller_id: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select reseller (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {resellers.filter(r => r.is_active).map((reseller) => (
-                      <SelectItem key={reseller.id} value={reseller.id}>
-                        {reseller.name} {reseller.phone && `(${reseller.phone})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="notes">Notes</Label>
                 <Textarea
                   id="notes"
                   value={formData.notes}
-                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
                   placeholder="Additional notes..."
                   rows={3}
                 />

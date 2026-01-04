@@ -189,13 +189,7 @@ export default function MikroTikManagement() {
         password: formData.password || editingRouter?.password_encrypted || '',
       };
 
-      if (!vpsUrl) {
-        toast.error('VPS URL not configured');
-        setTestResult({ success: false, error: 'VPS URL not configured in settings' });
-        return;
-      }
-
-      const response = await fetch(`${vpsUrl}/api/test-mikrotik`, {
+      const response = await fetch(`${(vpsUrl || '').replace(/\/$/, '')}/api/test-mikrotik`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mikrotik }),
@@ -220,12 +214,9 @@ export default function MikroTikManagement() {
 
   const handleTestRouter = async (router: MikroTikRouter) => {
     setTesting(router.id);
-    
+
     try {
-      if (!vpsUrl) {
-        toast.error('VPS URL not configured');
-        return;
-      }
+      const apiBase = (vpsUrl || '').replace(/\/$/, '');
 
       const mikrotik = {
         ip: router.ip_address,
@@ -234,25 +225,25 @@ export default function MikroTikManagement() {
         password: router.password_encrypted,
       };
 
-      const response = await fetch(`${vpsUrl}/api/test-mikrotik`, {
+      const response = await fetch(`${apiBase}/api/test-mikrotik`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mikrotik }),
       });
 
       const result = await response.json();
-      
+
       // Update router status
       await supabase
         .from('mikrotik_routers')
-        .update({ 
+        .update({
           status: result.success ? 'online' : 'offline',
-          last_synced: result.success ? new Date().toISOString() : undefined
+          last_synced: result.success ? new Date().toISOString() : undefined,
         })
         .eq('id', router.id);
 
       fetchRouters();
-      
+
       if (result.success) {
         toast.success(`${router.name}: Online - v${result.connection?.version}`);
       } else {
@@ -266,16 +257,13 @@ export default function MikroTikManagement() {
   };
 
   const handleSync = async (routerId: string, syncType: 'pppoe' | 'queues' | 'full') => {
-    const router = routers.find(r => r.id === routerId);
+    const router = routers.find((r) => r.id === routerId);
     if (!router) return;
 
     setSyncing({ routerId, type: syncType });
-    
+
     try {
-      if (!vpsUrl) {
-        toast.error('VPS URL not configured');
-        return;
-      }
+      const apiBase = (vpsUrl || '').replace(/\/$/, '');
 
       const mikrotik = {
         ip: router.ip_address,
@@ -285,7 +273,7 @@ export default function MikroTikManagement() {
       };
 
       // First test connection and get data
-      const response = await fetch(`${vpsUrl}/api/test-mikrotik`, {
+      const response = await fetch(`${apiBase}/api/test-mikrotik`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mikrotik }),
@@ -294,10 +282,7 @@ export default function MikroTikManagement() {
       const result = await response.json();
 
       if (!result.success) {
-        await supabase
-          .from('mikrotik_routers')
-          .update({ status: 'offline' })
-          .eq('id', routerId);
+        await supabase.from('mikrotik_routers').update({ status: 'offline' }).eq('id', routerId);
         fetchRouters();
         toast.error(result.error || 'Connection failed');
         return;
@@ -306,9 +291,9 @@ export default function MikroTikManagement() {
       // Update router status
       await supabase
         .from('mikrotik_routers')
-        .update({ 
+        .update({
           last_synced: new Date().toISOString(),
-          status: 'online' 
+          status: 'online',
         })
         .eq('id', routerId);
 
@@ -316,20 +301,11 @@ export default function MikroTikManagement() {
       let message = '';
 
       if (syncType === 'pppoe' || syncType === 'full') {
-        // Sync PPPoE users - update customers with matching usernames
-        if (data.secrets_count > 0) {
-          // Get existing customers for this router
-          const { data: customers } = await supabase
-            .from('customers')
-            .select('id, pppoe_username')
-            .eq('mikrotik_id', routerId);
-          
-          message += `${data.pppoe_count} active PPPoE sessions, ${data.secrets_count} secrets. `;
-        }
+        message += `${data.pppoe_count} active PPPoE sessions, ${data.secrets_count} secrets. `;
       }
 
       if (syncType === 'queues' || syncType === 'full') {
-        message += `Queues synced. `;
+        message += 'Queues synced. ';
       }
 
       if (syncType === 'full') {
@@ -340,12 +316,8 @@ export default function MikroTikManagement() {
       toast.success(message || `${syncType} sync completed!`);
     } catch (err: any) {
       console.error('Sync error:', err);
-      
-      await supabase
-        .from('mikrotik_routers')
-        .update({ status: 'offline' })
-        .eq('id', routerId);
-      
+
+      await supabase.from('mikrotik_routers').update({ status: 'offline' }).eq('id', routerId);
       fetchRouters();
       toast.error(err.message || 'Sync failed');
     } finally {
