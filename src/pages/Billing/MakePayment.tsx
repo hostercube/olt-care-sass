@@ -107,6 +107,87 @@ export default function MakePayment() {
     }
   };
 
+  // Handle bKash Checkout.js popup execution
+  const handleBkashCheckoutJS = async (bkashConfig: any, transactionIdRef: string) => {
+    try {
+      // Dynamically load bKash Checkout.js script
+      await new Promise<void>((resolve, reject) => {
+        if (document.getElementById('bkash-checkout-script')) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.id = 'bkash-checkout-script';
+        script.src = bkashConfig.scriptUrl;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load bKash Checkout.js'));
+        document.head.appendChild(script);
+      });
+
+      // Wait a bit for bKash to initialize
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // bKash Checkout.js popup
+      const bKash = (window as any).bKash;
+      if (!bKash) {
+        throw new Error('bKash Checkout.js not loaded');
+      }
+
+      bKash.init({
+        paymentMode: 'checkout',
+        paymentRequest: {
+          amount: bkashConfig.amount,
+          intent: 'sale',
+        },
+        createRequest: () => {
+          // Payment already created, just return paymentID
+          bKash.execute();
+        },
+        executeRequestOnAuthorization: async () => {
+          // Call backend to execute payment
+          const VPS_URL = import.meta.env.VITE_POLLING_SERVER_URL || 'https://oltapp.isppoint.com/olt-polling-server';
+          const executeRes = await fetch(`${VPS_URL}/api/payments/bkash/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paymentID: bkashConfig.paymentID,
+              transaction_id: transactionIdRef,
+              tenant_id: tenantId,
+            }),
+          });
+          const executeData = await executeRes.json();
+          
+          if (executeData.success) {
+            setPaymentSuccess(true);
+            toast({
+              title: 'Payment Successful',
+              description: 'Your bKash payment has been processed.',
+            });
+          } else {
+            throw new Error(executeData.error || 'bKash payment execution failed');
+          }
+        },
+        onClose: () => {
+          setIsSubmitting(false);
+        },
+      });
+
+      bKash.reconfigure({
+        paymentID: bkashConfig.paymentID,
+      });
+      
+      bKash.execute();
+    } catch (error: any) {
+      console.error('bKash Checkout.js error:', error);
+      toast({
+        title: 'bKash Payment Error',
+        description: error.message || 'Failed to process bKash payment',
+        variant: 'destructive',
+      });
+      setIsSubmitting(false);
+    }
+  };
+
   const handleOnlinePayment = async () => {
     if (!selectedMethod || !selectedInvoice || !paymentAmount || !tenantId) {
       toast({
@@ -137,6 +218,16 @@ export default function MakePayment() {
         customer_phone: tenantInfo?.phone || '',
         payment_for: 'subscription',
       });
+
+      // bKash PGW Checkout.js mode - handle popup instead of redirect
+      if (response.success && response.bkash_mode === 'checkout_js' && response.bkash_config) {
+        toast({
+          title: 'Opening bKash Payment',
+          description: 'Please complete the payment in the popup...',
+        });
+        await handleBkashCheckoutJS(response.bkash_config, response.transaction_id || '');
+        return;
+      }
 
       if (response.success && response.checkout_url) {
         toast({
