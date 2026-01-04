@@ -11,6 +11,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
@@ -24,7 +26,7 @@ import {
   Edit, Receipt, History, MessageSquare, Settings, Play,
   Ban, Check, Trash2, Link, Unlink, RotateCcw, Loader2,
   Eye, EyeOff, Copy, ChevronRight, Zap, Signal, AlertTriangle,
-  Thermometer
+  Thermometer, CalendarIcon
 } from 'lucide-react';
 import type { Customer, CustomerProfile as CustomerProfileType, ISPPackage } from '@/types/isp';
 import { format, formatDistanceToNow, addDays } from 'date-fns';
@@ -38,6 +40,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 const statusColors: Record<string, string> = {
   active: 'bg-green-500',
@@ -75,7 +78,7 @@ export default function CustomerProfile() {
   const [showExpiryDialog, setShowExpiryDialog] = useState(false);
   const [showRechargeDialog, setShowRechargeDialog] = useState(false);
   const [selectedPackageId, setSelectedPackageId] = useState<string>('');
-  const [expiryDays, setExpiryDays] = useState<number>(30);
+  const [newExpiryDate, setNewExpiryDate] = useState<Date | undefined>(undefined);
   const [rechargeMonths, setRechargeMonths] = useState<number>(1);
   const [onuInfo, setOnuInfo] = useState<any>(null);
 
@@ -303,23 +306,21 @@ export default function CustomerProfile() {
   };
 
   const handleExtendExpiry = async () => {
-    if (!customer) return;
+    if (!customer || !newExpiryDate) return;
 
     setActionLoading('expiry');
     try {
-      const currentExpiry = customer.expiry_date ? new Date(customer.expiry_date) : new Date();
-      const newExpiry = addDays(currentExpiry, expiryDays);
-
       await supabase.from('customers').update({
-        expiry_date: newExpiry.toISOString().split('T')[0],
+        expiry_date: format(newExpiryDate, 'yyyy-MM-dd'),
       }).eq('id', customer.id);
 
-      toast.success(`Expiry extended to ${format(newExpiry, 'dd MMM yyyy')}`);
+      toast.success(`Expiry changed to ${format(newExpiryDate, 'dd MMM yyyy')}`);
       setShowExpiryDialog(false);
+      setNewExpiryDate(undefined);
       await fetchCustomer();
     } catch (err) {
-      console.error('Extend expiry error:', err);
-      toast.error('Failed to extend expiry');
+      console.error('Change expiry error:', err);
+      toast.error('Failed to change expiry');
     } finally {
       setActionLoading(null);
     }
@@ -992,28 +993,48 @@ export default function CustomerProfile() {
       </Dialog>
 
       {/* Extend Expiry Dialog */}
-      <Dialog open={showExpiryDialog} onOpenChange={setShowExpiryDialog}>
+      <Dialog open={showExpiryDialog} onOpenChange={(open) => {
+        setShowExpiryDialog(open);
+        if (!open) setNewExpiryDate(undefined);
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Extend Expiry Date</DialogTitle>
+            <DialogTitle>Change Expiry Date</DialogTitle>
             <DialogDescription>
               Current expiry: {customer?.expiry_date ? format(new Date(customer.expiry_date), 'dd MMM yyyy') : 'Not set'}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <Label>Days to Extend</Label>
-            <Input 
-              type="number" 
-              value={expiryDays} 
-              onChange={(e) => setExpiryDays(parseInt(e.target.value) || 0)}
-              className="mt-2"
-            />
+            <Label>Select New Expiry Date</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal mt-2",
+                    !newExpiryDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {newExpiryDate ? format(newExpiryDate, 'PPP') : 'Pick a date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={newExpiryDate}
+                  onSelect={setNewExpiryDate}
+                  initialFocus
+                  disabled={(date) => date < new Date()}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowExpiryDialog(false)}>Cancel</Button>
-            <Button onClick={handleExtendExpiry} disabled={actionLoading === 'expiry'}>
+            <Button onClick={handleExtendExpiry} disabled={actionLoading === 'expiry' || !newExpiryDate}>
               {actionLoading === 'expiry' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Extend Expiry
+              Change Expiry
             </Button>
           </DialogFooter>
         </DialogContent>
