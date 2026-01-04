@@ -59,6 +59,13 @@ function generateTransactionId() {
  */
 async function initiateSSLCommerz(config, paymentData) {
   const { store_id, store_password, is_sandbox } = config;
+  
+  // Validate required credentials
+  if (!store_id || !store_password) {
+    logger.error('SSLCommerz credentials not configured');
+    return { success: false, error: 'SSLCommerz credentials not configured. Please configure store_id and store_password in gateway settings.' };
+  }
+  
   const baseUrl = is_sandbox ? GATEWAY_CONFIGS.sslcommerz.sandbox : GATEWAY_CONFIGS.sslcommerz.live;
 
   const formData = new URLSearchParams({
@@ -326,6 +333,13 @@ async function initiatePipraPay(config, paymentData) {
  */
 async function initiateBkash(config, paymentData) {
   const { app_key, app_secret, username, password, is_sandbox, bkash_mode } = config;
+  
+  // Validate required credentials
+  if (!app_key || !app_secret || !username || !password) {
+    logger.error('bKash credentials not configured:', { app_key: !!app_key, app_secret: !!app_secret, username: !!username, password: !!password });
+    return { success: false, error: 'bKash credentials not configured. Please configure app_key, app_secret, username and password in gateway settings.' };
+  }
+  
   const mode = bkash_mode || 'tokenized';
 
   if (mode === 'checkout_js') {
@@ -354,7 +368,7 @@ async function initiateBkash(config, paymentData) {
     logger.info('bKash Tokenized grant response:', grantData);
 
     if (!grantData.id_token) {
-      return { success: false, error: grantData.statusMessage || 'Failed to get bKash token' };
+      return { success: false, error: grantData.statusMessage || 'Failed to get bKash token. Check your credentials.' };
     }
 
     // Create payment
@@ -400,6 +414,13 @@ async function initiateBkash(config, paymentData) {
  */
 async function initiateBkashCheckoutJS(config, paymentData) {
   const { app_key, app_secret, username, password, is_sandbox } = config;
+  
+  // Validate required credentials
+  if (!app_key || !app_secret || !username || !password) {
+    logger.error('bKash PGW credentials not configured');
+    return { success: false, error: 'bKash credentials not configured. Please configure app_key, app_secret, username and password in gateway settings.' };
+  }
+  
   const baseUrl = is_sandbox ? GATEWAY_CONFIGS.bkash.pgwSandbox : GATEWAY_CONFIGS.bkash.pgwLive;
   const scriptUrl = is_sandbox ? GATEWAY_CONFIGS.bkash.checkoutJsSandbox : GATEWAY_CONFIGS.bkash.checkoutJsLive;
 
@@ -422,7 +443,7 @@ async function initiateBkashCheckoutJS(config, paymentData) {
     logger.info('bKash PGW grant response:', grantData);
 
     if (!grantData.id_token) {
-      return { success: false, error: grantData.statusMessage || 'Failed to get bKash PGW token' };
+      return { success: false, error: grantData.statusMessage || 'Failed to get bKash PGW token. Check your credentials.' };
     }
 
     // Create payment

@@ -148,11 +148,27 @@ export function useInvoices(tenantId?: string) {
 
   const cancelInvoice = async (id: string) => {
     try {
+      // First check if invoice can be cancelled
+      const { data: invoice, error: fetchError } = await supabase
+        .from('invoices')
+        .select('id, status')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+      
+      if (!invoice) {
+        throw new Error('Invoice not found');
+      }
+
+      if (invoice.status !== 'unpaid' && invoice.status !== 'overdue') {
+        throw new Error('Only unpaid or overdue invoices can be cancelled');
+      }
+
       const { error } = await supabase
         .from('invoices')
         .update({ status: 'cancelled' })
-        .eq('id', id)
-        .in('status', ['unpaid', 'overdue']);
+        .eq('id', id);
 
       if (error) throw error;
 

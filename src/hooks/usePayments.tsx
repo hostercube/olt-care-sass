@@ -57,6 +57,16 @@ export function usePayments(tenantId?: string) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
+      // First get the payment to find invoice_number
+      const { data: payment, error: fetchError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (fetchError || !payment) throw fetchError || new Error('Payment not found');
+
+      // Update the payment
       const { error } = await supabase
         .from('payments')
         .update({
@@ -70,9 +80,64 @@ export function usePayments(tenantId?: string) {
 
       if (error) throw error;
 
+      // If payment has invoice_number, update invoice and subscription
+      if (payment.invoice_number) {
+        const { data: invoice } = await supabase
+          .from('invoices')
+          .select('id, subscription_id')
+          .eq('invoice_number', payment.invoice_number)
+          .single();
+
+        if (invoice) {
+          // Update invoice to paid
+          await supabase
+            .from('invoices')
+            .update({
+              status: 'paid',
+              paid_at: new Date().toISOString(),
+              payment_id: id,
+            })
+            .eq('id', invoice.id);
+
+          // Update subscription to active and extend end date
+          if (invoice.subscription_id) {
+            const { data: subscription } = await supabase
+              .from('subscriptions')
+              .select('*, package:packages(*)')
+              .eq('id', invoice.subscription_id)
+              .single();
+
+            if (subscription) {
+              const currentEnd = new Date(subscription.ends_at);
+              const now = new Date();
+              const startDate = currentEnd > now ? currentEnd : now;
+              
+              // Calculate new end date based on billing cycle
+              const newEndDate = new Date(startDate);
+              const billingCycle = subscription.billing_cycle as string;
+              if (billingCycle === 'yearly') {
+                newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+              } else if (billingCycle === 'quarterly') {
+                newEndDate.setMonth(newEndDate.getMonth() + 3);
+              } else {
+                newEndDate.setMonth(newEndDate.getMonth() + 1);
+              }
+
+              await supabase
+                .from('subscriptions')
+                .update({ 
+                  status: 'active',
+                  ends_at: newEndDate.toISOString(),
+                })
+                .eq('id', invoice.subscription_id);
+            }
+          }
+        }
+      }
+
       toast({
         title: 'Payment Verified',
-        description: 'The payment has been verified and marked as completed',
+        description: 'The payment has been verified and subscription activated',
       });
 
       await fetchPayments();
