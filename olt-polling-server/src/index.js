@@ -1505,17 +1505,7 @@ app.post('/api/mikrotik/sync/full', async (req, res) => {
   }
 
   try {
-    // Run profile sync first so PPP secrets can map to packages
-    const [pkgRes, userRes] = await Promise.all([
-      (async () => {
-        const r = await fetch('http://127.0.0.1/');
-        return r;
-      })().catch(() => null),
-      null,
-    ]);
-
-    // NOTE: We can't call our own routes internally reliably in all deployments.
-    // So we run the logic inline by calling the same helpers.
+    // NOTE: We run the logic inline (no internal HTTP calls).
 
     const { data: router, error: routerErr } = await supabase
       .from('mikrotik_routers')
@@ -1708,6 +1698,57 @@ app.post('/api/mikrotik/pppoe/create', async (req, res) => {
   } catch (error) {
     logger.error(`PPPoE user creation error:`, error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update PPPoE user (rename/password/profile/comment/caller-id)
+app.post('/api/mikrotik/pppoe/update', async (req, res) => {
+  const { mikrotik, username, newUsername, password, profile, comment, callerId } = req.body || {};
+
+  if (!mikrotik || !mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return res.status(400).json({ success: false, error: 'MikroTik configuration required' });
+  }
+
+  if (!username) {
+    return res.status(400).json({ success: false, error: 'PPPoE username required' });
+  }
+
+  if (newUsername !== undefined && !String(newUsername).trim()) {
+    return res.status(400).json({ success: false, error: 'New PPPoE username cannot be empty' });
+  }
+
+  try {
+    const { fetchPPPSecretsWithIds, updatePPPSecret } = await import('./polling/mikrotik-client.js');
+
+    const secrets = await fetchPPPSecretsWithIds(mikrotik);
+    const current = secrets.find(
+      (s) => String(s.pppoe_username || '').toLowerCase() === String(username).toLowerCase()
+    );
+
+    if (!current) {
+      return res.json({ success: false, error: `PPP secret ${username} not found` });
+    }
+
+    if (
+      newUsername &&
+      String(newUsername).toLowerCase() !== String(username).toLowerCase() &&
+      secrets.some((s) => String(s.pppoe_username || '').toLowerCase() === String(newUsername).toLowerCase())
+    ) {
+      return res.json({ success: false, error: 'PPPoE username already exists on MikroTik' });
+    }
+
+    const updates = {};
+    if (newUsername !== undefined) updates.name = newUsername;
+    if (password !== undefined) updates.password = password;
+    if (profile !== undefined) updates.profile = profile;
+    if (comment !== undefined) updates.comment = comment;
+    if (callerId !== undefined) updates.callerId = callerId;
+
+    const result = await updatePPPSecret(mikrotik, current.id, updates);
+    return res.json(result);
+  } catch (error) {
+    logger.error(`PPPoE user update error:`, error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 

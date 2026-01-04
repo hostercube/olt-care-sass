@@ -260,33 +260,45 @@ export default function MikroTikManagement() {
     const router = routers.find((r) => r.id === routerId);
     if (!router) return;
 
+    const effectiveTenantId = (isSuperAdmin ? (router as any).tenant_id : tenantId) || (router as any).tenant_id || tenantId;
+    if (!effectiveTenantId) {
+      toast.error('Tenant not selected. Please refresh and try again.');
+      return;
+    }
+
     setSyncing({ routerId, type: syncType });
 
     try {
       const apiBase = (vpsUrl || '').replace(/\/$/, '');
-      
+
       // Determine endpoint based on sync type
-      const endpoint = syncType === 'pppoe' 
+      const endpoint = syncType === 'pppoe'
         ? '/api/mikrotik/sync/pppoe'
         : syncType === 'queues'
-        ? '/api/mikrotik/sync/queues'
-        : '/api/mikrotik/sync/full';
+          ? '/api/mikrotik/sync/queues'
+          : '/api/mikrotik/sync/full';
 
       const response = await fetch(`${apiBase}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          routerId, 
-          tenantId 
+        body: JSON.stringify({
+          routerId,
+          tenantId: effectiveTenantId,
         }),
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
 
-      if (!result.success) {
-        await supabase.from('mikrotik_routers').update({ status: 'offline' }).eq('id', routerId);
-        fetchRouters();
-        toast.error(result.error || 'Sync failed');
+      const errorMsg = String(result?.error || '').trim();
+      const isTenantError = response.status === 403 || errorMsg.toLowerCase().includes('does not belong to tenant');
+
+      if (!response.ok || !result.success) {
+        // Do NOT mark router offline for tenant/access errors.
+        if (!isTenantError) {
+          await supabase.from('mikrotik_routers').update({ status: 'offline' }).eq('id', routerId);
+          fetchRouters();
+        }
+        toast.error(errorMsg || 'Sync failed');
         return;
       }
 
