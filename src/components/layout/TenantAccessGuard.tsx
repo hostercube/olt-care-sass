@@ -39,6 +39,29 @@ export function TenantAccessGuard({ children }: TenantAccessGuardProps) {
 
   // Check tenant status
   if (tenant) {
+    if (tenant.status === 'pending') {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background p-4">
+          <Card className="max-w-md w-full">
+            <CardHeader className="text-center">
+              <div className="mx-auto w-16 h-16 bg-warning/10 rounded-full flex items-center justify-center mb-4">
+                <Clock className="h-8 w-8 text-warning" />
+              </div>
+              <CardTitle>Payment Required</CardTitle>
+              <CardDescription>
+                Your account is pending activation. Please complete payment to continue.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <Button onClick={() => navigate('/billing/pay')} className="w-full">
+                Go to Payment
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     if (tenant.status === 'suspended') {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">

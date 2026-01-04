@@ -5069,8 +5069,13 @@ export type Database = {
         | "customer_payment"
       speed_unit: "mbps" | "gbps"
       staff_role: "admin" | "staff" | "technician" | "support" | "reseller"
-      subscription_status: "active" | "expired" | "cancelled" | "pending"
-      tenant_status: "active" | "suspended" | "trial" | "cancelled"
+      subscription_status:
+        | "trial"
+        | "active"
+        | "expired"
+        | "cancelled"
+        | "pending"
+      tenant_status: "active" | "suspended" | "pending" | "trial" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5254,8 +5259,14 @@ export const Constants = {
       ],
       speed_unit: ["mbps", "gbps"],
       staff_role: ["admin", "staff", "technician", "support", "reseller"],
-      subscription_status: ["active", "expired", "cancelled", "pending"],
-      tenant_status: ["active", "suspended", "trial", "cancelled"],
+      subscription_status: [
+        "trial",
+        "active",
+        "expired",
+        "cancelled",
+        "pending",
+      ],
+      tenant_status: ["active", "suspended", "pending", "trial", "cancelled"],
     },
   },
 } as const

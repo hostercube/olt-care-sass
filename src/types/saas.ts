@@ -1,6 +1,6 @@
 // SaaS Types for OLT Care Multi-Tenant System
 
-export type TenantStatus = 'active' | 'suspended' | 'trial' | 'cancelled';
+export type TenantStatus = 'active' | 'suspended' | 'trial' | 'pending' | 'cancelled';
 export type SubscriptionStatus = 'active' | 'trial' | 'expired' | 'cancelled' | 'pending';
 export type BillingCycle = 'monthly' | 'yearly';
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';

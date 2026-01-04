@@ -95,18 +95,24 @@ export default function Auth() {
       setPackages((pkgData as Package[]) || []);
 
       // Fetch platform settings for trial days
-      const { data: settingsData } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'platform_settings')
-        .single();
-      
-      if (settingsData?.value) {
-        const settings = settingsData.value as any;
-        setPlatformSettings({
-          defaultTrialDays: settings.defaultTrialDays ?? 14,
-          enableSignup: settings.enableSignup ?? true,
-        });
+      try {
+        const { data: settingsData, error } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'platform_settings')
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (settingsData?.value) {
+          const settings = settingsData.value as any;
+          setPlatformSettings({
+            defaultTrialDays: settings.defaultTrialDays ?? 14,
+            enableSignup: settings.enableSignup ?? true,
+          });
+        }
+      } catch {
+        // Keep defaults
       }
     };
     fetchData();
