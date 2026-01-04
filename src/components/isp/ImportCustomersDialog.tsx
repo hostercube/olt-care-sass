@@ -17,7 +17,7 @@ interface ImportCustomersDialogProps {
 export function ImportCustomersDialog({ open, onOpenChange, onSuccess }: ImportCustomersDialogProps) {
   const { importCustomers, downloading, importing, progress } = useCustomerImport();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [result, setResult] = useState<{ success: number; failed: number; errors: { row: number; error: string }[] } | null>(null);
+  const [result, setResult] = useState<{ success: number; failed: number; mikrotikCreated?: number; errors: { row: number; error: string }[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,7 +32,12 @@ export function ImportCustomersDialog({ open, onOpenChange, onSuccess }: ImportC
     if (!selectedFile) return;
     
     const importResult = await importCustomers(selectedFile);
-    setResult(importResult);
+    setResult({
+      success: importResult.success,
+      failed: importResult.failed,
+      mikrotikCreated: importResult.mikrotikCreated,
+      errors: importResult.errors,
+    });
     
     if (importResult.success > 0) {
       onSuccess?.();
@@ -117,11 +122,17 @@ export function ImportCustomersDialog({ open, onOpenChange, onSuccess }: ImportC
           {/* Results */}
           {result && (
             <div className="space-y-2">
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-2 text-green-600">
                   <CheckCircle className="h-4 w-4" />
                   <span className="text-sm">{result.success} imported</span>
                 </div>
+                {(result.mikrotikCreated ?? 0) > 0 && (
+                  <div className="flex items-center gap-2 text-blue-600">
+                    <CheckCircle className="h-4 w-4" />
+                    <span className="text-sm">{result.mikrotikCreated} PPPoE on MikroTik</span>
+                  </div>
+                )}
                 {result.failed > 0 && (
                   <div className="flex items-center gap-2 text-red-600">
                     <XCircle className="h-4 w-4" />

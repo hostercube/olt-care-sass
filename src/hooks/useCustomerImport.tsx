@@ -1,17 +1,21 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { toast } from 'sonner';
 
 interface ImportResult {
   total: number;
   success: number;
   failed: number;
+  mikrotikCreated: number;
   errors: { row: number; error: string }[];
 }
 
 export function useCustomerImport() {
   const { tenantId, isSuperAdmin } = useTenantContext();
+  const { settings } = useSystemSettings();
+  const apiBase = (settings?.apiServerUrl || '').replace(/\/$/, '');
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -34,18 +38,18 @@ export function useCustomerImport() {
     return rows;
   };
 
-  const findOrCreatePackage = async (packageName: string, price: number): Promise<string | null> => {
+  const findOrCreatePackage = async (packageName: string, price: number): Promise<{ id: string; name: string } | null> => {
     if (!packageName || !tenantId) return null;
     
     // Try to find existing package
     const { data: existing } = await supabase
       .from('isp_packages')
-      .select('id')
+      .select('id, name')
       .eq('tenant_id', tenantId)
       .ilike('name', packageName)
       .single();
     
-    if (existing) return existing.id;
+    if (existing) return { id: existing.id, name: existing.name };
     
     // Create new package
     const { data: newPkg, error } = await supabase
@@ -58,7 +62,7 @@ export function useCustomerImport() {
         upload_speed: 10,
         validity_days: 30,
       })
-      .select('id')
+      .select('id, name')
       .single();
     
     if (error) {
@@ -66,7 +70,7 @@ export function useCustomerImport() {
       return null;
     }
     
-    return newPkg?.id || null;
+    return newPkg ? { id: newPkg.id, name: newPkg.name } : null;
   };
 
   const findOrCreateArea = async (areaName: string, district?: string, upazila?: string): Promise<string | null> => {
@@ -102,23 +106,69 @@ export function useCustomerImport() {
     return newArea?.id || null;
   };
 
-  const findMikroTik = async (mikrotikName: string): Promise<string | null> => {
+  const findMikroTik = async (mikrotikName: string): Promise<{ id: string; ip: string; port: number; username: string; password: string } | null> => {
     if (!mikrotikName || !tenantId) return null;
     
     const { data } = await supabase
       .from('mikrotik_routers')
-      .select('id')
+      .select('id, ip_address, port, username, password_encrypted')
       .eq('tenant_id', tenantId)
       .ilike('name', `%${mikrotikName}%`)
       .single();
     
-    return data?.id || null;
+    if (!data) return null;
+    
+    return {
+      id: data.id,
+      ip: data.ip_address,
+      port: data.port || 8728,
+      username: data.username,
+      password: data.password_encrypted,
+    };
+  };
+
+  // Create PPPoE user on MikroTik
+  const createPPPoEOnMikroTik = async (
+    mikrotik: { ip: string; port: number; username: string; password: string },
+    pppoeUser: { name: string; password: string; profile: string; comment?: string }
+  ): Promise<boolean> => {
+    if (!apiBase) {
+      console.warn('API server URL not configured, skipping MikroTik PPPoE creation');
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${apiBase}/api/mikrotik/pppoe/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mikrotik: {
+            ip: mikrotik.ip,
+            port: mikrotik.port,
+            username: mikrotik.username,
+            password: mikrotik.password,
+          },
+          pppoeUser: {
+            name: pppoeUser.name,
+            password: pppoeUser.password,
+            profile: pppoeUser.profile,
+            comment: pppoeUser.comment || '',
+          },
+        }),
+      });
+
+      const result = await response.json();
+      return result.success === true;
+    } catch (err) {
+      console.error('Failed to create PPPoE on MikroTik:', err);
+      return false;
+    }
   };
 
   const importCustomers = useCallback(async (file: File): Promise<ImportResult> => {
     if (!tenantId && !isSuperAdmin) {
       toast.error('No tenant context available');
-      return { total: 0, success: 0, failed: 0, errors: [] };
+      return { total: 0, success: 0, failed: 0, mikrotikCreated: 0, errors: [] };
     }
 
     setImporting(true);
@@ -130,7 +180,7 @@ export function useCustomerImport() {
       
       if (rows.length === 0) {
         toast.error('No valid data found in CSV');
-        return { total: 0, success: 0, failed: 0, errors: [] };
+        return { total: 0, success: 0, failed: 0, mikrotikCreated: 0, errors: [] };
       }
 
       // Log import batch
@@ -150,6 +200,7 @@ export function useCustomerImport() {
         total: rows.length,
         success: 0,
         failed: 0,
+        mikrotikCreated: 0,
         errors: [],
       };
 
@@ -166,10 +217,10 @@ export function useCustomerImport() {
             continue;
           }
 
-          // Find or create package
+          // Find or create package (now returns name too)
           const packageName = row.package || row.package_name || row.plan || '';
           const packagePrice = parseFloat(row.price || row.monthly_bill || row.bill || '0');
-          const packageId = packageName ? await findOrCreatePackage(packageName, packagePrice) : null;
+          const packageInfo = packageName ? await findOrCreatePackage(packageName, packagePrice) : null;
 
           // Find or create area
           const areaName = row.area || row.area_name || row.zone || '';
@@ -177,9 +228,12 @@ export function useCustomerImport() {
           const upazila = row.upazila || row.thana || '';
           const areaId = areaName ? await findOrCreateArea(areaName, district, upazila) : null;
 
-          // Find MikroTik
+          // Find MikroTik (now returns full router info)
           const mikrotikName = row.mikrotik || row.router || '';
-          const mikrotikId = mikrotikName ? await findMikroTik(mikrotikName) : null;
+          const mikrotikInfo = mikrotikName ? await findMikroTik(mikrotikName) : null;
+
+          const pppoeUsername = row.pppoe_username || row.username || row.pppoe || null;
+          const pppoePassword = row.pppoe_password || row.password || null;
 
           // Create customer
           const customerData: any = {
@@ -188,13 +242,13 @@ export function useCustomerImport() {
             phone: row.phone || row.mobile || row.contact || null,
             email: row.email || null,
             address: row.address || row.location || null,
-            pppoe_username: row.pppoe_username || row.username || row.pppoe || null,
-            pppoe_password: row.pppoe_password || row.password || null,
+            pppoe_username: pppoeUsername,
+            pppoe_password: pppoePassword,
             onu_mac: row.onu_mac || row.mac || null,
             router_mac: row.router_mac || null,
-            package_id: packageId,
+            package_id: packageInfo?.id || null,
             area_id: areaId,
-            mikrotik_id: mikrotikId,
+            mikrotik_id: mikrotikInfo?.id || null,
             monthly_bill: packagePrice || 0,
             due_amount: parseFloat(row.due || row.due_amount || '0'),
             connection_date: row.connection_date || row.start_date || new Date().toISOString().split('T')[0],
@@ -203,15 +257,35 @@ export function useCustomerImport() {
             notes: row.notes || row.remarks || null,
           };
 
-          const { error } = await supabase
+          const { data: insertedCustomer, error } = await supabase
             .from('customers')
-            .insert(customerData);
+            .insert(customerData)
+            .select('id')
+            .single();
 
           if (error) {
             result.failed++;
             result.errors.push({ row: i + 2, error: error.message });
           } else {
             result.success++;
+
+            // Create PPPoE user on MikroTik if conditions are met
+            if (mikrotikInfo && pppoeUsername && pppoePassword) {
+              const profileName = packageInfo?.name || 'default';
+              const pppoeCreated = await createPPPoEOnMikroTik(
+                mikrotikInfo,
+                {
+                  name: pppoeUsername,
+                  password: pppoePassword,
+                  profile: profileName,
+                  comment: name,
+                }
+              );
+              
+              if (pppoeCreated) {
+                result.mikrotikCreated++;
+              }
+            }
           }
         } catch (err: any) {
           result.failed++;
@@ -234,7 +308,10 @@ export function useCustomerImport() {
       }
 
       if (result.success > 0) {
-        toast.success(`Imported ${result.success} of ${result.total} customers`);
+        const msg = result.mikrotikCreated > 0 
+          ? `Imported ${result.success} customers, ${result.mikrotikCreated} PPPoE users created on MikroTik`
+          : `Imported ${result.success} of ${result.total} customers`;
+        toast.success(msg);
       }
       if (result.failed > 0) {
         toast.warning(`${result.failed} customers failed to import`);
@@ -244,12 +321,12 @@ export function useCustomerImport() {
     } catch (err: any) {
       console.error('Import error:', err);
       toast.error('Failed to import customers');
-      return { total: 0, success: 0, failed: 0, errors: [] };
+      return { total: 0, success: 0, failed: 0, mikrotikCreated: 0, errors: [] };
     } finally {
       setImporting(false);
       setProgress(0);
     }
-  }, [tenantId, isSuperAdmin]);
+  }, [tenantId, isSuperAdmin, apiBase]);
 
   const downloadTemplate = () => {
     const template = 'name,phone,email,address,pppoe_username,pppoe_password,package,price,area,district,upazila,mikrotik,onu_mac,due_amount,connection_date,expiry_date,status,notes\n';
