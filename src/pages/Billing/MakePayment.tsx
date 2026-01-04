@@ -29,7 +29,6 @@ export default function MakePayment() {
 
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | ''>('');
   const [transactionId, setTransactionId] = useState('');
-  const [amount, setAmount] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
@@ -74,30 +73,19 @@ export default function MakePayment() {
   const unpaidInvoices = invoices.filter(i => i.status === 'unpaid' || i.status === 'overdue');
   
   // Use global gateways from SuperAdmin - always available to all ISP owners
-  // Tenant-specific gateways are optional overrides  
-  // Filter only enabled gateways from global settings
   const enabledGateways = globalGateways.filter(g => g.is_enabled);
-
   const gatewaysLoading = globalGatewaysLoading;
 
-  // Auto-select first unpaid invoice and set amount
+  // Get selected invoice data and amount
+  const selectedInvoiceData = selectedInvoice ? invoices.find(i => i.id === selectedInvoice) : null;
+  const paymentAmount = selectedInvoiceData?.total_amount || 0;
+
+  // Auto-select first unpaid invoice
   useEffect(() => {
     if (unpaidInvoices.length > 0 && !selectedInvoice) {
-      const firstInvoice = unpaidInvoices[0];
-      setSelectedInvoice(firstInvoice.id);
-      setAmount(firstInvoice.total_amount.toString());
+      setSelectedInvoice(unpaidInvoices[0].id);
     }
   }, [unpaidInvoices, selectedInvoice]);
-
-  // Auto-update amount when invoice is selected
-  useEffect(() => {
-    if (selectedInvoice) {
-      const invoice = invoices.find(i => i.id === selectedInvoice);
-      if (invoice) {
-        setAmount(invoice.total_amount.toString());
-      }
-    }
-  }, [selectedInvoice, invoices]);
 
   const getGatewayIcon = (method: PaymentMethod) => {
     switch (method) {
@@ -120,10 +108,10 @@ export default function MakePayment() {
   };
 
   const handleOnlinePayment = async () => {
-    if (!selectedMethod || !amount || !tenantId) {
+    if (!selectedMethod || !selectedInvoice || !paymentAmount || !tenantId) {
       toast({
         title: 'Error',
-        description: 'Please fill in all required fields',
+        description: 'Please select an invoice and payment method',
         variant: 'destructive',
       });
       return;
@@ -136,16 +124,12 @@ export default function MakePayment() {
       const returnUrl = `${baseUrl}/billing/pay`;
       const cancelUrl = `${baseUrl}/billing/pay`;
 
-      const selectedInvoiceData = selectedInvoice 
-        ? invoices.find(i => i.id === selectedInvoice) 
-        : null;
-
       const response = await initiatePayment({
         gateway: selectedMethod,
-        amount: parseFloat(amount),
+        amount: paymentAmount,
         tenant_id: tenantId,
         invoice_id: selectedInvoiceData?.invoice_number,
-        description: `Subscription Payment${selectedInvoiceData ? ` - ${selectedInvoiceData.invoice_number}` : ''}`,
+        description: `Subscription Payment - ${selectedInvoiceData?.invoice_number}`,
         return_url: returnUrl,
         cancel_url: cancelUrl,
         customer_name: tenantInfo?.name || 'Customer',
@@ -187,10 +171,10 @@ export default function MakePayment() {
   };
 
   const handleManualPayment = async () => {
-    if (!selectedMethod || !amount || !tenantId || !transactionId) {
+    if (!selectedMethod || !selectedInvoice || !paymentAmount || !tenantId || !transactionId) {
       toast({
         title: 'Error',
-        description: 'Please fill in all required fields including transaction ID',
+        description: 'Please select an invoice and enter transaction ID',
         variant: 'destructive',
       });
       return;
@@ -200,12 +184,12 @@ export default function MakePayment() {
     try {
       await createPayment({
         tenant_id: tenantId,
-        amount: parseFloat(amount),
+        amount: paymentAmount,
         payment_method: selectedMethod,
         transaction_id: transactionId,
-        invoice_number: selectedInvoice ? invoices.find(i => i.id === selectedInvoice)?.invoice_number : undefined,
+        invoice_number: selectedInvoiceData?.invoice_number,
         status: 'pending',
-        description: `Manual Payment`,
+        description: `Manual Payment - ${selectedInvoiceData?.invoice_number}`,
       });
 
       setPaymentSuccess(true);
@@ -251,7 +235,6 @@ export default function MakePayment() {
                 <Button className="w-full" onClick={() => {
                   setPaymentSuccess(false);
                   setSelectedMethod('');
-                  setAmount('');
                   setTransactionId('');
                   setSelectedInvoice(null);
                   navigate('/billing/pay', { replace: true });
@@ -353,13 +336,13 @@ export default function MakePayment() {
         )}
 
         {/* Payment Amount - Auto-filled from invoice */}
-        {selectedInvoice && amount && (
+        {selectedInvoice && paymentAmount > 0 && (
           <Card className="border-primary/50 bg-primary/5">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Amount to Pay</p>
-                  <p className="text-3xl font-bold text-primary">৳{parseFloat(amount).toLocaleString()}</p>
+                  <p className="text-3xl font-bold text-primary">৳{paymentAmount.toLocaleString()}</p>
                 </div>
                 <CheckCircle className="h-8 w-8 text-primary" />
               </div>
@@ -460,7 +443,7 @@ export default function MakePayment() {
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!selectedMethod || !amount || isSubmitting || (!isOnlineGateway(selectedMethod as PaymentMethod) && !transactionId)}
+            disabled={!selectedMethod || !selectedInvoice || !paymentAmount || isSubmitting || (!isOnlineGateway(selectedMethod as PaymentMethod) && !transactionId)}
           >
             {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {isSubmitting ? 'Processing...' : 
