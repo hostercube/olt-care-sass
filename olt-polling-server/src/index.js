@@ -1236,6 +1236,450 @@ app.post('/mikrotik/bulk-tag/:oltId', async (req, res) => {
 
 // ============= MIKROTIK PPPoE USER MANAGEMENT =============
 
+// ============= MIKROTIK SYNC (ISP IMPORT) =============
+
+const parseSingleRateToMbps = (rate) => {
+  if (!rate) return null;
+  const raw = String(rate).trim();
+  if (!raw || raw === '0' || raw === '0/0') return 0;
+
+  const m = raw.toLowerCase().match(/^(\d+(?:\.\d+)?)([kmg])?$/);
+  if (!m) return null;
+  const value = parseFloat(m[1]);
+  const unit = m[2] || 'm';
+  if (unit === 'k') return value / 1000;
+  if (unit === 'g') return value * 1000;
+  return value;
+};
+
+const parseRateLimitToMbps = (rateLimit) => {
+  // Mikrotik rate-limit examples: "10M/10M" or "10M/10M 0/0 0/0 ..."
+  const first = String(rateLimit || '').trim().split(/\s+/)[0] || '';
+  const [upRaw, downRaw] = first.split('/');
+  const up = parseSingleRateToMbps(upRaw);
+  const down = parseSingleRateToMbps(downRaw ?? upRaw);
+
+  return {
+    upload: up ?? 0,
+    download: down ?? 0,
+  };
+};
+
+// Sync PPP secrets -> Customers (creates missing customers)
+app.post('/api/mikrotik/sync/pppoe', async (req, res) => {
+  const { routerId, tenantId } = req.body || {};
+
+  if (!routerId) {
+    return res.status(400).json({ success: false, error: 'routerId is required' });
+  }
+
+  if (!tenantId) {
+    return res.status(400).json({ success: false, error: 'tenantId is required' });
+  }
+
+  try {
+    const { data: router, error: routerErr } = await supabase
+      .from('mikrotik_routers')
+      .select('*')
+      .eq('id', routerId)
+      .single();
+
+    if (routerErr || !router) {
+      return res.status(404).json({ success: false, error: 'Router not found' });
+    }
+
+    if (router.tenant_id !== tenantId) {
+      return res.status(403).json({ success: false, error: 'Router does not belong to tenant' });
+    }
+
+    const mikrotik = {
+      ip: router.ip_address,
+      port: router.port || 8728,
+      username: router.username,
+      password: router.password_encrypted,
+    };
+
+    const { fetchMikroTikPPPSecrets, fetchMikroTikPPPoE } = await import('./polling/mikrotik-client.js');
+
+    const [secrets, activeSessions] = await Promise.all([
+      fetchMikroTikPPPSecrets(mikrotik),
+      fetchMikroTikPPPoE(mikrotik),
+    ]);
+
+    // Load packages for profile->package mapping
+    const { data: pkgs } = await supabase
+      .from('isp_packages')
+      .select('id, name, price')
+      .eq('tenant_id', tenantId);
+
+    const pkgByName = new Map(
+      (pkgs || []).map((p) => [String(p.name).toLowerCase(), { id: p.id, price: p.price }])
+    );
+
+    // Existing PPPoE usernames map
+    const { data: existingCustomers } = await supabase
+      .from('customers')
+      .select('id, pppoe_username')
+      .eq('tenant_id', tenantId)
+      .not('pppoe_username', 'is', null)
+      .limit(10000);
+
+    const existingUsernames = new Set(
+      (existingCustomers || [])
+        .map((c) => String(c.pppoe_username || '').toLowerCase())
+        .filter(Boolean)
+    );
+
+    const inserts = [];
+
+    for (const s of secrets || []) {
+      const username = String(s.pppoe_username || '').trim();
+      if (!username) continue;
+
+      if (existingUsernames.has(username.toLowerCase())) {
+        continue;
+      }
+
+      const pkg = s.profile ? pkgByName.get(String(s.profile).toLowerCase()) : null;
+      const monthly = pkg?.price || 0;
+
+      inserts.push({
+        tenant_id: tenantId,
+        name: s.router_name || (s.comment && String(s.comment).trim()) || username,
+        mikrotik_id: routerId,
+        pppoe_username: username,
+        pppoe_password: s.pppoe_password || null,
+        package_id: pkg?.id || null,
+        monthly_bill: monthly,
+        due_amount: monthly,
+        is_auto_disable: true,
+        status: 'active',
+        notes: s.profile ? `Synced from MikroTik (profile: ${s.profile})` : 'Synced from MikroTik',
+      });
+    }
+
+    let inserted = 0;
+    if (inserts.length > 0) {
+      const { error: insErr, data: insData } = await supabase
+        .from('customers')
+        .insert(inserts)
+        .select('id');
+
+      if (insErr) {
+        throw insErr;
+      }
+      inserted = insData?.length || 0;
+    }
+
+    await supabase
+      .from('mikrotik_routers')
+      .update({ last_synced: new Date().toISOString(), status: 'online' })
+      .eq('id', routerId);
+
+    return res.json({
+      success: true,
+      secrets: secrets?.length || 0,
+      activeSessions: activeSessions?.length || 0,
+      customersInserted: inserted,
+      customersSkipped: (secrets?.length || 0) - inserted,
+    });
+  } catch (error) {
+    logger.error('MikroTik PPPoE sync error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Sync PPP profiles -> ISP Packages (creates/updates packages)
+app.post('/api/mikrotik/sync/queues', async (req, res) => {
+  const { routerId, tenantId } = req.body || {};
+
+  if (!routerId) {
+    return res.status(400).json({ success: false, error: 'routerId is required' });
+  }
+
+  if (!tenantId) {
+    return res.status(400).json({ success: false, error: 'tenantId is required' });
+  }
+
+  try {
+    const { data: router, error: routerErr } = await supabase
+      .from('mikrotik_routers')
+      .select('*')
+      .eq('id', routerId)
+      .single();
+
+    if (routerErr || !router) {
+      return res.status(404).json({ success: false, error: 'Router not found' });
+    }
+
+    if (router.tenant_id !== tenantId) {
+      return res.status(403).json({ success: false, error: 'Router does not belong to tenant' });
+    }
+
+    const mikrotik = {
+      ip: router.ip_address,
+      port: router.port || 8728,
+      username: router.username,
+      password: router.password_encrypted,
+    };
+
+    const { fetchMikroTikPPPProfiles } = await import('./polling/mikrotik-client.js');
+    const profiles = await fetchMikroTikPPPProfiles(mikrotik);
+
+    const { data: existingPkgs } = await supabase
+      .from('isp_packages')
+      .select('id, name')
+      .eq('tenant_id', tenantId);
+
+    const existingByName = new Map(
+      (existingPkgs || []).map((p) => [String(p.name).toLowerCase(), p])
+    );
+
+    let created = 0;
+    let updated = 0;
+
+    for (const p of profiles || []) {
+      const name = String(p.name || '').trim();
+      if (!name) continue;
+
+      const speeds = parseRateLimitToMbps(p.rate_limit);
+      const existing = existingByName.get(name.toLowerCase());
+
+      if (!existing) {
+        const { error: insErr } = await supabase.from('isp_packages').insert({
+          tenant_id: tenantId,
+          name,
+          description: 'Synced from MikroTik PPP profile',
+          download_speed: speeds.download,
+          upload_speed: speeds.upload,
+          speed_unit: 'mbps',
+          price: 0,
+          validity_days: 30,
+          is_active: true,
+          sort_order: 999,
+        });
+        if (insErr) throw insErr;
+        created++;
+      } else {
+        const { error: upErr } = await supabase
+          .from('isp_packages')
+          .update({
+            download_speed: speeds.download,
+            upload_speed: speeds.upload,
+            speed_unit: 'mbps',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+        if (upErr) throw upErr;
+        updated++;
+      }
+    }
+
+    await supabase
+      .from('mikrotik_routers')
+      .update({ last_synced: new Date().toISOString(), status: 'online' })
+      .eq('id', routerId);
+
+    return res.json({
+      success: true,
+      profiles: profiles?.length || 0,
+      packagesCreated: created,
+      packagesUpdated: updated,
+    });
+  } catch (error) {
+    logger.error('MikroTik package/profile sync error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Full sync: profiles + secrets
+app.post('/api/mikrotik/sync/full', async (req, res) => {
+  const { routerId, tenantId } = req.body || {};
+
+  if (!routerId) {
+    return res.status(400).json({ success: false, error: 'routerId is required' });
+  }
+
+  if (!tenantId) {
+    return res.status(400).json({ success: false, error: 'tenantId is required' });
+  }
+
+  try {
+    // Run profile sync first so PPP secrets can map to packages
+    const [pkgRes, userRes] = await Promise.all([
+      (async () => {
+        const r = await fetch('http://127.0.0.1/');
+        return r;
+      })().catch(() => null),
+      null,
+    ]);
+
+    // NOTE: We can't call our own routes internally reliably in all deployments.
+    // So we run the logic inline by calling the same helpers.
+
+    const { data: router, error: routerErr } = await supabase
+      .from('mikrotik_routers')
+      .select('*')
+      .eq('id', routerId)
+      .single();
+
+    if (routerErr || !router) {
+      return res.status(404).json({ success: false, error: 'Router not found' });
+    }
+
+    if (router.tenant_id !== tenantId) {
+      return res.status(403).json({ success: false, error: 'Router does not belong to tenant' });
+    }
+
+    const mikrotik = {
+      ip: router.ip_address,
+      port: router.port || 8728,
+      username: router.username,
+      password: router.password_encrypted,
+    };
+
+    const { fetchMikroTikPPPProfiles, fetchMikroTikPPPSecrets, fetchMikroTikPPPoE } = await import(
+      './polling/mikrotik-client.js'
+    );
+
+    const profiles = await fetchMikroTikPPPProfiles(mikrotik);
+
+    const { data: existingPkgs } = await supabase
+      .from('isp_packages')
+      .select('id, name')
+      .eq('tenant_id', tenantId);
+
+    const existingByName = new Map(
+      (existingPkgs || []).map((p) => [String(p.name).toLowerCase(), p])
+    );
+
+    let packagesCreated = 0;
+    let packagesUpdated = 0;
+
+    for (const p of profiles || []) {
+      const name = String(p.name || '').trim();
+      if (!name) continue;
+
+      const speeds = parseRateLimitToMbps(p.rate_limit);
+      const existing = existingByName.get(name.toLowerCase());
+
+      if (!existing) {
+        const { error: insErr } = await supabase.from('isp_packages').insert({
+          tenant_id: tenantId,
+          name,
+          description: 'Synced from MikroTik PPP profile',
+          download_speed: speeds.download,
+          upload_speed: speeds.upload,
+          speed_unit: 'mbps',
+          price: 0,
+          validity_days: 30,
+          is_active: true,
+          sort_order: 999,
+        });
+        if (insErr) throw insErr;
+        packagesCreated++;
+      } else {
+        const { error: upErr } = await supabase
+          .from('isp_packages')
+          .update({
+            download_speed: speeds.download,
+            upload_speed: speeds.upload,
+            speed_unit: 'mbps',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+        if (upErr) throw upErr;
+        packagesUpdated++;
+      }
+    }
+
+    // Refresh packages for mapping
+    const { data: pkgs } = await supabase
+      .from('isp_packages')
+      .select('id, name, price')
+      .eq('tenant_id', tenantId);
+
+    const pkgByName = new Map(
+      (pkgs || []).map((p) => [String(p.name).toLowerCase(), { id: p.id, price: p.price }])
+    );
+
+    const [secrets, activeSessions] = await Promise.all([
+      fetchMikroTikPPPSecrets(mikrotik),
+      fetchMikroTikPPPoE(mikrotik),
+    ]);
+
+    const { data: existingCustomers } = await supabase
+      .from('customers')
+      .select('id, pppoe_username')
+      .eq('tenant_id', tenantId)
+      .not('pppoe_username', 'is', null)
+      .limit(10000);
+
+    const existingUsernames = new Set(
+      (existingCustomers || [])
+        .map((c) => String(c.pppoe_username || '').toLowerCase())
+        .filter(Boolean)
+    );
+
+    const inserts = [];
+
+    for (const s of secrets || []) {
+      const username = String(s.pppoe_username || '').trim();
+      if (!username) continue;
+
+      if (existingUsernames.has(username.toLowerCase())) {
+        continue;
+      }
+
+      const pkg = s.profile ? pkgByName.get(String(s.profile).toLowerCase()) : null;
+      const monthly = pkg?.price || 0;
+
+      inserts.push({
+        tenant_id: tenantId,
+        name: s.router_name || (s.comment && String(s.comment).trim()) || username,
+        mikrotik_id: routerId,
+        pppoe_username: username,
+        pppoe_password: s.pppoe_password || null,
+        package_id: pkg?.id || null,
+        monthly_bill: monthly,
+        due_amount: monthly,
+        is_auto_disable: true,
+        status: 'active',
+        notes: s.profile ? `Synced from MikroTik (profile: ${s.profile})` : 'Synced from MikroTik',
+      });
+    }
+
+    let customersInserted = 0;
+    if (inserts.length > 0) {
+      const { error: insErr, data: insData } = await supabase
+        .from('customers')
+        .insert(inserts)
+        .select('id');
+
+      if (insErr) throw insErr;
+      customersInserted = insData?.length || 0;
+    }
+
+    await supabase
+      .from('mikrotik_routers')
+      .update({ last_synced: new Date().toISOString(), status: 'online' })
+      .eq('id', routerId);
+
+    return res.json({
+      success: true,
+      profiles: profiles?.length || 0,
+      packagesCreated,
+      packagesUpdated,
+      secrets: secrets?.length || 0,
+      activeSessions: activeSessions?.length || 0,
+      customersInserted,
+    });
+  } catch (error) {
+    logger.error('MikroTik full sync error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Create PPPoE user on MikroTik
 app.post('/api/mikrotik/pppoe/create', async (req, res) => {
   const { mikrotik, pppoeUser } = req.body;

@@ -419,6 +419,30 @@ export async function fetchMikroTikPPPSecrets(mikrotik) {
 }
 
 /**
+ * Fetch PPP profiles from MikroTik (for packages/profiles sync)
+ */
+export async function fetchMikroTikPPPProfiles(mikrotik) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return [];
+  }
+
+  try {
+    const profiles = await callMikroTikAPI(mikrotik, '/ppp/profile/print');
+
+    return (profiles || []).map((p) => ({
+      name: p.name,
+      rate_limit: p['rate-limit'] ?? p.rate_limit ?? null,
+      local_address: p['local-address'] ?? null,
+      remote_address: p['remote-address'] ?? null,
+      only_one: p['only-one'] ?? null,
+    }));
+  } catch (error) {
+    logger.error('Failed to fetch MikroTik PPP profiles:', error?.message || String(error));
+    return [];
+  }
+}
+
+/**
  * Fetch router identity and system info
  */
 export async function fetchMikroTikIdentity(mikrotik) {
@@ -1699,13 +1723,48 @@ export async function createPPPSecret(mikrotik, userConfig) {
       return { success: false, error: `PPPoE username "${name}" already exists on MikroTik` };
     }
 
+    // Validate profile exists; otherwise omit (RouterOS will use default)
+    let resolvedProfile = profile;
+    try {
+      if (resolvedProfile) {
+        const profiles = await fetchMikroTikPPPProfiles(mikrotik);
+        const ok = profiles.some(
+          (p) => String(p?.name || '').toLowerCase() === String(resolvedProfile).toLowerCase()
+        );
+        if (!ok) {
+          logger.warn(
+            `PPP profile "${resolvedProfile}" not found on ${mikrotik.ip}; creating user without profile (RouterOS default)`
+          );
+          resolvedProfile = null;
+        }
+      }
+    } catch {
+      // If profile check fails, proceed without blocking creation
+    }
+
     const connectionInfo = await detectRouterOSVersion(mikrotik);
     logger.info(`Creating PPP secret ${name} via ${connectionInfo.method} API`);
 
-    if (connectionInfo.method === 'rest') {
-      return await createPPPSecretREST(mikrotik, { name, password, profile, comment, callerId }, connectionInfo);
-    } else {
-      return await createPPPSecretPlain(mikrotik, { name, password, profile, comment, callerId }, connectionInfo);
+    const payload = { name, password, comment, callerId };
+    if (resolvedProfile) payload.profile = resolvedProfile;
+
+    try {
+      if (connectionInfo.method === 'rest') {
+        return await createPPPSecretREST(mikrotik, payload, connectionInfo);
+      }
+      return await createPPPSecretPlain(mikrotik, payload, connectionInfo);
+    } catch (err) {
+      // Retry once if RouterOS rejects profile
+      const msg = String(err?.message || err);
+      if (msg.toLowerCase().includes('profile') && resolvedProfile) {
+        logger.warn(`PPP secret create failed due to profile; retrying without profile: ${msg}`);
+        const retryPayload = { name, password, comment, callerId };
+        if (connectionInfo.method === 'rest') {
+          return await createPPPSecretREST(mikrotik, retryPayload, connectionInfo);
+        }
+        return await createPPPSecretPlain(mikrotik, retryPayload, connectionInfo);
+      }
+      throw err;
     }
   } catch (error) {
     logger.error(`Failed to create PPP secret ${name}:`, error.message);
@@ -1723,9 +1782,9 @@ async function createPPPSecretREST(mikrotik, userConfig, connectionInfo) {
   const body = {
     name: userConfig.name,
     password: userConfig.password,
-    profile: userConfig.profile,
     service: 'pppoe',
   };
+  if (userConfig.profile) body.profile = userConfig.profile;
   if (userConfig.comment) body.comment = userConfig.comment;
   if (userConfig.callerId) body['caller-id'] = userConfig.callerId;
 
