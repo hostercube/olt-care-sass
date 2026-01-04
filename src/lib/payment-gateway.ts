@@ -91,5 +91,7 @@ export function isOnlineGateway(gateway: PaymentMethod): boolean {
 
 // Get callback URL for payment gateways
 export function getPaymentCallbackUrl(gateway: string): string {
-  return `${VPS_URL}/api/payments/callback/${gateway}`;
+  // Use non-/api path because some Nginx setups don't proxy /api/* correctly.
+  // Backend supports both /payments/callback/:gateway and /api/payments/callback/:gateway.
+  return `${VPS_URL}/payments/callback/${gateway}`;
 }
