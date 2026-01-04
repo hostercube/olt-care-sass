@@ -267,9 +267,18 @@ export default function SMSCenter() {
                       <Label>Phone Number</Label>
                       <Input
                         value={singlePhone}
-                        onChange={(e) => setSinglePhone(e.target.value)}
+                        onChange={(e) => {
+                          // Auto-format phone number
+                          let value = e.target.value.replace(/[^\d+]/g, '');
+                          if (value.startsWith('+880')) value = '0' + value.substring(4);
+                          else if (value.startsWith('880')) value = '0' + value.substring(3);
+                          setSinglePhone(value);
+                        }}
                         placeholder="01XXXXXXXXX"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Enter 11 digit number (01XXXXXXXXX)
+                      </p>
                     </div>
                   )}
 

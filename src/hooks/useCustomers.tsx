@@ -11,6 +11,13 @@ export function useCustomers() {
   const [error, setError] = useState<Error | null>(null);
 
   const fetchCustomers = useCallback(async () => {
+    // Always require tenant context for ISP users
+    if (!isSuperAdmin && !tenantId) {
+      setCustomers([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       let query = supabase
@@ -23,6 +30,7 @@ export function useCustomers() {
         `)
         .order('created_at', { ascending: false });
 
+      // CRITICAL: Always filter by tenant_id for non-super-admins  
       if (!isSuperAdmin && tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
@@ -34,6 +42,7 @@ export function useCustomers() {
     } catch (err) {
       console.error('Error fetching customers:', err);
       setError(err as Error);
+      setCustomers([]);
     } finally {
       setLoading(false);
     }

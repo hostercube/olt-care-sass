@@ -122,11 +122,21 @@ export function useSMSGateway() {
 
   const sendTestSMS = async (phoneNumber: string, message: string) => {
     try {
-      // Queue SMS in sms_logs - polling server will send it instantly
+      // Normalize phone number before queuing
+      let normalizedPhone = phoneNumber.replace(/[^\d+]/g, '');
+      if (normalizedPhone.startsWith('+880')) {
+        normalizedPhone = normalizedPhone.substring(1);
+      } else if (normalizedPhone.startsWith('0')) {
+        normalizedPhone = '880' + normalizedPhone.substring(1);
+      } else if (!normalizedPhone.startsWith('880')) {
+        normalizedPhone = '880' + normalizedPhone;
+      }
+
+      // Queue SMS in sms_logs - polling server will send it
       const { error } = await supabase
         .from('sms_logs')
         .insert({
-          phone_number: phoneNumber,
+          phone_number: normalizedPhone,
           message,
           status: 'pending',
         });

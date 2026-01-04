@@ -9,6 +9,33 @@ const SMS_SETTINGS_CACHE_MS = 30_000;
 let cachedSettings = { ts: 0, settings: null };
 
 /**
+ * Normalize Bangladesh phone number to E.164 format (880XXXXXXXXX)
+ * Handles: +880, 880, 01, 1, etc.
+ */
+function normalizePhoneNumber(phone) {
+  if (!phone) return '';
+  
+  // Remove all non-digit characters except +
+  let cleaned = phone.toString().replace(/[^\d+]/g, '');
+  
+  // Remove leading + if exists
+  if (cleaned.startsWith('+')) {
+    cleaned = cleaned.substring(1);
+  }
+  
+  // Handle various formats:
+  if (cleaned.startsWith('880')) {
+    return cleaned;
+  } else if (cleaned.startsWith('0')) {
+    return '880' + cleaned.substring(1);
+  } else if (cleaned.length === 10 && cleaned.startsWith('1')) {
+    return '880' + cleaned;
+  }
+  
+  return cleaned;
+}
+
+/**
  * Get SMS gateway settings from database
  */
 export async function getSMSGatewaySettings(supabase) {
@@ -137,6 +164,7 @@ async function sendSSLWireless(settings, phone, message) {
 
 /**
  * Send SMS using configured provider
+ * Auto-normalizes phone number to E.164 format
  */
 export async function sendSMS(settings, phone, message) {
   if (!settings || !settings.is_enabled) {
@@ -147,13 +175,22 @@ export async function sendSMS(settings, phone, message) {
     return { success: false, error: 'Phone and message are required' };
   }
 
+  // Normalize phone number before sending
+  const normalizedPhone = normalizePhoneNumber(phone);
+  
+  if (!normalizedPhone || normalizedPhone.length < 11) {
+    return { success: false, error: `Invalid phone number: ${phone}` };
+  }
+
+  logger.debug(`Sending SMS to ${normalizedPhone} (original: ${phone})`);
+
   switch (settings.provider) {
     case 'smsnoc':
-      return sendSMSNOC(settings, phone, message);
+      return sendSMSNOC(settings, normalizedPhone, message);
     case 'mimsms':
-      return sendMIMSMS(settings, phone, message);
+      return sendMIMSMS(settings, normalizedPhone, message);
     case 'sslwireless':
-      return sendSSLWireless(settings, phone, message);
+      return sendSSLWireless(settings, normalizedPhone, message);
     default:
       return { success: false, error: `Unsupported provider: ${settings.provider}` };
   }

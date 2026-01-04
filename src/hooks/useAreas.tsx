@@ -10,6 +10,13 @@ export function useAreas() {
   const [loading, setLoading] = useState(true);
 
   const fetchAreas = useCallback(async () => {
+    // Always require tenant context for ISP users
+    if (!isSuperAdmin && !tenantId) {
+      setAreas([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       let query = supabase
@@ -17,6 +24,7 @@ export function useAreas() {
         .select('*')
         .order('name', { ascending: true });
 
+      // CRITICAL: Always filter by tenant_id for non-super-admins
       if (!isSuperAdmin && tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
@@ -26,6 +34,7 @@ export function useAreas() {
       setAreas((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching areas:', err);
+      setAreas([]);
     } finally {
       setLoading(false);
     }

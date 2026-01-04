@@ -14,7 +14,6 @@ import { useCustomers } from '@/hooks/useCustomers';
 import { useISPPackages } from '@/hooks/useISPPackages';
 import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
-import { useRealtimeONUs } from '@/hooks/useRealtimeONUs';
 import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
 import { Loader2, User, Network, Package, MapPin } from 'lucide-react';
 import { addDays, format } from 'date-fns';
@@ -30,7 +29,6 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   const { packages } = useISPPackages();
   const { areas } = useAreas();
   const { resellers } = useResellers();
-  const { onus } = useRealtimeONUs();
   const { routers } = useMikroTikRouters();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
@@ -44,11 +42,6 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     area_id: '',
     reseller_id: '',
     mikrotik_id: '',
-    onu_id: '',
-    onu_mac: '',
-    pon_port: '',
-    onu_index: '',
-    router_mac: '',
     pppoe_username: '',
     pppoe_password: '',
     package_id: '',
@@ -75,23 +68,6 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     }
   }, [formData.package_id, formData.connection_date, packages]);
 
-  // Auto-fill ONU details when selected
-  useEffect(() => {
-    if (formData.onu_id) {
-      const onu = onus.find(o => o.id === formData.onu_id);
-      if (onu) {
-        setFormData(prev => ({
-          ...prev,
-          onu_mac: onu.mac_address || '',
-          pon_port: onu.pon_port || '',
-          onu_index: onu.onu_index?.toString() || '',
-          router_mac: onu.router_mac || '',
-          pppoe_username: onu.pppoe_username || prev.pppoe_username,
-        }));
-      }
-    }
-  }, [formData.onu_id, onus]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -105,11 +81,6 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         area_id: formData.area_id && formData.area_id !== 'none' ? formData.area_id : null,
         reseller_id: formData.reseller_id && formData.reseller_id !== 'none' ? formData.reseller_id : null,
         mikrotik_id: formData.mikrotik_id && formData.mikrotik_id !== 'none' ? formData.mikrotik_id : null,
-        onu_id: formData.onu_id && formData.onu_id !== 'none' ? formData.onu_id : null,
-        onu_mac: formData.onu_mac || null,
-        pon_port: formData.pon_port || null,
-        onu_index: formData.onu_index ? parseInt(formData.onu_index) : null,
-        router_mac: formData.router_mac || null,
         pppoe_username: formData.pppoe_username || null,
         pppoe_password: formData.pppoe_password || null,
         package_id: formData.package_id || null,
@@ -140,11 +111,6 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       area_id: '',
       reseller_id: '',
       mikrotik_id: '',
-      onu_id: '',
-      onu_mac: '',
-      pon_port: '',
-      onu_index: '',
-      router_mac: '',
       pppoe_username: '',
       pppoe_password: '',
       package_id: '',
@@ -202,9 +168,17 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                   <Input
                     id="phone"
                     value={formData.phone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    onChange={(e) => {
+                      // Auto-format phone number
+                      let value = e.target.value.replace(/[^\d+]/g, '');
+                      // Remove +88 or 88 prefix for display
+                      if (value.startsWith('+880')) value = '0' + value.substring(4);
+                      else if (value.startsWith('880')) value = '0' + value.substring(3);
+                      setFormData(prev => ({ ...prev, phone: value }));
+                    }}
                     placeholder="01XXXXXXXXX"
                   />
+                  <p className="text-xs text-muted-foreground">Enter 11 digit number starting with 01</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -230,9 +204,9 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
             </TabsContent>
 
             <TabsContent value="network" className="space-y-4 mt-4">
-              {/* MikroTik Selection */}
+              {/* MikroTik Selection - Required */}
               <div className="space-y-2">
-                <Label>MikroTik Router</Label>
+                <Label>MikroTik Router *</Label>
                 <Select
                   value={formData.mikrotik_id}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, mikrotik_id: value }))}
@@ -255,48 +229,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label>Link to ONU Device</Label>
-                <Select
-                  value={formData.onu_id}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, onu_id: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select ONU device" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {onus.map((onu) => (
-                      <SelectItem key={onu.id} value={onu.id}>
-                        {onu.name} - {onu.pon_port}:{onu.onu_index} 
-                        {onu.pppoe_username && ` (${onu.pppoe_username})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="onu_mac">ONU MAC</Label>
-                  <Input
-                    id="onu_mac"
-                    value={formData.onu_mac}
-                    onChange={(e) => setFormData(prev => ({ ...prev, onu_mac: e.target.value }))}
-                    placeholder="AA:BB:CC:DD:EE:FF"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="router_mac">Router MAC</Label>
-                  <Input
-                    id="router_mac"
-                    value={formData.router_mac}
-                    onChange={(e) => setFormData(prev => ({ ...prev, router_mac: e.target.value }))}
-                    placeholder="AA:BB:CC:DD:EE:FF"
-                  />
-                </div>
-              </div>
-
+              {/* PPPoE Credentials */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="pppoe_username">PPPoE Username *</Label>
@@ -304,39 +237,18 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     id="pppoe_username"
                     value={formData.pppoe_username}
                     onChange={(e) => setFormData(prev => ({ ...prev, pppoe_username: e.target.value }))}
-                    placeholder="pppoe_user"
+                    placeholder="customer_username"
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pppoe_password">PPPoE Password</Label>
+                  <Label htmlFor="pppoe_password">PPPoE Password *</Label>
                   <Input
                     id="pppoe_password"
-                    type="password"
                     value={formData.pppoe_password}
                     onChange={(e) => setFormData(prev => ({ ...prev, pppoe_password: e.target.value }))}
                     placeholder="Password"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="pon_port">PON Port</Label>
-                  <Input
-                    id="pon_port"
-                    value={formData.pon_port}
-                    onChange={(e) => setFormData(prev => ({ ...prev, pon_port: e.target.value }))}
-                    placeholder="0/1"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="onu_index">ONU Index</Label>
-                  <Input
-                    id="onu_index"
-                    type="number"
-                    value={formData.onu_index}
-                    onChange={(e) => setFormData(prev => ({ ...prev, onu_index: e.target.value }))}
-                    placeholder="1"
+                    required
                   />
                 </div>
               </div>

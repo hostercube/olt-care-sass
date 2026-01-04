@@ -10,6 +10,13 @@ export function useISPPackages() {
   const [loading, setLoading] = useState(true);
 
   const fetchPackages = useCallback(async () => {
+    // Always require tenant context for ISP users
+    if (!isSuperAdmin && !tenantId) {
+      setPackages([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       let query = supabase
@@ -18,6 +25,7 @@ export function useISPPackages() {
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
 
+      // CRITICAL: Always filter by tenant_id for non-super-admins
       if (!isSuperAdmin && tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
@@ -27,6 +35,7 @@ export function useISPPackages() {
       setPackages((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching ISP packages:', err);
+      setPackages([]);
     } finally {
       setLoading(false);
     }
