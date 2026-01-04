@@ -18,6 +18,7 @@ import { DIVISIONS, getDistricts, getUpazilas } from '@/data/bangladeshLocations
 interface PlatformSettings {
   defaultTrialDays: number;
   enableSignup: boolean;
+  requireEmailVerification: boolean;
 }
 
 interface Package {
@@ -52,7 +53,11 @@ export default function Auth() {
 
   const [mode, setMode] = useState<'login' | 'signup'>(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
   const [packages, setPackages] = useState<Package[]>([]);
-  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({ defaultTrialDays: 14, enableSignup: true });
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
+    defaultTrialDays: 14,
+    enableSignup: true,
+    requireEmailVerification: false,
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -109,6 +114,7 @@ export default function Auth() {
           setPlatformSettings({
             defaultTrialDays: settings.defaultTrialDays ?? 14,
             enableSignup: settings.enableSignup ?? true,
+            requireEmailVerification: settings.requireEmailVerification ?? false,
           });
         }
       } catch {
@@ -177,12 +183,22 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateSignup()) return;
-    
+
+    if (!platformSettings.enableSignup) {
+      toast({
+        variant: 'destructive',
+        title: 'Signup Disabled',
+        description: 'New registrations are currently disabled by admin.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
-    
+
     try {
       const redirectUrl = `${window.location.origin}/`;
       const trialDays = platformSettings.defaultTrialDays;
+      const requireEmailVerification = platformSettings.requireEmailVerification;
 
       // Create the user
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -232,31 +248,29 @@ export default function Auth() {
 
       const requiresPayment = !!completeData.requires_payment;
 
-      if (requiresPayment) {
-        toast({
-          title: 'Account Created!',
-          description: 'Please complete your payment to activate your account.',
-        });
-
-        // Auto login and redirect to payment page (if email confirmation is disabled)
+      // If email verification is disabled in Super Admin settings, we auto-confirm on backend.
+      // So we can sign-in immediately.
+      if (!requireEmailVerification) {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: signupData.email,
           password: signupData.password,
         });
 
         if (!signInError) {
-          navigate('/billing/pay');
+          if (requiresPayment) {
+            navigate('/billing/pay');
+          }
+          toast({ title: 'Account Created!', description: requiresPayment ? 'Please complete payment to activate.' : 'Welcome! Your account is ready.' });
           return;
         }
-      } else {
-        toast({
-          title: 'Account Created!',
-          description:
-            trialDays > 0
-              ? `Your ${trialDays}-day trial has started. Please check your email to verify your account.`
-              : 'Please check your email to verify your account, or login directly.',
-        });
       }
+
+      toast({
+        title: 'Account Created!',
+        description: requireEmailVerification
+          ? 'Please check your email to verify your account, then login.'
+          : 'Please login to continue.',
+      });
 
       // Switch to login mode
       setMode('login');

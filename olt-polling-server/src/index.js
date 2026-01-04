@@ -30,6 +30,7 @@ import { initiatePayment, handlePaymentCallback } from './payments/payment-handl
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Store polling status
 const pollingStatus = {
@@ -1768,6 +1769,29 @@ app.post('/api/auth/complete-signup', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email mismatch' });
     }
 
+    // Platform setting: Require Email Verification
+    // If disabled, auto-confirm the user's email via admin API so they can login immediately.
+    try {
+      const { data: settingsRow } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'platform_settings')
+        .maybeSingle();
+
+      const requireEmailVerification = !!(settingsRow?.value && (settingsRow.value).requireEmailVerification);
+
+      if (!requireEmailVerification) {
+        const { error: confirmErr } = await supabase.auth.admin.updateUserById(user_id, {
+          email_confirm: true,
+        });
+        if (confirmErr) {
+          logger.warn('Auto email confirm failed:', confirmErr.message);
+        }
+      }
+    } catch (e) {
+      logger.warn('Could not read platform_settings for email verification:', e?.message || e);
+    }
+
     const trialDaysNum = Number.isFinite(Number(trial_days)) ? Number(trial_days) : 14;
     const requiresPayment = trialDaysNum === 0;
     const tenantStatus = requiresPayment ? 'pending' : 'trial';
@@ -1910,7 +1934,10 @@ app.post('/api/payments/initiate', async (req, res) => {
     const forwardedProto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').toString().split(',')[0].trim();
     const forwardedHost = (req.headers['x-forwarded-host'] || req.get('host') || '').toString().split(',')[0].trim();
     const baseUrl = process.env.PUBLIC_BASE_URL || `${forwardedProto}://${forwardedHost}`;
-    const gatewayCallbackUrl = `${baseUrl}/api/payments/callback/${gateway}`;
+
+    // NOTE: many Nginx configs only proxy /payments/* but not /api/*.
+    // So we use the non-/api callback URL (server still supports both).
+    const gatewayCallbackUrl = `${baseUrl}/payments/callback/${gateway}`;
 
     const result = await initiatePayment(supabase, gateway, {
       amount,
