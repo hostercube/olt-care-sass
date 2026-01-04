@@ -1071,6 +1071,10 @@ export type Database = {
           expiry_date: string | null
           id: string
           is_auto_disable: boolean | null
+          last_activated_at: string | null
+          last_caller_id: string | null
+          last_deactivated_at: string | null
+          last_ip_address: string | null
           last_payment_date: string | null
           mikrotik_id: string | null
           monthly_bill: number | null
@@ -1101,6 +1105,10 @@ export type Database = {
           expiry_date?: string | null
           id?: string
           is_auto_disable?: boolean | null
+          last_activated_at?: string | null
+          last_caller_id?: string | null
+          last_deactivated_at?: string | null
+          last_ip_address?: string | null
           last_payment_date?: string | null
           mikrotik_id?: string | null
           monthly_bill?: number | null
@@ -1131,6 +1139,10 @@ export type Database = {
           expiry_date?: string | null
           id?: string
           is_auto_disable?: boolean | null
+          last_activated_at?: string | null
+          last_caller_id?: string | null
+          last_deactivated_at?: string | null
+          last_ip_address?: string | null
           last_payment_date?: string | null
           mikrotik_id?: string | null
           monthly_bill?: number | null
@@ -4950,6 +4962,10 @@ export type Database = {
           expiry_date: string | null
           id: string
           is_auto_disable: boolean | null
+          last_activated_at: string | null
+          last_caller_id: string | null
+          last_deactivated_at: string | null
+          last_ip_address: string | null
           last_payment_date: string | null
           mikrotik_id: string | null
           monthly_bill: number | null
