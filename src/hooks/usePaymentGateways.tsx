@@ -13,6 +13,7 @@ export interface PaymentGatewaySettings {
   instructions: string | null;
   config: Record<string, unknown> | null;
   sort_order: number;
+  bkash_mode?: string;
   created_at: string;
   updated_at: string;
 }

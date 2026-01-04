@@ -131,9 +131,14 @@ export default function GatewaySettings() {
     if (gateways.length > 0) {
       const configs: Record<string, any> = {};
       gateways.forEach(gw => {
+        // Include bkash_mode in config for UI
+        const gwConfig = { ...(gw.config || {}) };
+        if (gw.gateway === 'bkash' && (gw as any).bkash_mode) {
+          gwConfig.bkash_mode = (gw as any).bkash_mode;
+        }
         configs[gw.gateway] = {
           ...gw,
-          config: gw.config || {},
+          config: gwConfig,
         };
       });
       setPaymentConfigs(configs);
@@ -183,18 +188,20 @@ export default function GatewaySettings() {
   const handlePaymentSave = async (gateway: string) => {
     const config = paymentConfigs[gateway];
     if (config) {
-      // Store bkash_mode inside config object
       const configData = { ...config.config };
-      if (gateway === 'bkash' && !configData.bkash_mode) {
-        configData.bkash_mode = 'tokenized';
-      }
-      
-      await updateGateway(config.id, {
+      const updateData: any = {
         is_enabled: config.is_enabled,
         sandbox_mode: config.sandbox_mode,
         config: configData,
         instructions: config.instructions,
-      });
+      };
+      
+      // Save bkash_mode to column directly for bKash gateway
+      if (gateway === 'bkash') {
+        updateData.bkash_mode = configData.bkash_mode || 'tokenized';
+      }
+      
+      await updateGateway(config.id, updateData);
     }
   };
 
@@ -268,14 +275,12 @@ export default function GatewaySettings() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="tokenized">Tokenized (Redirect)</SelectItem>
-                  <SelectItem value="checkout_js">PGW Checkout.js (Popup)</SelectItem>
+                  <SelectItem value="tokenized">Tokenized API (Redirect)</SelectItem>
+                  <SelectItem value="checkout_js">PGW Checkout.js (Redirect)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {config.config?.bkash_mode === 'checkout_js' 
-                  ? 'Old PGW method using in-page popup.' 
-                  : 'New tokenized API with redirect to bKash.'}
+                Both modes redirect to bKash for payment. Tokenized uses newer API endpoints.
               </p>
             </div>
           )}

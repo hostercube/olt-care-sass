@@ -2900,6 +2900,7 @@ export type Database = {
       }
       payment_gateway_settings: {
         Row: {
+          bkash_mode: string | null
           config: Json | null
           created_at: string
           display_name: string
@@ -2912,6 +2913,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bkash_mode?: string | null
           config?: Json | null
           created_at?: string
           display_name: string
@@ -2924,6 +2926,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bkash_mode?: string | null
           config?: Json | null
           created_at?: string
           display_name?: string
