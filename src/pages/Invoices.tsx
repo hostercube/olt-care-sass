@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -8,10 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useTenantContext, useSuperAdmin } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { downloadInvoicePDF } from '@/lib/invoice-pdf';
+import { PaginationControls, useTablePagination } from '@/components/common/TableWithPagination';
 import { format } from 'date-fns';
 import {
   Search,
@@ -23,6 +26,7 @@ import {
   Clock,
   XCircle,
   CreditCard,
+  Eye,
 } from 'lucide-react';
 import type { Invoice } from '@/types/saas';
 
@@ -35,24 +39,56 @@ const statusConfig: Record<string, { icon: React.ElementType; color: string; lab
 
 export default function Invoices() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { tenantId } = useTenantContext();
   const { isSuperAdmin } = useSuperAdmin();
   const { invoices, loading, fetchInvoices, cancelInvoice } = useInvoices(isSuperAdmin ? undefined : tenantId || undefined);
   const { settings } = useSystemSettings();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
+
   // Filter invoices
-  const filteredInvoices = invoices.filter((invoice) => {
-    const matchesSearch =
-      invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.tenant?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.tenant?.company_name?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((invoice) => {
+      const matchesSearch =
+        invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.tenant?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.tenant?.company_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [invoices, searchTerm, statusFilter]);
+
+  const {
+    paginatedData,
+    currentPage,
+    totalPages,
+    pageSize,
+    totalItems,
+    startIndex,
+    endIndex,
+    goToPage,
+    handlePageSizeChange,
+    setCurrentPage,
+  } = useTablePagination(filteredInvoices, 10);
+
+  useEffect(() => {
+    // reset pagination on filter changes
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, setCurrentPage]);
+
+  // Open via URL (from subscription page)
+  useEffect(() => {
+    const viewId = searchParams.get('view');
+    if (!viewId) return;
+    const inv = invoices.find((i) => i.id === viewId);
+    if (inv) setViewInvoice(inv);
+  }, [searchParams, invoices]);
 
   const handleDownloadPDF = (invoice: Invoice) => {
     downloadInvoicePDF(invoice, settings);
@@ -60,6 +96,24 @@ export default function Invoices() {
 
   const handlePayInvoice = (invoice: Invoice) => {
     navigate(`/billing/pay?invoice=${invoice.id}`);
+  };
+
+  const handleViewInvoice = (invoice: Invoice) => {
+    setViewInvoice(invoice);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('view', invoice.id);
+      return next;
+    });
+  };
+
+  const closeViewInvoice = () => {
+    setViewInvoice(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('view');
+      return next;
+    });
   };
 
   const handleCancelInvoice = async (invoice: Invoice) => {
@@ -168,7 +222,7 @@ export default function Invoices() {
               Invoice List
             </CardTitle>
             <CardDescription>
-              Showing {filteredInvoices.length} of {invoices.length} invoices
+              Showing {totalItems} of {invoices.length} invoices
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -203,16 +257,20 @@ export default function Invoices() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInvoices.map((invoice) => {
+                    {paginatedData.map((invoice) => {
                       const status = getStatusConfig(invoice.status);
                       const StatusIcon = status.icon;
-                      
+
                       return (
                         <TableRow key={invoice.id}>
                           <TableCell>
-                            <span className="font-mono font-medium">
+                            <Button
+                              variant="link"
+                              className="p-0 h-auto font-mono font-medium"
+                              onClick={() => handleViewInvoice(invoice)}
+                            >
                               {invoice.invoice_number}
-                            </span>
+                            </Button>
                           </TableCell>
                           {isSuperAdmin && (
                             <TableCell>
@@ -227,9 +285,7 @@ export default function Invoices() {
                             </TableCell>
                           )}
                           <TableCell>
-                            <span className="font-bold">
-                              ৳{invoice.total_amount.toLocaleString()}
-                            </span>
+                            <span className="font-bold">৳{invoice.total_amount.toLocaleString()}</span>
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className={`gap-1.5 ${status.color}`}>
@@ -237,41 +293,29 @@ export default function Invoices() {
                               {status.label}
                             </Badge>
                           </TableCell>
-                          <TableCell>
-                            {format(new Date(invoice.due_date), 'MMM d, yyyy')}
-                          </TableCell>
-                          <TableCell>
-                            {format(new Date(invoice.created_at), 'MMM d, yyyy')}
-                          </TableCell>
+                          <TableCell>{format(new Date(invoice.due_date), 'MMM d, yyyy')}</TableCell>
+                          <TableCell>{format(new Date(invoice.created_at), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="outline" className="gap-2" onClick={() => handleViewInvoice(invoice)}>
+                                <Eye className="h-4 w-4" />
+                                View
+                              </Button>
+
                               {!isSuperAdmin && (invoice.status === 'unpaid' || invoice.status === 'overdue') && (
-                                <Button
-                                  size="sm"
-                                  className="gap-2"
-                                  onClick={() => handlePayInvoice(invoice)}
-                                >
+                                <Button size="sm" className="gap-2" onClick={() => handlePayInvoice(invoice)}>
                                   <CreditCard className="h-4 w-4" />
                                   Pay
                                 </Button>
                               )}
 
                               {!isSuperAdmin && (invoice.status === 'unpaid' || invoice.status === 'overdue') && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleCancelInvoice(invoice)}
-                                >
+                                <Button size="sm" variant="outline" onClick={() => handleCancelInvoice(invoice)}>
                                   Cancel
                                 </Button>
                               )}
 
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDownloadPDF(invoice)}
-                                className="gap-2"
-                              >
+                              <Button size="sm" variant="outline" onClick={() => handleDownloadPDF(invoice)} className="gap-2">
                                 <Download className="h-4 w-4" />
                                 PDF
                               </Button>
@@ -282,10 +326,104 @@ export default function Invoices() {
                     })}
                   </TableBody>
                 </Table>
+
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  totalItems={totalItems}
+                  startIndex={startIndex}
+                  endIndex={endIndex}
+                  onPageChange={goToPage}
+                  onPageSizeChange={handlePageSizeChange}
+                />
               </div>
             )}
           </CardContent>
         </Card>
+
+        <Dialog open={!!viewInvoice} onOpenChange={(open) => (!open ? closeViewInvoice() : undefined)}>
+          <DialogContent className="max-w-2xl">
+            {viewInvoice && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Invoice {viewInvoice.invoice_number}</DialogTitle>
+                  <DialogDescription>
+                    {isSuperAdmin
+                      ? (viewInvoice.tenant?.company_name || viewInvoice.tenant?.name || '')
+                      : 'Invoice details and actions'}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-muted-foreground">Status</div>
+                    <Badge variant="outline">{viewInvoice.status.toUpperCase()}</Badge>
+                  </div>
+
+                  <Separator />
+
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-muted-foreground">Created</div>
+                      <div className="font-medium">{format(new Date(viewInvoice.created_at), 'MMM d, yyyy')}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Due</div>
+                      <div className="font-medium">{format(new Date(viewInvoice.due_date), 'MMM d, yyyy')}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Description</TableHead>
+                          <TableHead className="text-right">Qty</TableHead>
+                          <TableHead className="text-right">Unit</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(viewInvoice.line_items || []).map((li, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell>{li.description}</TableCell>
+                            <TableCell className="text-right">{li.quantity}</TableCell>
+                            <TableCell className="text-right">৳{Number(li.unit_price).toLocaleString()}</TableCell>
+                            <TableCell className="text-right">৳{Number(li.total).toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-right font-medium">Total</TableCell>
+                          <TableCell className="text-right font-bold">৳{viewInvoice.total_amount.toLocaleString()}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                <DialogFooter className="gap-2">
+                  {!isSuperAdmin && (viewInvoice.status === 'unpaid' || viewInvoice.status === 'overdue') && (
+                    <>
+                      <Button variant="outline" onClick={() => handleCancelInvoice(viewInvoice)}>
+                        Cancel Invoice
+                      </Button>
+                      <Button onClick={() => handlePayInvoice(viewInvoice)} className="gap-2">
+                        <CreditCard className="h-4 w-4" />
+                        Pay Now
+                      </Button>
+                    </>
+                  )}
+
+                  <Button variant="outline" onClick={() => handleDownloadPDF(viewInvoice)} className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Download PDF
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

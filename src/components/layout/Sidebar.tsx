@@ -118,6 +118,7 @@ const superAdminItems: NavItem[] = [
 // Subscription & Billing for tenants
 const tenantBillingItems: NavItem[] = [
   { title: 'My Subscription', href: '/billing/subscription', icon: FileText },
+  { title: 'Invoices', href: '/invoices', icon: Receipt },
   { title: 'Make Payment', href: '/billing/pay', icon: CreditCard },
   { title: 'Billing History', href: '/billing/history', icon: Receipt },
   { title: 'Renew', href: '/billing/renew', icon: Zap },
