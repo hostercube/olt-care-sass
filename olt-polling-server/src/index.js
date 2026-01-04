@@ -1234,6 +1234,160 @@ app.post('/mikrotik/bulk-tag/:oltId', async (req, res) => {
   }
 });
 
+// ============= MIKROTIK PPPoE USER MANAGEMENT =============
+
+// Create PPPoE user on MikroTik
+app.post('/api/mikrotik/pppoe/create', async (req, res) => {
+  const { mikrotik, pppoeUser } = req.body;
+  
+  if (!mikrotik || !mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return res.status(400).json({ success: false, error: 'MikroTik configuration required' });
+  }
+  
+  if (!pppoeUser || !pppoeUser.name || !pppoeUser.password) {
+    return res.status(400).json({ success: false, error: 'PPPoE user details required (name, password)' });
+  }
+  
+  try {
+    logger.info(`Creating PPPoE user ${pppoeUser.name} on ${mikrotik.ip}`);
+    
+    const { createPPPSecret } = await import('./polling/mikrotik-client.js');
+    const result = await createPPPSecret(mikrotik, {
+      name: pppoeUser.name,
+      password: pppoeUser.password,
+      profile: pppoeUser.profile || 'default',
+      comment: pppoeUser.comment || '',
+      callerId: pppoeUser.callerId || '',
+    });
+    
+    res.json(result);
+  } catch (error) {
+    logger.error(`PPPoE user creation error:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Toggle PPPoE user (enable/disable) on MikroTik
+app.post('/api/mikrotik/pppoe/toggle', async (req, res) => {
+  const { mikrotik, username, disabled } = req.body;
+  
+  if (!mikrotik || !mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return res.status(400).json({ success: false, error: 'MikroTik configuration required' });
+  }
+  
+  if (!username) {
+    return res.status(400).json({ success: false, error: 'PPPoE username required' });
+  }
+  
+  try {
+    logger.info(`${disabled ? 'Disabling' : 'Enabling'} PPPoE user ${username} on ${mikrotik.ip}`);
+    
+    const { togglePPPSecret } = await import('./polling/mikrotik-client.js');
+    const result = await togglePPPSecret(mikrotik, username, disabled);
+    
+    res.json(result);
+  } catch (error) {
+    logger.error(`PPPoE user toggle error:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete PPPoE user from MikroTik
+app.post('/api/mikrotik/pppoe/delete', async (req, res) => {
+  const { mikrotik, username } = req.body;
+  
+  if (!mikrotik || !mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return res.status(400).json({ success: false, error: 'MikroTik configuration required' });
+  }
+  
+  if (!username) {
+    return res.status(400).json({ success: false, error: 'PPPoE username required' });
+  }
+  
+  try {
+    logger.info(`Deleting PPPoE user ${username} from ${mikrotik.ip}`);
+    
+    const { deletePPPSecret } = await import('./polling/mikrotik-client.js');
+    const result = await deletePPPSecret(mikrotik, username);
+    
+    res.json(result);
+  } catch (error) {
+    logger.error(`PPPoE user delete error:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get PPPoE user status (active session) from MikroTik
+app.post('/api/mikrotik/pppoe/status', async (req, res) => {
+  const { mikrotik, username } = req.body;
+  
+  if (!mikrotik || !mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return res.status(400).json({ success: false, error: 'MikroTik configuration required' });
+  }
+  
+  if (!username) {
+    return res.status(400).json({ success: false, error: 'PPPoE username required' });
+  }
+  
+  try {
+    const { getPPPoESessionStatus } = await import('./polling/mikrotik-client.js');
+    const result = await getPPPoESessionStatus(mikrotik, username);
+    
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error(`PPPoE status check error:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get live bandwidth usage for a PPPoE user
+app.post('/api/mikrotik/pppoe/bandwidth', async (req, res) => {
+  const { mikrotik, username } = req.body;
+  
+  if (!mikrotik || !mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return res.status(400).json({ success: false, error: 'MikroTik configuration required' });
+  }
+  
+  if (!username) {
+    return res.status(400).json({ success: false, error: 'PPPoE username required' });
+  }
+  
+  try {
+    const { getPPPoEBandwidth } = await import('./polling/mikrotik-client.js');
+    const result = await getPPPoEBandwidth(mikrotik, username);
+    
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error(`PPPoE bandwidth check error:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Disconnect active PPPoE session
+app.post('/api/mikrotik/pppoe/disconnect', async (req, res) => {
+  const { mikrotik, username } = req.body;
+  
+  if (!mikrotik || !mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return res.status(400).json({ success: false, error: 'MikroTik configuration required' });
+  }
+  
+  if (!username) {
+    return res.status(400).json({ success: false, error: 'PPPoE username required' });
+  }
+  
+  try {
+    logger.info(`Disconnecting PPPoE session for ${username} on ${mikrotik.ip}`);
+    
+    const { disconnectPPPoESession } = await import('./polling/mikrotik-client.js');
+    const result = await disconnectPPPoESession(mikrotik, username);
+    
+    res.json(result);
+  } catch (error) {
+    logger.error(`PPPoE disconnect error:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Poll all OLTs (with /api prefix)
 app.post('/api/poll-all', async (req, res) => {
   if (pollingStatus.isPolling) {

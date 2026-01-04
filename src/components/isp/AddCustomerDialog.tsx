@@ -6,17 +6,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useISPPackages } from '@/hooks/useISPPackages';
 import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
 import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
-import { Loader2, User, Network, Package, MapPin } from 'lucide-react';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { 
+  Loader2, User, Network, Package, MapPin, ChevronLeft, ChevronRight,
+  Check, Router, Key, Calendar
+} from 'lucide-react';
 import { addDays, format } from 'date-fns';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface AddCustomerDialogProps {
   open: boolean;
@@ -24,14 +32,25 @@ interface AddCustomerDialogProps {
   onSuccess?: () => void;
 }
 
+const STEPS = [
+  { id: 'basic', label: 'Basic Info', icon: User },
+  { id: 'network', label: 'Network', icon: Network },
+  { id: 'package', label: 'Package', icon: Package },
+  { id: 'location', label: 'Location', icon: MapPin },
+];
+
 export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomerDialogProps) {
   const { createCustomer } = useCustomers();
   const { packages } = useISPPackages();
   const { areas } = useAreas();
   const { resellers } = useResellers();
   const { routers } = useMikroTikRouters();
+  const { settings } = useSystemSettings();
+  const vpsUrl = settings?.apiServerUrl || '';
+  
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('basic');
+  const [currentStep, setCurrentStep] = useState(0);
+  const [creatingPPPoE, setCreatingPPPoE] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -50,7 +69,11 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     monthly_bill: '',
     notes: '',
     is_auto_disable: true,
+    create_mikrotik_user: true,
   });
+
+  // Validation state
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Auto-calculate expiry when package changes
   useEffect(() => {
@@ -68,11 +91,130 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     }
   }, [formData.package_id, formData.connection_date, packages]);
 
+  // Auto-generate PPPoE username when name changes
+  useEffect(() => {
+    if (formData.name && !formData.pppoe_username) {
+      const username = formData.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '_')
+        .substring(0, 20);
+      setFormData(prev => ({ ...prev, pppoe_username: username }));
+    }
+  }, [formData.name]);
+
+  const validateStep = (step: number): boolean => {
+    const newErrors: Record<string, string> = {};
+    
+    switch (step) {
+      case 0: // Basic
+        if (!formData.name.trim()) newErrors.name = 'Name is required';
+        if (formData.phone && !/^01\d{9}$/.test(formData.phone)) {
+          newErrors.phone = 'Enter valid 11-digit phone number starting with 01';
+        }
+        if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+          newErrors.email = 'Enter valid email address';
+        }
+        break;
+      case 1: // Network
+        if (!formData.pppoe_username.trim()) newErrors.pppoe_username = 'PPPoE username is required';
+        if (!formData.pppoe_password.trim()) newErrors.pppoe_password = 'PPPoE password is required';
+        if (formData.pppoe_password.length < 4) newErrors.pppoe_password = 'Password must be at least 4 characters';
+        break;
+      case 2: // Package
+        if (!formData.package_id) newErrors.package_id = 'Please select a package';
+        break;
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleNext = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep(prev => Math.min(prev + 1, STEPS.length - 1));
+    }
+  };
+
+  const handlePrevious = () => {
+    setCurrentStep(prev => Math.max(prev - 1, 0));
+  };
+
+  const createPPPoEOnMikroTik = async (): Promise<boolean> => {
+    if (!formData.create_mikrotik_user || !formData.mikrotik_id) {
+      return true; // Skip if not creating on MikroTik
+    }
+
+    const router = routers.find(r => r.id === formData.mikrotik_id);
+    if (!router) return true;
+
+    if (!vpsUrl) {
+      console.warn('VPS URL not configured, skipping MikroTik user creation');
+      return true;
+    }
+
+    try {
+      setCreatingPPPoE(true);
+      
+      // Get package profile name
+      const pkg = packages.find(p => p.id === formData.package_id);
+      const profileName = pkg?.name || 'default';
+
+      const response = await fetch(`${vpsUrl}/api/mikrotik/pppoe/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mikrotik: {
+            ip: router.ip_address,
+            port: router.port,
+            username: router.username,
+            password: router.password_encrypted,
+          },
+          pppoeUser: {
+            name: formData.pppoe_username,
+            password: formData.pppoe_password,
+            profile: profileName,
+            comment: `Customer: ${formData.name}`,
+          }
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success('PPPoE user created on MikroTik');
+        return true;
+      } else {
+        // Don't fail customer creation, just warn
+        toast.warning(`Note: PPPoE user not created on MikroTik - ${result.error || 'API not available'}`);
+        return true;
+      }
+    } catch (err) {
+      console.warn('MikroTik PPPoE creation failed:', err);
+      toast.warning('Note: Could not create PPPoE user on MikroTik. You may need to add it manually.');
+      return true; // Still allow customer creation
+    } finally {
+      setCreatingPPPoE(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate all steps
+    for (let i = 0; i <= currentStep; i++) {
+      if (!validateStep(i)) {
+        setCurrentStep(i);
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
+      // First, try to create PPPoE user on MikroTik
+      await createPPPoEOnMikroTik();
+
+      // Then create customer in database
       await createCustomer({
         name: formData.name,
         phone: formData.phone || null,
@@ -95,6 +237,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       
       onSuccess?.();
       resetForm();
+      onOpenChange(false);
     } catch (err) {
       console.error('Error creating customer:', err);
     } finally {
@@ -119,39 +262,77 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       monthly_bill: '',
       notes: '',
       is_auto_disable: true,
+      create_mikrotik_user: true,
     });
-    setActiveTab('basic');
+    setCurrentStep(0);
+    setErrors({});
   };
 
+  const isLastStep = currentStep === STEPS.length - 1;
+  const selectedPackage = packages.find(p => p.id === formData.package_id);
+  const selectedRouter = routers.find(r => r.id === formData.mikrotik_id);
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(open) => { if (!open) resetForm(); onOpenChange(open); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Customer</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit}>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-4 w-full">
-              <TabsTrigger value="basic" className="gap-2">
-                <User className="h-4 w-4" />
-                Basic
-              </TabsTrigger>
-              <TabsTrigger value="network" className="gap-2">
-                <Network className="h-4 w-4" />
-                Network
-              </TabsTrigger>
-              <TabsTrigger value="package" className="gap-2">
-                <Package className="h-4 w-4" />
-                Package
-              </TabsTrigger>
-              <TabsTrigger value="location" className="gap-2">
-                <MapPin className="h-4 w-4" />
-                Location
-              </TabsTrigger>
-            </TabsList>
+        {/* Step Indicator */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between">
+            {STEPS.map((step, index) => {
+              const Icon = step.icon;
+              const isActive = index === currentStep;
+              const isCompleted = index < currentStep;
+              
+              return (
+                <div key={step.id} className="flex items-center flex-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (index < currentStep || validateStep(currentStep)) {
+                        setCurrentStep(index);
+                      }
+                    }}
+                    className={cn(
+                      "flex flex-col items-center gap-1 p-2 rounded-lg transition-colors w-full",
+                      isActive && "bg-primary/10",
+                      isCompleted && "text-primary",
+                      !isActive && !isCompleted && "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                      isActive && "bg-primary text-primary-foreground",
+                      isCompleted && "bg-primary/20 text-primary",
+                      !isActive && !isCompleted && "bg-muted"
+                    )}>
+                      {isCompleted ? (
+                        <Check className="h-5 w-5" />
+                      ) : (
+                        <Icon className="h-5 w-5" />
+                      )}
+                    </div>
+                    <span className="text-xs font-medium hidden sm:block">{step.label}</span>
+                  </button>
+                  {index < STEPS.length - 1 && (
+                    <div className={cn(
+                      "h-0.5 flex-1 mx-2 rounded",
+                      index < currentStep ? "bg-primary" : "bg-muted"
+                    )} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-            <TabsContent value="basic" className="space-y-4 mt-4">
+        <form onSubmit={handleSubmit}>
+          {/* Step 1: Basic Info */}
+          {currentStep === 0 && (
+            <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Name *</Label>
@@ -160,8 +341,9 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Customer name"
-                    required
+                    className={errors.name ? 'border-destructive' : ''}
                   />
+                  {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone</Label>
@@ -169,16 +351,19 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     id="phone"
                     value={formData.phone}
                     onChange={(e) => {
-                      // Auto-format phone number
                       let value = e.target.value.replace(/[^\d+]/g, '');
-                      // Remove +88 or 88 prefix for display
                       if (value.startsWith('+880')) value = '0' + value.substring(4);
                       else if (value.startsWith('880')) value = '0' + value.substring(3);
                       setFormData(prev => ({ ...prev, phone: value }));
                     }}
                     placeholder="01XXXXXXXXX"
+                    className={errors.phone ? 'border-destructive' : ''}
                   />
-                  <p className="text-xs text-muted-foreground">Enter 11 digit number starting with 01</p>
+                  {errors.phone ? (
+                    <p className="text-xs text-destructive">{errors.phone}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Enter 11 digit number starting with 01</p>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -189,7 +374,9 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                   value={formData.email}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                   placeholder="customer@example.com"
+                  className={errors.email ? 'border-destructive' : ''}
                 />
+                {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
@@ -201,12 +388,15 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                   rows={2}
                 />
               </div>
-            </TabsContent>
+            </div>
+          )}
 
-            <TabsContent value="network" className="space-y-4 mt-4">
-              {/* MikroTik Selection - Required */}
+          {/* Step 2: Network */}
+          {currentStep === 1 && (
+            <div className="space-y-4">
+              {/* MikroTik Selection */}
               <div className="space-y-2">
-                <Label>MikroTik Router *</Label>
+                <Label>MikroTik Router</Label>
                 <Select
                   value={formData.mikrotik_id}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, mikrotik_id: value }))}
@@ -218,8 +408,11 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     <SelectItem value="none">None</SelectItem>
                     {routers.map((router) => (
                       <SelectItem key={router.id} value={router.id}>
-                        {router.name} ({router.ip_address})
-                        {router.is_primary && ' - Primary'}
+                        <div className="flex items-center gap-2">
+                          <Router className="h-4 w-4" />
+                          {router.name} ({router.ip_address})
+                          {router.is_primary && <Badge variant="outline" className="ml-1 text-xs">Primary</Badge>}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -232,51 +425,132 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
               {/* PPPoE Credentials */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="pppoe_username">PPPoE Username *</Label>
+                  <Label htmlFor="pppoe_username">
+                    <Key className="h-3 w-3 inline mr-1" />
+                    PPPoE Username *
+                  </Label>
                   <Input
                     id="pppoe_username"
                     value={formData.pppoe_username}
                     onChange={(e) => setFormData(prev => ({ ...prev, pppoe_username: e.target.value }))}
                     placeholder="customer_username"
-                    required
+                    className={errors.pppoe_username ? 'border-destructive' : ''}
                   />
+                  {errors.pppoe_username && <p className="text-xs text-destructive">{errors.pppoe_username}</p>}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pppoe_password">PPPoE Password *</Label>
+                  <Label htmlFor="pppoe_password">
+                    <Key className="h-3 w-3 inline mr-1" />
+                    PPPoE Password *
+                  </Label>
                   <Input
                     id="pppoe_password"
+                    type="password"
                     value={formData.pppoe_password}
                     onChange={(e) => setFormData(prev => ({ ...prev, pppoe_password: e.target.value }))}
                     placeholder="Password"
-                    required
+                    className={errors.pppoe_password ? 'border-destructive' : ''}
                   />
+                  {errors.pppoe_password && <p className="text-xs text-destructive">{errors.pppoe_password}</p>}
                 </div>
               </div>
-            </TabsContent>
 
-            <TabsContent value="package" className="space-y-4 mt-4">
+              {/* Auto-create on MikroTik */}
+              {formData.mikrotik_id && formData.mikrotik_id !== 'none' && (
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Router className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="font-medium">Auto-create on MikroTik</p>
+                          <p className="text-sm text-muted-foreground">
+                            Automatically create PPPoE user on {selectedRouter?.name}
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={formData.create_mikrotik_user}
+                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, create_mikrotik_user: checked }))}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Auto-disable expired */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <Label>Auto-Disable on Expiry</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically disable PPPoE when subscription expires
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.is_auto_disable}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_auto_disable: checked }))}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Package */}
+          {currentStep === 2 && (
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Package</Label>
+                <Label>Package *</Label>
                 <Select
                   value={formData.package_id}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, package_id: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={errors.package_id ? 'border-destructive' : ''}>
                     <SelectValue placeholder="Select package" />
                   </SelectTrigger>
                   <SelectContent>
                     {packages.map((pkg) => (
                       <SelectItem key={pkg.id} value={pkg.id}>
-                        {pkg.name} - ৳{pkg.price}/month ({pkg.download_speed}/{pkg.upload_speed} {pkg.speed_unit})
+                        <div className="flex items-center gap-2">
+                          <Package className="h-4 w-4" />
+                          {pkg.name} - ৳{pkg.price}/month ({pkg.download_speed}/{pkg.upload_speed} {pkg.speed_unit})
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.package_id && <p className="text-xs text-destructive">{errors.package_id}</p>}
               </div>
+
+              {/* Selected Package Preview */}
+              {selectedPackage && (
+                <Card className="bg-muted/50">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Package className="h-5 w-5 text-primary" />
+                      <span className="font-medium">{selectedPackage.name}</span>
+                      <Badge variant="outline">
+                        {selectedPackage.download_speed}/{selectedPackage.upload_speed} {selectedPackage.speed_unit}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Monthly Price:</span>
+                        <span className="ml-2 font-medium">৳{selectedPackage.price}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Validity:</span>
+                        <span className="ml-2 font-medium">{selectedPackage.validity_days} days</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="connection_date">Connection Date</Label>
+                  <Label htmlFor="connection_date">
+                    <Calendar className="h-3 w-3 inline mr-1" />
+                    Connection Date
+                  </Label>
                   <Input
                     id="connection_date"
                     type="date"
@@ -285,7 +559,10 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="expiry_date">Expiry Date</Label>
+                  <Label htmlFor="expiry_date">
+                    <Calendar className="h-3 w-3 inline mr-1" />
+                    Expiry Date
+                  </Label>
                   <Input
                     id="expiry_date"
                     type="date"
@@ -305,9 +582,12 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                   placeholder="0"
                 />
               </div>
-            </TabsContent>
+            </div>
+          )}
 
-            <TabsContent value="location" className="space-y-4 mt-4">
+          {/* Step 4: Location */}
+          {currentStep === 3 && (
+            <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Area</Label>
                 <Select
@@ -321,10 +601,13 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     <SelectItem value="none">None</SelectItem>
                     {areas.map((area) => (
                       <SelectItem key={area.id} value={area.id}>
-                        {area.name} 
-                        {area.village && `, ${area.village}`}
-                        {area.upazila && `, ${area.upazila}`}
-                        {area.district && ` (${area.district})`}
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4" />
+                          {area.name} 
+                          {area.village && `, ${area.village}`}
+                          {area.upazila && `, ${area.upazila}`}
+                          {area.district && ` (${area.district})`}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -361,17 +644,67 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                   rows={3}
                 />
               </div>
-            </TabsContent>
-          </Tabs>
 
-          <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading || !formData.name}>
-              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Add Customer
-            </Button>
+              {/* Summary Card */}
+              <Card className="bg-muted/50">
+                <CardContent className="p-4">
+                  <h4 className="font-medium mb-3">Customer Summary</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{formData.name}</span></div>
+                    <div><span className="text-muted-foreground">Phone:</span> <span className="font-medium">{formData.phone || 'N/A'}</span></div>
+                    <div><span className="text-muted-foreground">PPPoE:</span> <span className="font-medium">{formData.pppoe_username}</span></div>
+                    <div><span className="text-muted-foreground">Package:</span> <span className="font-medium">{selectedPackage?.name || 'N/A'}</span></div>
+                    <div><span className="text-muted-foreground">Router:</span> <span className="font-medium">{selectedRouter?.name || 'None'}</span></div>
+                    <div><span className="text-muted-foreground">Monthly:</span> <span className="font-medium">৳{formData.monthly_bill || '0'}</span></div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          <DialogFooter className="mt-6 flex-col sm:flex-row gap-2">
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => { resetForm(); onOpenChange(false); }}
+                className="flex-1 sm:flex-none"
+              >
+                Cancel
+              </Button>
+              {currentStep > 0 && (
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={handlePrevious}
+                  className="flex-1 sm:flex-none"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              {!isLastStep ? (
+                <Button 
+                  type="button" 
+                  onClick={handleNext}
+                  className="flex-1 sm:flex-none"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              ) : (
+                <Button 
+                  type="submit" 
+                  disabled={loading || creatingPPPoE || !formData.name}
+                  className="flex-1 sm:flex-none"
+                >
+                  {(loading || creatingPPPoE) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {creatingPPPoE ? 'Creating PPPoE...' : 'Add Customer'}
+                </Button>
+              )}
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

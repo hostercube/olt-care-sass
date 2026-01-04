@@ -12,9 +12,21 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
-import { Router, Plus, Edit, Trash2, Loader2, RefreshCw, Wifi, WifiOff, Activity } from 'lucide-react';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { 
+  Router, Plus, Edit, Trash2, Loader2, RefreshCw, Wifi, WifiOff, Activity,
+  Users, ListOrdered, Settings, CheckCircle, XCircle, MoreVertical, Search,
+  Zap, Database, Network
+} from 'lucide-react';
 import type { MikroTikRouter } from '@/types/isp';
 import { toast } from 'sonner';
 import {
@@ -24,13 +36,22 @@ import {
 
 export default function MikroTikManagement() {
   const { tenantId, isSuperAdmin } = useTenantContext();
+  const { settings } = useSystemSettings();
+  const vpsUrl = settings?.apiServerUrl || '';
+  
   const [routers, setRouters] = useState<MikroTikRouter[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingRouter, setEditingRouter] = useState<MikroTikRouter | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<MikroTikRouter | null>(null);
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState<{ routerId: string; type: string } | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<any>(null);
+  
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -83,6 +104,7 @@ export default function MikroTikManagement() {
       auto_disable_expired: true,
     });
     setEditingRouter(null);
+    setTestResult(null);
   };
 
   const handleEdit = (router: MikroTikRouter) => {
@@ -92,12 +114,13 @@ export default function MikroTikManagement() {
       ip_address: router.ip_address,
       port: router.port.toString(),
       username: router.username,
-      password: '', // Don't show existing password
+      password: '',
       is_primary: router.is_primary,
       sync_pppoe: router.sync_pppoe,
       sync_queues: router.sync_queues,
       auto_disable_expired: router.auto_disable_expired,
     });
+    setTestResult(null);
     setShowDialog(true);
   };
 
@@ -117,9 +140,8 @@ export default function MikroTikManagement() {
         auto_disable_expired: formData.auto_disable_expired,
       };
 
-      // Only include password if provided
       if (formData.password) {
-        data.password_encrypted = formData.password; // In production, encrypt this
+        data.password_encrypted = formData.password;
       }
 
       if (editingRouter) {
@@ -150,21 +172,138 @@ export default function MikroTikManagement() {
     }
   };
 
-  const handleSync = async (routerId: string) => {
-    setSyncing(routerId);
+  const handleTestConnection = async () => {
+    if (!formData.ip_address || !formData.username) {
+      toast.error('Please enter IP address and username');
+      return;
+    }
+
+    setTesting('dialog');
+    setTestResult(null);
+    
     try {
-      const router = routers.find(r => r.id === routerId);
-      if (!router) throw new Error('Router not found');
+      const mikrotik = {
+        ip: formData.ip_address,
+        port: parseInt(formData.port) || 8728,
+        username: formData.username,
+        password: formData.password || editingRouter?.password_encrypted || '',
+      };
 
-      // Fetch all customers linked to this MikroTik
-      const { data: customers, error: custError } = await supabase
-        .from('customers')
-        .select('id, name, pppoe_username, pppoe_password, status, expiry_date')
-        .eq('mikrotik_id', routerId);
+      if (!vpsUrl) {
+        toast.error('VPS URL not configured');
+        setTestResult({ success: false, error: 'VPS URL not configured in settings' });
+        return;
+      }
 
-      if (custError) throw custError;
+      const response = await fetch(`${vpsUrl}/api/test-mikrotik`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mikrotik }),
+      });
 
-      // Update last_synced timestamp
+      const result = await response.json();
+      setTestResult(result);
+      
+      if (result.success) {
+        toast.success(`Connection successful! Version: ${result.connection?.version}`);
+      } else {
+        toast.error(result.error || 'Connection failed');
+      }
+    } catch (err: any) {
+      console.error('Test connection error:', err);
+      setTestResult({ success: false, error: err.message });
+      toast.error('Failed to test connection');
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleTestRouter = async (router: MikroTikRouter) => {
+    setTesting(router.id);
+    
+    try {
+      if (!vpsUrl) {
+        toast.error('VPS URL not configured');
+        return;
+      }
+
+      const mikrotik = {
+        ip: router.ip_address,
+        port: router.port,
+        username: router.username,
+        password: router.password_encrypted,
+      };
+
+      const response = await fetch(`${vpsUrl}/api/test-mikrotik`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mikrotik }),
+      });
+
+      const result = await response.json();
+      
+      // Update router status
+      await supabase
+        .from('mikrotik_routers')
+        .update({ 
+          status: result.success ? 'online' : 'offline',
+          last_synced: result.success ? new Date().toISOString() : undefined
+        })
+        .eq('id', router.id);
+
+      fetchRouters();
+      
+      if (result.success) {
+        toast.success(`${router.name}: Online - v${result.connection?.version}`);
+      } else {
+        toast.error(`${router.name}: ${result.error || 'Connection failed'}`);
+      }
+    } catch (err: any) {
+      toast.error(`Test failed: ${err.message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleSync = async (routerId: string, syncType: 'pppoe' | 'queues' | 'full') => {
+    const router = routers.find(r => r.id === routerId);
+    if (!router) return;
+
+    setSyncing({ routerId, type: syncType });
+    
+    try {
+      if (!vpsUrl) {
+        toast.error('VPS URL not configured');
+        return;
+      }
+
+      const mikrotik = {
+        ip: router.ip_address,
+        port: router.port,
+        username: router.username,
+        password: router.password_encrypted,
+      };
+
+      // First test connection and get data
+      const response = await fetch(`${vpsUrl}/api/test-mikrotik`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mikrotik }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        await supabase
+          .from('mikrotik_routers')
+          .update({ status: 'offline' })
+          .eq('id', routerId);
+        fetchRouters();
+        toast.error(result.error || 'Connection failed');
+        return;
+      }
+
+      // Update router status
       await supabase
         .from('mikrotik_routers')
         .update({ 
@@ -173,22 +312,42 @@ export default function MikroTikManagement() {
         })
         .eq('id', routerId);
 
-      const activeCount = customers?.filter(c => c.status === 'active').length || 0;
-      const expiredCount = customers?.filter(c => c.status === 'expired').length || 0;
+      const data = result.data;
+      let message = '';
 
-      toast.success(`Sync completed! ${activeCount} active, ${expiredCount} expired users found.`);
+      if (syncType === 'pppoe' || syncType === 'full') {
+        // Sync PPPoE users - update customers with matching usernames
+        if (data.secrets_count > 0) {
+          // Get existing customers for this router
+          const { data: customers } = await supabase
+            .from('customers')
+            .select('id, pppoe_username')
+            .eq('mikrotik_id', routerId);
+          
+          message += `${data.pppoe_count} active PPPoE sessions, ${data.secrets_count} secrets. `;
+        }
+      }
+
+      if (syncType === 'queues' || syncType === 'full') {
+        message += `Queues synced. `;
+      }
+
+      if (syncType === 'full') {
+        message = `Full sync: ${data.pppoe_count} PPPoE, ${data.secrets_count} secrets, ${data.arp_count} ARP, ${data.dhcp_count} DHCP`;
+      }
+
       fetchRouters();
+      toast.success(message || `${syncType} sync completed!`);
     } catch (err: any) {
       console.error('Sync error:', err);
-      toast.error(err.message || 'Sync failed');
       
-      // Mark router as offline on error
       await supabase
         .from('mikrotik_routers')
         .update({ status: 'offline' })
         .eq('id', routerId);
       
       fetchRouters();
+      toast.error(err.message || 'Sync failed');
     } finally {
       setSyncing(null);
     }
@@ -223,21 +382,31 @@ export default function MikroTikManagement() {
     }
   };
 
+  // Filtered routers
+  const filteredRouters = routers.filter(router => {
+    const matchesSearch = !searchQuery || 
+      router.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      router.ip_address.includes(searchQuery);
+    const matchesStatus = statusFilter === 'all' || router.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
   return (
     <DashboardLayout
       title="MikroTik Management"
       subtitle="Manage MikroTik routers and PPPoE automation"
     >
       {/* Info Card */}
-      <Card className="mb-6 border-blue-500/20 bg-blue-500/5">
+      <Card className="mb-6 border-primary/20 bg-primary/5">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <Router className="h-5 w-5 text-blue-500 mt-0.5" />
+            <Router className="h-5 w-5 text-primary mt-0.5" />
             <div>
               <h4 className="font-medium">MikroTik Integration</h4>
               <p className="text-sm text-muted-foreground">
                 Add your MikroTik routers to enable automatic PPPoE user management. 
-                When a customer expires, their PPPoE connection can be automatically disabled.
+                When a customer is added, their PPPoE account is auto-created on MikroTik.
+                Expired customers can be automatically disabled.
               </p>
             </div>
           </div>
@@ -245,20 +414,42 @@ export default function MikroTikManagement() {
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Router className="h-5 w-5" />
-            MikroTik Routers
-          </CardTitle>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={fetchRouters}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-            <Button onClick={() => { resetForm(); setShowDialog(true); }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Router
-            </Button>
+        <CardHeader>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <CardTitle className="flex items-center gap-2">
+              <Router className="h-5 w-5" />
+              MikroTik Routers
+            </CardTitle>
+            <div className="flex flex-wrap gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search routers..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 w-[180px]"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="online">Online</SelectItem>
+                  <SelectItem value="offline">Offline</SelectItem>
+                  <SelectItem value="unknown">Unknown</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={fetchRouters}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+              <Button onClick={() => { resetForm(); setShowDialog(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Router
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -282,18 +473,24 @@ export default function MikroTikManagement() {
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
-                ) : routers.length === 0 ? (
+                ) : filteredRouters.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      No routers configured. Add your first MikroTik router.
+                      {routers.length === 0 
+                        ? 'No routers configured. Add your first MikroTik router.'
+                        : 'No routers match your search criteria.'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  routers.map((router) => (
+                  filteredRouters.map((router) => (
                     <TableRow key={router.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {getStatusIcon(router.status)}
+                          {testing === router.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            getStatusIcon(router.status)
+                          )}
                           <Badge variant={router.status === 'online' ? 'default' : 'secondary'}>
                             {router.status}
                           </Badge>
@@ -322,24 +519,90 @@ export default function MikroTikManagement() {
                           : 'Never'}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleSync(router.id)}
-                          disabled={syncing === router.id}
-                        >
-                          {syncing === router.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(router)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(router)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Sync Dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                disabled={syncing?.routerId === router.id}
+                              >
+                                {syncing?.routerId === router.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                                <span className="ml-1 hidden sm:inline">Sync</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Sync Options</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                onClick={() => handleSync(router.id, 'pppoe')}
+                                disabled={syncing !== null}
+                              >
+                                <Users className="h-4 w-4 mr-2" />
+                                PPPoE Users Sync
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleSync(router.id, 'queues')}
+                                disabled={syncing !== null}
+                              >
+                                <ListOrdered className="h-4 w-4 mr-2" />
+                                Queues Sync
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                onClick={() => handleSync(router.id, 'full')}
+                                disabled={syncing !== null}
+                                className="text-primary"
+                              >
+                                <Zap className="h-4 w-4 mr-2" />
+                                Full MikroTik Sync
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+
+                          {/* Test Connection */}
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleTestRouter(router)}
+                            disabled={testing === router.id}
+                            title="Test Connection"
+                          >
+                            {testing === router.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Network className="h-4 w-4" />
+                            )}
+                          </Button>
+
+                          {/* More Actions */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleEdit(router)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit Router
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                onClick={() => setDeleteConfirm(router)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Router
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -410,6 +673,68 @@ export default function MikroTikManagement() {
               </div>
             </div>
 
+            {/* Test Connection Button */}
+            <div className="flex items-center gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handleTestConnection}
+                disabled={testing === 'dialog' || !formData.ip_address || !formData.username}
+              >
+                {testing === 'dialog' ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Network className="h-4 w-4 mr-2" />
+                )}
+                Test Connection
+              </Button>
+              {testResult && (
+                <div className="flex items-center gap-2">
+                  {testResult.success ? (
+                    <>
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span className="text-sm text-green-600">
+                        Connected (v{testResult.connection?.version})
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-4 w-4 text-red-500" />
+                      <span className="text-sm text-red-600 truncate max-w-[200px]">
+                        {testResult.error}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Test Result Details */}
+            {testResult?.success && testResult.data && (
+              <Card className="bg-green-500/5 border-green-500/20">
+                <CardContent className="p-3">
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">PPPoE Sessions:</span>
+                      <span className="ml-2 font-medium">{testResult.data.pppoe_count}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">PPP Secrets:</span>
+                      <span className="ml-2 font-medium">{testResult.data.secrets_count}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">ARP Entries:</span>
+                      <span className="ml-2 font-medium">{testResult.data.arp_count}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">DHCP Leases:</span>
+                      <span className="ml-2 font-medium">{testResult.data.dhcp_count}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="space-y-4 pt-4 border-t">
               <div className="flex items-center justify-between">
                 <div>
@@ -467,12 +792,13 @@ export default function MikroTikManagement() {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Router</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deleteConfirm?.name}"? This action cannot be undone.
+              Customers linked to this router will be unlinked.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

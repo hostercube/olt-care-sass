@@ -1672,6 +1672,526 @@ export async function bulkTagPPPSecrets(mikrotik, onus, options = {}) {
   };
 }
 
+// ============= PPPoE USER MANAGEMENT FUNCTIONS =============
+
+/**
+ * Create a new PPP Secret on MikroTik
+ */
+export async function createPPPSecret(mikrotik, userConfig) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return { success: false, error: 'Missing MikroTik credentials' };
+  }
+
+  const { name, password, profile = 'default', comment = '', callerId = '' } = userConfig;
+
+  if (!name || !password) {
+    return { success: false, error: 'Username and password required' };
+  }
+
+  try {
+    const connectionInfo = await detectRouterOSVersion(mikrotik);
+    logger.info(`Creating PPP secret ${name} via ${connectionInfo.method} API`);
+
+    if (connectionInfo.method === 'rest') {
+      return await createPPPSecretREST(mikrotik, { name, password, profile, comment, callerId }, connectionInfo);
+    } else {
+      return await createPPPSecretPlain(mikrotik, { name, password, profile, comment, callerId }, connectionInfo);
+    }
+  } catch (error) {
+    logger.error(`Failed to create PPP secret ${name}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+async function createPPPSecretREST(mikrotik, userConfig, connectionInfo) {
+  const { ip, username, password } = mikrotik;
+  const { port, protocol } = connectionInfo;
+
+  const url = `${protocol}://${ip}:${port}/rest/ppp/secret`;
+  const auth = Buffer.from(`${username}:${password}`).toString('base64');
+
+  const body = {
+    name: userConfig.name,
+    password: userConfig.password,
+    profile: userConfig.profile,
+    service: 'pppoe',
+  };
+  if (userConfig.comment) body.comment = userConfig.comment;
+  if (userConfig.callerId) body['caller-id'] = userConfig.callerId;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MIKROTIK_TIMEOUT);
+
+  try {
+    const options = {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    };
+
+    if (protocol === 'https') {
+      const https = await import('https');
+      options.agent = new https.Agent({ rejectUnauthorized: false });
+    }
+
+    const response = await fetch(url, options);
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}: ${errorBody}`);
+    }
+
+    logger.info(`PPP secret ${userConfig.name} created successfully via REST`);
+    return { success: true };
+  } catch (error) {
+    clearTimeout(timeout);
+    throw error;
+  }
+}
+
+async function createPPPSecretPlain(mikrotik, userConfig, connectionInfo) {
+  const net = await import('net');
+  const { ip, username, password } = mikrotik;
+  const port = connectionInfo?.port || mikrotik.port || 8728;
+
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let buffer = Buffer.alloc(0);
+    let loginComplete = false;
+
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error('MikroTik API timeout'));
+    }, MIKROTIK_TIMEOUT);
+
+    socket.connect(port, ip, () => {
+      sendPlainCommand(socket, ['/login', `=name=${username}`, `=password=${password}`]);
+    });
+
+    socket.on('data', (data) => {
+      buffer = Buffer.concat([buffer, data]);
+
+      while (buffer.length > 0) {
+        const parsed = parsePlainSentence(buffer);
+        if (!parsed) break;
+
+        const { sentence, bytesRead } = parsed;
+        buffer = buffer.slice(bytesRead);
+
+        if (sentence.length === 0) continue;
+
+        const reply = sentence[0];
+
+        if (reply === '!done') {
+          if (!loginComplete) {
+            loginComplete = true;
+            const cmd = [
+              '/ppp/secret/add',
+              `=name=${userConfig.name}`,
+              `=password=${userConfig.password}`,
+              `=profile=${userConfig.profile}`,
+              `=service=pppoe`,
+            ];
+            if (userConfig.comment) cmd.push(`=comment=${userConfig.comment}`);
+            if (userConfig.callerId) cmd.push(`=caller-id=${userConfig.callerId}`);
+            sendPlainCommand(socket, cmd);
+          } else {
+            clearTimeout(timeout);
+            socket.end();
+            logger.info(`PPP secret ${userConfig.name} created successfully via Plain API`);
+            resolve({ success: true });
+          }
+        } else if (reply === '!trap') {
+          const errorMsg = sentence.find(s => s.startsWith('=message='));
+          clearTimeout(timeout);
+          socket.destroy();
+          reject(new Error(errorMsg ? errorMsg.substring(9) : 'Unknown MikroTik error'));
+        } else if (reply === '!fatal') {
+          clearTimeout(timeout);
+          socket.destroy();
+          reject(new Error('MikroTik API fatal error'));
+        }
+      }
+    });
+
+    socket.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Toggle PPP Secret enabled/disabled state
+ */
+export async function togglePPPSecret(mikrotik, username, disabled) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return { success: false, error: 'Missing MikroTik credentials' };
+  }
+
+  try {
+    // First find the secret ID
+    const secrets = await fetchPPPSecretsWithIds(mikrotik);
+    const secret = secrets.find(s => s.pppoe_username?.toLowerCase() === username?.toLowerCase());
+    
+    if (!secret) {
+      return { success: false, error: `PPP secret ${username} not found` };
+    }
+
+    const connectionInfo = await detectRouterOSVersion(mikrotik);
+    logger.info(`${disabled ? 'Disabling' : 'Enabling'} PPP secret ${username} via ${connectionInfo.method} API`);
+
+    if (connectionInfo.method === 'rest') {
+      return await togglePPPSecretREST(mikrotik, secret.id, disabled, connectionInfo);
+    } else {
+      return await togglePPPSecretPlain(mikrotik, secret.id, disabled, connectionInfo);
+    }
+  } catch (error) {
+    logger.error(`Failed to toggle PPP secret ${username}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+async function togglePPPSecretREST(mikrotik, secretId, disabled, connectionInfo) {
+  const { ip, username, password } = mikrotik;
+  const { port, protocol } = connectionInfo;
+
+  const url = `${protocol}://${ip}:${port}/rest/ppp/secret/${encodeURIComponent(secretId)}`;
+  const auth = Buffer.from(`${username}:${password}`).toString('base64');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MIKROTIK_TIMEOUT);
+
+  try {
+    const options = {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ disabled: disabled ? 'yes' : 'no' }),
+      signal: controller.signal,
+    };
+
+    if (protocol === 'https') {
+      const https = await import('https');
+      options.agent = new https.Agent({ rejectUnauthorized: false });
+    }
+
+    const response = await fetch(url, options);
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    clearTimeout(timeout);
+    throw error;
+  }
+}
+
+async function togglePPPSecretPlain(mikrotik, secretId, disabled, connectionInfo) {
+  const net = await import('net');
+  const { ip, username, password } = mikrotik;
+  const port = connectionInfo?.port || mikrotik.port || 8728;
+
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let buffer = Buffer.alloc(0);
+    let loginComplete = false;
+
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error('MikroTik API timeout'));
+    }, MIKROTIK_TIMEOUT);
+
+    socket.connect(port, ip, () => {
+      sendPlainCommand(socket, ['/login', `=name=${username}`, `=password=${password}`]);
+    });
+
+    socket.on('data', (data) => {
+      buffer = Buffer.concat([buffer, data]);
+
+      while (buffer.length > 0) {
+        const parsed = parsePlainSentence(buffer);
+        if (!parsed) break;
+
+        const { sentence, bytesRead } = parsed;
+        buffer = buffer.slice(bytesRead);
+
+        if (sentence.length === 0) continue;
+
+        const reply = sentence[0];
+
+        if (reply === '!done') {
+          if (!loginComplete) {
+            loginComplete = true;
+            sendPlainCommand(socket, ['/ppp/secret/set', `=.id=${secretId}`, `=disabled=${disabled ? 'yes' : 'no'}`]);
+          } else {
+            clearTimeout(timeout);
+            socket.end();
+            resolve({ success: true });
+          }
+        } else if (reply === '!trap') {
+          clearTimeout(timeout);
+          socket.destroy();
+          reject(new Error('MikroTik API error'));
+        }
+      }
+    });
+
+    socket.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Delete PPP Secret from MikroTik
+ */
+export async function deletePPPSecret(mikrotik, username) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return { success: false, error: 'Missing MikroTik credentials' };
+  }
+
+  try {
+    const secrets = await fetchPPPSecretsWithIds(mikrotik);
+    const secret = secrets.find(s => s.pppoe_username?.toLowerCase() === username?.toLowerCase());
+    
+    if (!secret) {
+      return { success: false, error: `PPP secret ${username} not found` };
+    }
+
+    const connectionInfo = await detectRouterOSVersion(mikrotik);
+    logger.info(`Deleting PPP secret ${username} via ${connectionInfo.method} API`);
+
+    if (connectionInfo.method === 'rest') {
+      return await deletePPPSecretREST(mikrotik, secret.id, connectionInfo);
+    } else {
+      return await deletePPPSecretPlain(mikrotik, secret.id, connectionInfo);
+    }
+  } catch (error) {
+    logger.error(`Failed to delete PPP secret ${username}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+async function deletePPPSecretREST(mikrotik, secretId, connectionInfo) {
+  const { ip, username, password } = mikrotik;
+  const { port, protocol } = connectionInfo;
+
+  const url = `${protocol}://${ip}:${port}/rest/ppp/secret/${encodeURIComponent(secretId)}`;
+  const auth = Buffer.from(`${username}:${password}`).toString('base64');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MIKROTIK_TIMEOUT);
+
+  try {
+    const options = {
+      method: 'DELETE',
+      headers: { 'Authorization': `Basic ${auth}` },
+      signal: controller.signal,
+    };
+
+    if (protocol === 'https') {
+      const https = await import('https');
+      options.agent = new https.Agent({ rejectUnauthorized: false });
+    }
+
+    const response = await fetch(url, options);
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    clearTimeout(timeout);
+    throw error;
+  }
+}
+
+async function deletePPPSecretPlain(mikrotik, secretId, connectionInfo) {
+  const net = await import('net');
+  const { ip, username, password } = mikrotik;
+  const port = connectionInfo?.port || mikrotik.port || 8728;
+
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let buffer = Buffer.alloc(0);
+    let loginComplete = false;
+
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error('MikroTik API timeout'));
+    }, MIKROTIK_TIMEOUT);
+
+    socket.connect(port, ip, () => {
+      sendPlainCommand(socket, ['/login', `=name=${username}`, `=password=${password}`]);
+    });
+
+    socket.on('data', (data) => {
+      buffer = Buffer.concat([buffer, data]);
+
+      while (buffer.length > 0) {
+        const parsed = parsePlainSentence(buffer);
+        if (!parsed) break;
+
+        const { sentence, bytesRead } = parsed;
+        buffer = buffer.slice(bytesRead);
+
+        if (sentence.length === 0) continue;
+
+        const reply = sentence[0];
+
+        if (reply === '!done') {
+          if (!loginComplete) {
+            loginComplete = true;
+            sendPlainCommand(socket, ['/ppp/secret/remove', `=.id=${secretId}`]);
+          } else {
+            clearTimeout(timeout);
+            socket.end();
+            resolve({ success: true });
+          }
+        } else if (reply === '!trap') {
+          clearTimeout(timeout);
+          socket.destroy();
+          reject(new Error('MikroTik API error'));
+        }
+      }
+    });
+
+    socket.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Get PPPoE session status for a specific user
+ */
+export async function getPPPoESessionStatus(mikrotik, username) {
+  const sessions = await fetchMikroTikPPPoE(mikrotik);
+  const session = sessions.find(s => s.pppoe_username?.toLowerCase() === username?.toLowerCase());
+  
+  if (session) {
+    return {
+      isOnline: true,
+      uptime: session.uptime,
+      address: session.ip_address,
+      callerId: session.raw_caller_id,
+    };
+  }
+  
+  return { isOnline: false };
+}
+
+/**
+ * Get live bandwidth for a PPPoE user (from active session or queue)
+ */
+export async function getPPPoEBandwidth(mikrotik, username) {
+  try {
+    // Try to get from active session first
+    const sessions = await callMikroTikAPI(mikrotik, '/ppp/active/print');
+    const session = sessions.find(s => (s.name || s.user)?.toLowerCase() === username?.toLowerCase());
+    
+    if (session) {
+      return {
+        isOnline: true,
+        uptime: session.uptime,
+        rxBytes: parseInt(session['rx-bytes'] || 0),
+        txBytes: parseInt(session['tx-bytes'] || 0),
+        rxPackets: parseInt(session['rx-packets'] || 0),
+        txPackets: parseInt(session['tx-packets'] || 0),
+      };
+    }
+    
+    return { isOnline: false };
+  } catch (error) {
+    logger.error(`Failed to get bandwidth for ${username}:`, error.message);
+    return { isOnline: false, error: error.message };
+  }
+}
+
+/**
+ * Disconnect active PPPoE session
+ */
+export async function disconnectPPPoESession(mikrotik, username) {
+  try {
+    const sessions = await callMikroTikAPI(mikrotik, '/ppp/active/print');
+    const session = sessions.find(s => (s.name || s.user)?.toLowerCase() === username?.toLowerCase());
+    
+    if (!session) {
+      return { success: false, error: 'Session not found' };
+    }
+
+    const sessionId = session['.id'];
+    const connectionInfo = await detectRouterOSVersion(mikrotik);
+
+    if (connectionInfo.method === 'rest') {
+      const { ip, username: user, password } = mikrotik;
+      const { port, protocol } = connectionInfo;
+      const url = `${protocol}://${ip}:${port}/rest/ppp/active/${encodeURIComponent(sessionId)}`;
+      const auth = Buffer.from(`${user}:${password}`).toString('base64');
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Basic ${auth}` },
+      });
+
+      return { success: response.ok };
+    } else {
+      // Plain API disconnect
+      const net = await import('net');
+      const port = connectionInfo?.port || mikrotik.port || 8728;
+
+      return new Promise((resolve) => {
+        const socket = new net.Socket();
+        let loginComplete = false;
+        let buffer = Buffer.alloc(0);
+
+        socket.connect(port, mikrotik.ip, () => {
+          sendPlainCommand(socket, ['/login', `=name=${mikrotik.username}`, `=password=${mikrotik.password}`]);
+        });
+
+        socket.on('data', (data) => {
+          buffer = Buffer.concat([buffer, data]);
+          const parsed = parsePlainSentence(buffer);
+          if (parsed) {
+            buffer = buffer.slice(parsed.bytesRead);
+            if (parsed.sentence[0] === '!done') {
+              if (!loginComplete) {
+                loginComplete = true;
+                sendPlainCommand(socket, ['/ppp/active/remove', `=.id=${sessionId}`]);
+              } else {
+                socket.end();
+                resolve({ success: true });
+              }
+            }
+          }
+        });
+
+        socket.on('error', () => resolve({ success: false }));
+        setTimeout(() => { socket.destroy(); resolve({ success: false }); }, 10000);
+      });
+    }
+  } catch (error) {
+    logger.error(`Failed to disconnect session for ${username}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
 /**
  * Test MikroTik connection
  */
