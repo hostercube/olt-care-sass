@@ -4,15 +4,16 @@ import { cn } from '@/lib/utils';
 import {
   Activity,
   Bell,
+  Box,
   Building2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   ClipboardList,
-  Cog,
   CreditCard,
   Database,
+  DollarSign,
   FileText,
   LayoutDashboard,
   Mail,
@@ -24,7 +25,9 @@ import {
   Router,
   Server,
   Settings,
+  Shield,
   Terminal,
+  UserCheck,
   Users,
   Wallet,
   Wifi,
@@ -47,6 +50,7 @@ interface NavItem {
   requiredModule?: ModuleName;
 }
 
+// OLT Care - Network monitoring items
 const oltCareItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'OLT Management', href: '/olts', icon: Server },
@@ -55,36 +59,48 @@ const oltCareItems: NavItem[] = [
   { title: 'Monitoring', href: '/monitoring', icon: Activity },
 ];
 
-const ispModuleItems: NavItem[] = [
+// ISP Management - Core business operations
+const ispCoreItems: NavItem[] = [
   { title: 'ISP Dashboard', href: '/isp', icon: LayoutDashboard },
   { title: 'Customers', href: '/isp/customers', icon: Users, requiredModule: 'isp_customers' },
-  { title: 'Billing', href: '/isp/billing', icon: Receipt, requiredModule: 'isp_billing' },
-  { title: 'Automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
   { title: 'Packages', href: '/isp/packages', icon: Package },
   { title: 'Areas', href: '/isp/areas', icon: MapPin },
-  { title: 'Resellers', href: '/isp/resellers', icon: Users, requiredModule: 'isp_resellers' },
+  { title: 'Resellers', href: '/isp/resellers', icon: UserCheck, requiredModule: 'isp_resellers' },
+];
+
+// Billing & Payments - Financial operations
+const ispBillingItems: NavItem[] = [
+  { title: 'Billing', href: '/isp/billing', icon: Receipt, requiredModule: 'isp_billing' },
+  { title: 'Automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
+  { title: 'bKash Payments', href: '/isp/bkash', icon: Wallet },
+  { title: 'Payment Gateways', href: '/isp/gateways', icon: CreditCard },
+  { title: 'Income/Expense', href: '/isp/transactions', icon: DollarSign },
+];
+
+// Network & Integration
+const ispNetworkItems: NavItem[] = [
   { title: 'MikroTik', href: '/isp/mikrotik', icon: Wifi, requiredModule: 'isp_mikrotik' },
   { title: 'SMS Center', href: '/isp/sms', icon: MessageSquare, requiredModule: 'sms_alerts' },
-  { title: 'bKash Payments', href: '/isp/bkash', icon: Wallet },
-  { title: 'Gateways', href: '/isp/gateways', icon: CreditCard },
-  { title: 'Inventory', href: '/isp/inventory', icon: Package, requiredModule: 'isp_inventory' },
-  { title: 'Staff & Salary', href: '/isp/staff', icon: Users },
-  { title: 'Income/Expense', href: '/isp/transactions', icon: CreditCard },
-  { title: 'Reports', href: '/isp/reports', icon: FileText },
   { title: 'Custom Domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
 ];
 
+// Operations - Staff & Inventory
+const ispOperationsItems: NavItem[] = [
+  { title: 'Staff & Salary', href: '/isp/staff', icon: Users },
+  { title: 'Inventory', href: '/isp/inventory', icon: Box, requiredModule: 'isp_inventory' },
+  { title: 'Reports', href: '/isp/reports', icon: FileText },
+];
+
+// System Settings - Admin controls
 const tenantSystemItems: NavItem[] = [
-  { title: 'DB Integrity', href: '/integrity', icon: Database },
-  { title: 'Debug Logs', href: '/debug', icon: Terminal },
-  { title: 'User Management', href: '/users', icon: Users, adminOnly: true },
-  { title: 'Notification Settings', href: '/notifications', icon: Bell },
-  { title: 'Notification History', href: '/notifications/history', icon: ClipboardList },
+  { title: 'User Management', href: '/users', icon: Shield, adminOnly: true },
   { title: 'Activity Logs', href: '/activity-logs', icon: ClipboardList },
-  { title: 'Invoices', href: '/invoices', icon: FileText },
+  { title: 'Notifications', href: '/notifications', icon: Bell },
+  { title: 'DB Integrity', href: '/integrity', icon: Database },
   { title: 'Settings', href: '/settings', icon: Settings },
 ];
 
+// Super Admin items
 const superAdminItems: NavItem[] = [
   { title: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { title: 'Tenants', href: '/admin/tenants', icon: Building2 },
@@ -99,6 +115,7 @@ const superAdminItems: NavItem[] = [
   { title: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
+// Subscription & Billing for tenants
 const tenantBillingItems: NavItem[] = [
   { title: 'My Subscription', href: '/billing/subscription', icon: FileText },
   { title: 'Make Payment', href: '/billing/pay', icon: CreditCard },
@@ -121,6 +138,9 @@ function readImpersonation(): { tenantId: string; tenantName?: string } | null {
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [ispExpanded, setIspExpanded] = useState(true);
+  const [billingExpanded, setBillingExpanded] = useState(false);
+  const [networkExpanded, setNetworkExpanded] = useState(false);
+  const [operationsExpanded, setOperationsExpanded] = useState(false);
   const [systemExpanded, setSystemExpanded] = useState(false);
   const [impersonation, setImpersonation] = useState<{ tenantId: string; tenantName?: string } | null>(null);
 
@@ -142,9 +162,19 @@ export function Sidebar() {
   const inTenantView = isSuperAdmin && (isImpersonating || !!impersonation);
   const showSuperAdminNav = isSuperAdmin && !inTenantView;
 
-  // Auto-expand ISP section when on ISP routes (tenant view only)
+  // Auto-expand sections when on relevant routes
   useEffect(() => {
-    if (location.pathname.startsWith('/isp')) setIspExpanded(true);
+    if (location.pathname.startsWith('/isp')) {
+      if (location.pathname.includes('/billing') || location.pathname.includes('/bkash') || location.pathname.includes('/gateways') || location.pathname.includes('/transactions') || location.pathname.includes('/automation')) {
+        setBillingExpanded(true);
+      } else if (location.pathname.includes('/mikrotik') || location.pathname.includes('/sms') || location.pathname.includes('/domain')) {
+        setNetworkExpanded(true);
+      } else if (location.pathname.includes('/staff') || location.pathname.includes('/inventory') || location.pathname.includes('/reports')) {
+        setOperationsExpanded(true);
+      } else {
+        setIspExpanded(true);
+      }
+    }
   }, [location.pathname]);
 
   const filteredTenantSystemItems = useMemo(
@@ -152,16 +182,18 @@ export function Sidebar() {
     [isAdmin],
   );
 
-  const filteredIspItems = useMemo(
-    () =>
-      ispModuleItems.filter((item) => {
-        // When super admin is impersonating, show only package-enabled modules.
-        if (isSuperAdmin && !inTenantView) return true;
-        if (!item.requiredModule) return true;
-        return hasAccess(item.requiredModule);
-      }),
-    [hasAccess, inTenantView, isSuperAdmin],
-  );
+  const filterByModule = (items: NavItem[]) => {
+    return items.filter((item) => {
+      if (isSuperAdmin && !inTenantView) return true;
+      if (!item.requiredModule) return true;
+      return hasAccess(item.requiredModule);
+    });
+  };
+
+  const filteredIspCoreItems = useMemo(() => filterByModule(ispCoreItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredBillingItems = useMemo(() => filterByModule(ispBillingItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredNetworkItems = useMemo(() => filterByModule(ispNetworkItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredOperationsItems = useMemo(() => filterByModule(ispOperationsItems), [hasAccess, inTenantView, isSuperAdmin]);
 
   const renderNavItem = (item: NavItem) => {
     const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
@@ -266,10 +298,28 @@ export function Sidebar() {
             )}
             <div className="flex flex-col gap-0.5">{oltCareItems.map(renderNavItem)}</div>
 
-            {renderSection('ISP Management', filteredIspItems, {
+            {renderSection('ISP Management', filteredIspCoreItems, {
               collapsible: true,
               expanded: ispExpanded,
               onToggle: () => setIspExpanded((v) => !v),
+            })}
+
+            {filteredBillingItems.length > 0 && renderSection('Billing & Payments', filteredBillingItems, {
+              collapsible: true,
+              expanded: billingExpanded,
+              onToggle: () => setBillingExpanded((v) => !v),
+            })}
+
+            {filteredNetworkItems.length > 0 && renderSection('Network & Integration', filteredNetworkItems, {
+              collapsible: true,
+              expanded: networkExpanded,
+              onToggle: () => setNetworkExpanded((v) => !v),
+            })}
+
+            {filteredOperationsItems.length > 0 && renderSection('Operations', filteredOperationsItems, {
+              collapsible: true,
+              expanded: operationsExpanded,
+              onToggle: () => setOperationsExpanded((v) => !v),
             })}
 
             {renderSection('System', filteredTenantSystemItems, {
