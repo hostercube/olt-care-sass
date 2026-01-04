@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,15 +13,27 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePayments } from '@/hooks/usePayments';
 import { useInvoices } from '@/hooks/useInvoices';
-import { CreditCard, Search, CheckCircle, XCircle, Clock, Eye, FileText, DollarSign, Trash2, Ban, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { downloadInvoicePDF } from '@/lib/invoice-pdf';
+import { PaginationControls, useTablePagination } from '@/components/common/TableWithPagination';
+import { CreditCard, Search, CheckCircle, XCircle, Clock, Eye, FileText, DollarSign, Trash2, Ban, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { format } from 'date-fns';
-import type { PaymentStatus, Payment } from '@/types/saas';
+import type { PaymentStatus, Payment, Invoice } from '@/types/saas';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export default function PaymentManagement() {
+  const navigate = useNavigate();
+  const { settings } = useSystemSettings();
+
   const { payments, loading: paymentsLoading, verifyPayment, rejectPayment, deletePayment } = usePayments();
-  const { invoices, loading: invoicesLoading } = useInvoices();
+  const {
+    invoices,
+    loading: invoicesLoading,
+    cancelInvoice,
+    deleteInvoice,
+  } = useInvoices();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
@@ -30,10 +43,18 @@ export default function PaymentManagement() {
   const [verifyNotes, setVerifyNotes] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Pagination state
+
+  // Payments pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Invoices pagination + filters
+  const invoiceTable = useTablePagination<Invoice>(
+    invoices,
+    10,
+    ['invoice_number', 'tenant.company_name', 'tenant.name', 'tenant.email', 'status'],
+  );
+  const invoiceStatusFilter = invoiceTable.filters.status || 'all';
 
   const getStatusBadge = (status: PaymentStatus) => {
     const config: Record<PaymentStatus, { variant: 'success' | 'warning' | 'danger' | 'default'; icon: any }> = {
@@ -183,6 +204,24 @@ export default function PaymentManagement() {
     </div>
   );
 
+  const handleViewInvoice = (invoice: Invoice) => {
+    navigate(`/invoices?view=${invoice.id}`);
+  };
+
+  const handleDownloadInvoice = (invoice: Invoice) => {
+    downloadInvoicePDF(invoice, settings);
+  };
+
+  const handleCancelInvoice = async (invoice: Invoice) => {
+    if (invoice.status !== 'unpaid' && invoice.status !== 'overdue') return;
+    if (!confirm(`Cancel invoice ${invoice.invoice_number}?`)) return;
+    await cancelInvoice(invoice.id);
+  };
+
+  const handleDeleteInvoice = async (invoice: Invoice) => {
+    if (!confirm(`Delete invoice ${invoice.invoice_number}? This cannot be undone.`)) return;
+    await deleteInvoice(invoice.id);
+  };
   return (
     <DashboardLayout title="Payment Management" subtitle="Verify payments and manage billing">
       <div className="space-y-6">
@@ -404,8 +443,36 @@ export default function PaymentManagement() {
           <TabsContent value="invoices">
             <Card>
               <CardHeader>
-                <CardTitle>Invoices</CardTitle>
-                <CardDescription>All generated invoices</CardDescription>
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <CardTitle>Invoices</CardTitle>
+                    <CardDescription>All generated invoices</CardDescription>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search invoices..."
+                        value={invoiceTable.searchQuery}
+                        onChange={(e) => invoiceTable.handleSearch(e.target.value)}
+                        className="pl-9 w-full sm:w-[260px]"
+                      />
+                    </div>
+
+                    <select
+                      value={invoiceStatusFilter}
+                      onChange={(e) => invoiceTable.handleFilterChange('status', e.target.value)}
+                      className="h-10 rounded-md border bg-background px-3 text-sm"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="unpaid">Unpaid</option>
+                      <option value="overdue">Overdue</option>
+                      <option value="paid">Paid</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -417,37 +484,86 @@ export default function PaymentManagement() {
                       <TableHead>Status</TableHead>
                       <TableHead>Due Date</TableHead>
                       <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {invoicesLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          Loading...
+                        </TableCell>
                       </TableRow>
-                    ) : invoices.length === 0 ? (
+                    ) : invoiceTable.filteredData.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           No invoices found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      invoices.map((invoice) => (
+                      invoiceTable.paginatedData.map((invoice) => (
                         <TableRow key={invoice.id}>
                           <TableCell className="font-mono">{invoice.invoice_number}</TableCell>
-                          <TableCell>{invoice.tenant?.company_name || invoice.tenant?.name || '-'}</TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{invoice.tenant?.company_name || invoice.tenant?.name || '-'}</p>
+                              <p className="text-xs text-muted-foreground">{invoice.tenant?.email}</p>
+                            </div>
+                          </TableCell>
                           <TableCell className="font-medium">৳{invoice.total_amount.toLocaleString()}</TableCell>
                           <TableCell>
-                            <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'overdue' ? 'danger' : 'warning'}>
+                            <Badge
+                              variant={
+                                invoice.status === 'paid'
+                                  ? 'success'
+                                  : invoice.status === 'overdue'
+                                    ? 'danger'
+                                    : invoice.status === 'cancelled'
+                                      ? 'outline'
+                                      : 'warning'
+                              }
+                            >
                               {invoice.status.toUpperCase()}
                             </Badge>
                           </TableCell>
                           <TableCell>{format(new Date(invoice.due_date), 'PP')}</TableCell>
                           <TableCell>{format(new Date(invoice.created_at), 'PP')}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="outline" className="gap-2" onClick={() => handleViewInvoice(invoice)}>
+                                <Eye className="h-4 w-4" />
+                                View
+                              </Button>
+                              <Button size="sm" variant="outline" className="gap-2" onClick={() => handleDownloadInvoice(invoice)}>
+                                <Download className="h-4 w-4" />
+                                PDF
+                              </Button>
+                              {(invoice.status === 'unpaid' || invoice.status === 'overdue') && (
+                                <Button size="sm" variant="outline" onClick={() => handleCancelInvoice(invoice)}>
+                                  Cancel
+                                </Button>
+                              )}
+                              <Button size="sm" variant="destructive" onClick={() => handleDeleteInvoice(invoice)}>
+                                Delete
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
+
+                <PaginationControls
+                  currentPage={invoiceTable.currentPage}
+                  totalPages={invoiceTable.totalPages}
+                  pageSize={invoiceTable.pageSize}
+                  totalItems={invoiceTable.totalItems}
+                  startIndex={invoiceTable.startIndex}
+                  endIndex={invoiceTable.endIndex}
+                  onPageChange={invoiceTable.goToPage}
+                  onPageSizeChange={invoiceTable.handlePageSizeChange}
+                />
               </CardContent>
             </Card>
           </TabsContent>

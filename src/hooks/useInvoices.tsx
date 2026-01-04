@@ -156,7 +156,7 @@ export function useInvoices(tenantId?: string) {
         .single();
 
       if (fetchError) throw fetchError;
-      
+
       if (!invoice) {
         throw new Error('Invoice not found');
       }
@@ -189,6 +189,28 @@ export function useInvoices(tenantId?: string) {
     }
   };
 
+  const deleteInvoice = async (id: string) => {
+    try {
+      const { error } = await supabase.from('invoices').delete().eq('id', id);
+      if (error) throw error;
+
+      toast({
+        title: 'Invoice Deleted',
+        description: 'The invoice has been deleted.',
+      });
+
+      await fetchInvoices();
+    } catch (error: any) {
+      console.error('Error deleting invoice:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete invoice',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
   return {
     invoices,
     loading,
@@ -196,5 +218,6 @@ export function useInvoices(tenantId?: string) {
     generateInvoice,
     markInvoicePaid,
     cancelInvoice,
+    deleteInvoice,
   };
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,10 +9,10 @@ interface TableWithPaginationProps<T> {
   columns: {
     key: string;
     header: string;
-    render?: (item: T) => React.ReactNode;
+    render?: (item: T) => ReactNode;
     searchable?: boolean;
   }[];
-  renderRow: (item: T, index: number) => React.ReactNode;
+  renderRow: (item: T, index: number) => ReactNode;
   pageSize?: number;
   searchPlaceholder?: string;
   filterOptions?: {
@@ -232,7 +232,7 @@ interface SearchAndFilterBarProps {
     options: { value: string; label: string }[];
     onChange: (value: string) => void;
   }[];
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
 export function SearchAndFilterBar({

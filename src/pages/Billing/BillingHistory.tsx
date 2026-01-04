@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { usePayments } from '@/hooks/usePayments';
 import { useInvoices } from '@/hooks/useInvoices';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { downloadInvoicePDF } from '@/lib/invoice-pdf';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { 
   FileText, Download, CreditCard, Calendar, Search, 
@@ -20,6 +22,7 @@ const ITEMS_PER_PAGE = 10;
 
 export default function BillingHistory() {
   const { tenantId, loading: tenantLoading } = useTenantContext();
+  const { settings } = useSystemSettings();
   const { payments, loading: paymentsLoading } = usePayments(tenantId || undefined);
   const { invoices, loading: invoicesLoading } = useInvoices(tenantId || undefined);
   const { subscriptions, loading: subscriptionsLoading } = useSubscriptions(tenantId || undefined);
@@ -292,7 +295,12 @@ export default function BillingHistory() {
                               <p className="font-bold text-lg">৳{invoice.total_amount.toLocaleString()}</p>
                               {getStatusBadge(invoice.status)}
                             </div>
-                            <Button variant="ghost" size="icon">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => downloadInvoicePDF(invoice, settings)}
+                              aria-label={`Download ${invoice.invoice_number} PDF`}
+                            >
                               <Download className="h-4 w-4" />
                             </Button>
                           </div>
