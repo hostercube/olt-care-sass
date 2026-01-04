@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -342,77 +342,109 @@ export default function Invoices() {
           </CardContent>
         </Card>
 
+        {/* Improved Invoice View Dialog */}
         <Dialog open={!!viewInvoice} onOpenChange={(open) => (!open ? closeViewInvoice() : undefined)}>
           <DialogContent className="max-w-2xl">
             {viewInvoice && (
               <>
-                <DialogHeader>
-                  <DialogTitle>Invoice {viewInvoice.invoice_number}</DialogTitle>
-                  <DialogDescription>
-                    {isSuperAdmin
-                      ? (viewInvoice.tenant?.company_name || viewInvoice.tenant?.name || '')
-                      : 'Invoice details and actions'}
-                  </DialogDescription>
+                <DialogHeader className="pb-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <DialogTitle className="text-xl font-bold">Invoice {viewInvoice.invoice_number}</DialogTitle>
+                      <DialogDescription className="mt-1">
+                        {isSuperAdmin
+                          ? (viewInvoice.tenant?.company_name || viewInvoice.tenant?.name || '')
+                          : 'Invoice details and payment options'}
+                      </DialogDescription>
+                    </div>
+                    <Badge 
+                      variant="outline" 
+                      className={`text-sm px-3 py-1 ${getStatusConfig(viewInvoice.status).color}`}
+                    >
+                      {React.createElement(getStatusConfig(viewInvoice.status).icon, { className: "h-4 w-4 mr-1.5" })}
+                      {getStatusConfig(viewInvoice.status).label}
+                    </Badge>
+                  </div>
                 </DialogHeader>
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-muted-foreground">Status</div>
-                    <Badge variant="outline">{viewInvoice.status.toUpperCase()}</Badge>
+                <div className="space-y-5 py-4">
+                  {/* Amount Summary */}
+                  <div className="bg-muted/50 rounded-lg p-4 text-center">
+                    <div className="text-sm text-muted-foreground mb-1">Total Amount</div>
+                    <div className="text-3xl font-bold text-primary">৳{viewInvoice.total_amount.toLocaleString()}</div>
                   </div>
 
-                  <Separator />
-
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <div className="text-muted-foreground">Created</div>
-                      <div className="font-medium">{format(new Date(viewInvoice.created_at), 'MMM d, yyyy')}</div>
+                  {/* Date Info */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-card border rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Created</div>
+                      <div className="font-medium mt-1">{format(new Date(viewInvoice.created_at), 'MMM d, yyyy')}</div>
                     </div>
-                    <div>
-                      <div className="text-muted-foreground">Due</div>
-                      <div className="font-medium">{format(new Date(viewInvoice.due_date), 'MMM d, yyyy')}</div>
+                    <div className="bg-card border rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Due Date</div>
+                      <div className="font-medium mt-1">{format(new Date(viewInvoice.due_date), 'MMM d, yyyy')}</div>
                     </div>
                   </div>
 
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Description</TableHead>
-                          <TableHead className="text-right">Qty</TableHead>
-                          <TableHead className="text-right">Unit</TableHead>
-                          <TableHead className="text-right">Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(viewInvoice.line_items || []).map((li, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell>{li.description}</TableCell>
-                            <TableCell className="text-right">{li.quantity}</TableCell>
-                            <TableCell className="text-right">৳{Number(li.unit_price).toLocaleString()}</TableCell>
-                            <TableCell className="text-right">৳{Number(li.total).toLocaleString()}</TableCell>
+                  {/* Line Items */}
+                  <div>
+                    <div className="text-sm font-medium mb-2">Items</div>
+                    <div className="rounded-lg border overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/50">
+                            <TableHead>Description</TableHead>
+                            <TableHead className="text-center w-20">Qty</TableHead>
+                            <TableHead className="text-right w-28">Unit Price</TableHead>
+                            <TableHead className="text-right w-28">Total</TableHead>
                           </TableRow>
-                        ))}
-                        <TableRow>
-                          <TableCell colSpan={3} className="text-right font-medium">Total</TableCell>
-                          <TableCell className="text-right font-bold">৳{viewInvoice.total_amount.toLocaleString()}</TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {(viewInvoice.line_items || []).map((li, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="font-medium">{li.description}</TableCell>
+                              <TableCell className="text-center">{li.quantity}</TableCell>
+                              <TableCell className="text-right">৳{Number(li.unit_price).toLocaleString()}</TableCell>
+                              <TableCell className="text-right font-medium">৳{Number(li.total).toLocaleString()}</TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="bg-muted/30 font-bold">
+                            <TableCell colSpan={3} className="text-right">Grand Total</TableCell>
+                            <TableCell className="text-right text-primary">৳{viewInvoice.total_amount.toLocaleString()}</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
+
+                  {viewInvoice.notes && (
+                    <div className="bg-muted/30 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Notes</div>
+                      <div className="text-sm">{viewInvoice.notes}</div>
+                    </div>
+                  )}
                 </div>
 
-                <DialogFooter className="gap-2">
+                <DialogFooter className="flex-col sm:flex-row gap-2 pt-4 border-t">
+                  {/* Cancel & Pay buttons for unpaid invoices */}
                   {!isSuperAdmin && (viewInvoice.status === 'unpaid' || viewInvoice.status === 'overdue') && (
-                    <>
-                      <Button variant="outline" onClick={() => handleCancelInvoice(viewInvoice)}>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => handleCancelInvoice(viewInvoice)}
+                        className="flex-1 sm:flex-initial gap-2"
+                      >
+                        <XCircle className="h-4 w-4" />
                         Cancel Invoice
                       </Button>
-                      <Button onClick={() => handlePayInvoice(viewInvoice)} className="gap-2">
+                      <Button 
+                        onClick={() => handlePayInvoice(viewInvoice)} 
+                        className="flex-1 sm:flex-initial gap-2"
+                      >
                         <CreditCard className="h-4 w-4" />
                         Pay Now
                       </Button>
-                    </>
+                    </div>
                   )}
 
                   <Button variant="outline" onClick={() => handleDownloadPDF(viewInvoice)} className="gap-2">
