@@ -74,18 +74,22 @@ export default function SuperAdminSettings() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('system_settings')
-        .select('*')
+        .select('value')
         .eq('key', 'platform_settings')
-        .single();
-      
+        .maybeSingle();
+
+      if (error) throw error;
+
       if (data?.value) {
         setSettings({ ...DEFAULT_SETTINGS, ...(data.value as any) });
+      } else {
+        setSettings(DEFAULT_SETTINGS);
       }
     } catch (error) {
-      // No settings found, use defaults
-      console.log('Using default settings');
+      // No settings found or no access, use defaults
+      setSettings(DEFAULT_SETTINGS);
     } finally {
       setLoading(false);
     }
@@ -94,34 +98,20 @@ export default function SuperAdminSettings() {
   const saveSettings = async () => {
     try {
       setSaving(true);
-      
-      const { data: existing } = await supabase
+
+      const { error } = await supabase
         .from('system_settings')
-        .select('id')
-        .eq('key', 'platform_settings')
-        .single();
-      
-      if (existing) {
-        const { error } = await supabase
-          .from('system_settings')
-          .update({ 
-            value: settings as any,
-            updated_at: new Date().toISOString()
-          })
-          .eq('key', 'platform_settings');
-        
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('system_settings')
-          .insert({ 
+        .upsert(
+          {
             key: 'platform_settings',
             value: settings as any,
-          });
-        
-        if (error) throw error;
-      }
-      
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' },
+        );
+
+      if (error) throw error;
+
       toast.success('Settings saved successfully');
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -398,7 +388,11 @@ export default function SuperAdminSettings() {
                     <Input
                       type="number"
                       value={settings.defaultTrialDays}
-                      onChange={(e) => updateSetting('defaultTrialDays', parseInt(e.target.value) || 14)}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const n = raw === '' ? 0 : Number(raw);
+                        updateSetting('defaultTrialDays', Number.isFinite(n) ? Math.max(0, Math.min(90, Math.trunc(n))) : 0);
+                      }}
                       min={0}
                       max={90}
                     />
