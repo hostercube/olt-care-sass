@@ -15,7 +15,7 @@ import { CreditCard, Smartphone, Banknote, CheckCircle, Loader2, ExternalLink, A
 import { useToast } from '@/hooks/use-toast';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import type { PaymentMethod } from '@/types/saas';
-import { initiatePayment, redirectToCheckout, isOnlineGateway, getGatewayDisplayName } from '@/lib/payment-gateway';
+import { initiatePayment, redirectToCheckout, isOnlineGateway, getGatewayDisplayName, getPaymentCallbackUrl } from '@/lib/payment-gateway';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function MakePayment() {
@@ -204,6 +204,7 @@ export default function MakePayment() {
       const baseUrl = window.location.origin;
       const returnUrl = `${baseUrl}/billing/pay`;
       const cancelUrl = `${baseUrl}/billing/pay`;
+      const gatewayCallbackUrl = getPaymentCallbackUrl(selectedMethod);
 
       const response = await initiatePayment({
         gateway: selectedMethod,
@@ -211,6 +212,7 @@ export default function MakePayment() {
         tenant_id: tenantId,
         invoice_id: selectedInvoiceData?.invoice_number,
         description: `Subscription Payment - ${selectedInvoiceData?.invoice_number}`,
+        gateway_callback_url: gatewayCallbackUrl,
         return_url: returnUrl,
         cancel_url: cancelUrl,
         customer_name: tenantInfo?.name || 'Customer',

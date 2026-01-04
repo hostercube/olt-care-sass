@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import type { PaymentMethod } from '@/types/saas';
-import { initiatePayment, redirectToCheckout, isOnlineGateway, getGatewayDisplayName } from '@/lib/payment-gateway';
+import { initiatePayment, redirectToCheckout, isOnlineGateway, getGatewayDisplayName, getPaymentCallbackUrl } from '@/lib/payment-gateway';
 
 interface TenantGateway {
   id: string;
@@ -157,6 +157,7 @@ export default function CustomerPayBill() {
       const baseUrl = window.location.origin;
       const returnUrl = `${baseUrl}/portal/pay`;
       const cancelUrl = `${baseUrl}/portal/pay`;
+      const gatewayCallbackUrl = getPaymentCallbackUrl(selectedMethod || 'manual');
 
       if (isOnlineGateway(selectedMethod)) {
         // Online payment - initiate gateway
@@ -166,6 +167,7 @@ export default function CustomerPayBill() {
           tenant_id: tenant_id,
           customer_id: id,
           description: `Bill Payment - ${customer.customer_code || customer.name}`,
+          gateway_callback_url: gatewayCallbackUrl,
           return_url: returnUrl,
           cancel_url: cancelUrl,
           customer_name: customer.name,
