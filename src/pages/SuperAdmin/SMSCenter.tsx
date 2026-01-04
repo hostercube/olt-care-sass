@@ -182,23 +182,35 @@ export default function SuperAdminSMSCenter() {
             .filter(t => selectedTenants.includes(t.id) && t.phone)
             .map(t => ({ phone: t.phone, name: t.name }));
 
-      // Queue SMS notifications
-      const notifications = recipients.map(r => ({
-        notification_type: 'bulk_sms',
-        channel: 'sms',
-        recipient: r.phone,
-        message: message.replace(/\{\{tenant_name\}\}/g, r.name),
-        status: 'pending',
-        scheduled_at: new Date().toISOString(),
-      }));
+      let successCount = 0;
+      let failCount = 0;
 
-      const { error } = await supabase
-        .from('notification_queue')
-        .insert(notifications as any);
+      // Send SMS instantly via edge function for each recipient
+      for (const r of recipients) {
+        const finalMessage = message.replace(/\{\{tenant_name\}\}/g, r.name);
+        
+        try {
+          const response = await supabase.functions.invoke('send-sms', {
+            body: { phone: r.phone, message: finalMessage }
+          });
 
-      if (error) throw error;
+          if (response.error || !response.data?.success) {
+            failCount++;
+            console.error(`Failed to send to ${r.phone}:`, response.error || response.data?.error);
+          } else {
+            successCount++;
+          }
+        } catch (err) {
+          failCount++;
+          console.error(`Error sending to ${r.phone}:`, err);
+        }
+      }
 
-      toast.success(`${recipients.length} SMS queued for delivery`);
+      if (successCount > 0) {
+        toast.success(`${successCount} SMS sent successfully${failCount > 0 ? `, ${failCount} failed` : ''}`);
+      } else {
+        toast.error(`All ${failCount} SMS failed to send`);
+      }
       
       // Reset form
       setMessage('');
@@ -209,7 +221,7 @@ export default function SuperAdminSMSCenter() {
       // Refresh logs
       fetchData();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to queue SMS');
+      toast.error(err.message || 'Failed to send SMS');
     } finally {
       setSending(false);
     }
