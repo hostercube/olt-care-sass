@@ -342,116 +342,168 @@ export default function Invoices() {
           </CardContent>
         </Card>
 
-        {/* Improved Invoice View Dialog */}
+        {/* Beautiful Invoice View Dialog */}
         <Dialog open={!!viewInvoice} onOpenChange={(open) => (!open ? closeViewInvoice() : undefined)}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             {viewInvoice && (
               <>
-                <DialogHeader className="pb-4 border-b">
-                  <div className="flex items-center justify-between">
+                {/* Header with gradient */}
+                <div className="relative -m-6 mb-0 p-6 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-b">
+                  <div className="flex items-start justify-between">
                     <div>
-                      <DialogTitle className="text-xl font-bold">Invoice {viewInvoice.invoice_number}</DialogTitle>
-                      <DialogDescription className="mt-1">
-                        {isSuperAdmin
-                          ? (viewInvoice.tenant?.company_name || viewInvoice.tenant?.name || '')
-                          : 'Invoice details and payment options'}
-                      </DialogDescription>
+                      <div className="flex items-center gap-2 mb-1">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Invoice</span>
+                      </div>
+                      <h2 className="text-2xl font-bold tracking-tight">{viewInvoice.invoice_number}</h2>
+                      {isSuperAdmin && viewInvoice.tenant && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {viewInvoice.tenant.company_name || viewInvoice.tenant.name}
+                        </p>
+                      )}
                     </div>
                     <Badge 
                       variant="outline" 
-                      className={`text-sm px-3 py-1 ${getStatusConfig(viewInvoice.status).color}`}
+                      className={`text-sm px-4 py-1.5 rounded-full font-medium ${getStatusConfig(viewInvoice.status).color}`}
                     >
                       {React.createElement(getStatusConfig(viewInvoice.status).icon, { className: "h-4 w-4 mr-1.5" })}
                       {getStatusConfig(viewInvoice.status).label}
                     </Badge>
                   </div>
-                </DialogHeader>
+                </div>
 
-                <div className="space-y-5 py-4">
-                  {/* Amount Summary */}
-                  <div className="bg-muted/50 rounded-lg p-4 text-center">
-                    <div className="text-sm text-muted-foreground mb-1">Total Amount</div>
-                    <div className="text-3xl font-bold text-primary">৳{viewInvoice.total_amount.toLocaleString()}</div>
+                <div className="space-y-6 pt-6">
+                  {/* Amount Hero Card */}
+                  <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary to-primary/80 p-6 text-primary-foreground shadow-lg">
+                    <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMtOS45NDEgMC0xOCA4LjA1OS0xOCAxOHM4LjA1OSAxOCAxOCAxOCAxOC04LjA1OSAxOC0xOC04LjA1OS0xOC0xOC0xOHoiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjIiLz48L2c+PC9zdmc+')] opacity-20"></div>
+                    <div className="relative text-center">
+                      <p className="text-sm font-medium text-primary-foreground/80 uppercase tracking-wider">Total Amount</p>
+                      <p className="text-4xl font-bold mt-2">৳{viewInvoice.total_amount.toLocaleString()}</p>
+                      {viewInvoice.tax_amount > 0 && (
+                        <p className="text-sm text-primary-foreground/70 mt-1">
+                          Including ৳{viewInvoice.tax_amount.toLocaleString()} tax
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Date Info */}
+                  {/* Date Grid */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-card border rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Created</div>
-                      <div className="font-medium mt-1">{format(new Date(viewInvoice.created_at), 'MMM d, yyyy')}</div>
+                    <div className="rounded-lg border bg-card p-4 hover:shadow-sm transition-shadow">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1.5 rounded-md bg-muted">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Created</span>
+                      </div>
+                      <p className="font-semibold">{format(new Date(viewInvoice.created_at), 'MMMM d, yyyy')}</p>
                     </div>
-                    <div className="bg-card border rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Due Date</div>
-                      <div className="font-medium mt-1">{format(new Date(viewInvoice.due_date), 'MMM d, yyyy')}</div>
+                    <div className="rounded-lg border bg-card p-4 hover:shadow-sm transition-shadow">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`p-1.5 rounded-md ${viewInvoice.status === 'overdue' ? 'bg-red-100' : 'bg-muted'}`}>
+                          <Clock className={`h-4 w-4 ${viewInvoice.status === 'overdue' ? 'text-red-500' : 'text-muted-foreground'}`} />
+                        </div>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Due Date</span>
+                      </div>
+                      <p className={`font-semibold ${viewInvoice.status === 'overdue' ? 'text-red-500' : ''}`}>
+                        {format(new Date(viewInvoice.due_date), 'MMMM d, yyyy')}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Line Items */}
+                  {/* Line Items Table */}
                   <div>
-                    <div className="text-sm font-medium mb-2">Items</div>
-                    <div className="rounded-lg border overflow-hidden">
+                    <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      Invoice Items
+                    </h3>
+                    <div className="rounded-xl border overflow-hidden shadow-sm">
                       <Table>
                         <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead>Description</TableHead>
-                            <TableHead className="text-center w-20">Qty</TableHead>
-                            <TableHead className="text-right w-28">Unit Price</TableHead>
-                            <TableHead className="text-right w-28">Total</TableHead>
+                          <TableRow className="bg-muted/50 hover:bg-muted/50">
+                            <TableHead className="font-semibold">Description</TableHead>
+                            <TableHead className="text-center w-20 font-semibold">Qty</TableHead>
+                            <TableHead className="text-right w-28 font-semibold">Rate</TableHead>
+                            <TableHead className="text-right w-28 font-semibold">Amount</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {(viewInvoice.line_items || []).map((li, idx) => (
-                            <TableRow key={idx}>
+                            <TableRow key={idx} className="hover:bg-muted/30">
                               <TableCell className="font-medium">{li.description}</TableCell>
-                              <TableCell className="text-center">{li.quantity}</TableCell>
-                              <TableCell className="text-right">৳{Number(li.unit_price).toLocaleString()}</TableCell>
+                              <TableCell className="text-center text-muted-foreground">{li.quantity}</TableCell>
+                              <TableCell className="text-right text-muted-foreground">৳{Number(li.unit_price).toLocaleString()}</TableCell>
                               <TableCell className="text-right font-medium">৳{Number(li.total).toLocaleString()}</TableCell>
                             </TableRow>
                           ))}
-                          <TableRow className="bg-muted/30 font-bold">
-                            <TableCell colSpan={3} className="text-right">Grand Total</TableCell>
-                            <TableCell className="text-right text-primary">৳{viewInvoice.total_amount.toLocaleString()}</TableCell>
-                          </TableRow>
                         </TableBody>
                       </Table>
+                      {/* Total Row */}
+                      <div className="bg-muted/30 px-4 py-3 border-t flex justify-between items-center">
+                        <span className="font-semibold text-muted-foreground">Grand Total</span>
+                        <span className="text-xl font-bold text-primary">৳{viewInvoice.total_amount.toLocaleString()}</span>
+                      </div>
                     </div>
                   </div>
 
+                  {/* Notes */}
                   {viewInvoice.notes && (
-                    <div className="bg-muted/30 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Notes</div>
-                      <div className="text-sm">{viewInvoice.notes}</div>
+                    <div className="rounded-lg bg-muted/30 border p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notes</span>
+                      </div>
+                      <p className="text-sm text-foreground">{viewInvoice.notes}</p>
+                    </div>
+                  )}
+
+                  {/* Paid Info */}
+                  {viewInvoice.status === 'paid' && viewInvoice.paid_at && (
+                    <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-full bg-green-100 dark:bg-green-900">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-green-700 dark:text-green-400">Payment Received</p>
+                          <p className="text-sm text-green-600 dark:text-green-500">
+                            Paid on {format(new Date(viewInvoice.paid_at), 'MMMM d, yyyy \'at\' h:mm a')}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
 
-                <DialogFooter className="flex-col sm:flex-row gap-2 pt-4 border-t">
-                  {/* Cancel & Pay buttons for unpaid invoices */}
-                  {!isSuperAdmin && (viewInvoice.status === 'unpaid' || viewInvoice.status === 'overdue') && (
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <Button 
-                        variant="outline" 
-                        onClick={() => handleCancelInvoice(viewInvoice)}
-                        className="flex-1 sm:flex-initial gap-2"
-                      >
-                        <XCircle className="h-4 w-4" />
-                        Cancel Invoice
-                      </Button>
-                      <Button 
-                        onClick={() => handlePayInvoice(viewInvoice)} 
-                        className="flex-1 sm:flex-initial gap-2"
-                      >
-                        <CreditCard className="h-4 w-4" />
-                        Pay Now
-                      </Button>
-                    </div>
-                  )}
-
-                  <Button variant="outline" onClick={() => handleDownloadPDF(viewInvoice)} className="gap-2">
+                {/* Footer Actions */}
+                <div className="flex flex-col-reverse sm:flex-row gap-3 pt-6 border-t mt-6">
+                  <Button variant="outline" onClick={() => handleDownloadPDF(viewInvoice)} className="gap-2 flex-1 sm:flex-initial">
                     <Download className="h-4 w-4" />
                     Download PDF
                   </Button>
-                </DialogFooter>
+                  
+                  <div className="flex gap-2 flex-1 sm:flex-initial sm:ml-auto">
+                    {!isSuperAdmin && (viewInvoice.status === 'unpaid' || viewInvoice.status === 'overdue') && (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => handleCancelInvoice(viewInvoice)}
+                          className="gap-2 flex-1"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          Cancel
+                        </Button>
+                        <Button 
+                          onClick={() => handlePayInvoice(viewInvoice)} 
+                          className="gap-2 flex-1 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-md"
+                        >
+                          <CreditCard className="h-4 w-4" />
+                          Pay Now
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
               </>
             )}
           </DialogContent>

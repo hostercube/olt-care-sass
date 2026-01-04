@@ -74,9 +74,32 @@ export function useInvoices(tenantId?: string) {
     }
   }, [toast, tenantId]);
 
+  // Subscribe to realtime changes for invoice updates
   useEffect(() => {
     fetchInvoices();
-  }, [fetchInvoices]);
+
+    // Set up realtime subscription for invoice changes
+    const channel = supabase
+      .channel('invoices-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'invoices',
+          ...(tenantId ? { filter: `tenant_id=eq.${tenantId}` } : {}),
+        },
+        () => {
+          // Refetch when any change occurs
+          fetchInvoices();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchInvoices, tenantId]);
 
   const generateInvoice = async (tenantId: string, subscriptionId: string, amount: number, dueDate: Date) => {
     try {
