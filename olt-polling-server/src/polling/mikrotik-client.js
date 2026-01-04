@@ -1401,11 +1401,14 @@ async function updatePPPSecretPlain(mikrotik, secretId, updates, connectionInfo)
             loginComplete = true;
             // Build the set command
             const cmd = ['/ppp/secret/set', `=.id=${secretId}`];
+            if (updates.name !== undefined) cmd.push(`=name=${updates.name}`);
+            if (updates.password !== undefined) cmd.push(`=password=${updates.password}`);
+            if (updates.profile !== undefined) cmd.push(`=profile=${updates.profile}`);
             if (updates.comment !== undefined) cmd.push(`=comment=${updates.comment}`);
             if (updates.callerId !== undefined) cmd.push(`=caller-id=${updates.callerId}`);
             logger.debug(`Plain API set command:`, cmd);
             sendPlainCommand(socket, cmd);
-            commandSent = true;
+
           } else {
             clearTimeout(timeout);
             socket.end();
