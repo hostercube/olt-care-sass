@@ -1763,25 +1763,40 @@ app.post('/api/mikrotik/pppoe/update', async (req, res) => {
 // Toggle PPPoE user (enable/disable) on MikroTik
 app.post('/api/mikrotik/pppoe/toggle', async (req, res) => {
   const { mikrotik, username, disabled } = req.body;
-  
+
   if (!mikrotik || !mikrotik.ip || !mikrotik.username || !mikrotik.password) {
     return res.status(400).json({ success: false, error: 'MikroTik configuration required' });
   }
-  
+
   if (!username) {
     return res.status(400).json({ success: false, error: 'PPPoE username required' });
   }
-  
+
   try {
     logger.info(`${disabled ? 'Disabling' : 'Enabling'} PPPoE user ${username} on ${mikrotik.ip}`);
-    
-    const { togglePPPSecret } = await import('./polling/mikrotik-client.js');
+
+    const { togglePPPSecret, disconnectPPPoESession } = await import('./polling/mikrotik-client.js');
     const result = await togglePPPSecret(mikrotik, username, disabled);
-    
-    res.json(result);
+
+    // IMPORTANT: Disabling a secret does NOT always kick an already-active session.
+    // So when disabling, also disconnect the active session to ensure it disappears from /ppp/active.
+    if (result?.success && disabled) {
+      try {
+        const disconnectResult = await disconnectPPPoESession(mikrotik, username);
+        result.disconnected = !!disconnectResult?.success;
+        if (!disconnectResult?.success && disconnectResult?.error) {
+          result.disconnectError = disconnectResult.error;
+        }
+      } catch (discErr) {
+        result.disconnected = false;
+        result.disconnectError = discErr?.message || String(discErr);
+      }
+    }
+
+    return res.json(result);
   } catch (error) {
     logger.error(`PPPoE user toggle error:`, error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 

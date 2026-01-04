@@ -47,7 +47,7 @@ const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' |
 
 export default function CustomerManagement() {
   const navigate = useNavigate();
-  const { customers, loading, stats, refetch, deleteCustomer, updateStatus } = useCustomers();
+  const { customers, loading, stats, refetch, deleteCustomer } = useCustomers();
   const { packages } = useISPPackages();
   const { deletePPPoEUser, togglePPPoEUser } = useMikroTikSync();
   const [searchTerm, setSearchTerm] = useState('');
@@ -110,6 +110,34 @@ export default function CustomerManagement() {
   };
 
   const clearSelection = () => setSelectedIds(new Set());
+
+  const setServiceStatus = useCallback(async (customer: Customer, nextStatus: CustomerStatus) => {
+    try {
+      // Sync MikroTik first (so DB status matches real network state)
+      if (customer.mikrotik_id && customer.pppoe_username) {
+        const disabled = nextStatus === 'suspended';
+        await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, disabled);
+      }
+
+      const now = new Date().toISOString();
+      const patch: any = { status: nextStatus };
+      if (nextStatus === 'active') patch.last_activated_at = now;
+      if (nextStatus === 'suspended') patch.last_deactivated_at = now;
+
+      const { error } = await supabase
+        .from('customers')
+        .update(patch)
+        .eq('id', customer.id);
+
+      if (error) throw error;
+
+      toast.success(`Customer ${nextStatus === 'active' ? 'activated' : 'suspended'}`);
+    } catch (err: any) {
+      console.error('Failed to set service status:', err);
+      toast.error(err?.message || 'Failed to update status');
+      throw err;
+    }
+  }, [togglePPPoEUser]);
 
   const handleDelete = async () => {
     if (!deleteConfirm) return;
@@ -202,17 +230,12 @@ export default function CustomerManagement() {
       const customer = customers.find(c => c.id === id);
       if (!customer) continue;
 
-      // Enable on MikroTik if linked
-      if (customer.mikrotik_id && customer.pppoe_username) {
-        await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, false);
-      }
-
-      await updateStatus(id, 'active');
+      await setServiceStatus(customer, 'active');
       enabled++;
     }
     toast.success(`${enabled} customers enabled`);
     refetch();
-  }, [customers, togglePPPoEUser, updateStatus, refetch]);
+  }, [customers, setServiceStatus, refetch]);
 
   const handleBulkNetworkDisable = useCallback(async (customerIds: string[]) => {
     let disabled = 0;
@@ -220,17 +243,12 @@ export default function CustomerManagement() {
       const customer = customers.find(c => c.id === id);
       if (!customer) continue;
 
-      // Disable on MikroTik if linked
-      if (customer.mikrotik_id && customer.pppoe_username) {
-        await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, true);
-      }
-
-      await updateStatus(id, 'suspended');
+      await setServiceStatus(customer, 'suspended');
       disabled++;
     }
     toast.success(`${disabled} customers disabled`);
     refetch();
-  }, [customers, togglePPPoEUser, updateStatus, refetch]);
+  }, [customers, setServiceStatus, refetch]);
 
   const exportCSV = () => {
     const headers = ['Code', 'Name', 'Phone', 'PPPoE', 'Package', 'Status', 'Expiry', 'Due'];
@@ -486,13 +504,13 @@ export default function CustomerManagement() {
                                   Edit
                                 </DropdownMenuItem>
                                 {customer.status !== 'active' && (
-                                  <DropdownMenuItem onClick={() => updateStatus(customer.id, 'active')}>
+                                  <DropdownMenuItem onClick={() => setServiceStatus(customer, 'active')}>
                                     <UserCheck className="h-4 w-4 mr-2" />
                                     Activate
                                   </DropdownMenuItem>
                                 )}
                                 {customer.status === 'active' && (
-                                  <DropdownMenuItem onClick={() => updateStatus(customer.id, 'suspended')}>
+                                  <DropdownMenuItem onClick={() => setServiceStatus(customer, 'suspended')}>
                                     <Ban className="h-4 w-4 mr-2" />
                                     Suspend
                                   </DropdownMenuItem>

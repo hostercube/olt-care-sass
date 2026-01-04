@@ -114,6 +114,10 @@ export interface Customer {
   status: CustomerStatus;
   is_auto_disable: boolean;
   last_payment_date: string | null;
+  last_activated_at?: string | null;
+  last_deactivated_at?: string | null;
+  last_caller_id?: string | null;
+  last_ip_address?: string | null;
   
   notes: string | null;
   created_at: string;
