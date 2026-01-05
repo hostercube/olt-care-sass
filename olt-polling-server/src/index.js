@@ -2453,7 +2453,173 @@ cron.schedule('*/10 * * * * *', async () => {
 });
 
 // ============= AUTH / SIGNUP ENDPOINTS =============
-// Completes SaaS signup by creating tenant + linking user (uses service key, so avoids RLS issues on client)
+
+// Full signup endpoint - creates user AND tenant in one call (bypasses Supabase email rate limits)
+app.post('/api/auth/full-signup', async (req, res) => {
+  try {
+    const {
+      email,
+      password,
+      full_name,
+      company_name,
+      phone,
+      division,
+      district,
+      upazila,
+      address,
+      package_id,
+      billing_cycle,
+      trial_days,
+    } = req.body || {};
+
+    if (!email || !password || !company_name || !full_name) {
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+    }
+
+    // Check if email already exists
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const emailExists = existingUsers?.users?.some(u => u.email?.toLowerCase() === email.toLowerCase());
+    if (emailExists) {
+      return res.status(400).json({ success: false, error: 'An account with this email already exists' });
+    }
+
+    // Create user with admin API (auto-confirms email, bypasses rate limits)
+    const { createUser } = await import('./admin/user-admin.js');
+    const userData = await createUser(email, password, { full_name, company_name });
+    
+    if (!userData?.user?.id) {
+      return res.status(400).json({ success: false, error: 'Failed to create user account' });
+    }
+
+    const user_id = userData.user.id;
+    const trialDaysNum = Number.isFinite(Number(trial_days)) ? Number(trial_days) : 14;
+    const requiresPayment = trialDaysNum === 0;
+    const tenantStatus = requiresPayment ? 'pending' : 'trial';
+    const trialEndsAt = requiresPayment
+      ? null
+      : new Date(Date.now() + trialDaysNum * 24 * 60 * 60 * 1000).toISOString();
+
+    // Create tenant
+    const { data: tenant, error: tenantError } = await supabase
+      .from('tenants')
+      .insert({
+        name: company_name,
+        email,
+        phone: phone || null,
+        owner_name: full_name,
+        owner_user_id: user_id,
+        division: division || null,
+        district: district || null,
+        upazila: upazila || null,
+        address: address || null,
+        status: tenantStatus,
+        trial_ends_at: trialEndsAt,
+      })
+      .select()
+      .single();
+
+    if (tenantError || !tenant) {
+      // Cleanup: delete user if tenant creation failed
+      try {
+        await supabase.auth.admin.deleteUser(user_id);
+      } catch {}
+      return res.status(400).json({ success: false, error: tenantError?.message || 'Failed to create tenant' });
+    }
+
+    // Link user to tenant
+    const { error: linkError } = await supabase
+      .from('tenant_users')
+      .insert({
+        tenant_id: tenant.id,
+        user_id,
+        role: 'admin',
+        is_owner: true,
+      });
+
+    if (linkError) {
+      return res.status(400).json({ success: false, error: linkError.message || 'Failed to link user' });
+    }
+
+    // Initialize default gateways
+    try {
+      await supabase.rpc('initialize_tenant_gateways', { _tenant_id: tenant.id });
+    } catch (e) {
+      logger.error('initialize_tenant_gateways failed:', e);
+    }
+
+    // Create subscription if package selected
+    if (package_id) {
+      const { data: pkg } = await supabase
+        .from('packages')
+        .select('id, name, price_monthly, price_yearly')
+        .eq('id', package_id)
+        .single();
+
+      if (pkg) {
+        const cycle = billing_cycle === 'yearly' ? 'yearly' : 'monthly';
+        const amount = cycle === 'yearly' ? pkg.price_yearly : pkg.price_monthly;
+
+        const startDate = new Date();
+        const endDate = new Date();
+        if (requiresPayment) {
+          endDate.setDate(endDate.getDate() + (cycle === 'monthly' ? 30 : 365));
+        } else {
+          endDate.setDate(endDate.getDate() + trialDaysNum);
+        }
+
+        const subscriptionStatus = requiresPayment ? 'pending' : 'trial';
+
+        const { data: subscription } = await supabase
+          .from('subscriptions')
+          .insert({
+            tenant_id: tenant.id,
+            package_id,
+            status: subscriptionStatus,
+            billing_cycle: cycle,
+            amount,
+            starts_at: startDate.toISOString(),
+            ends_at: endDate.toISOString(),
+          })
+          .select()
+          .single();
+
+        if (requiresPayment && subscription) {
+          const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
+          await supabase.from('invoices').insert({
+            tenant_id: tenant.id,
+            subscription_id: subscription.id,
+            invoice_number: invoiceNumber,
+            amount,
+            tax_amount: 0,
+            total_amount: amount,
+            status: 'unpaid',
+            due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            line_items: [
+              {
+                description: `${pkg.name} - ${cycle === 'monthly' ? 'Monthly' : 'Yearly'} Subscription`,
+                quantity: 1,
+                unit_price: amount,
+                total: amount,
+              },
+            ],
+          });
+        }
+      }
+    }
+
+    logger.info(`Full signup completed for ${email}, tenant: ${tenant.id}`);
+    return res.json({ success: true, tenant_id: tenant.id, user_id, requires_payment: requiresPayment });
+  } catch (error) {
+    logger.error('Full signup error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Legacy: Completes SaaS signup by creating tenant + linking user (uses service key, so avoids RLS issues on client)
 app.post('/api/auth/complete-signup', async (req, res) => {
   try {
     const {
@@ -2532,6 +2698,7 @@ app.post('/api/auth/complete-signup', async (req, res) => {
         email,
         phone: phone || null,
         owner_name,
+        owner_user_id: user_id,
         division: division || null,
         district: district || null,
         upazila: upazila || null,
