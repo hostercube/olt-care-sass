@@ -93,6 +93,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
 
       const shouldUpdateMikroTik = updateMikroTik && !!routerId && !!oldUsername;
 
+      // Update MikroTik first (if applicable)
       if (shouldUpdateMikroTik) {
         const updates: any = {};
 
@@ -119,14 +120,20 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
 
         if (Object.keys(updates).length > 0) {
           console.log('Updating MikroTik with:', updates);
-          const ok = await updatePPPoEUser(routerId, oldUsername, updates);
-          if (!ok) {
-            // MikroTik update failed but continue with DB update
-            console.warn('MikroTik update failed, continuing with database update');
+          try {
+            const ok = await updatePPPoEUser(routerId, oldUsername, updates);
+            if (!ok) {
+              console.warn('MikroTik update failed, continuing with database update');
+              toast.warning('MikroTik update failed, database will still be updated');
+            }
+          } catch (mtErr) {
+            console.error('MikroTik update error:', mtErr);
+            toast.warning('MikroTik update failed, database will still be updated');
           }
         }
       }
 
+      // Always update database regardless of MikroTik success
       const updateData: any = {
         name: formData.name.trim(),
         phone: formData.phone || null,
@@ -150,6 +157,8 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
 
       console.log('Updating customer with:', updateData);
       await updateCustomer(customer.id, updateData);
+      toast.success('Customer updated successfully');
+      onOpenChange(false);
       onSuccess?.();
     } catch (err: any) {
       console.error('Error updating customer:', err);

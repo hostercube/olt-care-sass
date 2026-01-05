@@ -340,24 +340,20 @@ async function initiateBkash(config, paymentData) {
     hasAppSecret: !!app_secret,
     hasUsername: !!username,
     hasPassword: !!password,
+    configKeys: Object.keys(config),
   });
   
   // Validate required credentials with user-friendly error
-  if (!app_key) {
-    logger.error('bKash app_key not configured');
-    return { success: false, error: 'bKash App Key not configured. Please go to Gateway Settings and configure your bKash credentials.' };
-  }
-  if (!app_secret) {
-    logger.error('bKash app_secret not configured');
-    return { success: false, error: 'bKash App Secret not configured. Please go to Gateway Settings and configure your bKash credentials.' };
-  }
-  if (!username) {
-    logger.error('bKash username not configured');
-    return { success: false, error: 'bKash Username not configured. Please go to Gateway Settings and configure your bKash credentials.' };
-  }
-  if (!password) {
-    logger.error('bKash password not configured');
-    return { success: false, error: 'bKash Password not configured. Please go to Gateway Settings and configure your bKash credentials.' };
+  const missingCreds = [];
+  if (!app_key) missingCreds.push('App Key');
+  if (!app_secret) missingCreds.push('App Secret');
+  if (!username) missingCreds.push('Username');
+  if (!password) missingCreds.push('Password');
+  
+  if (missingCreds.length > 0) {
+    const errorMsg = `bKash credentials missing: ${missingCreds.join(', ')}. Please configure bKash API credentials in Super Admin > Gateway Settings.`;
+    logger.error(errorMsg);
+    return { success: false, error: errorMsg };
   }
   
   const mode = bkash_mode || 'tokenized';
