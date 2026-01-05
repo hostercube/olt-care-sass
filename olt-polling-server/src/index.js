@@ -41,14 +41,18 @@ const pollingStatus = {
 };
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+// Health check endpoint (both /health and /api/health for compatibility)
+const healthResponse = (req, res) => {
   res.json({
     status: 'healthy',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     supabase: process.env.SUPABASE_URL ? 'configured' : 'missing'
   });
-});
+};
+
+app.get('/health', healthResponse);
+app.get('/api/health', healthResponse);
 
 // ============= DEVICE HEALTH METRICS ENDPOINT =============
 // Fetches CPU, RAM, uptime from all configured MikroTik devices
