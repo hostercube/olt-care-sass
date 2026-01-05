@@ -58,7 +58,7 @@ export default function CustomerProfile() {
   const [searchParams] = useSearchParams();
   const { tenantId, isSuperAdmin } = useTenantContext();
   const { hasAccess } = useModuleAccess();
-  const { getCustomerNetworkStatus, togglePPPoEUser, saveCallerId, removeCallerId, updatePPPoEUser, disconnectSession, getLiveBandwidth } = useMikroTikSync();
+  const { getCustomerNetworkStatus, togglePPPoEUser, saveCallerId, removeCallerId, updatePPPoEUser, disconnectSession, getLiveBandwidth, activateCustomer, switchToExpiredProfile } = useMikroTikSync();
   const { packages } = useISPPackages();
   
   const [customer, setCustomer] = useState<CustomerProfileType | null>(null);
@@ -215,7 +215,10 @@ export default function CustomerProfile() {
       switch (action) {
         case 'enable':
           if (customer.mikrotik_id && customer.pppoe_username) {
-            await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, false);
+            // Activate and switch back to original profile
+            const pkg = packages.find(p => p.id === customer.package_id);
+            const profileName = pkg?.name || 'default';
+            await activateCustomer(customer.mikrotik_id, customer.pppoe_username, profileName);
             await supabase.from('customers').update({ 
               status: 'active',
               last_activated_at: now 
@@ -225,7 +228,8 @@ export default function CustomerProfile() {
           break;
         case 'disable':
           if (customer.mikrotik_id && customer.pppoe_username) {
-            await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, true);
+            // Use expired profile if configured, otherwise just disable
+            await switchToExpiredProfile(customer.mikrotik_id, customer.pppoe_username);
             await supabase.from('customers').update({ 
               status: 'suspended',
               last_deactivated_at: now 
@@ -333,12 +337,27 @@ export default function CustomerProfile() {
     try {
       const pkg = packages.find(p => p.id === customer.package_id);
       const validityDays = pkg?.validity_days || 30;
-      const currentExpiry = customer.expiry_date ? new Date(customer.expiry_date) : new Date();
-      const newExpiry = addDays(currentExpiry < new Date() ? new Date() : currentExpiry, validityDays * rechargeMonths);
+      
+      // Determine if customer was offline/disabled - affects expiry calculation
+      const wasOffline = customer.status === 'suspended' || customer.status === 'expired';
+      const currentExpiry = customer.expiry_date ? new Date(customer.expiry_date) : null;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      let newExpiry: Date;
+      
+      if (wasOffline || !currentExpiry || currentExpiry < today) {
+        // Customer was offline/expired: Start from today
+        newExpiry = addDays(today, validityDays * rechargeMonths);
+      } else {
+        // Customer is online and not expired: Extend from current expiry
+        newExpiry = addDays(currentExpiry, validityDays * rechargeMonths);
+      }
 
-      // Enable on MikroTik if suspended
-      if (customer.status === 'suspended' && customer.mikrotik_id && customer.pppoe_username) {
-        await togglePPPoEUser(customer.mikrotik_id, customer.pppoe_username, false);
+      // Activate on MikroTik - handles profile switching if expired profile was used
+      if (customer.mikrotik_id && customer.pppoe_username) {
+        const profileName = pkg?.name || 'default';
+        await activateCustomer(customer.mikrotik_id, customer.pppoe_username, profileName);
       }
 
       await supabase.from('customers').update({
@@ -360,7 +379,7 @@ export default function CustomerProfile() {
         status: 'completed',
       });
 
-      toast.success(`Recharged for ${rechargeMonths} month(s)`);
+      toast.success(`Recharged for ${rechargeMonths} month(s). New expiry: ${format(newExpiry, 'dd MMM yyyy')}`);
       setShowRechargeDialog(false);
       await fetchCustomer();
     } catch (err) {

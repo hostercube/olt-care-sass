@@ -245,6 +245,8 @@ export interface MikroTikRouter {
   auto_disable_expired: boolean;
   allow_customer_delete?: boolean;
   allow_queue_delete?: boolean;
+  use_expired_profile?: boolean;
+  expired_profile_name?: string;
   created_at: string;
   updated_at: string;
 }
