@@ -115,7 +115,32 @@ export function TenantAccessGuard({ children }: TenantAccessGuardProps) {
     }
 
     // Check trial expiration
-    if (tenant.status === 'trial' && tenant.trial_ends_at) {
+    if (tenant.status === 'trial') {
+      // If trial_ends_at is null or in the past, block access
+      if (!tenant.trial_ends_at) {
+        // No trial end date means they should pay
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-background p-4">
+            <Card className="max-w-md w-full">
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 bg-warning/10 rounded-full flex items-center justify-center mb-4">
+                  <Clock className="h-8 w-8 text-warning" />
+                </div>
+                <CardTitle>Payment Required</CardTitle>
+                <CardDescription>
+                  Please subscribe to a plan to start using the platform.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <Button onClick={() => navigate('/billing/subscription')}>
+                  Choose a Plan
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      }
+      
       const trialEnd = new Date(tenant.trial_ends_at);
       if (trialEnd < new Date()) {
         return (

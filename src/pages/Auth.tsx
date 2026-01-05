@@ -660,7 +660,11 @@ export default function Auth() {
                         <span className="text-sm">{selectedPackage.name} - {signupData.billingCycle}</span>
                         <span className="font-bold text-primary">৳{displayPrice}/{signupData.billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">14-day free trial included</p>
+                      {platformSettings.defaultTrialDays > 0 ? (
+                        <p className="text-xs text-muted-foreground mt-1">{platformSettings.defaultTrialDays}-day free trial included</p>
+                      ) : (
+                        <p className="text-xs text-warning mt-1">Payment required to activate account</p>
+                      )}
                     </div>
                   )}
 

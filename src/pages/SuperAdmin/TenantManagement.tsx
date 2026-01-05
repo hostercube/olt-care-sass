@@ -13,7 +13,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTenants } from '@/hooks/useTenants';
 import { usePackages } from '@/hooks/usePackages';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2, Users, Router, MapPin, UserCheck, ArrowUpDown, RefreshCw } from 'lucide-react';
+import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2, Users, Router, MapPin, UserCheck, ArrowUpDown, RefreshCw, AlertCircle } from 'lucide-react';
+import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
+import { resolvePollingServerUrl } from '@/lib/polling-server';
 import { format } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
@@ -35,6 +37,7 @@ export default function TenantManagement() {
   const { tenants, loading, createTenant, updateTenant, suspendTenant, activateTenant, deleteTenant, fetchTenants } = useTenants();
   const { packages } = usePackages();
   const { subscriptions, createSubscription, fetchSubscriptions } = useSubscriptions();
+  const { pollingServerUrl } = usePollingServerUrl();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -48,6 +51,7 @@ export default function TenantManagement() {
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
   const [loggingInAs, setLoggingInAs] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [tenantStats, setTenantStats] = useState<Record<string, TenantStats>>({});
   const [newPassword, setNewPassword] = useState('');
   const [selectedPackageId, setSelectedPackageId] = useState('');
@@ -178,20 +182,46 @@ export default function TenantManagement() {
       return;
     }
 
+    const VPS_URL = resolvePollingServerUrl(pollingServerUrl);
+    if (!VPS_URL) {
+      toast({ title: 'Error', description: 'Polling server URL not configured. Please configure it in Platform Settings → Infrastructure.', variant: 'destructive' });
+      return;
+    }
+
     setIsCreating(true);
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newTenant.email,
-        password: newTenant.password,
-        options: {
-          data: { full_name: newTenant.owner_name || newTenant.name },
-        },
+      const pkg = packages.find(p => p.id === newTenant.package_id);
+      
+      // Use VPS admin endpoint to create user (auto-confirms email and creates user properly)
+      const createUserRes = await fetch(`${VPS_URL}/api/admin/create-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newTenant.email,
+          password: newTenant.password,
+          full_name: newTenant.owner_name || newTenant.name,
+        }),
       });
 
-      if (authError) throw new Error(authError.message);
-      if (!authData.user) throw new Error('Failed to create user account');
+      const createUserData = await createUserRes.json();
+      if (!createUserRes.ok || !createUserData?.user?.id) {
+        throw new Error(createUserData?.error || 'Failed to create user account');
+      }
 
-      const pkg = packages.find(p => p.id === newTenant.package_id);
+      const userId = createUserData.user.id;
+
+      // Fetch platform settings for trial days
+      let trialDays = 14;
+      try {
+        const { data: settingsData } = await supabase.functions.invoke('public-platform-settings');
+        trialDays = settingsData?.settings?.defaultTrialDays ?? 14;
+      } catch {
+        // Use default
+      }
+
+      const requiresPayment = trialDays === 0;
+      const tenantStatus = requiresPayment ? 'pending' : 'trial';
+      const trialEndsAt = requiresPayment ? null : new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
       
       const tenant = await createTenant({
         name: newTenant.company_name || newTenant.name,
@@ -201,16 +231,16 @@ export default function TenantManagement() {
         address: `${newTenant.owner_name ? newTenant.owner_name + ' - ' : ''}${newTenant.division ? newTenant.division + ', ' : ''}${newTenant.district ? newTenant.district + ', ' : ''}${newTenant.upazila ? newTenant.upazila + ', ' : ''}${newTenant.address || ''}`.trim().replace(/,\s*$/, ''),
         max_olts: pkg?.max_olts || 1,
         max_users: pkg?.max_users || 1,
-        status: 'trial',
-        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        owner_user_id: authData.user.id,
+        status: tenantStatus,
+        trial_ends_at: trialEndsAt,
+        owner_user_id: userId,
         features: pkg?.features || {},
       });
 
       if (tenant) {
         await supabase.from('tenant_users').insert({
           tenant_id: tenant.id,
-          user_id: authData.user.id,
+          user_id: userId,
           role: 'admin',
           is_owner: true,
         });
@@ -218,7 +248,7 @@ export default function TenantManagement() {
         if (newTenant.package_id && pkg) {
           const amount = newTenant.billing_cycle === 'monthly' ? pkg.price_monthly : pkg.price_yearly;
           const endsAt = new Date();
-          endsAt.setDate(endsAt.getDate() + 14);
+          endsAt.setDate(endsAt.getDate() + (requiresPayment ? 30 : trialDays));
 
           await createSubscription({
             tenant_id: tenant.id,
@@ -227,14 +257,14 @@ export default function TenantManagement() {
             amount: amount || 0,
             starts_at: new Date().toISOString(),
             ends_at: endsAt.toISOString(),
-            status: 'pending',
+            status: requiresPayment ? 'pending' : 'trial',
           });
         }
 
         await supabase.rpc('initialize_tenant_gateways', { _tenant_id: tenant.id });
       }
 
-      toast({ title: 'Tenant Created', description: `Account created for ${newTenant.email}` });
+      toast({ title: 'Tenant Created', description: `Account created for ${newTenant.email}. They can login immediately.` });
       setIsCreateOpen(false);
       setNewTenant({
         name: '', email: '', password: '', confirmPassword: '', phone: '', company_name: '', owner_name: '',
@@ -254,6 +284,13 @@ export default function TenantManagement() {
       return;
     }
 
+    const VPS_URL = resolvePollingServerUrl(pollingServerUrl);
+    if (!VPS_URL) {
+      toast({ title: 'Error', description: 'Polling server URL not configured. Please configure it in Platform Settings → Infrastructure.', variant: 'destructive' });
+      return;
+    }
+
+    setIsResettingPassword(true);
     try {
       // Get user ID from tenant_users
       const { data: tenantUser } = await supabase
@@ -263,15 +300,35 @@ export default function TenantManagement() {
         .eq('is_owner', true)
         .single();
 
-      if (!tenantUser) throw new Error('Owner user not found');
+      if (!tenantUser?.user_id) throw new Error('Owner user not found');
 
-      // Update password using admin API - this requires service role
-      toast({ title: 'Password Reset', description: 'Password reset email will be sent to the tenant' });
-      
+      // Get current user ID for admin verification
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error('Not authenticated');
+
+      // Call VPS endpoint to reset password
+      const response = await fetch(`${VPS_URL}/api/admin/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: tenantUser.user_id,
+          newPassword,
+          requestingUserId: user.id,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to reset password');
+      }
+
+      toast({ title: 'Success', description: `Password reset successfully for ${selectedTenant.name}` });
       setIsPasswordOpen(false);
       setNewPassword('');
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -698,8 +755,11 @@ export default function TenantManagement() {
               <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min 6 characters" />
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsPasswordOpen(false)}>Cancel</Button>
-              <Button onClick={handlePasswordReset}>Reset Password</Button>
+              <Button variant="outline" onClick={() => setIsPasswordOpen(false)} disabled={isResettingPassword}>Cancel</Button>
+              <Button onClick={handlePasswordReset} disabled={isResettingPassword}>
+                {isResettingPassword && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Reset Password
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
