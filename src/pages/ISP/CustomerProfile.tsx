@@ -67,6 +67,7 @@ export default function CustomerProfile() {
   const [networkStatusLoading, setNetworkStatusLoading] = useState(false);
   const [lastStatusCheck, setLastStatusCheck] = useState<Date | null>(null);
   const [bandwidthData, setBandwidthData] = useState<{ time: string; rx: number; tx: number }[]>([]);
+  const [lastBandwidthBytes, setLastBandwidthBytes] = useState<{ rx: number; tx: number } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -225,15 +226,30 @@ export default function CustomerProfile() {
         setLastStatusCheck(new Date());
         
         if (bw.isOnline) {
-          setBandwidthData(prev => {
-            const newData = [...prev.slice(-59)];
-            newData.push({
-              time: format(new Date(), 'HH:mm:ss'),
-              rx: Math.round((bw.rxBytes || 0) / 1024 / 1024 * 8), // Convert to Mbps
-              tx: Math.round((bw.txBytes || 0) / 1024 / 1024 * 8),
+          const currentRx = bw.rxBytes || 0;
+          const currentTx = bw.txBytes || 0;
+          
+          // Calculate rate (bytes per second) from delta between polls
+          if (lastBandwidthBytes) {
+            const rxDelta = Math.max(0, currentRx - lastBandwidthBytes.rx);
+            const txDelta = Math.max(0, currentTx - lastBandwidthBytes.tx);
+            
+            // Convert bytes per 5 seconds to Mbps: (bytes * 8 bits / 1000000) / 5 seconds
+            const rxMbps = parseFloat(((rxDelta * 8) / 1000000 / 5).toFixed(2));
+            const txMbps = parseFloat(((txDelta * 8) / 1000000 / 5).toFixed(2));
+            
+            setBandwidthData(prev => {
+              const newData = [...prev.slice(-59)];
+              newData.push({
+                time: format(new Date(), 'HH:mm:ss'),
+                rx: rxMbps,
+                tx: txMbps,
+              });
+              return newData;
             });
-            return newData;
-          });
+          }
+          
+          setLastBandwidthBytes({ rx: currentRx, tx: currentTx });
         }
       }
     };
@@ -242,7 +258,7 @@ export default function CustomerProfile() {
     pollBandwidth(); // Initial fetch
     
     return () => clearInterval(interval);
-  }, [customer?.mikrotik_id, customer?.pppoe_username, getLiveBandwidth]);
+  }, [customer?.mikrotik_id, customer?.pppoe_username, getLiveBandwidth, lastBandwidthBytes]);
 
   // Handle action from URL params
   useEffect(() => {
@@ -576,10 +592,20 @@ export default function CustomerProfile() {
               <div className="flex flex-col items-center text-center mb-6">
                 <Avatar className="h-20 w-20 mb-4">
                   <AvatarFallback className="text-2xl bg-primary/10 text-primary">
-                    {customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                    {/* Extract initials from name, ignoring ONU data in brackets */}
+                    {(() => {
+                      const cleanName = customer.name.replace(/\[.*?\]/g, '').trim();
+                      if (cleanName) {
+                        return cleanName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                      }
+                      return customer.pppoe_username?.slice(0, 2).toUpperCase() || 'NA';
+                    })()}
                   </AvatarFallback>
                 </Avatar>
-                <h2 className="text-xl font-bold">{customer.name}</h2>
+                <h2 className="text-xl font-bold">
+                  {/* Show clean name without ONU brackets, fallback to PPPoE username */}
+                  {customer.name.replace(/\[.*?\]/g, '').trim() || customer.pppoe_username || 'Unknown'}
+                </h2>
                 <p className="text-sm text-muted-foreground">{customer.pppoe_username}</p>
                 <div className="flex items-center gap-2 mt-3">
                   <Badge variant="outline">{customer.customer_code || 'No Code'}</Badge>
@@ -804,62 +830,6 @@ export default function CustomerProfile() {
                   <span className="font-medium">৳{customer.monthly_bill || 0}</span>
                 </div>
 
-                {/* ONU Details (if OLT enabled and ONU linked) */}
-                {hasOltAccess && onuInfo && (
-                  <>
-                    <Separator className="col-span-2 my-2" />
-                    <div className="col-span-2 flex items-center gap-2 text-sm font-medium text-primary">
-                      <Signal className="h-4 w-4" />
-                      ONU Details
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Signal className="h-4 w-4" /> ONU Status
-                      </span>
-                      <Badge className={onuInfo.status === 'online' ? 'bg-green-500' : 'bg-red-500'}>
-                        {(onuInfo.status || 'UNKNOWN').toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Network className="h-4 w-4" /> ONU Name
-                      </span>
-                      <span>{onuInfo.description || onuInfo.name || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Network className="h-4 w-4" /> ONU MAC
-                      </span>
-                      <span className="font-mono text-xs">{onuInfo.mac_address || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Download className="h-4 w-4" /> RX Power (dBm)
-                      </span>
-                      <span className={`font-mono ${(onuInfo.rx_power || 0) < -25 ? 'text-red-500' : 'text-green-500'}`}>
-                        {onuInfo.rx_power || 'N/A'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Upload className="h-4 w-4" /> TX Power (dBm)
-                      </span>
-                      <span className="font-mono">{onuInfo.tx_power || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Thermometer className="h-4 w-4" /> Temperature
-                      </span>
-                      <span>{onuInfo.temperature ? `${onuInfo.temperature}°C` : 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-muted-foreground flex items-center gap-2">
-                        <Router className="h-4 w-4" /> OLT
-                      </span>
-                      <span>{onuInfo.olt?.name || 'N/A'}</span>
-                    </div>
-                  </>
-                )}
               </div>
 
               {/* PPPoE Credentials */}
@@ -902,6 +872,83 @@ export default function CustomerProfile() {
               </div>
             </CardContent>
           </Card>
+
+          {/* ONU Details Card - Separate Section (only when OLT linked) */}
+          {hasOltAccess && onuInfo && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Signal className="h-5 w-5" />
+                  ONU Details
+                </CardTitle>
+                <CardDescription>
+                  Optical Network Unit diagnostics from OLT
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">ONU Status</p>
+                    <Badge className={onuInfo.status === 'online' ? 'bg-green-500' : 'bg-red-500'}>
+                      {(onuInfo.status || 'UNKNOWN').toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">ONU Name</p>
+                    <p className="font-medium text-sm">{onuInfo.description || onuInfo.name || 'N/A'}</p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">ONU MAC</p>
+                    <p className="font-mono text-xs">{onuInfo.mac_address || 'N/A'}</p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">RX Power (ONU)</p>
+                    <p className={`font-mono font-medium ${(parseFloat(onuInfo.rx_power) || 0) < -25 ? 'text-red-500' : 'text-green-500'}`}>
+                      {onuInfo.rx_power ? `${onuInfo.rx_power} dBm` : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">TX Power (ONU)</p>
+                    <p className="font-mono font-medium">{onuInfo.tx_power ? `${onuInfo.tx_power} dBm` : 'N/A'}</p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">Temperature</p>
+                    <p className="font-medium">{onuInfo.temperature ? `${onuInfo.temperature}°C` : 'N/A'}</p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">PON Port</p>
+                    <p className="font-medium">{onuInfo.pon_port || customer.pon_port || 'N/A'}</p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">ONU Index</p>
+                    <p className="font-medium">{onuInfo.onu_index || customer.onu_index || 'N/A'}</p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">OLT</p>
+                    <p className="font-medium">{onuInfo.olt?.name || 'N/A'}</p>
+                  </div>
+                  {onuInfo.distance && (
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-xs text-muted-foreground mb-1">Distance</p>
+                      <p className="font-medium">{onuInfo.distance} m</p>
+                    </div>
+                  )}
+                  {onuInfo.offline_reason && (
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-xs text-muted-foreground mb-1">Offline Reason</p>
+                      <p className="font-medium text-red-500">{onuInfo.offline_reason}</p>
+                    </div>
+                  )}
+                  {onuInfo.last_down_time && (
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-xs text-muted-foreground mb-1">Last Down</p>
+                      <p className="font-medium text-xs">{onuInfo.last_down_time}</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Live Bandwidth Chart */}
           {bandwidthData.length > 0 && (
