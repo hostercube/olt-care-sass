@@ -27,6 +27,7 @@ import {
 import { addDays, format } from 'date-fns';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { fetchJsonSafe, normalizePollingServerUrl } from '@/lib/polling-server';
 
 interface AddCustomerDialogProps {
   open: boolean;
@@ -49,9 +50,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   const { routers } = useMikroTikRouters();
   const { settings } = useSystemSettings();
   const { tenantId } = useTenantContext();
-
-  const apiBase = (settings?.apiServerUrl || '').replace(/\/$/, '');
-
+  const apiBase = normalizePollingServerUrl(settings?.apiServerUrl);
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [creatingPPPoE, setCreatingPPPoE] = useState(false);
@@ -172,6 +171,11 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       return true;
     }
 
+    if (!apiBase) {
+      toast.error('Polling server URL not configured. Go to Settings → Polling.');
+      return false;
+    }
+
     const router = routers.find((r) => r.id === formData.mikrotik_id);
     if (!router) {
       toast.error('Selected MikroTik router not found');
@@ -185,33 +189,38 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       const pkg = packages.find((p) => p.id === formData.package_id);
       const profileName = pkg?.name || 'default';
 
-      const response = await fetch(`${apiBase}/api/mikrotik/pppoe/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mikrotik: {
-            ip: router.ip_address,
-            port: router.port,
-            username: router.username,
-            password: router.password_encrypted,
-          },
-          pppoeUser: {
-            name: formData.pppoe_username,
-            password: formData.pppoe_password,
-            profile: profileName,
-            comment: `Customer: ${formData.name}`,
-          },
-        }),
-      });
+      const { ok, status, data, text } = await fetchJsonSafe<any>(
+        `${apiBase}/api/mikrotik/pppoe/create`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mikrotik: {
+              ip: router.ip_address,
+              port: router.port,
+              username: router.username,
+              password: router.password_encrypted,
+            },
+            pppoeUser: {
+              name: formData.pppoe_username,
+              password: formData.pppoe_password,
+              profile: profileName,
+              comment: `Customer: ${formData.name}`,
+            },
+          }),
+        }
+      );
 
-      const result = await response.json().catch(() => ({}));
+      const result = data || {};
 
-      if (result?.success) {
+      if (ok && result?.success) {
         toast.success('PPPoE user created on MikroTik');
         return true;
       }
 
-      toast.error(result?.error || 'PPPoE user was not created on MikroTik');
+      const fallback = !ok ? `Request failed (HTTP ${status})` : 'PPPoE user was not created on MikroTik';
+      const msg = String(result?.error || '').trim() || (data ? fallback : (text || fallback));
+      toast.error(msg);
       return false;
     } catch (err) {
       console.warn('MikroTik PPPoE creation failed:', err);
