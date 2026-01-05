@@ -14,11 +14,16 @@ import { Wifi, Loader2, ArrowLeft, Eye, EyeOff, Shield } from 'lucide-react';
 import { z } from 'zod';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { DIVISIONS, getDistricts, getUpazilas } from '@/data/bangladeshLocations';
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
+import { resolvePollingServerUrl } from '@/lib/polling-server';
 
 interface PlatformSettings {
   defaultTrialDays: number;
   enableSignup: boolean;
   requireEmailVerification: boolean;
+  enableCaptcha: boolean;
+  captchaSiteKey: string;
+  pollingServerUrl: string;
 }
 
 interface Package {
@@ -57,11 +62,27 @@ export default function Auth() {
     defaultTrialDays: 14,
     enableSignup: true,
     requireEmailVerification: false,
+    enableCaptcha: false,
+    captchaSiteKey: '',
+    pollingServerUrl: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const captchaEnabled = !!platformSettings.enableCaptcha && !!platformSettings.captchaSiteKey;
+  const [loginCaptchaToken, setLoginCaptchaToken] = useState<string | null>(null);
+  const [signupCaptchaToken, setSignupCaptchaToken] = useState<string | null>(null);
+
+  const verifyTurnstile = async (token: string) => {
+    const { data, error } = await supabase.functions.invoke('turnstile-verify', {
+      body: { token },
+    });
+
+    if (error) throw error;
+    if (!data?.success) throw new Error(data?.error || 'CAPTCHA verification failed');
+  };
 
   // Login form
   const [email, setEmail] = useState('');
@@ -115,6 +136,9 @@ export default function Auth() {
             defaultTrialDays: settings.defaultTrialDays ?? 14,
             enableSignup: settings.enableSignup ?? true,
             requireEmailVerification: settings.requireEmailVerification ?? false,
+            enableCaptcha: settings.enableCaptcha ?? false,
+            captchaSiteKey: settings.captchaSiteKey ?? '',
+            pollingServerUrl: settings.pollingServerUrl ?? '',
           });
         }
       } catch {
@@ -164,11 +188,34 @@ export default function Auth() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateLogin()) return;
-    
+
+    if (captchaEnabled) {
+      if (!loginCaptchaToken) {
+        toast({
+          variant: 'destructive',
+          title: 'CAPTCHA Required',
+          description: 'Please complete the CAPTCHA before logging in.',
+        });
+        return;
+      }
+
+      try {
+        await verifyTurnstile(loginCaptchaToken);
+      } catch (err: any) {
+        toast({
+          variant: 'destructive',
+          title: 'CAPTCHA Failed',
+          description: err?.message || 'Please try again.',
+        });
+        setLoginCaptchaToken(null);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     const result = await signIn(email, password);
     setIsSubmitting(false);
-    
+
     if (result.error) {
       toast({
         variant: "destructive",
@@ -191,6 +238,29 @@ export default function Auth() {
         description: 'New registrations are currently disabled by admin.',
       });
       return;
+    }
+
+    if (captchaEnabled) {
+      if (!signupCaptchaToken) {
+        toast({
+          variant: 'destructive',
+          title: 'CAPTCHA Required',
+          description: 'Please complete the CAPTCHA before creating your account.',
+        });
+        return;
+      }
+
+      try {
+        await verifyTurnstile(signupCaptchaToken);
+      } catch (err: any) {
+        toast({
+          variant: 'destructive',
+          title: 'CAPTCHA Failed',
+          description: err?.message || 'Please try again.',
+        });
+        setSignupCaptchaToken(null);
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -216,10 +286,10 @@ export default function Auth() {
       if (authError) throw authError;
       if (!authData.user) throw new Error('Failed to create user');
 
-      const VPS_URL =
-        import.meta.env.VITE_VPS_URL ||
-        import.meta.env.VITE_POLLING_SERVER_URL ||
-        'https://oltapp.isppoint.com/olt-polling-server';
+      const VPS_URL = resolvePollingServerUrl(platformSettings.pollingServerUrl);
+      if (!VPS_URL) {
+        throw new Error('Polling server URL is not configured by Super Admin.');
+      }
 
       // Complete signup via your VPS backend (avoids client-side RLS issues)
       const completeRes = await fetch(`${VPS_URL}/api/auth/complete-signup`, {
@@ -374,6 +444,15 @@ export default function Auth() {
                     </div>
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                   </div>
+
+                  {captchaEnabled && (
+                    <div className="pt-1">
+                      <TurnstileWidget
+                        siteKey={platformSettings.captchaSiteKey}
+                        onToken={setLoginCaptchaToken}
+                      />
+                    </div>
+                  )}
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
@@ -589,6 +668,15 @@ export default function Auth() {
                         <span className="font-bold text-primary">৳{displayPrice}/{signupData.billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">14-day free trial included</p>
+                    </div>
+                  )}
+
+                  {captchaEnabled && (
+                    <div className="pt-1">
+                      <TurnstileWidget
+                        siteKey={platformSettings.captchaSiteKey}
+                        onToken={setSignupCaptchaToken}
+                      />
                     </div>
                   )}
                 </CardContent>

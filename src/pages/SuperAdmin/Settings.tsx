@@ -485,7 +485,7 @@ export default function SuperAdminSettings() {
                     placeholder="https://yourdomain.com/olt-polling-server"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Your VPS polling server endpoint. Example: https://oltapp.isppoint.com/olt-polling-server (don't include /api)
+                    Your VPS polling server endpoint. Example: https://yourdomain.com/olt-polling-server (don&apos;t include /api)
                   </p>
                 </div>
                 

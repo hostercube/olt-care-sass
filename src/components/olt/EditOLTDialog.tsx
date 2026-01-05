@@ -35,6 +35,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Constants } from '@/integrations/supabase/types';
 import type { Tables } from '@/integrations/supabase/types';
 import { Separator } from '@/components/ui/separator';
+import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
+import { resolvePollingServerUrl } from '@/lib/polling-server';
 
 const oltBrands = Constants.public.Enums.olt_brand;
 
@@ -68,6 +70,9 @@ interface EditOLTDialogProps {
 }
 
 export function EditOLTDialog({ olt, open, onOpenChange, onOLTUpdated }: EditOLTDialogProps) {
+  const { pollingServerUrl } = usePollingServerUrl();
+  const pollingBase = resolvePollingServerUrl(pollingServerUrl);
+
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>('success');
@@ -121,9 +126,13 @@ export function EditOLTDialog({ olt, open, onOpenChange, onOLTUpdated }: EditOLT
     setTestResult(null);
 
     try {
-      const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL || 'http://localhost:3001';
-      
-      const response = await fetch(`${pollingServerUrl}/api/test-connection`, {
+      if (!pollingBase) {
+        toast.warning('Polling server not configured by Super Admin. Changes will be saved without verification.');
+        setTestResult('success');
+        return;
+      }
+
+      const response = await fetch(`${pollingBase}/api/test-connection`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
