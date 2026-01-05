@@ -4958,6 +4958,16 @@ export type Database = {
       generate_po_number: { Args: { _tenant_id: string }; Returns: string }
       generate_request_number: { Args: { _tenant_id: string }; Returns: string }
       generate_so_number: { Args: { _tenant_id: string }; Returns: string }
+      get_enabled_payment_methods: {
+        Args: never
+        Returns: {
+          display_name: string
+          gateway: string
+          id: string
+          instructions: string
+          sort_order: number
+        }[]
+      }
       get_reseller_all_customers: {
         Args: { p_reseller_id: string }
         Returns: {
