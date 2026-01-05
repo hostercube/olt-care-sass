@@ -288,6 +288,9 @@ export default function Landing() {
               </Button>
               
               <ThemeToggle />
+              <Button variant="ghost" onClick={() => navigate('/portal/login')} className="text-primary">
+                {lang === 'en' ? 'Customer Login' : 'কাস্টমার লগইন'}
+              </Button>
               <Button variant="outline" onClick={() => navigate('/auth')}>{t.login}</Button>
               <Button onClick={() => navigate('/auth?mode=signup')} className="bg-gradient-to-r from-primary to-primary/80">
                 {t.getStarted}
@@ -318,6 +321,9 @@ export default function Landing() {
               <a href="#features" className="text-muted-foreground hover:text-foreground">{t.features}</a>
               <a href="#pricing" className="text-muted-foreground hover:text-foreground">{t.pricing}</a>
               <a href="#contact" className="text-muted-foreground hover:text-foreground">{t.contact}</a>
+              <Button variant="ghost" onClick={() => navigate('/portal/login')} className="justify-start text-primary">
+                {lang === 'en' ? 'Customer Login' : 'কাস্টমার লগইন'}
+              </Button>
               <Button variant="outline" onClick={() => navigate('/auth')}>{t.login}</Button>
               <Button onClick={() => navigate('/auth?mode=signup')}>{t.getStarted}</Button>
             </div>
