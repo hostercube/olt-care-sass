@@ -64,6 +64,8 @@ export default function CustomerProfile() {
   const [customer, setCustomer] = useState<CustomerProfileType | null>(null);
   const [loading, setLoading] = useState(true);
   const [networkStatus, setNetworkStatus] = useState<any>(null);
+  const [networkStatusLoading, setNetworkStatusLoading] = useState(false);
+  const [lastStatusCheck, setLastStatusCheck] = useState<Date | null>(null);
   const [bandwidthData, setBandwidthData] = useState<{ time: string; rx: number; tx: number }[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -108,16 +110,22 @@ export default function CustomerProfile() {
 
       // Fetch network status if mikrotik is linked
       if (data?.mikrotik_id && data?.pppoe_username) {
-        const status = await getCustomerNetworkStatus(data.mikrotik_id, data.pppoe_username);
-        setNetworkStatus(status);
-        
-        // Update customer's last_caller_id and last_ip_address if changed
-        if (status?.callerId && status.callerId !== data.last_caller_id) {
-          await supabase.from('customers').update({
-            last_caller_id: status.callerId,
-            last_ip_address: status.address || null,
-            router_mac: status.callerId || data.router_mac,
-          }).eq('id', id);
+        try {
+          const status = await getCustomerNetworkStatus(data.mikrotik_id, data.pppoe_username);
+          setNetworkStatus(status);
+          setLastStatusCheck(new Date());
+          
+          // Update customer's last_caller_id and last_ip_address if changed
+          if (status?.callerId && status.callerId !== data.last_caller_id) {
+            await supabase.from('customers').update({
+              last_caller_id: status.callerId,
+              last_ip_address: status.address || null,
+              router_mac: status.callerId || data.router_mac,
+            }).eq('id', id);
+          }
+        } catch (err) {
+          console.error('Failed to get network status:', err);
+          setNetworkStatus({ isOnline: false, error: 'Failed to check status' });
         }
       }
 
@@ -173,22 +181,60 @@ export default function CustomerProfile() {
     fetchCustomer();
   }, [fetchCustomer]);
 
-  // Live bandwidth polling
+  // Refresh network status manually
+  const refreshNetworkStatus = useCallback(async () => {
+    if (!customer?.mikrotik_id || !customer?.pppoe_username) return;
+    
+    setNetworkStatusLoading(true);
+    try {
+      const status = await getCustomerNetworkStatus(customer.mikrotik_id, customer.pppoe_username);
+      setNetworkStatus(status);
+      setLastStatusCheck(new Date());
+      
+      // Update customer's last_caller_id and last_ip_address if changed
+      if (status?.callerId && status.callerId !== customer.last_caller_id) {
+        await supabase.from('customers').update({
+          last_caller_id: status.callerId,
+          last_ip_address: status.address || null,
+          router_mac: status.callerId || customer.router_mac,
+        }).eq('id', customer.id);
+      }
+      
+      toast.success('Network status refreshed');
+    } catch (err) {
+      console.error('Failed to refresh network status:', err);
+      toast.error('Failed to refresh status');
+    } finally {
+      setNetworkStatusLoading(false);
+    }
+  }, [customer, getCustomerNetworkStatus]);
+
+  // Live bandwidth polling - also updates online status
   useEffect(() => {
     if (!customer?.mikrotik_id || !customer?.pppoe_username) return;
 
     const pollBandwidth = async () => {
-      const bw = await getLiveBandwidth(customer.mikrotik_id!, customer.pppoe_username!);
+      const bw = await getLiveBandwidth(customer.mikrotik_id!, customer.pppoe_username!) as any;
       if (bw) {
-        setBandwidthData(prev => {
-          const newData = [...prev.slice(-59)];
-          newData.push({
-            time: format(new Date(), 'HH:mm:ss'),
-            rx: Math.round((bw.rxBytes || 0) / 1024 / 1024 * 8), // Convert to Mbps
-            tx: Math.round((bw.txBytes || 0) / 1024 / 1024 * 8),
+        // Update online status from bandwidth check
+        setNetworkStatus((prev: any) => ({
+          ...prev,
+          isOnline: bw.isOnline || false,
+          uptime: bw.uptime || prev?.uptime,
+        }));
+        setLastStatusCheck(new Date());
+        
+        if (bw.isOnline) {
+          setBandwidthData(prev => {
+            const newData = [...prev.slice(-59)];
+            newData.push({
+              time: format(new Date(), 'HH:mm:ss'),
+              rx: Math.round((bw.rxBytes || 0) / 1024 / 1024 * 8), // Convert to Mbps
+              tx: Math.round((bw.txBytes || 0) / 1024 / 1024 * 8),
+            });
+            return newData;
           });
-          return newData;
-        });
+        }
       }
     };
 
@@ -448,18 +494,33 @@ export default function CustomerProfile() {
 
       {/* Top Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card>
+        <Card className="relative">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${isOnline ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
                 {isOnline ? <Wifi className="h-5 w-5 text-green-500" /> : <WifiOff className="h-5 w-5 text-red-500" />}
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-xs text-muted-foreground">Router Status</p>
                 <p className={`text-lg font-bold ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
                   {isOnline ? 'ONLINE' : 'OFFLINE'}
                 </p>
+                {lastStatusCheck && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Checked {formatDistanceToNow(lastStatusCheck, { addSuffix: true })}
+                  </p>
+                )}
               </div>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7" 
+                onClick={refreshNetworkStatus}
+                disabled={networkStatusLoading}
+                title="Refresh status"
+              >
+                <RefreshCw className={`h-4 w-4 ${networkStatusLoading ? 'animate-spin' : ''}`} />
+              </Button>
             </div>
           </CardContent>
         </Card>
