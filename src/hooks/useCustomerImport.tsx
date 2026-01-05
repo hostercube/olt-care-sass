@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { toast } from 'sonner';
-import { fetchJsonSafe, normalizePollingServerUrl } from '@/lib/polling-server';
+import { fetchJsonSafe, normalizePollingServerUrl, summarizeHttpError } from '@/lib/polling-server';
 
 interface ImportResult {
   total: number;
@@ -225,6 +225,17 @@ export function useCustomerImport() {
         return { total: 0, success: 0, failed: 0, mikrotikCreated: 0, errors: [] };
       }
 
+      let canProvisionPppoe = !!apiBase;
+
+      // If polling server is down (502/504), don't spam it with requests for every CSV row.
+      if (canProvisionPppoe) {
+        const health = await fetchJsonSafe<any>(`${apiBase}/health`);
+        if (!health.ok) {
+          canProvisionPppoe = false;
+          toast.error(`Polling server unavailable: ${summarizeHttpError(health.status, health.text)}`);
+        }
+      }
+
       // Log import batch
       const { data: importLog } = await supabase
         .from('customer_imports')
@@ -314,10 +325,10 @@ export function useCustomerImport() {
             // Create PPPoE user on MikroTik if conditions are met
             console.log(`Import row ${i + 2}: mikrotikInfo=${!!mikrotikInfo}, pppoeUsername=${pppoeUsername}, pppoePassword=${!!pppoePassword}`);
             
-            if (mikrotikInfo && pppoeUsername && pppoePassword) {
+            if (canProvisionPppoe && mikrotikInfo && pppoeUsername && pppoePassword) {
               const profileName = packageInfo?.name || 'default';
               console.log(`Creating PPPoE on MikroTik for ${pppoeUsername} with profile: ${profileName}`);
-              
+
               const pppoeCreated = await createPPPoEOnMikroTik(
                 mikrotikInfo,
                 {

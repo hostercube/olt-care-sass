@@ -27,7 +27,7 @@ import {
 import { addDays, format } from 'date-fns';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { fetchJsonSafe, normalizePollingServerUrl } from '@/lib/polling-server';
+import { fetchJsonSafe, normalizePollingServerUrl, summarizeHttpError } from '@/lib/polling-server';
 
 interface AddCustomerDialogProps {
   open: boolean;
@@ -219,7 +219,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       }
 
       const fallback = !ok ? `Request failed (HTTP ${status})` : 'PPPoE user was not created on MikroTik';
-      const msg = String(result?.error || '').trim() || (data ? fallback : (text || fallback));
+      const msg = String(result?.error || '').trim() || (data ? fallback : summarizeHttpError(status, text));
       toast.error(msg);
       return false;
     } catch (err) {

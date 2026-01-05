@@ -17,11 +17,23 @@ export function normalizePollingServerUrl(raw?: string | null): string {
   return url;
 }
 
+export function summarizeHttpError(status: number, text: string): string {
+  const t = String(text || '').trim();
+  if (!t) return `Request failed (HTTP ${status})`;
+
+  const looksHtml = /<!doctype\s+html|<html|<title>/i.test(t);
+  if (looksHtml) {
+    return `Polling server error (HTTP ${status}). Check backend service & Nginx proxy.`;
+  }
+
+  // Keep it short for toast UI
+  return t.length > 180 ? `${t.slice(0, 180)}…` : t;
+}
+
 export async function fetchJsonSafe<T = any>(
   input: RequestInfo | URL,
   init?: RequestInit
-): Promise<{ ok: boolean; status: number; data: T | null; text: string }>
-{
+): Promise<{ ok: boolean; status: number; data: T | null; text: string }> {
   const res = await fetch(input, init);
   const text = await res.text().catch(() => '');
   let data: T | null = null;
@@ -34,3 +46,4 @@ export async function fetchJsonSafe<T = any>(
 
   return { ok: res.ok, status: res.status, data, text };
 }
+

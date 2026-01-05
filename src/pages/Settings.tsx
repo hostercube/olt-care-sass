@@ -231,7 +231,7 @@ export default function Settings() {
 
                 <div className="space-y-2">
                   <Label>Polling Server URL</Label>
-                  <Input value={settings.apiServerUrl} onChange={(e) => updateSetting('apiServerUrl', e.target.value)} className="bg-secondary" placeholder="https://olt.yourdomain.com" />
+                  <Input value={settings.apiServerUrl} onChange={(e) => updateSetting('apiServerUrl', e.target.value)} className="bg-secondary" placeholder="https://yourdomain.com/olt-polling-server" />
                   <p className="text-xs text-muted-foreground">Your VPS polling server endpoint (don’t include /api)</p>
                 </div>
               </CardContent>
