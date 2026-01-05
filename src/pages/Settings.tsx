@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Slider } from '@/components/ui/slider';
 import {
   Select,
   SelectContent,
@@ -226,14 +225,6 @@ export default function Settings() {
                     </p>
                   </div>
                 )}
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <Label>Polling Server URL</Label>
-                  <Input value={settings.apiServerUrl} onChange={(e) => updateSetting('apiServerUrl', e.target.value)} className="bg-secondary" placeholder="https://yourdomain.com/olt-polling-server" />
-                  <p className="text-xs text-muted-foreground">Your VPS polling server endpoint (don’t include /api)</p>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>

@@ -19,7 +19,7 @@ import { useISPPackages } from '@/hooks/useISPPackages';
 import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
 import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
-import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
 import {
   Loader2, User, Network, Package, MapPin, ChevronLeft, ChevronRight,
   Check, Router, Key, Calendar
@@ -48,9 +48,9 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   const { areas } = useAreas();
   const { resellers } = useResellers();
   const { routers } = useMikroTikRouters();
-  const { settings } = useSystemSettings();
+  const { pollingServerUrl } = usePollingServerUrl();
   const { tenantId } = useTenantContext();
-  const apiBase = resolvePollingServerUrl(settings?.apiServerUrl);
+  const apiBase = resolvePollingServerUrl(pollingServerUrl);
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [creatingPPPoE, setCreatingPPPoE] = useState(false);

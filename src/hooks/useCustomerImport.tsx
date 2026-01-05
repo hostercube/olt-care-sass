@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
-import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
 import { toast } from 'sonner';
 import { fetchJsonSafe, resolvePollingServerUrl, summarizeHttpError } from '@/lib/polling-server';
 
@@ -15,8 +15,8 @@ interface ImportResult {
 
 export function useCustomerImport() {
   const { tenantId, isSuperAdmin } = useTenantContext();
-  const { settings } = useSystemSettings();
-  const apiBase = resolvePollingServerUrl(settings?.apiServerUrl);
+  const { pollingServerUrl } = usePollingServerUrl();
+  const apiBase = resolvePollingServerUrl(pollingServerUrl);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
 

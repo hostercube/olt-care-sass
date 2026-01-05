@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Shield, ServerOff, Loader2, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
 import { fetchJsonSafe, resolvePollingServerUrl, summarizeHttpError } from '@/lib/polling-server';
 
 // Extend window type for log throttling
@@ -22,7 +22,7 @@ interface VPSStatus {
 }
 
 export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
-  const { settings } = useSystemSettings();
+  const { pollingServerUrl } = usePollingServerUrl();
 
   const [vpsStatus, setVpsStatus] = useState<VPSStatus>({
     status: 'checking',
@@ -31,7 +31,7 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
     errorCount: 0,
   });
 
-  const pollingBase = resolvePollingServerUrl(settings?.apiServerUrl);
+  const pollingBase = resolvePollingServerUrl(pollingServerUrl);
 
   const checkVPSStatus = async () => {
     if (!pollingBase) {
