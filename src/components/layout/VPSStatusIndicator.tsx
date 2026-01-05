@@ -44,16 +44,41 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
       return;
     }
 
-    const url = `${pollingBase.replace(/\/+$/, '')}/status`;
+    const base = pollingBase.replace(/\/+$/, '');
+    // Some deployments proxy only /api/* routes. Prefer /api/health, then /health, then /status.
+    const urlsToTry = [`${base}/api/health`, `${base}/health`, `${base}/status`];
 
-    try {
-      const { ok, status, data, text } = await fetchJsonSafe<any>(
-        url,
-        { method: 'GET', headers: { Accept: 'application/json' } },
-        10000
-      );
+    let lastStatus = 0;
+    let lastText = '';
+    let lastUrl = urlsToTry[urlsToTry.length - 1];
 
-      if (ok && data) {
+    for (const url of urlsToTry) {
+      lastUrl = url;
+      try {
+        const { ok, status, data, text } = await fetchJsonSafe<any>(
+          url,
+          { method: 'GET', headers: { Accept: 'application/json' } },
+          10000
+        );
+
+        lastStatus = status;
+        lastText = text;
+
+        if (!ok || !data) continue;
+
+        // /api/health and /health
+        if (data?.status === 'healthy') {
+          setVpsStatus({
+            status: 'online',
+            lastPollTime: data.timestamp ?? null,
+            isPolling: false,
+            errorCount: 0,
+            checkedUrl: url,
+          });
+          return;
+        }
+
+        // /status
         setVpsStatus({
           status: 'online',
           lastPollTime: data.lastPollTime ?? null,
@@ -62,28 +87,25 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
           checkedUrl: url,
         });
         return;
+      } catch (error: any) {
+        // Only log once per minute to avoid console spam
+        const now = Date.now();
+        if (!window.__lastVPSLogTime || now - window.__lastVPSLogTime > 60000) {
+          console.warn('VPS status check failed:', error);
+          window.__lastVPSLogTime = now;
+        }
+        // continue to next URL
       }
-
-      setVpsStatus((prev) => ({
-        ...prev,
-        status: 'offline',
-        message: summarizeHttpError(status, text) || `Server returned ${status}`,
-        checkedUrl: url,
-      }));
-    } catch (error: any) {
-      // Only log once per minute to avoid console spam
-      const now = Date.now();
-      if (!window.__lastVPSLogTime || now - window.__lastVPSLogTime > 60000) {
-        console.warn('VPS status check failed:', error);
-        window.__lastVPSLogTime = now;
-      }
-      setVpsStatus((prev) => ({
-        ...prev,
-        status: 'offline',
-        message: error?.name === 'AbortError' ? 'Connection timeout' : 'Cannot reach server',
-        checkedUrl: url,
-      }));
     }
+
+    setVpsStatus((prev) => ({
+      ...prev,
+      status: 'offline',
+      message:
+        summarizeHttpError(lastStatus, lastText) ||
+        (lastStatus === 0 ? 'Cannot reach server' : `Server returned ${lastStatus}`),
+      checkedUrl: lastUrl,
+    }));
   };
 
   useEffect(() => {

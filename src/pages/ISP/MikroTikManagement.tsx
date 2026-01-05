@@ -207,7 +207,7 @@ export default function MikroTikManagement() {
       };
 
       if (!pollingBase) {
-        toast.error('Polling server URL not configured. Go to Settings → Polling.');
+        toast.error('Polling server URL not configured. Configure it in Super Admin → Settings → Infrastructure.');
         return;
       }
 
@@ -239,7 +239,7 @@ export default function MikroTikManagement() {
 
     try {
       if (!pollingBase) {
-        toast.error('Polling server URL not configured. Go to Settings → Polling.');
+        toast.error('Polling server URL not configured. Configure it in Super Admin → Settings → Infrastructure.');
         return;
       }
 
@@ -295,7 +295,7 @@ export default function MikroTikManagement() {
 
     try {
       if (!pollingBase) {
-        toast.error('Polling server URL not configured. Go to Settings → Polling.');
+        toast.error('Polling server URL not configured. Configure it in Super Admin → Settings → Infrastructure.');
         return;
       }
 
