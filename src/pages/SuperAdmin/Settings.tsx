@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select';
 import { 
   Settings as SettingsIcon, Shield, Globe, Bell, Mail, 
-  MessageSquare, CreditCard, Loader2, Save, RefreshCw
+  MessageSquare, CreditCard, Loader2, Save, RefreshCw, Server
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -40,6 +40,8 @@ interface SystemSettings {
   autoSuspendDays: number;
   maintenanceMode: boolean;
   maintenanceMessage: string;
+  // VPS/Polling Server
+  pollingServerUrl: string;
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -60,6 +62,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   autoSuspendDays: 7,
   maintenanceMode: false,
   maintenanceMessage: 'We are currently performing maintenance. Please check back later.',
+  pollingServerUrl: '',
 };
 
 export default function SuperAdminSettings() {
@@ -160,6 +163,10 @@ export default function SuperAdminSettings() {
             <TabsTrigger value="general" className="gap-2">
               <SettingsIcon className="h-4 w-4" />
               General
+            </TabsTrigger>
+            <TabsTrigger value="infrastructure" className="gap-2">
+              <Server className="h-4 w-4" />
+              Infrastructure
             </TabsTrigger>
             <TabsTrigger value="security" className="gap-2">
               <Shield className="h-4 w-4" />
@@ -454,6 +461,39 @@ export default function SuperAdminSettings() {
                       </p>
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Infrastructure Settings */}
+          <TabsContent value="infrastructure" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Server className="h-5 w-5 text-primary" />
+                  VPS Polling Server
+                </CardTitle>
+                <CardDescription>Configure the backend polling server for OLT/MikroTik management</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Polling Server URL</Label>
+                  <Input
+                    value={settings.pollingServerUrl}
+                    onChange={(e) => updateSetting('pollingServerUrl', e.target.value)}
+                    placeholder="https://yourdomain.com/olt-polling-server"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Your VPS polling server endpoint. Example: https://oltapp.isppoint.com/olt-polling-server (don't include /api)
+                  </p>
+                </div>
+                
+                <div className="p-4 rounded-lg bg-muted/30 border">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Note:</strong> This URL is used globally for all tenants to communicate with OLT and MikroTik devices.
+                    Ensure the polling server is running and accessible from the internet.
+                  </p>
                 </div>
               </CardContent>
             </Card>
