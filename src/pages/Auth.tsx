@@ -308,7 +308,12 @@ export default function Auth() {
           <ArrowLeft className="h-4 w-4" />
           Back to Home
         </Link>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <Link to="/portal/login" className="text-sm text-primary hover:underline">
+            Customer Login
+          </Link>
+          <ThemeToggle />
+        </div>
       </div>
 
       <div className="flex-1 flex items-center justify-center p-4">
