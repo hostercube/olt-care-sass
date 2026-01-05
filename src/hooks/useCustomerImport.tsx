@@ -109,14 +109,38 @@ export function useCustomerImport() {
   const findMikroTik = async (mikrotikName: string): Promise<{ id: string; ip: string; port: number; username: string; password: string } | null> => {
     if (!mikrotikName || !tenantId) return null;
     
-    const { data } = await supabase
+    // Try exact match first, then partial match
+    let data = null;
+    
+    // First try exact match
+    const { data: exactData } = await supabase
       .from('mikrotik_routers')
       .select('id, ip_address, port, username, password_encrypted')
       .eq('tenant_id', tenantId)
-      .ilike('name', `%${mikrotikName}%`)
+      .ilike('name', mikrotikName)
       .single();
     
-    if (!data) return null;
+    if (exactData) {
+      data = exactData;
+    } else {
+      // Try partial match
+      const { data: partialData } = await supabase
+        .from('mikrotik_routers')
+        .select('id, ip_address, port, username, password_encrypted')
+        .eq('tenant_id', tenantId)
+        .ilike('name', `%${mikrotikName}%`)
+        .limit(1)
+        .single();
+      
+      data = partialData;
+    }
+    
+    if (!data) {
+      console.log(`MikroTik router not found for name: ${mikrotikName}`);
+      return null;
+    }
+    
+    console.log(`Found MikroTik router: ${data.ip_address} for name: ${mikrotikName}`);
     
     return {
       id: data.id,
@@ -134,10 +158,13 @@ export function useCustomerImport() {
   ): Promise<boolean> => {
     if (!apiBase) {
       console.warn('API server URL not configured, skipping MikroTik PPPoE creation');
+      toast.error('API Server URL not configured. Go to Settings to configure VPS connection.');
       return false;
     }
 
     try {
+      console.log(`Creating PPPoE user ${pppoeUser.name} on MikroTik ${mikrotik.ip} with profile: ${pppoeUser.profile}`);
+      
       const response = await fetch(`${apiBase}/api/mikrotik/pppoe/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -158,7 +185,14 @@ export function useCustomerImport() {
       });
 
       const result = await response.json();
-      return result.success === true;
+      console.log(`PPPoE create result for ${pppoeUser.name}:`, result);
+      
+      if (result.success === true) {
+        return true;
+      } else {
+        console.error(`Failed to create PPPoE user ${pppoeUser.name}: ${result.error || 'Unknown error'}`);
+        return false;
+      }
     } catch (err) {
       console.error('Failed to create PPPoE on MikroTik:', err);
       return false;
