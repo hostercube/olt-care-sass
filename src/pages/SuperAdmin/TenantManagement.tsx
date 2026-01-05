@@ -37,6 +37,8 @@ export default function TenantManagement() {
   const { subscriptions, createSubscription, fetchSubscriptions } = useSubscriptions();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [subscriptionFilter, setSubscriptionFilter] = useState<string>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
@@ -104,11 +106,33 @@ export default function TenantManagement() {
     }
   }, [tenants]);
 
-  const filteredTenants = tenants.filter(tenant =>
-    tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    tenant.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    tenant.company_name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTenants = tenants.filter(tenant => {
+    // Text search
+    const matchesSearch = 
+      tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      tenant.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      tenant.company_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Status filter
+    const matchesStatus = statusFilter === 'all' || tenant.status === statusFilter;
+    
+    // Subscription filter
+    let matchesSubscription = true;
+    if (subscriptionFilter !== 'all') {
+      const sub = getTenantSubscription(tenant.id);
+      if (subscriptionFilter === 'no_subscription') {
+        matchesSubscription = !sub;
+      } else if (subscriptionFilter === 'expired') {
+        matchesSubscription = sub ? new Date(sub.ends_at) < new Date() : false;
+      } else if (subscriptionFilter === 'active') {
+        matchesSubscription = sub ? sub.status === 'active' && new Date(sub.ends_at) >= new Date() : false;
+      } else if (subscriptionFilter === 'trial') {
+        matchesSubscription = tenant.status === 'trial';
+      }
+    }
+    
+    return matchesSearch && matchesStatus && matchesSubscription;
+  });
 
   // Pagination
   const {
@@ -434,14 +458,47 @@ export default function TenantManagement() {
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />All ISP Companies ({filteredTenants.length})</CardTitle>
-                <CardDescription>Registered ISP owners on the platform</CardDescription>
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />All ISP Companies ({filteredTenants.length})</CardTitle>
+                  <CardDescription>Registered ISP owners on the platform</CardDescription>
+                </div>
               </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 w-[250px]" />
+              
+              {/* Filters Row */}
+              <div className="flex flex-wrap gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search company, name, email..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+                </div>
+                
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="trial">Trial</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Select value={subscriptionFilter} onValueChange={setSubscriptionFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Subscription" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Subscriptions</SelectItem>
+                    <SelectItem value="active">Active Subscription</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                    <SelectItem value="trial">Trial Period</SelectItem>
+                    <SelectItem value="no_subscription">No Subscription</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardHeader>

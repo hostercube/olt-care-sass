@@ -11,11 +11,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePayments } from '@/hooks/usePayments';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { downloadInvoicePDF } from '@/lib/invoice-pdf';
-import { PaginationControls, useTablePagination } from '@/components/common/TableWithPagination';
 import { CreditCard, Search, CheckCircle, XCircle, Clock, Eye, FileText, DollarSign, Trash2, Ban, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import type { PaymentStatus, Payment, Invoice } from '@/types/saas';
@@ -32,9 +32,15 @@ export default function PaymentManagement() {
     loading: invoicesLoading,
     cancelInvoice,
     deleteInvoice,
+    fetchInvoices,
   } = useInvoices();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('all');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('all');
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>('all');
+  const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
+  
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
   const [isRejectOpen, setIsRejectOpen] = useState(false);
@@ -47,14 +53,10 @@ export default function PaymentManagement() {
   // Payments pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-
-  // Invoices pagination + filters
-  const invoiceTable = useTablePagination<Invoice>(
-    invoices,
-    10,
-    ['invoice_number', 'tenant.company_name', 'tenant.name', 'tenant.email', 'status'],
-  );
-  const invoiceStatusFilter = invoiceTable.filters.status || 'all';
+  
+  // Invoices pagination
+  const [invoiceCurrentPage, setInvoiceCurrentPage] = useState(1);
+  const [invoicePageSize, setInvoicePageSize] = useState(10);
 
   const getStatusBadge = (status: PaymentStatus) => {
     const config: Record<PaymentStatus, { variant: 'success' | 'warning' | 'danger' | 'default'; icon: any }> = {
@@ -75,11 +77,42 @@ export default function PaymentManagement() {
   const pendingPayments = payments.filter(p => p.status === 'pending');
   const completedPayments = payments.filter(p => p.status === 'completed');
 
-  const filteredPayments = payments.filter(payment =>
-    payment.transaction_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    payment.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    payment.tenant?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    payment.tenant?.company_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  // Filtered payments with status and method filters
+  const filteredPayments = useMemo(() => {
+    return payments.filter(payment => {
+      const matchesSearch = 
+        payment.transaction_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        payment.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        payment.tenant?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        payment.tenant?.company_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesStatus = paymentStatusFilter === 'all' || payment.status === paymentStatusFilter;
+      const matchesMethod = paymentMethodFilter === 'all' || payment.payment_method === paymentMethodFilter;
+      
+      return matchesSearch && matchesStatus && matchesMethod;
+    });
+  }, [payments, searchQuery, paymentStatusFilter, paymentMethodFilter]);
+
+  // Filtered invoices
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter(invoice => {
+      const matchesSearch = 
+        invoice.invoice_number.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) ||
+        invoice.tenant?.name?.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) ||
+        invoice.tenant?.company_name?.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) ||
+        invoice.tenant?.email?.toLowerCase().includes(invoiceSearchQuery.toLowerCase());
+      
+      const matchesStatus = invoiceStatusFilter === 'all' || invoice.status === invoiceStatusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [invoices, invoiceSearchQuery, invoiceStatusFilter]);
+
+  // Invoice pagination
+  const invoiceTotalPages = Math.ceil(filteredInvoices.length / invoicePageSize);
+  const paginatedInvoices = filteredInvoices.slice(
+    (invoiceCurrentPage - 1) * invoicePageSize,
+    invoiceCurrentPage * invoicePageSize
   );
 
   // Pagination logic
@@ -334,22 +367,54 @@ export default function PaymentManagement() {
           <TabsContent value="all">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>All Payments</CardTitle>
-                    <CardDescription>Complete payment history</CardDescription>
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>All Payments ({filteredPayments.length})</CardTitle>
+                      <CardDescription>Complete payment history</CardDescription>
+                    </div>
                   </div>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search transactions..."
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      className="pl-9 w-[250px]"
-                    />
+                  
+                  {/* Filters Row */}
+                  <div className="flex flex-wrap gap-3">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search transactions..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setCurrentPage(1);
+                        }}
+                        className="pl-9"
+                      />
+                    </div>
+                    
+                    <Select value={paymentStatusFilter} onValueChange={(v) => { setPaymentStatusFilter(v); setCurrentPage(1); }}>
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="failed">Failed</SelectItem>
+                        <SelectItem value="refunded">Refunded</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    <Select value={paymentMethodFilter} onValueChange={(v) => { setPaymentMethodFilter(v); setCurrentPage(1); }}>
+                      <SelectTrigger className="w-[150px]">
+                        <SelectValue placeholder="Method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Methods</SelectItem>
+                        <SelectItem value="bkash">bKash</SelectItem>
+                        <SelectItem value="sslcommerz">SSLCommerz</SelectItem>
+                        <SelectItem value="nagad">Nagad</SelectItem>
+                        <SelectItem value="manual">Manual</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </CardHeader>
@@ -445,7 +510,7 @@ export default function PaymentManagement() {
               <CardHeader>
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <CardTitle>Invoices</CardTitle>
+                    <CardTitle>Invoices ({filteredInvoices.length})</CardTitle>
                     <CardDescription>All generated invoices</CardDescription>
                   </div>
 
@@ -454,23 +519,27 @@ export default function PaymentManagement() {
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         placeholder="Search invoices..."
-                        value={invoiceTable.searchQuery}
-                        onChange={(e) => invoiceTable.handleSearch(e.target.value)}
+                        value={invoiceSearchQuery}
+                        onChange={(e) => {
+                          setInvoiceSearchQuery(e.target.value);
+                          setInvoiceCurrentPage(1);
+                        }}
                         className="pl-9 w-full sm:w-[260px]"
                       />
                     </div>
 
-                    <select
-                      value={invoiceStatusFilter}
-                      onChange={(e) => invoiceTable.handleFilterChange('status', e.target.value)}
-                      className="h-10 rounded-md border bg-background px-3 text-sm"
-                    >
-                      <option value="all">All Status</option>
-                      <option value="unpaid">Unpaid</option>
-                      <option value="overdue">Overdue</option>
-                      <option value="paid">Paid</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                    <Select value={invoiceStatusFilter} onValueChange={(v) => { setInvoiceStatusFilter(v); setInvoiceCurrentPage(1); }}>
+                      <SelectTrigger className="w-[150px]">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="unpaid">Unpaid</SelectItem>
+                        <SelectItem value="overdue">Overdue</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </CardHeader>
@@ -494,14 +563,14 @@ export default function PaymentManagement() {
                           Loading...
                         </TableCell>
                       </TableRow>
-                    ) : invoiceTable.filteredData.length === 0 ? (
+                    ) : paginatedInvoices.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           No invoices found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      invoiceTable.paginatedData.map((invoice) => (
+                      paginatedInvoices.map((invoice) => (
                         <TableRow key={invoice.id}>
                           <TableCell className="font-mono">{invoice.invoice_number}</TableCell>
                           <TableCell>
@@ -554,16 +623,45 @@ export default function PaymentManagement() {
                   </TableBody>
                 </Table>
 
-                <PaginationControls
-                  currentPage={invoiceTable.currentPage}
-                  totalPages={invoiceTable.totalPages}
-                  pageSize={invoiceTable.pageSize}
-                  totalItems={invoiceTable.totalItems}
-                  startIndex={invoiceTable.startIndex}
-                  endIndex={invoiceTable.endIndex}
-                  onPageChange={invoiceTable.goToPage}
-                  onPageSizeChange={invoiceTable.handlePageSizeChange}
-                />
+                {/* Invoice Pagination */}
+                <div className="flex items-center justify-between pt-4 border-t mt-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Rows per page:</span>
+                    <select
+                      value={invoicePageSize}
+                      onChange={(e) => {
+                        setInvoicePageSize(Number(e.target.value));
+                        setInvoiceCurrentPage(1);
+                      }}
+                      className="h-8 rounded border bg-background px-2 text-sm"
+                    >
+                      {PAGE_SIZE_OPTIONS.map(size => (
+                        <option key={size} value={size}>{size}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      Page {invoiceCurrentPage} of {invoiceTotalPages || 1} ({filteredInvoices.length} total)
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setInvoiceCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={invoiceCurrentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setInvoiceCurrentPage(p => Math.min(invoiceTotalPages, p + 1))}
+                      disabled={invoiceCurrentPage >= invoiceTotalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
