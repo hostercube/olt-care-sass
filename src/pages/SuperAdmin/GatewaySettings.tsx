@@ -188,7 +188,24 @@ export default function GatewaySettings() {
   const handlePaymentSave = async (gateway: string) => {
     const config = paymentConfigs[gateway];
     if (config) {
-      const configData = { ...config.config };
+      // Build config object from fields - ensure all values are saved
+      const gatewayDef = GATEWAY_CONFIGS[gateway];
+      const configData: Record<string, any> = {};
+      
+      // Copy all existing config values
+      if (config.config) {
+        Object.keys(config.config).forEach(key => {
+          if (config.config[key] !== undefined && config.config[key] !== '') {
+            configData[key] = config.config[key];
+          }
+        });
+      }
+      
+      // For bKash, ensure bkash_mode is in config 
+      if (gateway === 'bkash') {
+        configData.bkash_mode = config.config?.bkash_mode || 'tokenized';
+      }
+      
       const updateData: any = {
         is_enabled: config.is_enabled,
         sandbox_mode: config.sandbox_mode,
@@ -198,9 +215,10 @@ export default function GatewaySettings() {
       
       // Save bkash_mode to column directly for bKash gateway
       if (gateway === 'bkash') {
-        updateData.bkash_mode = configData.bkash_mode || 'tokenized';
+        updateData.bkash_mode = configData.bkash_mode;
       }
       
+      console.log('Saving gateway config:', { gateway, updateData });
       await updateGateway(config.id, updateData);
     }
   };
