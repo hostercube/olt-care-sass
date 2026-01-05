@@ -2189,6 +2189,7 @@ export type Database = {
           allow_queue_delete: boolean | null
           auto_disable_expired: boolean | null
           created_at: string
+          expired_profile_name: string | null
           id: string
           ip_address: string
           is_primary: boolean | null
@@ -2202,6 +2203,7 @@ export type Database = {
           sync_queues: boolean | null
           tenant_id: string
           updated_at: string
+          use_expired_profile: boolean | null
           username: string
         }
         Insert: {
@@ -2209,6 +2211,7 @@ export type Database = {
           allow_queue_delete?: boolean | null
           auto_disable_expired?: boolean | null
           created_at?: string
+          expired_profile_name?: string | null
           id?: string
           ip_address: string
           is_primary?: boolean | null
@@ -2222,6 +2225,7 @@ export type Database = {
           sync_queues?: boolean | null
           tenant_id: string
           updated_at?: string
+          use_expired_profile?: boolean | null
           username: string
         }
         Update: {
@@ -2229,6 +2233,7 @@ export type Database = {
           allow_queue_delete?: boolean | null
           auto_disable_expired?: boolean | null
           created_at?: string
+          expired_profile_name?: string | null
           id?: string
           ip_address?: string
           is_primary?: boolean | null
@@ -2242,6 +2247,7 @@ export type Database = {
           sync_queues?: boolean | null
           tenant_id?: string
           updated_at?: string
+          use_expired_profile?: boolean | null
           username?: string
         }
         Relationships: [

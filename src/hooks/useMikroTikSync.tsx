@@ -49,6 +49,9 @@ export function useMikroTikSync() {
       password: data.password_encrypted,
       allow_customer_delete: (data as any).allow_customer_delete ?? true,
       allow_queue_delete: (data as any).allow_queue_delete ?? true,
+      use_expired_profile: (data as any).use_expired_profile ?? false,
+      expired_profile_name: (data as any).expired_profile_name || 'expired',
+      auto_disable_expired: (data as any).auto_disable_expired ?? true,
     };
   };
 
@@ -377,6 +380,65 @@ export function useMikroTikSync() {
     return updatePPPoEUser(routerId, username, { callerId: '' });
   }, [updatePPPoEUser]);
 
+  // Switch customer to expired profile (restricted internet)
+  const switchToExpiredProfile = useCallback(async (
+    routerId: string,
+    username: string
+  ): Promise<boolean> => {
+    try {
+      const config = await getRouterConfig(routerId);
+      if (!config) return false;
+
+      // If use_expired_profile is disabled, just disable the user
+      if (!config.use_expired_profile) {
+        return togglePPPoEUser(routerId, username, true);
+      }
+
+      // Switch to expired profile
+      const result = await updatePPPoEUser(routerId, username, {
+        profile: config.expired_profile_name || 'expired',
+      });
+
+      if (result) {
+        toast.success(`Switched to expired profile: ${config.expired_profile_name}`);
+      }
+      return result;
+    } catch (err: any) {
+      console.error('Switch to expired profile error:', err);
+      toast.error('Failed to switch to expired profile');
+      return false;
+    }
+  }, [updatePPPoEUser, togglePPPoEUser]);
+
+  // Activate customer - switch from expired profile to original package profile and enable
+  const activateCustomer = useCallback(async (
+    routerId: string,
+    username: string,
+    originalProfile: string
+  ): Promise<boolean> => {
+    try {
+      const config = await getRouterConfig(routerId);
+      if (!config) return false;
+
+      // If use_expired_profile is enabled, switch back to original profile
+      if (config.use_expired_profile) {
+        await updatePPPoEUser(routerId, username, {
+          profile: originalProfile,
+        });
+      }
+
+      // Enable the user
+      await togglePPPoEUser(routerId, username, false);
+      
+      toast.success('Customer activated on MikroTik');
+      return true;
+    } catch (err: any) {
+      console.error('Activate customer error:', err);
+      toast.error('Failed to activate customer');
+      return false;
+    }
+  }, [updatePPPoEUser, togglePPPoEUser]);
+
   // Delete PPPoE user from MikroTik (respects router permission setting)
   const deletePPPoEUser = useCallback(async (
     routerId: string,
@@ -483,5 +545,8 @@ export function useMikroTikSync() {
     removeCallerId,
     deletePPPoEUser,
     deleteProfile,
+    switchToExpiredProfile,
+    activateCustomer,
+    getRouterConfig,
   };
 }

@@ -65,6 +65,8 @@ export default function MikroTikManagement() {
     auto_disable_expired: true,
     allow_customer_delete: false, // Default OFF for safety
     allow_queue_delete: false,    // Default OFF for safety
+    use_expired_profile: false,   // Expired profile feature
+    expired_profile_name: 'expired', // Default expired profile name
   });
 
   const fetchRouters = useCallback(async () => {
@@ -106,6 +108,8 @@ export default function MikroTikManagement() {
       auto_disable_expired: true,
       allow_customer_delete: false, // Default OFF for safety
       allow_queue_delete: false,    // Default OFF for safety
+      use_expired_profile: false,
+      expired_profile_name: 'expired',
     });
     setEditingRouter(null);
     setTestResult(null);
@@ -125,6 +129,8 @@ export default function MikroTikManagement() {
       auto_disable_expired: router.auto_disable_expired,
       allow_customer_delete: (router as any).allow_customer_delete ?? false,
       allow_queue_delete: (router as any).allow_queue_delete ?? false,
+      use_expired_profile: (router as any).use_expired_profile ?? false,
+      expired_profile_name: (router as any).expired_profile_name || 'expired',
     });
     setTestResult(null);
     setShowDialog(true);
@@ -146,6 +152,8 @@ export default function MikroTikManagement() {
         auto_disable_expired: formData.auto_disable_expired,
         allow_customer_delete: formData.allow_customer_delete,
         allow_queue_delete: formData.allow_queue_delete,
+        use_expired_profile: formData.use_expired_profile,
+        expired_profile_name: formData.expired_profile_name || 'expired',
       };
 
       if (formData.password) {
@@ -757,6 +765,49 @@ export default function MikroTikManagement() {
                   onCheckedChange={(checked) => setFormData(prev => ({ ...prev, auto_disable_expired: checked }))}
                 />
               </div>
+            </div>
+
+            {/* Expired Profile Settings */}
+            <div className="space-y-4 pt-4 border-t border-orange-500/30 bg-orange-500/5 p-4 rounded-lg">
+              <div className="flex items-center gap-2 text-orange-600">
+                <Settings className="h-5 w-5" />
+                <Label className="text-sm font-semibold">Expired Customer Profile</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Instead of disabling expired customers, switch them to a restricted profile on MikroTik.
+                This allows limited internet access (e.g., payment portal only) until they recharge.
+              </p>
+              
+              <div className="flex items-center justify-between p-3 border border-orange-500/30 rounded-md bg-background">
+                <div className="flex-1">
+                  <Label className="font-medium">Use Expired Profile</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    When enabled, expired customers will switch to a restricted profile instead of being disabled.
+                    <span className="block text-orange-600 font-medium">Make sure the profile exists on MikroTik!</span>
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.use_expired_profile}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, use_expired_profile: checked }))}
+                  className="data-[state=checked]:bg-orange-500"
+                />
+              </div>
+              
+              {formData.use_expired_profile && (
+                <div className="space-y-2">
+                  <Label>Expired Profile Name</Label>
+                  <Input
+                    value={formData.expired_profile_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, expired_profile_name: e.target.value }))}
+                    placeholder="expired"
+                    className="border-orange-500/30"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This profile should exist on MikroTik with restricted bandwidth/access. 
+                    Common names: <code className="bg-muted px-1 rounded">expired</code>, <code className="bg-muted px-1 rounded">restricted</code>, <code className="bg-muted px-1 rounded">suspended</code>
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* MikroTik Danger Zone */}
