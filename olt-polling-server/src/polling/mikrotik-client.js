@@ -100,25 +100,27 @@ async function deduplicateRequest(requestKey, fetchFn) {
 }
 
 /**
- * Clear all caches for a specific device (useful after mutations)
+ * Clear MikroTik *data* caches for a specific device (useful after mutations)
+ * NOTE: Connection cache is cleared via `clearMikroTikCache(ip, port)`.
  */
-export function clearMikroTikCache(deviceIp) {
+export function clearMikroTikDataCache(deviceIp) {
   const keysToDelete = [];
-  
+
   for (const [key] of dataCache) {
     if (key.includes(deviceIp)) keysToDelete.push(key);
   }
   for (const [key] of staticDataCache) {
     if (key.includes(deviceIp)) keysToDelete.push(key);
   }
-  
-  keysToDelete.forEach(key => {
+
+  keysToDelete.forEach((key) => {
     dataCache.delete(key);
     staticDataCache.delete(key);
   });
-  
-  logger.debug(`Cleared cache for device ${deviceIp}`);
+
+  logger.debug(`Cleared MikroTik data cache for device ${deviceIp}`);
 }
+
 
 /**
  * Normalize MAC address to uppercase XX:XX:XX:XX:XX:XX format
