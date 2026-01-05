@@ -27,7 +27,7 @@ import {
 import { addDays, format } from 'date-fns';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { fetchJsonSafe, normalizePollingServerUrl, summarizeHttpError } from '@/lib/polling-server';
+import { fetchJsonSafe, resolvePollingServerUrl, summarizeHttpError } from '@/lib/polling-server';
 
 interface AddCustomerDialogProps {
   open: boolean;
@@ -50,7 +50,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   const { routers } = useMikroTikRouters();
   const { settings } = useSystemSettings();
   const { tenantId } = useTenantContext();
-  const apiBase = normalizePollingServerUrl(settings?.apiServerUrl);
+  const apiBase = resolvePollingServerUrl(settings?.apiServerUrl);
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [creatingPPPoE, setCreatingPPPoE] = useState(false);

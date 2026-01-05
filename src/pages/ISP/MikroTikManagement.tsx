@@ -22,7 +22,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
-import { normalizePollingServerUrl } from '@/lib/polling-server';
+import { resolvePollingServerUrl } from '@/lib/polling-server';
 import { 
   Router, Plus, Edit, Trash2, Loader2, RefreshCw, Wifi, WifiOff, Activity,
   Users, ListOrdered, Settings, CheckCircle, XCircle, MoreVertical, Search,
@@ -38,7 +38,7 @@ import {
 export default function MikroTikManagement() {
   const { tenantId, isSuperAdmin } = useTenantContext();
   const { settings } = useSystemSettings();
-  const pollingBase = normalizePollingServerUrl(settings?.apiServerUrl);
+  const pollingBase = resolvePollingServerUrl(settings?.apiServerUrl);
   
   const [routers, setRouters] = useState<MikroTikRouter[]>([]);
   const [loading, setLoading] = useState(true);

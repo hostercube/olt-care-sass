@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { toast } from 'sonner';
-import { normalizePollingServerUrl } from '@/lib/polling-server';
+import { resolvePollingServerUrl } from '@/lib/polling-server';
 
 interface SyncResult {
   success: boolean;
@@ -28,7 +28,7 @@ interface CustomerNetworkStatus {
 export function useMikroTikSync() {
   const { tenantId } = useTenantContext();
   const { settings } = useSystemSettings();
-  const apiBase = normalizePollingServerUrl(settings?.apiServerUrl);
+  const apiBase = resolvePollingServerUrl(settings?.apiServerUrl);
 
   const [syncing, setSyncing] = useState(false);
   const [syncingRouter, setSyncingRouter] = useState<string | null>(null);
