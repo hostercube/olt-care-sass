@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { toast } from 'sonner';
-import { fetchJsonSafe, normalizePollingServerUrl, summarizeHttpError } from '@/lib/polling-server';
+import { fetchJsonSafe, resolvePollingServerUrl, summarizeHttpError } from '@/lib/polling-server';
 
 interface ImportResult {
   total: number;
@@ -16,7 +16,7 @@ interface ImportResult {
 export function useCustomerImport() {
   const { tenantId, isSuperAdmin } = useTenantContext();
   const { settings } = useSystemSettings();
-  const apiBase = normalizePollingServerUrl(settings?.apiServerUrl);
+  const apiBase = resolvePollingServerUrl(settings?.apiServerUrl);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
 

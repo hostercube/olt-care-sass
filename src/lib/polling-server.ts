@@ -17,6 +17,46 @@ export function normalizePollingServerUrl(raw?: string | null): string {
   return url;
 }
 
+const DEFAULT_RELATIVE_POLLING_PATH = '/olt-polling-server';
+
+function maybeAppendDefaultPollingPath(base: string): string {
+  if (!base) return '';
+  try {
+    const u = new URL(base);
+    // If user provided only origin (no path), assume the standard polling path.
+    if (u.pathname === '/' || u.pathname === '') {
+      u.pathname = DEFAULT_RELATIVE_POLLING_PATH;
+    }
+    // Remove trailing slash for consistency
+    return u.toString().replace(/\/+$/, '');
+  } catch {
+    // If it's not a full URL, keep as-is (normalizePollingServerUrl already trimmed)
+    return base;
+  }
+}
+
+/**
+ * Resolve polling server base URL.
+ * Priority: Settings value -> env -> same-origin default.
+ */
+export function resolvePollingServerUrl(raw?: string | null): string {
+  const fromSettings = maybeAppendDefaultPollingPath(normalizePollingServerUrl(raw));
+  if (fromSettings) return fromSettings;
+
+  const envFallback =
+    import.meta.env.VITE_VPS_URL || import.meta.env.VITE_POLLING_SERVER_URL || '';
+  const fromEnv = maybeAppendDefaultPollingPath(normalizePollingServerUrl(envFallback));
+  if (fromEnv) return fromEnv;
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return normalizePollingServerUrl(
+      `${window.location.origin}${DEFAULT_RELATIVE_POLLING_PATH}`
+    );
+  }
+
+  return '';
+}
+
 export function summarizeHttpError(status: number, text: string): string {
   const t = String(text || '').trim();
   
