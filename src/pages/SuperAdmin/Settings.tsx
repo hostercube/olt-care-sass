@@ -42,6 +42,13 @@ interface SystemSettings {
   maintenanceMessage: string;
   // VPS/Polling Server
   pollingServerUrl: string;
+  // Rate limits
+  smsRateLimitPerMinute: number;
+  smsRateLimitPerHour: number;
+  smsRateLimitPerDay: number;
+  emailRateLimitPerMinute: number;
+  emailRateLimitPerHour: number;
+  emailRateLimitPerDay: number;
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -63,6 +70,13 @@ const DEFAULT_SETTINGS: SystemSettings = {
   maintenanceMode: false,
   maintenanceMessage: 'We are currently performing maintenance. Please check back later.',
   pollingServerUrl: '',
+  // Rate limits - defaults
+  smsRateLimitPerMinute: 10,
+  smsRateLimitPerHour: 100,
+  smsRateLimitPerDay: 1000,
+  emailRateLimitPerMinute: 5,
+  emailRateLimitPerHour: 50,
+  emailRateLimitPerDay: 500,
 };
 
 export default function SuperAdminSettings() {
@@ -460,6 +474,96 @@ export default function SuperAdminSettings() {
                         Configure in <a href="/admin/email-gateway" className="text-primary hover:underline">Email Gateway Settings</a>
                       </p>
                     </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* SMS Rate Limits */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-primary" />
+                  SMS Rate Limits
+                </CardTitle>
+                <CardDescription>Control how many SMS can be sent per time period</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Per Minute</Label>
+                    <Input
+                      type="number"
+                      value={settings.smsRateLimitPerMinute}
+                      onChange={(e) => updateSetting('smsRateLimitPerMinute', parseInt(e.target.value) || 10)}
+                      min={1}
+                      max={100}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Per Hour</Label>
+                    <Input
+                      type="number"
+                      value={settings.smsRateLimitPerHour}
+                      onChange={(e) => updateSetting('smsRateLimitPerHour', parseInt(e.target.value) || 100)}
+                      min={1}
+                      max={1000}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Per Day</Label>
+                    <Input
+                      type="number"
+                      value={settings.smsRateLimitPerDay}
+                      onChange={(e) => updateSetting('smsRateLimitPerDay', parseInt(e.target.value) || 1000)}
+                      min={1}
+                      max={10000}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Email Rate Limits */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-primary" />
+                  Email Rate Limits
+                </CardTitle>
+                <CardDescription>Control how many emails can be sent per time period</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Per Minute</Label>
+                    <Input
+                      type="number"
+                      value={settings.emailRateLimitPerMinute}
+                      onChange={(e) => updateSetting('emailRateLimitPerMinute', parseInt(e.target.value) || 5)}
+                      min={1}
+                      max={50}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Per Hour</Label>
+                    <Input
+                      type="number"
+                      value={settings.emailRateLimitPerHour}
+                      onChange={(e) => updateSetting('emailRateLimitPerHour', parseInt(e.target.value) || 50)}
+                      min={1}
+                      max={500}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Per Day</Label>
+                    <Input
+                      type="number"
+                      value={settings.emailRateLimitPerDay}
+                      onChange={(e) => updateSetting('emailRateLimitPerDay', parseInt(e.target.value) || 500)}
+                      min={1}
+                      max={5000}
+                    />
                   </div>
                 </div>
               </CardContent>

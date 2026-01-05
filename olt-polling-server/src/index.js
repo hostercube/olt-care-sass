@@ -2181,6 +2181,35 @@ app.post('/admin/reset-password', async (req, res) => {
   app.handle(req, res);
 });
 
+// Create user endpoint (admin only - auto-confirms email)
+app.post('/api/admin/create-user', async (req, res) => {
+  const { email, password, full_name } = req.body;
+  
+  try {
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Import the createUser function from user-admin module
+    const { createUser } = await import('./admin/user-admin.js');
+    const result = await createUser(email, password, { full_name: full_name || '' });
+    
+    res.json({ success: true, user: result.user });
+  } catch (error) {
+    logger.error('Create user error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/admin/create-user', async (req, res) => {
+  req.url = '/api/admin/create-user';
+  app.handle(req, res);
+});
+
 // ============= NOTIFICATION ENDPOINTS =============
 // Test notification channels
 
