@@ -120,27 +120,20 @@ export default function Auth() {
         .order('sort_order', { ascending: true });
       setPackages((pkgData as Package[]) || []);
 
-      // Fetch platform settings for trial days
+      // Fetch platform settings for trial days + captcha (works before login)
       try {
-        const { data: settingsData, error } = await supabase
-          .from('system_settings')
-          .select('value')
-          .eq('key', 'platform_settings')
-          .maybeSingle();
-
+        const { data, error } = await supabase.functions.invoke('public-platform-settings');
         if (error) throw error;
 
-        if (settingsData?.value) {
-          const settings = settingsData.value as any;
-          setPlatformSettings({
-            defaultTrialDays: settings.defaultTrialDays ?? 14,
-            enableSignup: settings.enableSignup ?? true,
-            requireEmailVerification: settings.requireEmailVerification ?? false,
-            enableCaptcha: settings.enableCaptcha ?? false,
-            captchaSiteKey: settings.captchaSiteKey ?? '',
-            pollingServerUrl: settings.pollingServerUrl ?? '',
-          });
-        }
+        const s = (data as any)?.settings || {};
+        setPlatformSettings({
+          defaultTrialDays: s.defaultTrialDays ?? 14,
+          enableSignup: s.enableSignup ?? true,
+          requireEmailVerification: s.requireEmailVerification ?? false,
+          enableCaptcha: s.enableCaptcha ?? false,
+          captchaSiteKey: s.captchaSiteKey ?? '',
+          pollingServerUrl: s.pollingServerUrl ?? '',
+        });
       } catch {
         // Keep defaults
       }

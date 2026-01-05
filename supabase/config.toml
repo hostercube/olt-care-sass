@@ -3,3 +3,6 @@ project_id = "kpcmlbztpztrxdwlfhfw"
 [functions.turnstile-verify]
 verify_jwt = false
 
+[functions.public-platform-settings]
+verify_jwt = false
+

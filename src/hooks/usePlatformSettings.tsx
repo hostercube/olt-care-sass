@@ -40,16 +40,15 @@ export function usePlatformSettings() {
 
   const fetchSettings = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'platform_settings')
-        .maybeSingle();
+      setLoading(true);
 
+      // Use public backend function so tenant users (and login page) can read safe platform settings
+      const { data, error } = await supabase.functions.invoke('public-platform-settings');
       if (error) throw error;
 
-      if (data?.value) {
-        setSettings({ ...DEFAULT_SETTINGS, ...(data.value as PlatformSettings) });
+      const s = ((data as any)?.settings ?? null) as PlatformSettings | null;
+      if (s) {
+        setSettings({ ...DEFAULT_SETTINGS, ...s });
       } else {
         setSettings(DEFAULT_SETTINGS);
       }
