@@ -22,7 +22,8 @@ import { supabase } from '@/integrations/supabase/client';
 export default function MakePayment() {
   const { tenantId, isSuperAdmin, isImpersonating } = useTenantContext();
   const { createPayment } = usePayments();
-  const { gateways: globalGateways, loading: globalGatewaysLoading } = usePaymentGateways();
+  // For Super Admin panel - use direct query (has RLS access)
+  const { gateways: globalGatewaysDirect, loading: globalGatewaysLoading } = usePaymentGateways();
   const {
     gateways: tenantGateways,
     loading: tenantGatewaysLoading,
@@ -48,6 +49,33 @@ export default function MakePayment() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
   const [tenantInfo, setTenantInfo] = useState<any>(null);
+  const [globalGatewaysFromRpc, setGlobalGatewaysFromRpc] = useState<any[]>([]);
+  const [globalGatewaysRpcLoading, setGlobalGatewaysRpcLoading] = useState(true);
+
+  // Fetch global gateways using RPC function (bypasses RLS for tenants)
+  useEffect(() => {
+    const fetchGlobalGatewaysViaRpc = async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_enabled_payment_methods');
+        if (error) {
+          console.error('Error fetching enabled payment methods via RPC:', error);
+          // Fallback to direct query if RPC fails
+          setGlobalGatewaysFromRpc([]);
+        } else {
+          setGlobalGatewaysFromRpc(data || []);
+        }
+      } catch (err) {
+        console.error('Error calling get_enabled_payment_methods RPC:', err);
+        setGlobalGatewaysFromRpc([]);
+      } finally {
+        setGlobalGatewaysRpcLoading(false);
+      }
+    };
+    fetchGlobalGatewaysViaRpc();
+  }, []);
+
+  // Use RPC results for tenants, direct query for Super Admin
+  const globalGateways = isSuperAdmin && !isImpersonating ? globalGatewaysDirect : globalGatewaysFromRpc;
 
   // Check for payment callback status
   useEffect(() => {
@@ -121,7 +149,7 @@ export default function MakePayment() {
 
   const gatewaysLoading = tenantId
     ? tenantGatewaysLoading || isInitializingTenantGateways
-    : globalGatewaysLoading;
+    : (isSuperAdmin && !isImpersonating ? globalGatewaysLoading : globalGatewaysRpcLoading);
 
   // Get selected invoice data and amount
   const selectedInvoiceData = selectedInvoice ? invoices.find((i) => i.id === selectedInvoice) : null;

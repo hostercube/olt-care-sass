@@ -4961,10 +4961,13 @@ export type Database = {
       get_enabled_payment_methods: {
         Args: never
         Returns: {
+          bkash_mode: string
           display_name: string
           gateway: string
           id: string
           instructions: string
+          is_enabled: boolean
+          sandbox_mode: boolean
           sort_order: number
         }[]
       }
