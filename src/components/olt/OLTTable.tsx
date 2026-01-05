@@ -36,6 +36,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
+import { resolvePollingServerUrl } from '@/lib/polling-server';
 
 interface OLTTableProps {
   olts: Tables<'olts'>[];
@@ -44,6 +46,9 @@ interface OLTTableProps {
 
 export function OLTTable({ olts, onRefresh }: OLTTableProps) {
   const navigate = useNavigate();
+  const { pollingServerUrl } = usePollingServerUrl();
+  const pollingBase = resolvePollingServerUrl(pollingServerUrl);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [editingOLT, setEditingOLT] = useState<Tables<'olts'> | null>(null);
   const [deletingOLT, setDeletingOLT] = useState<{ id: string; name: string } | null>(null);
@@ -56,8 +61,11 @@ export function OLTTable({ olts, onRefresh }: OLTTableProps) {
   const handlePollNow = async (oltId: string, oltName: string) => {
     setPollingOLT(oltId);
     try {
-      const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL || 'http://localhost:3001';
-      const response = await fetch(`${pollingServerUrl}/api/poll/${oltId}`, {
+      if (!pollingBase) {
+        throw new Error('Polling server URL not configured. Ask Super Admin to set it.');
+      }
+
+      const response = await fetch(`${pollingBase}/api/poll/${oltId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });

@@ -1,7 +1,13 @@
 import type { PaymentMethod } from "@/types/saas";
+import { resolvePollingServerUrl } from "@/lib/polling-server";
 
-// Get VPS URL from environment - fallback to polling server URL
-const VPS_URL = import.meta.env.VITE_VPS_URL || import.meta.env.VITE_POLLING_SERVER_URL || 'https://oltapp.isppoint.com/olt-polling-server';
+function getVpsBaseUrl(override?: string | null): string {
+  // Uses:
+  // 1) platform setting (if provided)
+  // 2) env fallback
+  // 3) same-origin default: /olt-polling-server
+  return resolvePollingServerUrl(override);
+}
 
 export interface PaymentInitiateRequest {
   gateway: PaymentMethod;
@@ -50,7 +56,12 @@ export interface PaymentInitiateResponse {
   } | null;
 }
 
-export async function initiatePayment(request: PaymentInitiateRequest): Promise<PaymentInitiateResponse> {
+export async function initiatePayment(
+  request: PaymentInitiateRequest,
+  pollingServerUrl?: string | null,
+): Promise<PaymentInitiateResponse> {
+  const VPS_URL = getVpsBaseUrl(pollingServerUrl);
+
   try {
     const response = await fetch(`${VPS_URL}/api/payments/initiate`, {
       method: 'POST',
@@ -113,7 +124,8 @@ export function isOnlineGateway(gateway: PaymentMethod): boolean {
 }
 
 // Get callback URL for payment gateways
-export function getPaymentCallbackUrl(gateway: string): string {
+export function getPaymentCallbackUrl(gateway: string, pollingServerUrl?: string | null): string {
+  const VPS_URL = getVpsBaseUrl(pollingServerUrl);
   // MUST use /olt-polling-server path because Nginx proxies this to the backend
   // Without this prefix, Nginx tries to serve static files and returns 405 on POST
   return `${VPS_URL}/payments/callback/${gateway}`;

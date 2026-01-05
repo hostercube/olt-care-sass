@@ -35,6 +35,8 @@ import { toast } from 'sonner';
 import { addOLT } from '@/hooks/useOLTData';
 import { Constants } from '@/integrations/supabase/types';
 import { Separator } from '@/components/ui/separator';
+import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
+import { resolvePollingServerUrl } from '@/lib/polling-server';
 
 const oltBrands = Constants.public.Enums.olt_brand;
 
@@ -146,6 +148,9 @@ const brandConnectionInfo: Record<string, {
 };
 
 export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
+  const { pollingServerUrl } = usePollingServerUrl();
+  const pollingBase = resolvePollingServerUrl(pollingServerUrl);
+
   const [open, setOpen] = useState(false);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -205,10 +210,8 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       return;
     }
 
-    const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
-    
-    if (!pollingServerUrl) {
-      toast.error('Polling server not configured');
+    if (!pollingBase) {
+      toast.error('Polling server not configured. Ask Super Admin to set it in Platform Settings → Infrastructure.');
       return;
     }
 
@@ -219,7 +222,7 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
       
-      const baseUrl = pollingServerUrl.replace(/\/+$/, '');
+      const baseUrl = pollingBase.replace(/\/+$/, '');
       const response = await fetch(`${baseUrl}/test-all-protocols`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -265,9 +268,7 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       return;
     }
 
-    const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
-    
-    if (!pollingServerUrl) {
+    if (!pollingBase) {
       toast.warning('Polling server not configured. OLT will be added without connection test.');
       setTestResult('success');
       return;
@@ -280,7 +281,7 @@ export function AddOLTDialog({ onOLTAdded }: AddOLTDialogProps) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
       
-      const baseUrl = pollingServerUrl.replace(/\/+$/, '');
+      const baseUrl = pollingBase.replace(/\/+$/, '');
       const response = await fetch(`${baseUrl}/test-connection`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
