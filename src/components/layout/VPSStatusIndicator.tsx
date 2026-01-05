@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Shield, ServerOff, Loader2, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { fetchJsonSafe, resolvePollingServerUrl, summarizeHttpError } from '@/lib/polling-server';
 
 // Extend window type for log throttling
 declare global {
@@ -16,9 +18,12 @@ interface VPSStatus {
   isPolling: boolean;
   errorCount: number;
   message?: string;
+  checkedUrl?: string;
 }
 
 export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
+  const { settings } = useSystemSettings();
+
   const [vpsStatus, setVpsStatus] = useState<VPSStatus>({
     status: 'checking',
     lastPollTime: null,
@@ -26,49 +31,45 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
     errorCount: 0,
   });
 
-  const pollingServerUrl = import.meta.env.VITE_POLLING_SERVER_URL;
+  const pollingBase = resolvePollingServerUrl(settings?.apiServerUrl);
 
   const checkVPSStatus = async () => {
-    if (!pollingServerUrl) {
-      setVpsStatus(prev => ({ 
-        ...prev, 
+    if (!pollingBase) {
+      setVpsStatus((prev) => ({
+        ...prev,
         status: 'offline',
-        message: 'Polling server URL not configured'
+        message: 'Polling server URL not configured',
+        checkedUrl: undefined,
       }));
       return;
     }
 
+    const url = `${pollingBase.replace(/\/+$/, '')}/status`;
+
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
-      // Remove trailing slash and construct proper URL
-      const baseUrl = pollingServerUrl.replace(/\/+$/, '');
-      const response = await fetch(`${baseUrl}/status`, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data = await response.json();
+      const { ok, status, data, text } = await fetchJsonSafe<any>(
+        url,
+        { method: 'GET', headers: { Accept: 'application/json' } },
+        10000
+      );
+
+      if (ok && data) {
         setVpsStatus({
           status: 'online',
-          lastPollTime: data.lastPollTime,
-          isPolling: data.isPolling,
-          errorCount: data.errors?.length || 0,
+          lastPollTime: data.lastPollTime ?? null,
+          isPolling: !!data.isPolling,
+          errorCount: Array.isArray(data.errors) ? data.errors.length : 0,
+          checkedUrl: url,
         });
-      } else {
-        setVpsStatus(prev => ({ 
-          ...prev, 
-          status: 'offline',
-          message: `Server returned ${response.status}`
-        }));
+        return;
       }
+
+      setVpsStatus((prev) => ({
+        ...prev,
+        status: 'offline',
+        message: summarizeHttpError(status, text) || `Server returned ${status}`,
+        checkedUrl: url,
+      }));
     } catch (error: any) {
       // Only log once per minute to avoid console spam
       const now = Date.now();
@@ -76,19 +77,22 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
         console.warn('VPS status check failed:', error);
         window.__lastVPSLogTime = now;
       }
-      setVpsStatus(prev => ({ 
-        ...prev, 
+      setVpsStatus((prev) => ({
+        ...prev,
         status: 'offline',
-        message: error.name === 'AbortError' ? 'Connection timeout' : 'Cannot reach server'
+        message: error?.name === 'AbortError' ? 'Connection timeout' : 'Cannot reach server',
+        checkedUrl: url,
       }));
     }
   };
 
   useEffect(() => {
+    setVpsStatus((prev) => ({ ...prev, status: 'checking' }));
     checkVPSStatus();
     const interval = setInterval(checkVPSStatus, 30000);
     return () => clearInterval(interval);
-  }, [pollingServerUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pollingBase]);
 
   const getStatusIcon = () => {
     switch (vpsStatus.status) {
@@ -143,13 +147,14 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex justify-center cursor-help">
-              {getStatusIcon()}
-            </div>
+            <div className="flex justify-center cursor-help">{getStatusIcon()}</div>
           </TooltipTrigger>
           <TooltipContent side="right">
             <p>{getStatusText()}</p>
             {vpsStatus.message && <p className="text-xs opacity-70">{vpsStatus.message}</p>}
+            {vpsStatus.checkedUrl && (
+              <p className="text-xs opacity-70 font-mono max-w-[280px] break-all">{vpsStatus.checkedUrl}</p>
+            )}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -163,21 +168,17 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
           <div className={`rounded-lg p-3 border cursor-help ${getBgColor()}`}>
             <div className="flex items-center gap-2">
               {getStatusIcon()}
-              <span className={`text-xs font-medium ${getStatusColor()}`}>
-                {getStatusText()}
-              </span>
+              <span className={`text-xs font-medium ${getStatusColor()}`}>{getStatusText()}</span>
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">
               {vpsStatus.status === 'online' && vpsStatus.lastPollTime
                 ? `Last poll: ${formatDistanceToNow(new Date(vpsStatus.lastPollTime), { addSuffix: true })}`
                 : vpsStatus.status === 'offline'
-                ? vpsStatus.message || 'Cannot reach polling server'
-                : 'Checking server status...'}
+                  ? vpsStatus.message || 'Cannot reach polling server'
+                  : 'Checking server status...'}
             </p>
             {vpsStatus.errorCount > 0 && (
-              <p className="text-[10px] text-warning mt-0.5">
-                {vpsStatus.errorCount} error(s) in last poll
-              </p>
+              <p className="text-[10px] text-warning mt-0.5">{vpsStatus.errorCount} error(s) in last poll</p>
             )}
           </div>
         </TooltipTrigger>
@@ -185,8 +186,8 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
           <div className="space-y-1">
             <p className="font-medium">{getStatusText()}</p>
             {vpsStatus.message && <p className="text-xs">{vpsStatus.message}</p>}
-            {pollingServerUrl && (
-              <p className="text-xs opacity-70 font-mono">{pollingServerUrl}</p>
+            {vpsStatus.checkedUrl && (
+              <p className="text-xs opacity-70 font-mono max-w-[380px] break-all">{vpsStatus.checkedUrl}</p>
             )}
           </div>
         </TooltipContent>
@@ -194,3 +195,4 @@ export function VPSStatusIndicator({ collapsed }: { collapsed: boolean }) {
     </TooltipProvider>
   );
 }
+
