@@ -2200,7 +2200,9 @@ app.post('/api/admin/reset-password-by-email', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email and new password are required' });
     }
 
-    // Get admin client to find user by email
+    // Import and use the admin client from user-admin module
+    const { createUser, getAllUsers, updateUserPassword: updatePassword } = await import('./admin/user-admin.js');
+    const { createClient } = await import('@supabase/supabase-js');
     const adminClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
     
     // Find user by email

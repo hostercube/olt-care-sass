@@ -110,20 +110,11 @@ export default function MakePayment() {
   // ISP owners: show tenant-specific gateways if any are enabled; otherwise fall back to global gateways enabled by Super Admin
   const enabledTenantGateways = tenantId ? tenantGateways.filter((g: any) => g.is_enabled === true) : [];
   
-  // For global gateways, show all enabled ones (Super Admin has configured them)
-  // Filter out gateways that require config but don't have it (empty config object means not configured)
-  const enabledGlobalGateways = globalGateways.filter((g: any) => {
-    if (!g.is_enabled) return false;
-    
-    // Manual payment doesn't need config
-    if (g.gateway === 'manual') return true;
-    
-    // For other gateways, check if config exists and has at least one key
-    const hasConfig = g.config && typeof g.config === 'object' && Object.keys(g.config).length > 0;
-    return hasConfig;
-  });
+  // For global gateways, show ALL enabled ones - Super Admin has configured them
+  // Trust that if Super Admin enabled a gateway, it's ready to use
+  const enabledGlobalGateways = globalGateways.filter((g: any) => g.is_enabled === true);
   
-  // Use tenant gateways if they exist, otherwise fallback to global gateways
+  // Use tenant gateways if they exist and some are enabled, otherwise fallback to global gateways
   const enabledGateways = tenantId && enabledTenantGateways.length > 0 ? enabledTenantGateways : enabledGlobalGateways;
 
   const isUsingFallbackGateways = !!tenantId && enabledTenantGateways.length === 0 && enabledGlobalGateways.length > 0;
