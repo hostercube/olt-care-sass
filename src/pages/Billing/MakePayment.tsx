@@ -261,7 +261,12 @@ export default function MakePayment() {
           description: 'Please complete your payment manually.',
         });
       } else {
-        throw new Error(response.error || 'Payment initiation failed');
+        // Provide better error message for credential issues
+        let errorMsg = response.error || 'Payment initiation failed';
+        if (errorMsg.includes('credentials') || errorMsg.includes('not configured')) {
+          errorMsg = `${getGatewayDisplayName(selectedMethod)} is not properly configured. Please contact the administrator.`;
+        }
+        throw new Error(errorMsg);
       }
     } catch (error: any) {
       console.error('Payment error:', error);
