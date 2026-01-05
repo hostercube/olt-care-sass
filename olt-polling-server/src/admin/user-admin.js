@@ -28,32 +28,42 @@ function getAdminClient() {
  * Check if user has admin or super_admin role
  */
 export async function isUserAdmin(supabase, userId) {
-  // First check for super_admin role
-  const { data: superAdminData, error: superAdminError } = await supabase
-    .from('user_roles')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('role', 'super_admin')
-    .maybeSingle();
+  try {
+    // Get admin client to check user roles with elevated permissions
+    const adminClient = getAdminClient();
+    
+    // Check for super_admin role
+    const { data: superAdminData, error: superAdminError } = await adminClient
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('role', 'super_admin')
+      .maybeSingle();
 
-  if (!superAdminError && superAdminData) {
-    return true;
-  }
+    if (!superAdminError && superAdminData) {
+      logger.info(`User ${userId} has super_admin role`);
+      return true;
+    }
 
-  // Then check for admin role
-  const { data: adminData, error: adminError } = await supabase
-    .from('user_roles')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('role', 'admin')
-    .maybeSingle();
+    // Check for admin role
+    const { data: adminData, error: adminError } = await adminClient
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+      .maybeSingle();
 
-  if (adminError) {
-    logger.error(`Error checking admin role: ${adminError.message}`);
+    if (!adminError && adminData) {
+      logger.info(`User ${userId} has admin role`);
+      return true;
+    }
+
+    logger.warn(`User ${userId} is not an admin`);
+    return false;
+  } catch (error) {
+    logger.error(`Error checking admin role for user ${userId}:`, error);
     return false;
   }
-
-  return !!adminData;
 }
 
 /**
