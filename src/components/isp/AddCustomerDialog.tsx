@@ -189,6 +189,13 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       const pkg = packages.find((p) => p.id === formData.package_id);
       const profileName = pkg?.name || 'default';
 
+      console.log('Creating PPPoE user on MikroTik:', {
+        router: router.ip_address,
+        pppoeUsername: formData.pppoe_username,
+        profile: profileName,
+        apiBase,
+      });
+
       const { ok, status, data, text } = await fetchJsonSafe<any>(
         `${apiBase}/api/mikrotik/pppoe/create`,
         {
@@ -197,7 +204,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           body: JSON.stringify({
             mikrotik: {
               ip: router.ip_address,
-              port: router.port,
+              port: router.port || 8728,
               username: router.username,
               password: router.password_encrypted,
             },
@@ -210,6 +217,8 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           }),
         }
       );
+
+      console.log('PPPoE creation response:', { ok, status, data, textLength: text?.length });
 
       const result = data || {};
 

@@ -229,7 +229,11 @@ export function useCustomerImport() {
 
       // If polling server is down (502/504), don't spam it with requests for every CSV row.
       if (canProvisionPppoe) {
-        const health = await fetchJsonSafe<any>(`${apiBase}/health`);
+        // Try /api/health first (standard path), fallback to /health
+        let health = await fetchJsonSafe<any>(`${apiBase}/api/health`);
+        if (!health.ok) {
+          health = await fetchJsonSafe<any>(`${apiBase}/health`);
+        }
         if (!health.ok) {
           canProvisionPppoe = false;
           toast.error(`Polling server unavailable: ${summarizeHttpError(health.status, health.text)}`);

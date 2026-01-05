@@ -19,6 +19,18 @@ export function normalizePollingServerUrl(raw?: string | null): string {
 
 export function summarizeHttpError(status: number, text: string): string {
   const t = String(text || '').trim();
+  
+  // Handle special cases
+  if (status === 0 && t === 'Request timeout') {
+    return 'Request timed out. Check if the polling server is running.';
+  }
+  if (status === 0 && t === 'Network error') {
+    return 'Network error. Check your connection and polling server URL.';
+  }
+  if (status === 0) {
+    return t || 'Failed to connect to polling server.';
+  }
+  
   if (!t) return `Request failed (HTTP ${status})`;
 
   const looksHtml = /<!doctype\s+html|<html|<title>/i.test(t);
@@ -32,18 +44,35 @@ export function summarizeHttpError(status: number, text: string): string {
 
 export async function fetchJsonSafe<T = any>(
   input: RequestInfo | URL,
-  init?: RequestInit
+  init?: RequestInit,
+  timeoutMs = 30000
 ): Promise<{ ok: boolean; status: number; data: T | null; text: string }> {
-  const res = await fetch(input, init);
-  const text = await res.text().catch(() => '');
-  let data: T | null = null;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    data = text ? (JSON.parse(text) as T) : null;
-  } catch {
-    data = null;
-  }
+    const res = await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
 
-  return { ok: res.ok, status: res.status, data, text };
+    const text = await res.text().catch(() => '');
+    let data: T | null = null;
+
+    try {
+      data = text ? (JSON.parse(text) as T) : null;
+    } catch {
+      data = null;
+    }
+
+    return { ok: res.ok, status: res.status, data, text };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err?.name === 'AbortError') {
+      return { ok: false, status: 0, data: null, text: 'Request timeout' };
+    }
+    return { ok: false, status: 0, data: null, text: err?.message || 'Network error' };
+  }
 }
 
