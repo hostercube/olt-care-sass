@@ -1,1 +1,5 @@
 project_id = "kpcmlbztpztrxdwlfhfw"
+
+[functions.turnstile-verify]
+verify_jwt = false
+
