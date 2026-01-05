@@ -71,9 +71,10 @@ export default function Auth() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const captchaEnabled = !!platformSettings.enableCaptcha && !!platformSettings.captchaSiteKey;
+  const captchaEnabled = platformSettings.enableCaptcha === true && !!platformSettings.captchaSiteKey && platformSettings.captchaSiteKey.length > 10;
   const [loginCaptchaToken, setLoginCaptchaToken] = useState<string | null>(null);
   const [signupCaptchaToken, setSignupCaptchaToken] = useState<string | null>(null);
+  const [turnstileLoaded, setTurnstileLoaded] = useState(false);
 
   const verifyTurnstile = async (token: string) => {
     const { data, error } = await supabase.functions.invoke('turnstile-verify', {
@@ -439,11 +440,20 @@ export default function Auth() {
                   </div>
 
                   {captchaEnabled && (
-                    <div className="pt-1">
+                    <div className="pt-2">
                       <TurnstileWidget
                         siteKey={platformSettings.captchaSiteKey}
-                        onToken={setLoginCaptchaToken}
+                        onToken={(token) => {
+                          setLoginCaptchaToken(token);
+                          if (token) setTurnstileLoaded(true);
+                        }}
                       />
+                      {!turnstileLoaded && !loginCaptchaToken && (
+                        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Loading CAPTCHA...
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -669,11 +679,20 @@ export default function Auth() {
                   )}
 
                   {captchaEnabled && (
-                    <div className="pt-1">
+                    <div className="pt-2">
                       <TurnstileWidget
                         siteKey={platformSettings.captchaSiteKey}
-                        onToken={setSignupCaptchaToken}
+                        onToken={(token) => {
+                          setSignupCaptchaToken(token);
+                          if (token) setTurnstileLoaded(true);
+                        }}
                       />
+                      {!turnstileLoaded && !signupCaptchaToken && (
+                        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Loading CAPTCHA...
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>
