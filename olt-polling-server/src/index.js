@@ -2181,6 +2181,53 @@ app.post('/admin/reset-password', async (req, res) => {
   app.handle(req, res);
 });
 
+// Reset password by email (for tenants where user_id is not directly available)
+app.post('/api/admin/reset-password-by-email', async (req, res) => {
+  const { email, newPassword, requestingUserId } = req.body;
+  
+  try {
+    // Verify requesting user is admin
+    if (!requestingUserId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    
+    const adminCheck = await isUserAdmin(supabase, requestingUserId);
+    if (!adminCheck) {
+      return res.status(403).json({ success: false, error: 'Only admins can reset user passwords' });
+    }
+    
+    if (!email || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Email and new password are required' });
+    }
+
+    // Get admin client to find user by email
+    const adminClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
+    
+    // Find user by email
+    const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers();
+    if (listError) {
+      throw new Error(`Failed to list users: ${listError.message}`);
+    }
+    
+    const targetUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+    if (!targetUser) {
+      return res.status(404).json({ success: false, error: 'User not found with this email address' });
+    }
+    
+    // Update password
+    const result = await updateUserPassword(targetUser.id, newPassword);
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    logger.error('Password reset by email error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/admin/reset-password-by-email', async (req, res) => {
+  req.url = '/api/admin/reset-password-by-email';
+  app.handle(req, res);
+});
+
 // Create user endpoint (admin only - auto-confirms email)
 app.post('/api/admin/create-user', async (req, res) => {
   const { email, password, full_name } = req.body;

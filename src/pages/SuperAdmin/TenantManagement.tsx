@@ -292,48 +292,22 @@ export default function TenantManagement() {
 
     setIsResettingPassword(true);
     try {
-      // First try to get user_id from owner_user_id on tenant
-      let targetUserId = selectedTenant.owner_user_id;
-      
-      // If not found, try tenant_users table
-      if (!targetUserId) {
-        const { data: tenantUser } = await supabase
-          .from('tenant_users')
-          .select('user_id')
-          .eq('tenant_id', selectedTenant.id)
-          .eq('is_owner', true)
-          .maybeSingle();
-        
-        targetUserId = tenantUser?.user_id;
-      }
-      
-      // If still not found, get any user from tenant_users for this tenant
-      if (!targetUserId) {
-        const { data: anyTenantUser } = await supabase
-          .from('tenant_users')
-          .select('user_id')
-          .eq('tenant_id', selectedTenant.id)
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        
-        targetUserId = anyTenantUser?.user_id;
-      }
-
-      if (!targetUserId) {
-        throw new Error('No user associated with this tenant. The tenant may not have a login account created yet.');
+      // Get tenant email to find user
+      const tenantEmail = selectedTenant.email;
+      if (!tenantEmail) {
+        throw new Error('Tenant email not found');
       }
 
       // Get current user ID for admin verification
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('Not authenticated');
 
-      // Call VPS endpoint to reset password
-      const response = await fetch(`${VPS_URL}/api/admin/reset-password`, {
+      // Call VPS endpoint to reset password using tenant email
+      const response = await fetch(`${VPS_URL}/api/admin/reset-password-by-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: targetUserId,
+          email: tenantEmail,
           newPassword,
           requestingUserId: user.id,
         }),
