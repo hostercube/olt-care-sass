@@ -260,40 +260,23 @@ export default function Auth() {
     setIsSubmitting(true);
 
     try {
-      const redirectUrl = `${window.location.origin}/`;
-      const trialDays = platformSettings.defaultTrialDays;
-      const requireEmailVerification = platformSettings.requireEmailVerification;
-
-      // Create the user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: signupData.email,
-        password: signupData.password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            full_name: signupData.ownerName,
-            company_name: signupData.companyName,
-          },
-        },
-      });
-
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
-
       const VPS_URL = resolvePollingServerUrl(platformSettings.pollingServerUrl);
       if (!VPS_URL) {
         throw new Error('Polling server URL is not configured by Super Admin.');
       }
 
-      // Complete signup via your VPS backend (avoids client-side RLS issues)
-      const completeRes = await fetch(`${VPS_URL}/api/auth/complete-signup`, {
+      const trialDays = platformSettings.defaultTrialDays;
+
+      // Use VPS admin endpoint to create user (bypasses Supabase email rate limits)
+      // This uses the service role key on VPS to auto-confirm email
+      const createUserRes = await fetch(`${VPS_URL}/api/auth/full-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: authData.user.id,
           email: signupData.email,
+          password: signupData.password,
+          full_name: signupData.ownerName,
           company_name: signupData.companyName,
-          owner_name: signupData.ownerName,
           phone: signupData.phone,
           division: signupData.division || null,
           district: signupData.district || null,
@@ -305,35 +288,31 @@ export default function Auth() {
         }),
       });
 
-      const completeData = await completeRes.json().catch(() => ({}));
-      if (!completeRes.ok || !completeData?.success) {
-        throw new Error(completeData?.error || 'Failed to complete signup');
+      const createUserData = await createUserRes.json().catch(() => ({}));
+      
+      if (!createUserRes.ok || !createUserData?.success) {
+        throw new Error(createUserData?.error || 'Failed to create account');
       }
 
-      const requiresPayment = !!completeData.requires_payment;
+      const requiresPayment = !!createUserData.requires_payment;
 
-      // If email verification is disabled in Super Admin settings, we auto-confirm on backend.
-      // So we can sign-in immediately.
-      if (!requireEmailVerification) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: signupData.email,
-          password: signupData.password,
-        });
+      // Auto sign-in since email is auto-confirmed by VPS
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: signupData.email,
+        password: signupData.password,
+      });
 
-        if (!signInError) {
-          if (requiresPayment) {
-            navigate('/billing/pay');
-          }
-          toast({ title: 'Account Created!', description: requiresPayment ? 'Please complete payment to activate.' : 'Welcome! Your account is ready.' });
-          return;
+      if (!signInError) {
+        if (requiresPayment) {
+          navigate('/billing/pay');
         }
+        toast({ title: 'Account Created!', description: requiresPayment ? 'Please complete payment to activate.' : 'Welcome! Your account is ready.' });
+        return;
       }
 
       toast({
         title: 'Account Created!',
-        description: requireEmailVerification
-          ? 'Please check your email to verify your account, then login.'
-          : 'Please login to continue.',
+        description: 'Please login to continue.',
       });
 
       // Switch to login mode

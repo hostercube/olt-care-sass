@@ -292,15 +292,37 @@ export default function TenantManagement() {
 
     setIsResettingPassword(true);
     try {
-      // Get user ID from tenant_users
-      const { data: tenantUser } = await supabase
-        .from('tenant_users')
-        .select('user_id')
-        .eq('tenant_id', selectedTenant.id)
-        .eq('is_owner', true)
-        .single();
+      // First try to get user_id from owner_user_id on tenant
+      let targetUserId = selectedTenant.owner_user_id;
+      
+      // If not found, try tenant_users table
+      if (!targetUserId) {
+        const { data: tenantUser } = await supabase
+          .from('tenant_users')
+          .select('user_id')
+          .eq('tenant_id', selectedTenant.id)
+          .eq('is_owner', true)
+          .maybeSingle();
+        
+        targetUserId = tenantUser?.user_id;
+      }
+      
+      // If still not found, get any user from tenant_users for this tenant
+      if (!targetUserId) {
+        const { data: anyTenantUser } = await supabase
+          .from('tenant_users')
+          .select('user_id')
+          .eq('tenant_id', selectedTenant.id)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        
+        targetUserId = anyTenantUser?.user_id;
+      }
 
-      if (!tenantUser?.user_id) throw new Error('Owner user not found');
+      if (!targetUserId) {
+        throw new Error('No user associated with this tenant. The tenant may not have a login account created yet.');
+      }
 
       // Get current user ID for admin verification
       const { data: { user } } = await supabase.auth.getUser();
@@ -311,7 +333,7 @@ export default function TenantManagement() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: tenantUser.user_id,
+          userId: targetUserId,
           newPassword,
           requestingUserId: user.id,
         }),
