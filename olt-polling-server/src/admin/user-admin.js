@@ -25,20 +25,35 @@ function getAdminClient() {
 }
 
 /**
- * Check if user has admin role
+ * Check if user has admin or super_admin role
  */
 export async function isUserAdmin(supabase, userId) {
-  const { data, error } = await supabase.rpc('has_role', {
-    _user_id: userId,
-    _role: 'admin',
-  });
+  // First check for super_admin role
+  const { data: superAdminData, error: superAdminError } = await supabase
+    .from('user_roles')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('role', 'super_admin')
+    .maybeSingle();
 
-  if (error) {
-    logger.error(`Error checking admin role: ${error.message}`);
+  if (!superAdminError && superAdminData) {
+    return true;
+  }
+
+  // Then check for admin role
+  const { data: adminData, error: adminError } = await supabase
+    .from('user_roles')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('role', 'admin')
+    .maybeSingle();
+
+  if (adminError) {
+    logger.error(`Error checking admin role: ${adminError.message}`);
     return false;
   }
 
-  return data === true;
+  return !!adminData;
 }
 
 /**

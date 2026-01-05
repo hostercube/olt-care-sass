@@ -109,7 +109,12 @@ export default function MakePayment() {
 
   // ISP owners: show tenant-specific gateways if any are enabled; otherwise fall back to global gateways enabled by Super Admin
   const enabledTenantGateways = tenantId ? tenantGateways.filter((g: any) => g.is_enabled === true) : [];
+  
+  // For global gateways, show all enabled ones - the Super Admin has enabled them for a reason
+  // Trust that if they are enabled, they are configured properly on the VPS/backend side
   const enabledGlobalGateways = globalGateways.filter((g: any) => g.is_enabled === true);
+  
+  // Use tenant gateways if they exist, otherwise fallback to global gateways
   const enabledGateways = tenantId && enabledTenantGateways.length > 0 ? enabledTenantGateways : enabledGlobalGateways;
 
   const isUsingFallbackGateways = !!tenantId && enabledTenantGateways.length === 0 && enabledGlobalGateways.length > 0;
