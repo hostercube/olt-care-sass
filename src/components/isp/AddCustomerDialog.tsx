@@ -172,7 +172,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     }
 
     if (!apiBase) {
-      toast.error('Polling server URL not configured. Go to Settings → Polling.');
+      toast.error('Polling server URL not configured. Configure it in Super Admin → Settings → Infrastructure.');
       return false;
     }
 

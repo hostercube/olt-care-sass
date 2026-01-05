@@ -159,7 +159,7 @@ export function useCustomerImport() {
   ): Promise<boolean> => {
     if (!apiBase) {
       console.warn('API server URL not configured, skipping MikroTik PPPoE creation');
-      toast.error('API Server URL not configured. Go to Settings to configure VPS connection.');
+      toast.error('Polling server URL not configured. Configure it in Super Admin → Settings → Infrastructure.');
       return false;
     }
 

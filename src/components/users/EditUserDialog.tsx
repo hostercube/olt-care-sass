@@ -161,7 +161,7 @@ export function EditUserDialog({ user, open, onOpenChange, onUserUpdated }: Edit
         ? String((rawValue as { value: unknown }).value) 
         : typeof rawValue === 'string' ? rawValue : '';
       if (!apiUrl) {
-        throw new Error('Polling server URL not configured. Please configure it in Settings → Polling.');
+        throw new Error('Polling server URL not configured. Configure it in Super Admin → Settings → Infrastructure.');
       }
 
       // Call polling server API for password reset
