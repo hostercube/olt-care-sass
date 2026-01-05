@@ -304,8 +304,12 @@ export function useCustomerImport() {
             result.success++;
 
             // Create PPPoE user on MikroTik if conditions are met
+            console.log(`Import row ${i + 2}: mikrotikInfo=${!!mikrotikInfo}, pppoeUsername=${pppoeUsername}, pppoePassword=${!!pppoePassword}`);
+            
             if (mikrotikInfo && pppoeUsername && pppoePassword) {
               const profileName = packageInfo?.name || 'default';
+              console.log(`Creating PPPoE on MikroTik for ${pppoeUsername} with profile: ${profileName}`);
+              
               const pppoeCreated = await createPPPoEOnMikroTik(
                 mikrotikInfo,
                 {
@@ -318,7 +322,12 @@ export function useCustomerImport() {
               
               if (pppoeCreated) {
                 result.mikrotikCreated++;
+                console.log(`PPPoE user ${pppoeUsername} created successfully`);
+              } else {
+                console.warn(`PPPoE user ${pppoeUsername} failed to create on MikroTik`);
               }
+            } else {
+              console.log(`Skipping MikroTik PPPoE creation: missing ${!mikrotikInfo ? 'mikrotik' : !pppoeUsername ? 'username' : 'password'}`);
             }
           }
         } catch (err: any) {
