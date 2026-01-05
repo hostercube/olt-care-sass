@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { toast } from 'sonner';
+import { fetchJsonSafe, normalizePollingServerUrl } from '@/lib/polling-server';
 
 interface ImportResult {
   total: number;
@@ -15,7 +16,7 @@ interface ImportResult {
 export function useCustomerImport() {
   const { tenantId, isSuperAdmin } = useTenantContext();
   const { settings } = useSystemSettings();
-  const apiBase = (settings?.apiServerUrl || '').replace(/\/$/, '');
+  const apiBase = normalizePollingServerUrl(settings?.apiServerUrl);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -165,34 +166,41 @@ export function useCustomerImport() {
     try {
       console.log(`Creating PPPoE user ${pppoeUser.name} on MikroTik ${mikrotik.ip} with profile: ${pppoeUser.profile}`);
       
-      const response = await fetch(`${apiBase}/api/mikrotik/pppoe/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mikrotik: {
-            ip: mikrotik.ip,
-            port: mikrotik.port,
-            username: mikrotik.username,
-            password: mikrotik.password,
-          },
-          pppoeUser: {
-            name: pppoeUser.name,
-            password: pppoeUser.password,
-            profile: pppoeUser.profile,
-            comment: pppoeUser.comment || '',
-          },
-        }),
-      });
+      const { ok, status, data, text } = await fetchJsonSafe<any>(
+        `${apiBase}/api/mikrotik/pppoe/create`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mikrotik: {
+              ip: mikrotik.ip,
+              port: mikrotik.port,
+              username: mikrotik.username,
+              password: mikrotik.password,
+            },
+            pppoeUser: {
+              name: pppoeUser.name,
+              password: pppoeUser.password,
+              profile: pppoeUser.profile,
+              comment: pppoeUser.comment || '',
+            },
+          }),
+        }
+      );
 
-      const result = await response.json();
+      const result = data || {};
       console.log(`PPPoE create result for ${pppoeUser.name}:`, result);
-      
-      if (result.success === true) {
+
+      if (ok && result.success === true) {
         return true;
-      } else {
-        console.error(`Failed to create PPPoE user ${pppoeUser.name}: ${result.error || 'Unknown error'}`);
-        return false;
       }
+
+      const fallback = !ok ? `Request failed (HTTP ${status})` : (result.error || 'Unknown error');
+      console.error(`Failed to create PPPoE user ${pppoeUser.name}: ${fallback}`);
+      if (!data) {
+        console.error('Non-JSON response:', text);
+      }
+      return false;
     } catch (err) {
       console.error('Failed to create PPPoE on MikroTik:', err);
       return false;

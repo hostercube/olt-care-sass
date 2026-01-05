@@ -22,6 +22,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { normalizePollingServerUrl } from '@/lib/polling-server';
 import { 
   Router, Plus, Edit, Trash2, Loader2, RefreshCw, Wifi, WifiOff, Activity,
   Users, ListOrdered, Settings, CheckCircle, XCircle, MoreVertical, Search,
@@ -37,7 +38,7 @@ import {
 export default function MikroTikManagement() {
   const { tenantId, isSuperAdmin } = useTenantContext();
   const { settings } = useSystemSettings();
-  const vpsUrl = settings?.apiServerUrl || '';
+  const pollingBase = normalizePollingServerUrl(settings?.apiServerUrl);
   
   const [routers, setRouters] = useState<MikroTikRouter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,7 +206,12 @@ export default function MikroTikManagement() {
         password: formData.password || editingRouter?.password_encrypted || '',
       };
 
-      const response = await fetch(`${(vpsUrl || '').replace(/\/$/, '')}/api/test-mikrotik`, {
+      if (!pollingBase) {
+        toast.error('Polling server URL not configured. Go to Settings → Polling.');
+        return;
+      }
+
+      const response = await fetch(`${pollingBase}/api/test-mikrotik`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mikrotik }),
@@ -232,7 +238,10 @@ export default function MikroTikManagement() {
     setTesting(router.id);
 
     try {
-      const apiBase = (vpsUrl || '').replace(/\/$/, '');
+      if (!pollingBase) {
+        toast.error('Polling server URL not configured. Go to Settings → Polling.');
+        return;
+      }
 
       const mikrotik = {
         ip: router.ip_address,
@@ -241,7 +250,7 @@ export default function MikroTikManagement() {
         password: router.password_encrypted,
       };
 
-      const response = await fetch(`${apiBase}/api/test-mikrotik`, {
+      const response = await fetch(`${pollingBase}/api/test-mikrotik`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mikrotik }),
@@ -285,7 +294,10 @@ export default function MikroTikManagement() {
     setSyncing({ routerId, type: syncType });
 
     try {
-      const apiBase = (vpsUrl || '').replace(/\/$/, '');
+      if (!pollingBase) {
+        toast.error('Polling server URL not configured. Go to Settings → Polling.');
+        return;
+      }
 
       // Determine endpoint based on sync type
       const endpoint = syncType === 'pppoe'
@@ -294,7 +306,7 @@ export default function MikroTikManagement() {
           ? '/api/mikrotik/sync/queues'
           : '/api/mikrotik/sync/full';
 
-      const response = await fetch(`${apiBase}${endpoint}`, {
+      const response = await fetch(`${pollingBase}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
