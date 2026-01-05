@@ -8,15 +8,117 @@ import { getMacVendor } from './parsers/vsol-parser.js';
  * RouterOS 6.x: Uses Plain API protocol on port 8728 (default) or custom port
  * RouterOS 7.x: Uses REST API on www-ssl (443), www (80), or custom port
  * 
- * Detection Strategy:
- * 1. First detect RouterOS version via quick probe
- * 2. Use appropriate API based on version
+ * ================================================================================
+ * PERFORMANCE OPTIMIZATIONS (to prevent excessive API calls / CPU load on MikroTik)
+ * ================================================================================
+ * 
+ * 1. CONNECTION CACHING: Store detected connection methods for 10 minutes
+ * 2. DATA CACHING: Cache fetched data (PPPoE sessions, secrets) for 30 seconds
+ * 3. REQUEST THROTTLING: Rate limit concurrent requests per device
+ * 4. SMART POLLING: Use cached data when multiple components request same data
+ * 
+ * Professional ISP billing software architecture:
+ * - Maintains cached data to reduce API hits
+ * - Only polls when explicitly requested or on scheduled intervals
+ * - Never polls on every page load or API request
  */
 
 const MIKROTIK_TIMEOUT = parseInt(process.env.MIKROTIK_TIMEOUT_MS || '30000');
 
-// Store detected connection method per device
+// ============= CACHING SYSTEM =============
+
+// Store detected connection method per device (10 minute TTL)
 const deviceConnectionCache = new Map();
+const CONNECTION_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+// Store fetched data per device (30 second TTL for real-time data)
+const dataCache = new Map();
+const DATA_CACHE_TTL = 30 * 1000; // 30 seconds for active sessions
+
+// Store static data like secrets and profiles (2 minute TTL)
+const staticDataCache = new Map();
+const STATIC_DATA_CACHE_TTL = 2 * 60 * 1000; // 2 minutes for secrets/profiles
+
+// Track pending requests to prevent duplicate concurrent calls
+const pendingRequests = new Map();
+
+// Rate limiting: track last request time per device
+const lastRequestTime = new Map();
+const MIN_REQUEST_INTERVAL = 1000; // Minimum 1 second between requests to same device
+
+/**
+ * Get cached data or return null if expired/missing
+ */
+function getCachedData(cacheKey, cache, ttl) {
+  const cached = cache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < ttl) {
+    return cached.data;
+  }
+  return null;
+}
+
+/**
+ * Set cached data with timestamp
+ */
+function setCachedData(cacheKey, data, cache) {
+  cache.set(cacheKey, { data, timestamp: Date.now() });
+}
+
+/**
+ * Check and enforce rate limiting for a device
+ */
+async function enforceRateLimit(deviceKey) {
+  const lastTime = lastRequestTime.get(deviceKey);
+  const now = Date.now();
+  
+  if (lastTime && (now - lastTime) < MIN_REQUEST_INTERVAL) {
+    const waitTime = MIN_REQUEST_INTERVAL - (now - lastTime);
+    logger.debug(`Rate limiting: waiting ${waitTime}ms before next request to ${deviceKey}`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+  
+  lastRequestTime.set(deviceKey, Date.now());
+}
+
+/**
+ * Deduplicate concurrent requests - if same request is in-flight, wait for it
+ */
+async function deduplicateRequest(requestKey, fetchFn) {
+  // If request is already pending, wait for it
+  if (pendingRequests.has(requestKey)) {
+    logger.debug(`Deduplicating request: waiting for existing ${requestKey}`);
+    return pendingRequests.get(requestKey);
+  }
+  
+  // Start new request
+  const promise = fetchFn().finally(() => {
+    pendingRequests.delete(requestKey);
+  });
+  
+  pendingRequests.set(requestKey, promise);
+  return promise;
+}
+
+/**
+ * Clear all caches for a specific device (useful after mutations)
+ */
+export function clearMikroTikCache(deviceIp) {
+  const keysToDelete = [];
+  
+  for (const [key] of dataCache) {
+    if (key.includes(deviceIp)) keysToDelete.push(key);
+  }
+  for (const [key] of staticDataCache) {
+    if (key.includes(deviceIp)) keysToDelete.push(key);
+  }
+  
+  keysToDelete.forEach(key => {
+    dataCache.delete(key);
+    staticDataCache.delete(key);
+  });
+  
+  logger.debug(`Cleared cache for device ${deviceIp}`);
+}
 
 /**
  * Normalize MAC address to uppercase XX:XX:XX:XX:XX:XX format
@@ -44,10 +146,10 @@ async function detectRouterOSVersion(mikrotik) {
   const { ip, port = 8728, username, password } = mikrotik;
   const cacheKey = `${ip}:${port}`;
   
-  // Check cache first (valid for 5 minutes)
+  // Check cache first (valid for 10 minutes to reduce API hits)
   const cached = deviceConnectionCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp) < 300000) {
-    logger.debug(`Using cached connection method for ${cacheKey}: ${cached.method} v${cached.version} on port ${cached.port}`);
+  if (cached && (Date.now() - cached.timestamp) < CONNECTION_CACHE_TTL) {
+    // Silent debug - don't log every hit to reduce noise
     return cached;
   }
   
@@ -262,208 +364,276 @@ async function tryPlainAPIVersion(ip, port, username, password) {
 }
 
 /**
- * Fetch PPPoE active sessions from MikroTik
+ * Fetch PPPoE active sessions from MikroTik (with caching)
  */
-export async function fetchMikroTikPPPoE(mikrotik) {
+export async function fetchMikroTikPPPoE(mikrotik, forceRefresh = false) {
   if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
-    logger.debug('MikroTik not configured, skipping PPPoE fetch...');
     return [];
   }
 
-  try {
-    const sessions = await callMikroTikAPI(mikrotik, '/ppp/active/print');
-    
-    logger.info(`MikroTik PPPoE: Got ${sessions.length} active sessions from ${mikrotik.ip}:${mikrotik.port}`);
-    
-    // Transform to our format - caller-id is the ONU MAC address
-    const result = sessions.map(session => {
-      // caller-id typically contains the MAC address of the connecting device (router behind ONU)
-      const callerId = session['caller-id'] || '';
-      const macAddress = normalizeMac(callerId);
-      const pppoeUsername = session.name || session.user;
-      
-      // IMPORTANT: Only use comment as router_name if it exists and is NOT the same as username
-      // DO NOT fall back to session.name (which is the PPPoE username)
-      let routerName = null;
-      if (session.comment && session.comment.trim().length > 0) {
-        const comment = session.comment.trim();
-        // Skip if comment is same as username or looks like metadata
-        const looksLikeUsername = comment.toLowerCase() === pppoeUsername?.toLowerCase();
-        const looksLikeMetadata = comment.includes('[ONU:') || comment.includes('SN=') || comment.includes('MAC=');
-        if (!looksLikeUsername && !looksLikeMetadata) {
-          routerName = comment;
-        }
-      }
-      
-      const mapped = {
-        pppoe_username: pppoeUsername,
-        mac_address: macAddress,  // This is the router MAC from caller-id
-        ip_address: session.address,
-        uptime: session.uptime,
-        service: session.service,
-        router_name: routerName,  // Only set if we have a valid device name, NOT username
-        raw_caller_id: callerId,
-      };
-      
-      logger.debug(`PPPoE session: ${mapped.pppoe_username}, caller-id: ${callerId} -> MAC: ${macAddress}, router: ${routerName || 'N/A'}`);
-      return mapped;
-    });
-    
-    if (result.length > 0) {
-      logger.info(`Sample PPPoE: username=${result[0].pppoe_username}, mac=${result[0].mac_address}, caller-id=${result[0].raw_caller_id}`);
+  const cacheKey = `pppoe:${mikrotik.ip}`;
+  const deviceKey = mikrotik.ip;
+  
+  // Check cache first (unless forced refresh)
+  if (!forceRefresh) {
+    const cached = getCachedData(cacheKey, dataCache, DATA_CACHE_TTL);
+    if (cached) {
+      logger.debug(`Using cached PPPoE data for ${mikrotik.ip} (${cached.length} sessions)`);
+      return cached;
     }
-    
-    return result;
-  } catch (error) {
-    logger.error(`Failed to fetch MikroTik PPPoE data from ${mikrotik.ip}:${mikrotik.port}:`, error.message);
-    return [];
   }
-}
-
-/**
- * Fetch ARP table from MikroTik for MAC-IP mapping
- */
-export async function fetchMikroTikARP(mikrotik) {
-  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
-    return [];
-  }
-
-  try {
-    const arpEntries = await callMikroTikAPI(mikrotik, '/ip/arp/print');
+  
+  // Deduplicate concurrent requests
+  return deduplicateRequest(cacheKey, async () => {
+    await enforceRateLimit(deviceKey);
     
-    logger.debug(`MikroTik ARP: Got ${arpEntries.length} entries`);
-    
-    return arpEntries.map(entry => ({
-      ip_address: entry.address,
-      mac_address: normalizeMac(entry['mac-address']),
-      interface: entry.interface,
-      dynamic: entry.dynamic === 'true',
-      comment: entry.comment,
-    }));
-  } catch (error) {
-    logger.error(`Failed to fetch MikroTik ARP data:`, error.message);
-    return [];
-  }
-}
-
-/**
- * Fetch DHCP leases from MikroTik
- */
-export async function fetchMikroTikDHCPLeases(mikrotik) {
-  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
-    return [];
-  }
-
-  try {
-    const leases = await callMikroTikAPI(mikrotik, '/ip/dhcp-server/lease/print');
-    
-    logger.debug(`MikroTik DHCP: Got ${leases.length} leases`);
-    
-    return leases.map(lease => ({
-      ip_address: lease.address,
-      mac_address: normalizeMac(lease['mac-address']),
-      hostname: lease['host-name'] || lease.comment,
-      router_name: lease['host-name'] || lease.comment,
-      status: lease.status,
-      expires_after: lease['expires-after'],
-      comment: lease.comment,
-    }));
-  } catch (error) {
-    logger.error(`Failed to fetch MikroTik DHCP leases:`, error.message);
-    return [];
-  }
-}
-
-/**
- * Fetch PPP secrets from MikroTik
- */
-export async function fetchMikroTikPPPSecrets(mikrotik) {
-  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
-    return [];
-  }
-
-  try {
-    const secrets = await callMikroTikAPI(mikrotik, '/ppp/secret/print');
-    
-    logger.debug(`MikroTik PPP Secrets: Got ${secrets.length} secrets`);
-    
-    return secrets.map(secret => {
-      const pppoeUsername = secret.name;
-      // Only use comment as router_name if it's NOT the same as username and not metadata
-      let routerName = null;
-      if (secret.comment && secret.comment.trim().length > 0) {
-        const comment = secret.comment.trim();
-        const looksLikeUsername = comment.toLowerCase() === pppoeUsername?.toLowerCase();
-        const looksLikeMetadata = comment.includes('[ONU:') || comment.includes('SN=') || comment.includes('MAC=');
-        if (!looksLikeUsername && !looksLikeMetadata) {
-          routerName = comment;
-        }
-      }
+    try {
+      const sessions = await callMikroTikAPI(mikrotik, '/ppp/active/print');
       
-      return {
-        pppoe_username: pppoeUsername,
-        pppoe_password: secret.password,
-        profile: secret.profile,
-        service: secret.service,
-        caller_id: normalizeMac(secret['caller-id']),
-        comment: secret.comment,
-        router_name: routerName,  // Only valid device names, NOT fallback to username
-        remote_address: secret['remote-address'],
-        local_address: secret['local-address'],
-      };
-    });
-  } catch (error) {
-    logger.error(`Failed to fetch MikroTik PPP secrets:`, error.message);
-    return [];
-  }
+      // Transform to our format - caller-id is the ONU MAC address
+      const result = sessions.map(session => {
+        const callerId = session['caller-id'] || '';
+        const macAddress = normalizeMac(callerId);
+        const pppoeUsername = session.name || session.user;
+        
+        let routerName = null;
+        if (session.comment && session.comment.trim().length > 0) {
+          const comment = session.comment.trim();
+          const looksLikeUsername = comment.toLowerCase() === pppoeUsername?.toLowerCase();
+          const looksLikeMetadata = comment.includes('[ONU:') || comment.includes('SN=') || comment.includes('MAC=');
+          if (!looksLikeUsername && !looksLikeMetadata) {
+            routerName = comment;
+          }
+        }
+        
+        return {
+          pppoe_username: pppoeUsername,
+          mac_address: macAddress,
+          ip_address: session.address,
+          uptime: session.uptime,
+          service: session.service,
+          router_name: routerName,
+          raw_caller_id: callerId,
+        };
+      });
+      
+      // Cache the result
+      setCachedData(cacheKey, result, dataCache);
+      logger.info(`MikroTik PPPoE: Got ${result.length} active sessions from ${mikrotik.ip}`);
+      
+      return result;
+    } catch (error) {
+      logger.error(`Failed to fetch MikroTik PPPoE data from ${mikrotik.ip}:`, error.message);
+      return [];
+    }
+  });
 }
 
 /**
- * Fetch PPP profiles from MikroTik (for packages/profiles sync)
+ * Fetch ARP table from MikroTik for MAC-IP mapping (with caching)
  */
-export async function fetchMikroTikPPPProfiles(mikrotik) {
+export async function fetchMikroTikARP(mikrotik, forceRefresh = false) {
   if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
     return [];
   }
 
-  try {
-    const profiles = await callMikroTikAPI(mikrotik, '/ppp/profile/print');
-
-    return (profiles || []).map((p) => ({
-      name: p.name,
-      rate_limit: p['rate-limit'] ?? p.rate_limit ?? null,
-      local_address: p['local-address'] ?? null,
-      remote_address: p['remote-address'] ?? null,
-      only_one: p['only-one'] ?? null,
-    }));
-  } catch (error) {
-    logger.error('Failed to fetch MikroTik PPP profiles:', error?.message || String(error));
-    return [];
+  const cacheKey = `arp:${mikrotik.ip}`;
+  
+  if (!forceRefresh) {
+    const cached = getCachedData(cacheKey, dataCache, DATA_CACHE_TTL);
+    if (cached) return cached;
   }
+  
+  return deduplicateRequest(cacheKey, async () => {
+    await enforceRateLimit(mikrotik.ip);
+    
+    try {
+      const arpEntries = await callMikroTikAPI(mikrotik, '/ip/arp/print');
+      
+      const result = arpEntries.map(entry => ({
+        ip_address: entry.address,
+        mac_address: normalizeMac(entry['mac-address']),
+        interface: entry.interface,
+        dynamic: entry.dynamic === 'true',
+        comment: entry.comment,
+      }));
+      
+      setCachedData(cacheKey, result, dataCache);
+      return result;
+    } catch (error) {
+      logger.error(`Failed to fetch MikroTik ARP data:`, error.message);
+      return [];
+    }
+  });
 }
 
 /**
- * Fetch router identity and system info
+ * Fetch DHCP leases from MikroTik (with caching)
+ */
+export async function fetchMikroTikDHCPLeases(mikrotik, forceRefresh = false) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return [];
+  }
+
+  const cacheKey = `dhcp:${mikrotik.ip}`;
+  
+  if (!forceRefresh) {
+    const cached = getCachedData(cacheKey, dataCache, DATA_CACHE_TTL);
+    if (cached) return cached;
+  }
+  
+  return deduplicateRequest(cacheKey, async () => {
+    await enforceRateLimit(mikrotik.ip);
+    
+    try {
+      const leases = await callMikroTikAPI(mikrotik, '/ip/dhcp-server/lease/print');
+      
+      const result = leases.map(lease => ({
+        ip_address: lease.address,
+        mac_address: normalizeMac(lease['mac-address']),
+        hostname: lease['host-name'] || lease.comment,
+        router_name: lease['host-name'] || lease.comment,
+        status: lease.status,
+        expires_after: lease['expires-after'],
+        comment: lease.comment,
+      }));
+      
+      setCachedData(cacheKey, result, dataCache);
+      return result;
+    } catch (error) {
+      logger.error(`Failed to fetch MikroTik DHCP leases:`, error.message);
+      return [];
+    }
+  });
+}
+
+/**
+ * Fetch PPP secrets from MikroTik (with caching - uses longer TTL for static data)
+ */
+export async function fetchMikroTikPPPSecrets(mikrotik, forceRefresh = false) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return [];
+  }
+
+  const cacheKey = `secrets:${mikrotik.ip}`;
+  
+  if (!forceRefresh) {
+    const cached = getCachedData(cacheKey, staticDataCache, STATIC_DATA_CACHE_TTL);
+    if (cached) return cached;
+  }
+  
+  return deduplicateRequest(cacheKey, async () => {
+    await enforceRateLimit(mikrotik.ip);
+    
+    try {
+      const secrets = await callMikroTikAPI(mikrotik, '/ppp/secret/print');
+      
+      const result = secrets.map(secret => {
+        const pppoeUsername = secret.name;
+        let routerName = null;
+        if (secret.comment && secret.comment.trim().length > 0) {
+          const comment = secret.comment.trim();
+          const looksLikeUsername = comment.toLowerCase() === pppoeUsername?.toLowerCase();
+          const looksLikeMetadata = comment.includes('[ONU:') || comment.includes('SN=') || comment.includes('MAC=');
+          if (!looksLikeUsername && !looksLikeMetadata) {
+            routerName = comment;
+          }
+        }
+        
+        return {
+          pppoe_username: pppoeUsername,
+          pppoe_password: secret.password,
+          profile: secret.profile,
+          service: secret.service,
+          caller_id: normalizeMac(secret['caller-id']),
+          comment: secret.comment,
+          router_name: routerName,
+          remote_address: secret['remote-address'],
+          local_address: secret['local-address'],
+        };
+      });
+      
+      setCachedData(cacheKey, result, staticDataCache);
+      logger.debug(`MikroTik PPP Secrets: Got ${result.length} secrets`);
+      return result;
+    } catch (error) {
+      logger.error(`Failed to fetch MikroTik PPP secrets:`, error.message);
+      return [];
+    }
+  });
+}
+
+/**
+ * Fetch PPP profiles from MikroTik (with caching - uses longer TTL for static data)
+ */
+export async function fetchMikroTikPPPProfiles(mikrotik, forceRefresh = false) {
+  if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
+    return [];
+  }
+
+  const cacheKey = `profiles:${mikrotik.ip}`;
+  
+  if (!forceRefresh) {
+    const cached = getCachedData(cacheKey, staticDataCache, STATIC_DATA_CACHE_TTL);
+    if (cached) return cached;
+  }
+  
+  return deduplicateRequest(cacheKey, async () => {
+    await enforceRateLimit(mikrotik.ip);
+    
+    try {
+      const profiles = await callMikroTikAPI(mikrotik, '/ppp/profile/print');
+
+      const result = (profiles || []).map((p) => ({
+        name: p.name,
+        rate_limit: p['rate-limit'] ?? p.rate_limit ?? null,
+        local_address: p['local-address'] ?? null,
+        remote_address: p['remote-address'] ?? null,
+        only_one: p['only-one'] ?? null,
+      }));
+      
+      setCachedData(cacheKey, result, staticDataCache);
+      return result;
+    } catch (error) {
+      logger.error('Failed to fetch MikroTik PPP profiles:', error?.message || String(error));
+      return [];
+    }
+  });
+}
+
+/**
+ * Fetch router identity and system info (with caching)
  */
 export async function fetchMikroTikIdentity(mikrotik) {
   if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
     return null;
   }
 
-  try {
-    const identity = await callMikroTikAPI(mikrotik, '/system/identity/print');
-    const resource = await callMikroTikAPI(mikrotik, '/system/resource/print');
+  const cacheKey = `identity:${mikrotik.ip}`;
+  const cached = getCachedData(cacheKey, staticDataCache, STATIC_DATA_CACHE_TTL);
+  if (cached) return cached;
+  
+  return deduplicateRequest(cacheKey, async () => {
+    await enforceRateLimit(mikrotik.ip);
     
-    return {
-      name: identity[0]?.name || 'MikroTik',
-      version: resource[0]?.version,
-      uptime: resource[0]?.uptime,
-      board_name: resource[0]?.['board-name'],
-    };
-  } catch (error) {
-    logger.error(`Failed to fetch MikroTik identity:`, error.message);
-    return null;
-  }
+    try {
+      const identity = await callMikroTikAPI(mikrotik, '/system/identity/print');
+      const resource = await callMikroTikAPI(mikrotik, '/system/resource/print');
+      
+      const result = {
+        name: identity[0]?.name || 'MikroTik',
+        version: resource[0]?.version,
+        uptime: resource[0]?.uptime,
+        board_name: resource[0]?.['board-name'],
+      };
+      
+      setCachedData(cacheKey, result, staticDataCache);
+      return result;
+    } catch (error) {
+      logger.error(`Failed to fetch MikroTik identity:`, error.message);
+      return null;
+    }
+  });
 }
 
 /**
@@ -1706,8 +1876,11 @@ export async function bulkTagPPPSecrets(mikrotik, onus, options = {}) {
 
 /**
  * Create a new PPP Secret on MikroTik
+ * @param {object} mikrotik - MikroTik connection config
+ * @param {object} userConfig - PPPoE user config: { name, password, profile, comment, callerId }
+ * @param {boolean} skipDuplicateCheck - Skip duplicate check (for bulk import with known unique usernames)
  */
-export async function createPPPSecret(mikrotik, userConfig) {
+export async function createPPPSecret(mikrotik, userConfig, skipDuplicateCheck = false) {
   if (!mikrotik.ip || !mikrotik.username || !mikrotik.password) {
     return { success: false, error: 'Missing MikroTik credentials' };
   }
@@ -1719,20 +1892,22 @@ export async function createPPPSecret(mikrotik, userConfig) {
   }
 
   try {
-    // Prevent duplicate usernames
-    const existing = await fetchMikroTikPPPSecrets(mikrotik);
-    const alreadyExists = existing.some(
-      (s) => String(s?.pppoe_username || '').toLowerCase() === String(name).toLowerCase()
-    );
+    // Prevent duplicate usernames (force refresh cache to get latest data)
+    if (!skipDuplicateCheck) {
+      const existing = await fetchMikroTikPPPSecrets(mikrotik, true); // Force refresh
+      const alreadyExists = existing.some(
+        (s) => String(s?.pppoe_username || '').toLowerCase() === String(name).toLowerCase()
+      );
 
-    if (alreadyExists) {
-      return { success: false, error: `PPPoE username "${name}" already exists on MikroTik` };
+      if (alreadyExists) {
+        return { success: false, error: `PPPoE username "${name}" already exists on MikroTik` };
+      }
     }
 
-    // Validate profile exists; otherwise omit (RouterOS will use default)
+    // Validate profile exists (use cached data for profiles since they change rarely)
     let resolvedProfile = profile;
     try {
-      if (resolvedProfile) {
+      if (resolvedProfile && resolvedProfile !== 'default') {
         const profiles = await fetchMikroTikPPPProfiles(mikrotik);
         const ok = profiles.some(
           (p) => String(p?.name || '').toLowerCase() === String(resolvedProfile).toLowerCase()
@@ -1749,16 +1924,18 @@ export async function createPPPSecret(mikrotik, userConfig) {
     }
 
     const connectionInfo = await detectRouterOSVersion(mikrotik);
-    logger.info(`Creating PPP secret ${name} via ${connectionInfo.method} API`);
+    logger.info(`Creating PPP secret ${name} via ${connectionInfo.method} API on ${mikrotik.ip}`);
 
     const payload = { name, password, comment, callerId };
     if (resolvedProfile) payload.profile = resolvedProfile;
 
+    let result;
     try {
       if (connectionInfo.method === 'rest') {
-        return await createPPPSecretREST(mikrotik, payload, connectionInfo);
+        result = await createPPPSecretREST(mikrotik, payload, connectionInfo);
+      } else {
+        result = await createPPPSecretPlain(mikrotik, payload, connectionInfo);
       }
-      return await createPPPSecretPlain(mikrotik, payload, connectionInfo);
     } catch (err) {
       // Retry once if RouterOS rejects profile
       const msg = String(err?.message || err);
@@ -1766,12 +1943,21 @@ export async function createPPPSecret(mikrotik, userConfig) {
         logger.warn(`PPP secret create failed due to profile; retrying without profile: ${msg}`);
         const retryPayload = { name, password, comment, callerId };
         if (connectionInfo.method === 'rest') {
-          return await createPPPSecretREST(mikrotik, retryPayload, connectionInfo);
+          result = await createPPPSecretREST(mikrotik, retryPayload, connectionInfo);
+        } else {
+          result = await createPPPSecretPlain(mikrotik, retryPayload, connectionInfo);
         }
-        return await createPPPSecretPlain(mikrotik, retryPayload, connectionInfo);
+      } else {
+        throw err;
       }
-      throw err;
     }
+    
+    // Clear secrets cache after successful creation so next lookup gets fresh data
+    if (result?.success) {
+      staticDataCache.delete(`secrets:${mikrotik.ip}`);
+    }
+    
+    return result;
   } catch (error) {
     logger.error(`Failed to create PPP secret ${name}:`, error.message);
     return { success: false, error: error.message };
