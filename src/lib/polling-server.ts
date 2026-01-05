@@ -38,16 +38,22 @@ function maybeAppendDefaultPollingPath(base: string): string {
 /**
  * Resolve polling server base URL.
  * Priority: Settings value -> env -> same-origin default.
+ *
+ * NOTE: We do NOT auto-append a path for user-provided URLs.
+ * Different deployments may expose the polling server at the origin (/) or under a sub-path.
+ * If your polling server is proxied under "/olt-polling-server", include that in Settings.
  */
 export function resolvePollingServerUrl(raw?: string | null): string {
-  const fromSettings = maybeAppendDefaultPollingPath(normalizePollingServerUrl(raw));
+  // 1) User-configured value (Settings)
+  const fromSettings = normalizePollingServerUrl(raw);
   if (fromSettings) return fromSettings;
 
-  const envFallback =
-    import.meta.env.VITE_VPS_URL || import.meta.env.VITE_POLLING_SERVER_URL || '';
-  const fromEnv = maybeAppendDefaultPollingPath(normalizePollingServerUrl(envFallback));
+  // 2) Env fallback
+  const envFallback = import.meta.env.VITE_VPS_URL || import.meta.env.VITE_POLLING_SERVER_URL || '';
+  const fromEnv = normalizePollingServerUrl(envFallback);
   if (fromEnv) return fromEnv;
 
+  // 3) Same-origin default (most common VPS reverse-proxy setup)
   if (typeof window !== 'undefined' && window.location?.origin) {
     return normalizePollingServerUrl(
       `${window.location.origin}${DEFAULT_RELATIVE_POLLING_PATH}`
