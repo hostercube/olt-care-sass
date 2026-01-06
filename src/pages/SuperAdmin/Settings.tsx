@@ -116,23 +116,18 @@ export default function SuperAdminSettings() {
     try {
       setSaving(true);
 
-      const { error } = await supabase
-        .from('system_settings')
-        .upsert(
-          {
-            key: 'platform_settings',
-            value: settings as any,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'key' },
-        );
+      // Use edge function to save settings (bypasses RLS for super admin)
+      const { data, error } = await supabase.functions.invoke('save-platform-settings', {
+        body: { settings },
+      });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast.success('Settings saved successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving settings:', error);
-      toast.error('Failed to save settings');
+      toast.error(error.message || 'Failed to save settings');
     } finally {
       setSaving(false);
     }

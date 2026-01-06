@@ -563,21 +563,49 @@ export default function TenantManagement() {
                   <TableHead>Contact</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Package</TableHead>
+                  <TableHead>Expires</TableHead>
                   <TableHead>Stats</TableHead>
-                  <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
                 ) : paginatedTenants.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No tenants found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No tenants found</TableCell></TableRow>
                 ) : (
                   paginatedTenants.map((tenant) => {
                     const subscription = getTenantSubscription(tenant.id);
                     const pkg = subscription ? packages.find(p => p.id === subscription.package_id) : null;
                     const stats = tenantStats[tenant.id];
+                    
+                    // Determine effective status from subscription if available
+                    const getEffectiveStatus = () => {
+                      if (subscription) {
+                        const endsAt = new Date(subscription.ends_at);
+                        const now = new Date();
+                        if (subscription.status === 'active' && endsAt > now) return 'active';
+                        if (subscription.status === 'trial') return 'trial';
+                        if (endsAt < now) return 'expired';
+                      }
+                      if (tenant.trial_ends_at) {
+                        const trialEnds = new Date(tenant.trial_ends_at);
+                        if (trialEnds > new Date()) return 'trial';
+                      }
+                      return tenant.status;
+                    };
+                    
+                    const effectiveStatus = getEffectiveStatus();
+                    
+                    // Get expiry date
+                    const getExpiryDate = () => {
+                      if (subscription?.ends_at) return new Date(subscription.ends_at);
+                      if (tenant.trial_ends_at) return new Date(tenant.trial_ends_at);
+                      return null;
+                    };
+                    
+                    const expiryDate = getExpiryDate();
+                    const isExpired = expiryDate && expiryDate < new Date();
                     
                     return (
                       <TableRow key={tenant.id}>
@@ -589,12 +617,28 @@ export default function TenantManagement() {
                           <div>{tenant.name}</div>
                           <div className="text-sm text-muted-foreground">{tenant.email}</div>
                         </TableCell>
-                        <TableCell>{getStatusBadge(tenant.status)}</TableCell>
+                        <TableCell>
+                          {effectiveStatus === 'expired' ? (
+                            <Badge variant="destructive">EXPIRED</Badge>
+                          ) : (
+                            getStatusBadge(effectiveStatus as TenantStatus)
+                          )}
+                        </TableCell>
                         <TableCell>
                           {pkg ? (
                             <Badge variant="outline">{pkg.name}</Badge>
                           ) : (
                             <span className="text-muted-foreground text-sm">No package</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {expiryDate ? (
+                            <div className={isExpired ? 'text-destructive font-medium' : ''}>
+                              {format(expiryDate, 'PP')}
+                              {isExpired && <span className="text-xs block">Expired</span>}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -606,7 +650,6 @@ export default function TenantManagement() {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell>{format(new Date(tenant.created_at), 'PP')}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
