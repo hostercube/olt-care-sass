@@ -16,11 +16,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { 
-  Settings as SettingsIcon, Shield, Globe, Bell, Mail, 
-  MessageSquare, CreditCard, Loader2, Save, RefreshCw, Server
+  Settings as SettingsIcon, Shield, Globe, Bell, 
+  CreditCard, Loader2, Save, RefreshCw, Server
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import type { Json } from '@/integrations/supabase/types';
 
 interface SystemSettings {
   platformName: string;
@@ -40,9 +41,7 @@ interface SystemSettings {
   autoSuspendDays: number;
   maintenanceMode: boolean;
   maintenanceMessage: string;
-  // VPS/Polling Server
   pollingServerUrl: string;
-  // Rate limits
   smsRateLimitPerMinute: number;
   smsRateLimitPerHour: number;
   smsRateLimitPerDay: number;
@@ -70,13 +69,20 @@ const DEFAULT_SETTINGS: SystemSettings = {
   maintenanceMode: false,
   maintenanceMessage: 'We are currently performing maintenance. Please check back later.',
   pollingServerUrl: '',
-  // Rate limits - defaults
   smsRateLimitPerMinute: 10,
   smsRateLimitPerHour: 100,
   smsRateLimitPerDay: 1000,
   emailRateLimitPerMinute: 5,
   emailRateLimitPerHour: 50,
   emailRateLimitPerDay: 500,
+};
+
+// Parse value from system_settings table format
+const parseSettingValue = (value: Json): unknown => {
+  if (typeof value === 'object' && value !== null && 'value' in value) {
+    return (value as { value: unknown }).value;
+  }
+  return value;
 };
 
 export default function SuperAdminSettings() {
@@ -92,18 +98,26 @@ export default function SuperAdminSettings() {
     try {
       setLoading(true);
 
-      // Use backend function to fetch settings (avoids RLS issues)
-      const { data, error } = await supabase.functions.invoke('admin-platform-settings');
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('key, value');
+
       if (error) throw error;
 
-      const settingsValue = (data as any)?.settings;
-      if (settingsValue && typeof settingsValue === 'object') {
-        setSettings({ ...DEFAULT_SETTINGS, ...(settingsValue as any) });
+      if (data && data.length > 0) {
+        const parsed: Partial<SystemSettings> = {};
+        data.forEach(({ key, value }) => {
+          if (key in DEFAULT_SETTINGS) {
+            const parsedValue = parseSettingValue(value);
+            (parsed as Record<string, unknown>)[key] = parsedValue;
+          }
+        });
+        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
       } else {
         setSettings(DEFAULT_SETTINGS);
       }
-    } catch {
-      // No settings found or no access, use defaults
+    } catch (error) {
+      console.error('Error fetching settings:', error);
       setSettings(DEFAULT_SETTINGS);
     } finally {
       setLoading(false);
@@ -114,13 +128,20 @@ export default function SuperAdminSettings() {
     try {
       setSaving(true);
 
-      // Use edge function to save settings (bypasses RLS for super admin)
-      const { data, error } = await supabase.functions.invoke('save-platform-settings', {
-        body: { settings },
-      });
+      // Save each setting to system_settings table
+      for (const [key, value] of Object.entries(settings)) {
+        if (value !== undefined) {
+          const { error } = await supabase
+            .from('system_settings')
+            .upsert({
+              key,
+              value: { value } as Json,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'key' });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+          if (error) throw error;
+        }
+      }
 
       toast.success('Settings saved successfully');
     } catch (error: any) {
@@ -314,6 +335,32 @@ export default function SuperAdminSettings() {
             </Card>
           </TabsContent>
 
+          {/* Infrastructure Settings */}
+          <TabsContent value="infrastructure" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Server className="h-5 w-5 text-primary" />
+                  VPS / Polling Server
+                </CardTitle>
+                <CardDescription>Configure the polling server for OLT communication</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Polling Server URL</Label>
+                  <Input
+                    value={settings.pollingServerUrl}
+                    onChange={(e) => updateSetting('pollingServerUrl', e.target.value)}
+                    placeholder="https://your-vps-ip:3001"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The URL of your VPS running the polling server (e.g., https://123.45.67.89:3001)
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Security Settings */}
           <TabsContent value="security" className="space-y-6">
             <Card>
@@ -444,153 +491,77 @@ export default function SuperAdminSettings() {
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Bell className="h-5 w-5 text-primary" />
-                  Notification Configuration
+                  Rate Limits
                 </CardTitle>
-                <CardDescription>Configure how notifications are sent</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-4 rounded-lg bg-muted/30 border space-y-4">
-                  <div className="flex items-center gap-3">
-                    <MessageSquare className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="font-medium">SMS Gateway</p>
-                      <p className="text-sm text-muted-foreground">
-                        Configure in <a href="/admin/sms-gateway" className="text-primary hover:underline">SMS Gateway Settings</a>
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Mail className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="font-medium">Email Gateway</p>
-                      <p className="text-sm text-muted-foreground">
-                        Configure in <a href="/admin/email-gateway" className="text-primary hover:underline">Email Gateway Settings</a>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* SMS Rate Limits */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-primary" />
-                  SMS Rate Limits
-                </CardTitle>
-                <CardDescription>Control how many SMS can be sent per time period</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>Per Minute</Label>
-                    <Input
-                      type="number"
-                      value={settings.smsRateLimitPerMinute}
-                      onChange={(e) => updateSetting('smsRateLimitPerMinute', parseInt(e.target.value) || 10)}
-                      min={1}
-                      max={100}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Per Hour</Label>
-                    <Input
-                      type="number"
-                      value={settings.smsRateLimitPerHour}
-                      onChange={(e) => updateSetting('smsRateLimitPerHour', parseInt(e.target.value) || 100)}
-                      min={1}
-                      max={1000}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Per Day</Label>
-                    <Input
-                      type="number"
-                      value={settings.smsRateLimitPerDay}
-                      onChange={(e) => updateSetting('smsRateLimitPerDay', parseInt(e.target.value) || 1000)}
-                      min={1}
-                      max={10000}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Email Rate Limits */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Mail className="h-5 w-5 text-primary" />
-                  Email Rate Limits
-                </CardTitle>
-                <CardDescription>Control how many emails can be sent per time period</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>Per Minute</Label>
-                    <Input
-                      type="number"
-                      value={settings.emailRateLimitPerMinute}
-                      onChange={(e) => updateSetting('emailRateLimitPerMinute', parseInt(e.target.value) || 5)}
-                      min={1}
-                      max={50}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Per Hour</Label>
-                    <Input
-                      type="number"
-                      value={settings.emailRateLimitPerHour}
-                      onChange={(e) => updateSetting('emailRateLimitPerHour', parseInt(e.target.value) || 50)}
-                      min={1}
-                      max={500}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Per Day</Label>
-                    <Input
-                      type="number"
-                      value={settings.emailRateLimitPerDay}
-                      onChange={(e) => updateSetting('emailRateLimitPerDay', parseInt(e.target.value) || 500)}
-                      min={1}
-                      max={5000}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Infrastructure Settings */}
-          <TabsContent value="infrastructure" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Server className="h-5 w-5 text-primary" />
-                  VPS Polling Server
-                </CardTitle>
-                <CardDescription>Configure the backend polling server for OLT/MikroTik management</CardDescription>
+                <CardDescription>Configure notification rate limits</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label>Polling Server URL</Label>
-                  <Input
-                    value={settings.pollingServerUrl}
-                    onChange={(e) => updateSetting('pollingServerUrl', e.target.value)}
-                    placeholder="https://yourdomain.com/olt-polling-server"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Your VPS polling server endpoint. Example: https://yourdomain.com/olt-polling-server (don&apos;t include /api)
-                  </p>
+                <div>
+                  <h4 className="font-medium mb-4">SMS Rate Limits</h4>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label>Per Minute</Label>
+                      <Input
+                        type="number"
+                        value={settings.smsRateLimitPerMinute}
+                        onChange={(e) => updateSetting('smsRateLimitPerMinute', parseInt(e.target.value) || 10)}
+                        min={1}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Per Hour</Label>
+                      <Input
+                        type="number"
+                        value={settings.smsRateLimitPerHour}
+                        onChange={(e) => updateSetting('smsRateLimitPerHour', parseInt(e.target.value) || 100)}
+                        min={1}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Per Day</Label>
+                      <Input
+                        type="number"
+                        value={settings.smsRateLimitPerDay}
+                        onChange={(e) => updateSetting('smsRateLimitPerDay', parseInt(e.target.value) || 1000)}
+                        min={1}
+                      />
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="p-4 rounded-lg bg-muted/30 border">
-                  <p className="text-sm text-muted-foreground">
-                    <strong>Note:</strong> This URL is used globally for all tenants to communicate with OLT and MikroTik devices.
-                    Ensure the polling server is running and accessible from the internet.
-                  </p>
+
+                <Separator />
+
+                <div>
+                  <h4 className="font-medium mb-4">Email Rate Limits</h4>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label>Per Minute</Label>
+                      <Input
+                        type="number"
+                        value={settings.emailRateLimitPerMinute}
+                        onChange={(e) => updateSetting('emailRateLimitPerMinute', parseInt(e.target.value) || 5)}
+                        min={1}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Per Hour</Label>
+                      <Input
+                        type="number"
+                        value={settings.emailRateLimitPerHour}
+                        onChange={(e) => updateSetting('emailRateLimitPerHour', parseInt(e.target.value) || 50)}
+                        min={1}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Per Day</Label>
+                      <Input
+                        type="number"
+                        value={settings.emailRateLimitPerDay}
+                        onChange={(e) => updateSetting('emailRateLimitPerDay', parseInt(e.target.value) || 500)}
+                        min={1}
+                      />
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
