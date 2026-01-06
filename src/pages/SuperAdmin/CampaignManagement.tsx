@@ -91,11 +91,15 @@ export default function CampaignManagement() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchCampaigns(), fetchTenants(), fetchTemplates()]);
-      setLoading(false);
+      try {
+        await Promise.all([fetchCampaigns(), fetchTenants(), fetchTemplates()]);
+      } finally {
+        setLoading(false);
+      }
     };
     loadData();
   }, []);
+
 
   useEffect(() => {
     // Re-fetch on filter changes (not initial load)
@@ -445,11 +449,20 @@ export default function CampaignManagement() {
                         <Label className="flex items-center gap-2">
                           <FileText className="h-4 w-4" /> Use Email Template
                         </Label>
-                        <Select value={formData.email_template_id} onValueChange={(v) => handleTemplateSelect(v, 'email')}>
+                        <Select
+                          value={formData.email_template_id}
+                          onValueChange={(v) => {
+                            if (v === '__none__') {
+                              setFormData((prev) => ({ ...prev, email_template_id: '' }));
+                              return;
+                            }
+                            handleTemplateSelect(v, 'email');
+                          }}
+                        >
                           <SelectTrigger><SelectValue placeholder="Select template..." /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">No template</SelectItem>
-                            {emailTemplates.map(t => (
+                            <SelectItem value="__none__">No template</SelectItem>
+                            {emailTemplates.map((t) => (
                               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                             ))}
                           </SelectContent>
@@ -461,17 +474,27 @@ export default function CampaignManagement() {
                         <Label className="flex items-center gap-2">
                           <FileText className="h-4 w-4" /> Use SMS Template
                         </Label>
-                        <Select value={formData.sms_template_id} onValueChange={(v) => handleTemplateSelect(v, 'sms')}>
+                        <Select
+                          value={formData.sms_template_id}
+                          onValueChange={(v) => {
+                            if (v === '__none__') {
+                              setFormData((prev) => ({ ...prev, sms_template_id: '' }));
+                              return;
+                            }
+                            handleTemplateSelect(v, 'sms');
+                          }}
+                        >
                           <SelectTrigger><SelectValue placeholder="Select template..." /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">No template</SelectItem>
-                            {smsTemplates.map(t => (
+                            <SelectItem value="__none__">No template</SelectItem>
+                            {smsTemplates.map((t) => (
                               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                     )}
+
                   </div>
 
                   {formData.channel !== 'sms' && (
