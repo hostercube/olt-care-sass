@@ -55,6 +55,8 @@ export default function TenantManagement() {
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [suspendReason, setSuspendReason] = useState('');
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [loggingInAs, setLoggingInAs] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
@@ -414,6 +416,19 @@ export default function TenantManagement() {
     }
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!selectedTenant) return;
+    
+    setIsDeleting(true);
+    try {
+      await deleteTenant(selectedTenant.id);
+      setIsDeleteOpen(false);
+      setSelectedTenant(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleLoginAsTenant = async (tenant: any) => {
     setLoggingInAs(tenant.id);
     try {
@@ -730,7 +745,7 @@ export default function TenantManagement() {
                                     <CheckCircle className="h-4 w-4 mr-2" />Activate
                                   </DropdownMenuItem>
                                 )}
-                                <DropdownMenuItem onClick={() => deleteTenant(tenant.id)} className="text-destructive">
+                                <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsDeleteOpen(true); }} className="text-destructive">
                                   <Trash2 className="h-4 w-4 mr-2" />Delete
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
@@ -1046,6 +1061,48 @@ export default function TenantManagement() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsPackageOpen(false)}>Cancel</Button>
               <Button onClick={handlePackageChange}>Update Package</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-destructive flex items-center gap-2">
+                <Trash2 className="h-5 w-5" />
+                Delete ISP Company
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete <strong>{selectedTenant?.company_name || selectedTenant?.name}</strong>? 
+                This action cannot be undone and will:
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <ul className="list-disc list-inside space-y-1">
+                <li>Remove all company data including customers, resellers, and OLTs</li>
+                <li>Revoke access for all users associated with this company</li>
+                <li>Delete all subscriptions and billing history</li>
+                <li>Cancel any active services immediately</li>
+              </ul>
+            </div>
+            {selectedTenant && tenantStats[selectedTenant.id] && (
+              <div className="p-4 bg-destructive/10 rounded-lg space-y-1 text-sm">
+                <p><strong>Data that will be deleted:</strong></p>
+                <p>• {tenantStats[selectedTenant.id].customers} Customers</p>
+                <p>• {tenantStats[selectedTenant.id].resellers} Resellers</p>
+                <p>• {tenantStats[selectedTenant.id].olts} OLTs</p>
+                <p>• {tenantStats[selectedTenant.id].staff} Staff Members</p>
+              </div>
+            )}
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setIsDeleteOpen(false)} disabled={isDeleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteConfirm} disabled={isDeleting}>
+                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                Delete Permanently
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

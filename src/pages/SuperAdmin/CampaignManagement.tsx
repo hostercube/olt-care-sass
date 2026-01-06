@@ -450,7 +450,7 @@ export default function CampaignManagement() {
                           <FileText className="h-4 w-4" /> Use Email Template
                         </Label>
                         <Select
-                          value={formData.email_template_id}
+                          value={formData.email_template_id || '__none__'}
                           onValueChange={(v) => {
                             if (v === '__none__') {
                               setFormData((prev) => ({ ...prev, email_template_id: '' }));
@@ -475,7 +475,7 @@ export default function CampaignManagement() {
                           <FileText className="h-4 w-4" /> Use SMS Template
                         </Label>
                         <Select
-                          value={formData.sms_template_id}
+                          value={formData.sms_template_id || '__none__'}
                           onValueChange={(v) => {
                             if (v === '__none__') {
                               setFormData((prev) => ({ ...prev, sms_template_id: '' }));

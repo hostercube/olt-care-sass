@@ -157,6 +157,25 @@ export function useTenants() {
 
   const deleteTenant = async (id: string) => {
     try {
+      // First, get all users associated with this tenant
+      const { data: tenantUsers } = await supabase
+        .from('tenant_users')
+        .select('user_id')
+        .eq('tenant_id', id);
+
+      // Delete subscriptions
+      await supabase
+        .from('subscriptions')
+        .delete()
+        .eq('tenant_id', id);
+
+      // Delete tenant_users entries
+      await supabase
+        .from('tenant_users')
+        .delete()
+        .eq('tenant_id', id);
+
+      // Delete the tenant
       const { error } = await supabase
         .from('tenants')
         .delete()
@@ -166,7 +185,7 @@ export function useTenants() {
 
       toast({
         title: 'Tenant Deleted',
-        description: 'The tenant has been permanently deleted',
+        description: 'The tenant and all associated data have been permanently deleted. Users will be logged out on their next page refresh.',
       });
 
       await fetchTenants();
@@ -174,7 +193,7 @@ export function useTenants() {
       console.error('Error deleting tenant:', error);
       toast({
         title: 'Error',
-        description: 'Failed to delete tenant',
+        description: error.message || 'Failed to delete tenant',
         variant: 'destructive',
       });
     }
