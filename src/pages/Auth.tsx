@@ -56,9 +56,17 @@ export default function Auth() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const captchaSiteKey = platformSettings.captchaSiteKey?.trim() || '';
   const captchaEnabled = platformSettings.enableCaptcha === true && 
-    !!platformSettings.captchaSiteKey && 
-    platformSettings.captchaSiteKey.length > 10;
+    captchaSiteKey.length > 10;
+  
+  // Debug log for CAPTCHA settings
+  console.log('Auth: CAPTCHA settings:', { 
+    enableCaptcha: platformSettings.enableCaptcha, 
+    hasSiteKey: !!captchaSiteKey, 
+    siteKeyLength: captchaSiteKey.length,
+    captchaEnabled 
+  });
   
   const [loginCaptchaToken, setLoginCaptchaToken] = useState<string | null>(null);
   const [signupCaptchaToken, setSignupCaptchaToken] = useState<string | null>(null);
@@ -394,7 +402,7 @@ export default function Auth() {
                   {captchaEnabled && (
                     <div className="pt-2">
                       <TurnstileWidget
-                        siteKey={platformSettings.captchaSiteKey || ''}
+                        siteKey={captchaSiteKey}
                         onToken={(token) => setLoginCaptchaToken(token)}
                       />
                     </div>
@@ -608,7 +616,7 @@ export default function Auth() {
                     {captchaEnabled && (
                       <div className="pt-2">
                         <TurnstileWidget
-                          siteKey={platformSettings.captchaSiteKey || ''}
+                          siteKey={captchaSiteKey}
                           onToken={(token) => setSignupCaptchaToken(token)}
                         />
                       </div>

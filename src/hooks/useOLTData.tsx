@@ -283,6 +283,25 @@ export async function addOLT(data: {
     tenantId = tenantUser?.tenant_id || null;
   }
 
+  // Check if user is super admin (skip limit check for super admins)
+  const { data: userRoles } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('role', 'super_admin')
+    .maybeSingle();
+
+  const isSuperAdmin = !!userRoles;
+
+  // Check package limit for OLTs (only for non-super-admins with tenant)
+  if (!isSuperAdmin && tenantId) {
+    const { checkPackageLimit } = await import('@/hooks/usePackageLimits');
+    const limitCheck = await checkPackageLimit(tenantId, 'olts', 1);
+    if (!limitCheck.allowed) {
+      throw new Error(limitCheck.message || 'OLT limit reached. Please upgrade your package.');
+    }
+  }
+
   const insertData: any = {
     name: data.name,
     brand: data.brand,

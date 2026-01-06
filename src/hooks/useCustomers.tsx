@@ -74,6 +74,16 @@ export function useCustomers() {
       // Only add tenant_id if available (not super admin without tenant context)
       if (tenantId) {
         customerData.tenant_id = tenantId;
+        
+        // Check package limit before adding new customer
+        if (!isSuperAdmin) {
+          const { checkPackageLimit } = await import('@/hooks/usePackageLimits');
+          const limitCheck = await checkPackageLimit(tenantId, 'customers', 1);
+          if (!limitCheck.allowed) {
+            toast.error(limitCheck.message || 'Customer limit reached. Please upgrade your package.');
+            throw new Error(limitCheck.message);
+          }
+        }
       } else if (!isSuperAdmin) {
         throw new Error('No tenant context available');
       }
