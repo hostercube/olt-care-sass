@@ -286,7 +286,7 @@ export default function RenewSubscription() {
               onValueChange={setSelectedPackage}
               className="grid gap-4"
             >
-              {packages.filter(p => p.is_active).map((pkg) => (
+              {packages.filter(p => p.is_active && p.is_public !== false).map((pkg) => (
                 <label
                   key={pkg.id}
                   className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-colors ${
