@@ -199,6 +199,129 @@ export function useTenants() {
     }
   };
 
+  // Update tenant manual permissions
+  const updateTenantManualPermissions = async (
+    id: string, 
+    manualFeatures: TenantFeatures | null, 
+    manualLimits: Record<string, number | null> | null,
+    enabled: boolean
+  ) => {
+    try {
+      const { error } = await supabase
+        .from('tenants')
+        .update({
+          manual_features: manualFeatures as any,
+          manual_limits: manualLimits as any,
+          manual_features_enabled: enabled,
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: enabled 
+          ? 'Manual permissions enabled for this tenant' 
+          : 'Manual permissions disabled - using package defaults',
+      });
+
+      await fetchTenants();
+    } catch (error: any) {
+      console.error('Error updating tenant permissions:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update tenant permissions',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
+  // Change tenant's subscription package
+  const changeTenantPackage = async (tenantId: string, packageId: string) => {
+    try {
+      // Get the package details
+      const { data: pkg, error: pkgError } = await supabase
+        .from('packages')
+        .select('*')
+        .eq('id', packageId)
+        .single();
+
+      if (pkgError) throw pkgError;
+
+      // Check if tenant has an active subscription
+      const { data: existingSub } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .in('status', ['active', 'trial'])
+        .maybeSingle();
+
+      if (existingSub) {
+        // Update the existing subscription
+        const { error: updateError } = await supabase
+          .from('subscriptions')
+          .update({
+            package_id: packageId,
+            amount: pkg.price_monthly,
+          })
+          .eq('id', existingSub.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create a new subscription
+        const now = new Date();
+        const endsAt = new Date(now);
+        endsAt.setMonth(endsAt.getMonth() + 1);
+
+        const { error: insertError } = await supabase
+          .from('subscriptions')
+          .insert({
+            tenant_id: tenantId,
+            package_id: packageId,
+            billing_cycle: 'monthly',
+            status: 'active',
+            amount: pkg.price_monthly,
+            starts_at: now.toISOString(),
+            ends_at: endsAt.toISOString(),
+            auto_renew: true,
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      // If manual permissions are not enabled, clear them so package takes effect
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('manual_features_enabled')
+        .eq('id', tenantId)
+        .single();
+
+      if (!(tenant as any)?.manual_features_enabled) {
+        // Reset tenant features to empty so package features take over
+        await supabase
+          .from('tenants')
+          .update({ features: {} })
+          .eq('id', tenantId);
+      }
+
+      toast({
+        title: 'Package Changed',
+        description: `Tenant has been assigned to the ${pkg.name} package`,
+      });
+
+      await fetchTenants();
+    } catch (error: any) {
+      console.error('Error changing tenant package:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to change package',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
   return {
     tenants,
     loading,
@@ -208,5 +331,7 @@ export function useTenants() {
     suspendTenant,
     activateTenant,
     deleteTenant,
+    updateTenantManualPermissions,
+    changeTenantPackage,
   };
 }

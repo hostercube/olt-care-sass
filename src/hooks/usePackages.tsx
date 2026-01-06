@@ -23,7 +23,8 @@ export function usePackages() {
         ...item,
         price_monthly: Number(item.price_monthly),
         price_yearly: Number(item.price_yearly),
-        features: (item.features || {}) as TenantFeatures
+        features: (item.features || {}) as TenantFeatures,
+        is_public: (item as any).is_public ?? true,
       })) as Package[];
       
       setPackages(transformedData);
@@ -74,7 +75,11 @@ export function usePackages() {
   const updatePackage = async (id: string, updates: Partial<Package>) => {
     try {
       // Cast features to any to avoid Json type conflicts
-      const dbUpdates = { ...updates, features: updates.features as any };
+      const dbUpdates = { 
+        ...updates, 
+        features: updates.features as any,
+        is_public: (updates as any).is_public,
+      };
       const { error } = await supabase
         .from('packages')
         .update(dbUpdates)
@@ -82,9 +87,13 @@ export function usePackages() {
 
       if (error) throw error;
 
+      // When package is updated, all tenants subscribed to this package 
+      // who don't have manual_features_enabled will automatically get updated features
+      // because useModuleAccess reads from the subscription's package
+
       toast({
         title: 'Success',
-        description: 'Package updated successfully',
+        description: 'Package updated successfully. All subscribed tenants will receive the updated permissions.',
       });
 
       await fetchPackages();

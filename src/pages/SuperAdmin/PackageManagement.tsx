@@ -101,6 +101,7 @@ interface FormData {
   max_resellers: number | null;
   features: TenantFeatures;
   is_active: boolean;
+  is_public: boolean;
   sort_order: number;
 }
 
@@ -109,35 +110,47 @@ const LimitInput = memo(function LimitInput({
   label, 
   value, 
   onChange, 
-  allowUnlimited = true 
+  allowUnlimited = true,
+  defaultLimitedValue = 1
 }: { 
   label: string; 
   value: number | null; 
   onChange: (v: number | null) => void;
   allowUnlimited?: boolean;
+  defaultLimitedValue?: number;
 }) {
+  const isUnlimited = value === null || value === -1;
+  
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
       <div className="flex items-center gap-2">
         <Input
           type="number"
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value ? parseInt(e.target.value) : null)}
+          min={0}
+          value={isUnlimited ? '' : (value ?? '')}
+          onChange={(e) => {
+            const val = e.target.value;
+            if (val === '' || val === null) {
+              onChange(null);
+            } else {
+              onChange(parseInt(val, 10));
+            }
+          }}
           placeholder={allowUnlimited ? 'Unlimited' : '0'}
-          disabled={allowUnlimited && value === null}
+          disabled={allowUnlimited && isUnlimited}
           className="flex-1"
         />
         {allowUnlimited && (
           <Button
             type="button"
-            variant={value === null ? 'default' : 'outline'}
+            variant={isUnlimited ? 'outline' : 'default'}
             size="sm"
-            onClick={() => onChange(value === null ? 100 : null)}
+            onClick={() => onChange(isUnlimited ? defaultLimitedValue : null)}
             className="whitespace-nowrap"
           >
             <Infinity className="h-4 w-4 mr-1" />
-            {value === null ? 'Limited' : 'Unlimited'}
+            {isUnlimited ? 'Limited' : 'Unlimited'}
           </Button>
         )}
       </div>
@@ -197,6 +210,7 @@ export default function PackageManagement() {
     max_resellers: null,
     features: { ...DEFAULT_FEATURES },
     is_active: true,
+    is_public: true,
     sort_order: 0,
   }), []);
 
@@ -221,20 +235,22 @@ export default function PackageManagement() {
   };
 
   const openEdit = (pkg: any) => {
+    // Properly preserve null values for unlimited resources
     setFormData({
       name: pkg.name,
       description: pkg.description || '',
-      price_monthly: pkg.price_monthly,
-      price_yearly: pkg.price_yearly,
-      max_olts: pkg.max_olts,
-      max_onus: pkg.max_onus || 100,
-      max_users: pkg.max_users,
-      max_mikrotiks: pkg.max_mikrotiks || 1,
-      max_customers: pkg.max_customers,
-      max_areas: pkg.max_areas,
-      max_resellers: pkg.max_resellers,
+      price_monthly: Number(pkg.price_monthly) || 0,
+      price_yearly: Number(pkg.price_yearly) || 0,
+      max_olts: pkg.max_olts === null ? null : (pkg.max_olts ?? 1),
+      max_onus: pkg.max_onus === null ? null : (pkg.max_onus ?? 100),
+      max_users: pkg.max_users === null ? null : (pkg.max_users ?? 1),
+      max_mikrotiks: pkg.max_mikrotiks === null ? null : (pkg.max_mikrotiks ?? 1),
+      max_customers: pkg.max_customers ?? null,
+      max_areas: pkg.max_areas ?? null,
+      max_resellers: pkg.max_resellers ?? null,
       features: { ...DEFAULT_FEATURES, ...(pkg.features || {}) },
-      is_active: pkg.is_active,
+      is_active: pkg.is_active ?? true,
+      is_public: pkg.is_public ?? true,
       sort_order: pkg.sort_order || 0,
     });
     setEditingPackage(pkg);
@@ -339,6 +355,14 @@ export default function PackageManagement() {
                 onCheckedChange={(v) => setFormData(prev => ({ ...prev, is_active: v }))}
               />
               <Label htmlFor="is_active">Active</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="is_public"
+                checked={formData.is_public}
+                onCheckedChange={(v) => setFormData(prev => ({ ...prev, is_public: v }))}
+              />
+              <Label htmlFor="is_public">Public (Show on website)</Label>
             </div>
           </div>
         </div>
@@ -601,6 +625,11 @@ export default function PackageManagement() {
                     <Badge variant="success" className="text-xs"><Check className="h-3 w-3 mr-1" />Active</Badge>
                   ) : (
                     <Badge variant="secondary" className="text-xs"><X className="h-3 w-3 mr-1" />Inactive</Badge>
+                  )}
+                  {(pkg as any).is_public ? (
+                    <Badge variant="default" className="text-xs"><Globe className="h-3 w-3 mr-1" />Public</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">Admin Only</Badge>
                   )}
                   {(pkg.features as TenantFeatures)?.olt_care && (
                     <Badge variant="outline" className="text-xs">OLT Care</Badge>

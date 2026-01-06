@@ -2918,6 +2918,7 @@ export type Database = {
           features: Json | null
           id: string
           is_active: boolean | null
+          is_public: boolean | null
           max_areas: number | null
           max_customers: number | null
           max_mikrotiks: number | null
@@ -2938,6 +2939,7 @@ export type Database = {
           features?: Json | null
           id?: string
           is_active?: boolean | null
+          is_public?: boolean | null
           max_areas?: number | null
           max_customers?: number | null
           max_mikrotiks?: number | null
@@ -2958,6 +2960,7 @@ export type Database = {
           features?: Json | null
           id?: string
           is_active?: boolean | null
+          is_public?: boolean | null
           max_areas?: number | null
           max_customers?: number | null
           max_mikrotiks?: number | null
@@ -4908,7 +4911,15 @@ export type Database = {
           id: string
           language: string | null
           logo_url: string | null
+          manual_features: Json | null
+          manual_features_enabled: boolean | null
+          manual_limits: Json | null
+          max_areas: number | null
+          max_customers: number | null
+          max_mikrotiks: number | null
           max_olts: number | null
+          max_onus: number | null
+          max_resellers: number | null
           max_users: number | null
           name: string
           notes: string | null
@@ -4938,7 +4949,15 @@ export type Database = {
           id?: string
           language?: string | null
           logo_url?: string | null
+          manual_features?: Json | null
+          manual_features_enabled?: boolean | null
+          manual_limits?: Json | null
+          max_areas?: number | null
+          max_customers?: number | null
+          max_mikrotiks?: number | null
           max_olts?: number | null
+          max_onus?: number | null
+          max_resellers?: number | null
           max_users?: number | null
           name: string
           notes?: string | null
@@ -4968,7 +4987,15 @@ export type Database = {
           id?: string
           language?: string | null
           logo_url?: string | null
+          manual_features?: Json | null
+          manual_features_enabled?: boolean | null
+          manual_limits?: Json | null
+          max_areas?: number | null
+          max_customers?: number | null
+          max_mikrotiks?: number | null
           max_olts?: number | null
+          max_onus?: number | null
+          max_resellers?: number | null
           max_users?: number | null
           name?: string
           notes?: string | null
