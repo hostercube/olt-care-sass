@@ -15,6 +15,7 @@ declare global {
 type Props = {
   siteKey: string;
   onToken: (token: string | null) => void;
+  resetKey?: number; // increment to force widget re-render
 };
 
 function loadTurnstileScript(): Promise<void> {
@@ -44,7 +45,7 @@ function loadTurnstileScript(): Promise<void> {
   return window.__turnstileScriptLoading;
 }
 
-export function TurnstileWidget({ siteKey, onToken }: Props) {
+export function TurnstileWidget({ siteKey, onToken, resetKey = 0 }: Props) {
   const id = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
@@ -154,7 +155,7 @@ export function TurnstileWidget({ siteKey, onToken }: Props) {
       widgetIdRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteKey, id]);
+  }, [siteKey, id, resetKey]);
 
   return (
     <div className="space-y-2">
