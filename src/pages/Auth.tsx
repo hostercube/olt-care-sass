@@ -427,24 +427,20 @@ export default function Auth() {
                           if (token) setTurnstileLoaded(true);
                         }}
                       />
-                      {!turnstileLoaded && !loginCaptchaToken && (
-                        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Loading CAPTCHA...
-                        </div>
-                      )}
                     </div>
                   )}
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  <Button type="submit" className="w-full" disabled={isSubmitting || (captchaEnabled && !loginCaptchaToken)}>
                     {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     Login
                   </Button>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Shield className="h-3 w-3" />
-                    Protected by Cloudflare
-                  </div>
+                  {captchaEnabled && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Shield className="h-3 w-3" />
+                      Protected by Cloudflare Turnstile
+                    </div>
+                  )}
                 </CardFooter>
               </form>
             </TabsContent>
@@ -666,24 +662,20 @@ export default function Auth() {
                           if (token) setTurnstileLoaded(true);
                         }}
                       />
-                      {!turnstileLoaded && !signupCaptchaToken && (
-                        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Loading CAPTCHA...
-                        </div>
-                      )}
                     </div>
                   )}
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  <Button type="submit" className="w-full" disabled={isSubmitting || (captchaEnabled && !signupCaptchaToken)}>
                     {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     Create Account
                   </Button>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Shield className="h-3 w-3" />
-                    Protected by Cloudflare
-                  </div>
+                  {captchaEnabled && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Shield className="h-3 w-3" />
+                      Protected by Cloudflare Turnstile
+                    </div>
+                  )}
                 </CardFooter>
               </form>
             </TabsContent>
