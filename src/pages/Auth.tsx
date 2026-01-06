@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Wifi, Loader2, ArrowLeft, Eye, EyeOff, Shield, AlertTriangle } from 'lucide-react';
+import { Wifi, Loader2, ArrowLeft, Eye, EyeOff, Shield, AlertTriangle, Wrench, RefreshCw } from 'lucide-react';
 import { z } from 'zod';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { DIVISIONS, getDistricts, getUpazilas } from '@/data/bangladeshLocations';
@@ -117,6 +117,7 @@ export default function Auth() {
         .from('packages')
         .select('id, name, price_monthly, price_yearly, description')
         .eq('is_active', true)
+        .eq('is_public', true)
         .order('sort_order', { ascending: true });
       setPackages((pkgData as Package[]) || []);
     };
@@ -303,6 +304,41 @@ export default function Auth() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Show maintenance page if maintenance mode is enabled
+  if (platformSettings.maintenanceMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="max-w-md w-full text-center">
+          <CardHeader>
+            <div className="flex justify-center mb-4">
+              <div className="p-4 rounded-full bg-warning/10">
+                <Wrench className="h-12 w-12 text-warning" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl">Under Maintenance</CardTitle>
+            <CardDescription>
+              {platformSettings.maintenanceMessage || 'We are currently performing scheduled maintenance. Please check back soon.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground text-sm">
+              Login and registration are temporarily unavailable. We apologize for the inconvenience.
+            </p>
+          </CardContent>
+          <CardFooter className="justify-center gap-4">
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button variant="ghost" onClick={() => navigate('/')}>
+              Back to Home
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
     );
   }

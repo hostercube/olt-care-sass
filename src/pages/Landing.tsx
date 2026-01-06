@@ -9,9 +9,10 @@ import {
   Server, Globe, Zap, Check, ArrowRight, Menu, X,
   Router, Database, Bell, FileText, Clock, Smartphone,
   Lock, Building2, Headphones, TrendingUp, Eye, Settings,
-  ChevronDown, Play, Star, Award
+  ChevronDown, Play, Star, Award, AlertTriangle, Wrench, RefreshCw
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
+import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 
 interface Package {
   id: string;
@@ -210,6 +211,7 @@ export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [lang, setLang] = useState<'en' | 'bn'>('en');
+  const { settings: platformSettings, loading: settingsLoading } = usePlatformSettings();
 
   const t = translations[lang];
 
@@ -226,6 +228,38 @@ export default function Landing() {
     };
     fetchPackages();
   }, []);
+
+  // Show maintenance page if maintenance mode is enabled
+  if (!settingsLoading && platformSettings.maintenanceMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="max-w-md w-full text-center">
+          <CardHeader>
+            <div className="flex justify-center mb-4">
+              <div className="p-4 rounded-full bg-warning/10">
+                <Wrench className="h-12 w-12 text-warning" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl">Under Maintenance</CardTitle>
+            <CardDescription>
+              {platformSettings.maintenanceMessage || 'We are currently performing scheduled maintenance. Please check back soon.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground text-sm">
+              We apologize for any inconvenience. Our team is working to bring the system back online as soon as possible.
+            </p>
+          </CardContent>
+          <CardFooter className="justify-center">
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Page
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   const features = [
     { icon: Router, title: t.oltManagement, description: t.oltManagementDesc },
