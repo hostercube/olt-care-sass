@@ -3,6 +3,7 @@ import { OLTTable } from '@/components/olt/OLTTable';
 import { AddOLTDialog } from '@/components/olt/AddOLTDialog';
 import { useOLTs } from '@/hooks/useOLTData';
 import { StatsCard } from '@/components/dashboard/StatsCard';
+import { PackageLimitBadge } from '@/components/common/PackageLimitBadge';
 import { Server, Wifi, WifiOff, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function OLTManagement() {
@@ -27,8 +28,8 @@ export default function OLTManagement() {
     <DashboardLayout title="OLT Management" subtitle="Manage and monitor OLT devices">
       <div className="space-y-6 animate-fade-in">
         {/* Header Actions */}
-        <div className="flex items-center justify-between">
-          <div className="grid gap-4 grid-cols-2 md:grid-cols-4 flex-1 mr-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="grid gap-4 grid-cols-2 md:grid-cols-4 flex-1">
             <StatsCard
               title="Total OLTs"
               value={totalOLTs}
@@ -54,7 +55,10 @@ export default function OLTManagement() {
               variant="warning"
             />
           </div>
-          <AddOLTDialog onOLTAdded={refetch} />
+          <div className="flex items-center gap-3">
+            <PackageLimitBadge resource="olts" compact />
+            <AddOLTDialog onOLTAdded={refetch} />
+          </div>
         </div>
 
         {/* OLT Table */}

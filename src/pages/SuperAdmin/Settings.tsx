@@ -129,21 +129,52 @@ export default function SuperAdminSettings() {
       setSaving(true);
 
       // Save each setting to system_settings table
+      const errors: string[] = [];
+      
       for (const [key, value] of Object.entries(settings)) {
         if (value !== undefined) {
-          const { error } = await supabase
+          // Try update first, then insert if not exists
+          const { data: existing } = await supabase
             .from('system_settings')
-            .upsert({
-              key,
-              value: { value } as Json,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'key' });
+            .select('id')
+            .eq('key', key)
+            .maybeSingle();
 
-          if (error) throw error;
+          let error;
+          if (existing) {
+            // Update existing
+            const result = await supabase
+              .from('system_settings')
+              .update({
+                value: { value } as Json,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('key', key);
+            error = result.error;
+          } else {
+            // Insert new
+            const result = await supabase
+              .from('system_settings')
+              .insert({
+                key,
+                value: { value } as Json,
+                updated_at: new Date().toISOString(),
+              });
+            error = result.error;
+          }
+
+          if (error) {
+            console.error(`Error saving setting "${key}":`, error);
+            errors.push(`${key}: ${error.message}`);
+          }
         }
       }
 
-      toast.success('Settings saved successfully');
+      if (errors.length > 0) {
+        toast.error(`Some settings failed to save: ${errors.join(', ')}`);
+      } else {
+        toast.success('Settings saved successfully');
+      }
     } catch (error: any) {
       console.error('Error saving settings:', error);
       toast.error(error.message || 'Failed to save settings');

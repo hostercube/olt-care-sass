@@ -55,13 +55,15 @@ export function TurnstileWidget({ siteKey, onToken }: Props) {
     let mounted = true;
 
     // Validate site key
-    if (!siteKey || siteKey.length < 10) {
-      console.error('Turnstile: Invalid or missing site key');
+    if (!siteKey || siteKey.trim().length < 10) {
+      console.warn('Turnstile: Invalid or missing site key, length:', siteKey?.length || 0);
       setStatus('error');
       setErrorMessage('CAPTCHA not configured properly');
       onToken(null);
       return;
     }
+
+    const trimmedKey = siteKey.trim();
 
     (async () => {
       try {
@@ -94,10 +96,10 @@ export function TurnstileWidget({ siteKey, onToken }: Props) {
 
         containerRef.current.innerHTML = '';
 
-        console.log('Turnstile: Rendering widget with site key:', siteKey.substring(0, 10) + '...');
+        console.log('Turnstile: Rendering widget with site key:', trimmedKey.substring(0, 10) + '...');
         
         const widgetId = window.turnstile.render(containerRef.current, {
-          sitekey: siteKey,
+          sitekey: trimmedKey,
           theme: 'auto',
           size: 'normal',
           callback: (token: string) => {

@@ -50,6 +50,16 @@ export function useAreas() {
       
       if (tenantId) {
         areaData.tenant_id = tenantId;
+        
+        // Check package limit before adding new area
+        if (!isSuperAdmin) {
+          const { checkPackageLimit } = await import('@/hooks/usePackageLimits');
+          const limitCheck = await checkPackageLimit(tenantId, 'areas', 1);
+          if (!limitCheck.allowed) {
+            toast.error(limitCheck.message || 'Area limit reached. Please upgrade your package.');
+            throw new Error(limitCheck.message);
+          }
+        }
       } else if (!isSuperAdmin) {
         throw new Error('No tenant context available');
       }

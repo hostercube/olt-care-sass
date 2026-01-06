@@ -101,6 +101,16 @@ export function useResellerSystem() {
       
       if (tenantId) {
         resellerData.tenant_id = tenantId;
+        
+        // Check package limit before adding new reseller
+        if (!isSuperAdmin) {
+          const { checkPackageLimit } = await import('@/hooks/usePackageLimits');
+          const limitCheck = await checkPackageLimit(tenantId, 'resellers', 1);
+          if (!limitCheck.allowed) {
+            toast.error(limitCheck.message || 'Reseller limit reached. Please upgrade your package.');
+            throw new Error(limitCheck.message);
+          }
+        }
       } else if (!isSuperAdmin) {
         throw new Error('No tenant context available');
       }

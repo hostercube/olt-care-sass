@@ -169,6 +169,17 @@ export default function MikroTikManagement() {
         if (error) throw error;
         toast.success('Router updated successfully');
       } else {
+        // Check package limit before adding new MikroTik (only for tenants)
+        if (tenantId && !isSuperAdmin) {
+          const { checkPackageLimit } = await import('@/hooks/usePackageLimits');
+          const limitCheck = await checkPackageLimit(tenantId, 'mikrotiks', 1);
+          if (!limitCheck.allowed) {
+            toast.error(limitCheck.message || 'MikroTik limit reached. Please upgrade your package.');
+            setSaving(false);
+            return;
+          }
+        }
+        
         data.tenant_id = tenantId;
         data.password_encrypted = formData.password;
         const { error } = await supabase
