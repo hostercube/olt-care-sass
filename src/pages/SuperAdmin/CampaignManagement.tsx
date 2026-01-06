@@ -89,9 +89,19 @@ export default function CampaignManagement() {
   });
 
   useEffect(() => {
-    fetchCampaigns();
-    fetchTenants();
-    fetchTemplates();
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([fetchCampaigns(), fetchTenants(), fetchTemplates()]);
+      setLoading(false);
+    };
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    // Re-fetch on filter changes (not initial load)
+    if (!loading) {
+      fetchCampaigns();
+    }
   }, [currentPage, pageSize, statusFilter, channelFilter]);
 
   const fetchCampaigns = async () => {
@@ -122,13 +132,14 @@ export default function CampaignManagement() {
       const { data, error, count } = await query
         .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching campaigns:', error);
+        return;
+      }
       setCampaigns(data || []);
       setTotalCampaigns(count || 0);
     } catch (err) {
       console.error('Error fetching campaigns:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
