@@ -123,8 +123,8 @@ export interface Package {
   price_monthly: number;
   price_yearly: number;
   // Resource limits
-  max_olts: number;
-  max_users: number;
+  max_olts: number | null;
+  max_users: number | null;
   max_onus: number | null;
   max_mikrotiks: number | null;
   max_customers: number | null;
@@ -133,6 +133,7 @@ export interface Package {
   // Features
   features: TenantFeatures;
   is_active: boolean;
+  is_public: boolean; // Whether package is visible on public website
   sort_order: number;
   created_at: string;
   updated_at: string;

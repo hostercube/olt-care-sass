@@ -125,24 +125,37 @@ export function useModuleAccess(): ModuleAccessResult {
         const pkg = subscription.packages as any;
         const pkgFeatures = (pkg.features as TenantFeatures) || {};
         
-        // Merge tenant features with package features (tenant features take priority)
-        const tenantFeatures = (tenant?.features as TenantFeatures) || {};
-        const mergedFeatures = { ...pkgFeatures, ...tenantFeatures };
+        // Check if tenant has manual features enabled
+        const manualFeaturesEnabled = (tenant as any)?.manual_features_enabled === true;
+        const manualFeatures = ((tenant as any)?.manual_features as TenantFeatures) || {};
+        const manualLimits = ((tenant as any)?.manual_limits as any) || {};
         
-        setFeatures(mergedFeatures);
-        setLimits({
-          maxOlts: pkg.max_olts || tenant?.max_olts || 1,
-          maxUsers: pkg.max_users || tenant?.max_users || 1,
-          maxOnus: pkg.max_onus || tenant?.max_onus || null,
-          maxMikrotiks: pkg.max_mikrotiks || tenant?.max_mikrotiks || null,
-          maxCustomers: pkg.max_customers || tenant?.max_customers || null,
-          maxAreas: pkg.max_areas || tenant?.max_areas || null,
-          maxResellers: pkg.max_resellers || tenant?.max_resellers || null,
-        });
+        // Determine final features: if manual_features_enabled, use manual features, otherwise use package features
+        let finalFeatures: TenantFeatures;
+        if (manualFeaturesEnabled && Object.keys(manualFeatures).length > 0) {
+          finalFeatures = { ...pkgFeatures, ...manualFeatures };
+        } else {
+          finalFeatures = pkgFeatures;
+        }
+        
+        // Determine final limits: manual limits override package limits if set
+        const finalLimits = {
+          maxOlts: manualLimits.max_olts ?? (tenant as any)?.max_olts ?? pkg.max_olts ?? 1,
+          maxUsers: manualLimits.max_users ?? (tenant as any)?.max_users ?? pkg.max_users ?? 1,
+          maxOnus: manualLimits.max_onus ?? (tenant as any)?.max_onus ?? pkg.max_onus ?? null,
+          maxMikrotiks: manualLimits.max_mikrotiks ?? (tenant as any)?.max_mikrotiks ?? pkg.max_mikrotiks ?? null,
+          maxCustomers: manualLimits.max_customers ?? (tenant as any)?.max_customers ?? pkg.max_customers ?? null,
+          maxAreas: manualLimits.max_areas ?? (tenant as any)?.max_areas ?? pkg.max_areas ?? null,
+          maxResellers: manualLimits.max_resellers ?? (tenant as any)?.max_resellers ?? pkg.max_resellers ?? null,
+        };
+        
+        setFeatures(finalFeatures);
+        setLimits(finalLimits);
         setSubscriptionActive(true);
       } else if (tenant) {
         // No active subscription, use tenant defaults (trial or active mode)
-        // Enable all modules by default for trial/active tenants
+        const manualFeaturesEnabled = (tenant as any)?.manual_features_enabled === true;
+        const manualFeatures = ((tenant as any)?.manual_features as TenantFeatures) || {};
         const tenantFeatures = (tenant.features as TenantFeatures) || {};
         
         // Default features for trial/active tenants without subscription
@@ -163,18 +176,18 @@ export function useModuleAccess(): ModuleAccessResult {
           email_alerts: true,
           multi_user: true,
           reports_export: true,
-          ...tenantFeatures, // Override with tenant-specific features
+          ...(manualFeaturesEnabled ? manualFeatures : tenantFeatures), // Override with tenant-specific features
         };
         
         setFeatures(defaultFeatures);
         setLimits({
-          maxOlts: tenant.max_olts || 10,
-          maxUsers: tenant.max_users || 10,
-          maxOnus: tenant.max_onus || 1000,
-          maxMikrotiks: tenant.max_mikrotiks || 5,
-          maxCustomers: tenant.max_customers || null,
-          maxAreas: tenant.max_areas || null,
-          maxResellers: tenant.max_resellers || null,
+          maxOlts: (tenant as any).max_olts || 10,
+          maxUsers: (tenant as any).max_users || 10,
+          maxOnus: (tenant as any).max_onus || 1000,
+          maxMikrotiks: (tenant as any).max_mikrotiks || 5,
+          maxCustomers: (tenant as any).max_customers || null,
+          maxAreas: (tenant as any).max_areas || null,
+          maxResellers: (tenant as any).max_resellers || null,
         });
         setSubscriptionActive(tenant.status === 'trial' || tenant.status === 'active');
       }
