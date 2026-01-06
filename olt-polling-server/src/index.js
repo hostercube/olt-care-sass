@@ -25,6 +25,7 @@ import { logger } from './utils/logger.js';
 import { updateUserPassword, isUserAdmin } from './admin/user-admin.js';
 import { getNotificationSettings, notifyAlert, testSmtpConnection, sendTestEmail, sendTestTelegram, sendTestWhatsApp } from './notifications/notifier.js';
 import { processPendingSMS, getSMSGatewaySettings, sendSMS } from './notifications/sms-sender.js';
+import { processPendingEmails, getEmailGatewaySettings } from './notifications/email-sender.js';
 import { initiatePayment, handlePaymentCallback } from './payments/payment-handler.js';
 
 const app = express();
@@ -2498,6 +2499,16 @@ cron.schedule('*/10 * * * * *', async () => {
     await processPendingSMS(supabase);
   } catch (err) {
     logger.error('SMS processing error:', err);
+  }
+});
+
+// ============= EMAIL PROCESSING CRON =============
+// Process pending emails every 10 seconds for near-instant delivery
+cron.schedule('*/10 * * * * *', async () => {
+  try {
+    await processPendingEmails(supabase);
+  } catch (err) {
+    logger.error('Email processing error:', err);
   }
 });
 

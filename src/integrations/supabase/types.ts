@@ -1326,6 +1326,66 @@ export type Database = {
           },
         ]
       }
+      email_campaigns: {
+        Row: {
+          channel: string
+          created_at: string
+          created_by: string | null
+          failed_count: number | null
+          id: string
+          message: string
+          name: string
+          recipient_filter: Json | null
+          recipient_type: string
+          recipients: Json | null
+          scheduled_at: string | null
+          sent_at: string | null
+          sent_count: number | null
+          status: string
+          subject: string | null
+          total_recipients: number | null
+          updated_at: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          created_by?: string | null
+          failed_count?: number | null
+          id?: string
+          message: string
+          name: string
+          recipient_filter?: Json | null
+          recipient_type?: string
+          recipients?: Json | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          sent_count?: number | null
+          status?: string
+          subject?: string | null
+          total_recipients?: number | null
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          created_by?: string | null
+          failed_count?: number | null
+          id?: string
+          message?: string
+          name?: string
+          recipient_filter?: Json | null
+          recipient_type?: string
+          recipients?: Json | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          sent_count?: number | null
+          status?: string
+          subject?: string | null
+          total_recipients?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_gateway_settings: {
         Row: {
           config: Json | null
@@ -3020,6 +3080,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      platform_notification_settings: {
+        Row: {
+          created_at: string
+          days_before: number | null
+          description: string | null
+          email_enabled: boolean | null
+          email_template: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          notification_type: string
+          sms_enabled: boolean | null
+          sms_template: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          days_before?: number | null
+          description?: string | null
+          email_enabled?: boolean | null
+          email_template?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          notification_type: string
+          sms_enabled?: boolean | null
+          sms_template?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          days_before?: number | null
+          description?: string | null
+          email_enabled?: boolean | null
+          email_template?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          notification_type?: string
+          sms_enabled?: boolean | null
+          sms_template?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       platform_public_settings: {
         Row: {

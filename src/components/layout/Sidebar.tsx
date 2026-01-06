@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   Mail,
   MapPin,
+  Megaphone,
   MessageSquare,
   Network,
   Package,
@@ -112,6 +113,8 @@ const superAdminItems: NavItem[] = [
   { title: 'SMS Gateway', href: '/admin/sms-gateway', icon: MessageSquare },
   { title: 'SMS Templates', href: '/admin/sms-templates', icon: MessageSquare },
   { title: 'SMS Center', href: '/admin/sms-center', icon: MessageSquare },
+  { title: 'Notifications', href: '/admin/notifications', icon: Bell },
+  { title: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
   { title: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
