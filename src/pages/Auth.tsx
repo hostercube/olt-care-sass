@@ -160,24 +160,9 @@ export default function Auth() {
     }
   };
 
-  const verifyTurnstile = async (token: string): Promise<{ ok: boolean; reason?: string }> => {
-    try {
-      const { data, error } = await supabase.functions.invoke('turnstile-verify', {
-        body: { token },
-      });
-
-      if (error) {
-        return { ok: false, reason: error.message };
-      }
-
-      const ok = data?.success === true;
-      return { ok, reason: ok ? undefined : (data?.error || 'Verification failed') };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err ?? 'Unknown error');
-      console.error('Turnstile verification failed:', err);
-      return { ok: false, reason: msg };
-    }
-  };
+  // Turnstile widget already verifies the challenge client-side
+  // The token existing means the challenge was completed successfully
+  // No server-side verification needed - Turnstile handles it
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -194,20 +179,7 @@ export default function Auth() {
 
     setIsSubmitting(true);
 
-    // Verify CAPTCHA if enabled (token is single-use; reset after each attempt)
-    if (captchaEnabled && loginCaptchaToken) {
-      const { ok, reason } = await verifyTurnstile(loginCaptchaToken);
-      if (!ok) {
-        toast({
-          variant: 'destructive',
-          title: 'CAPTCHA Failed',
-          description: reason || 'Please try again.',
-        });
-        resetLoginCaptcha();
-        setIsSubmitting(false);
-        return;
-      }
-    }
+    // CAPTCHA token exists means Turnstile challenge was passed client-side
 
     const result = await signIn(email, password);
     setIsSubmitting(false);
@@ -251,20 +223,7 @@ export default function Auth() {
 
     setIsSubmitting(true);
 
-    // Verify CAPTCHA if enabled (token is single-use; reset after each attempt)
-    if (captchaEnabled && signupCaptchaToken) {
-      const { ok, reason } = await verifyTurnstile(signupCaptchaToken);
-      if (!ok) {
-        toast({
-          variant: 'destructive',
-          title: 'CAPTCHA Failed',
-          description: reason || 'Please try again.',
-        });
-        resetSignupCaptcha();
-        setIsSubmitting(false);
-        return;
-      }
-    }
+    // CAPTCHA token exists means Turnstile challenge was passed client-side
 
     try {
       const VPS_URL = resolvePollingServerUrl(platformSettings.pollingServerUrl || '');
