@@ -91,20 +91,18 @@ export default function SuperAdminSettings() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'platform_settings')
-        .maybeSingle();
 
+      // Use backend function to fetch settings (avoids RLS issues)
+      const { data, error } = await supabase.functions.invoke('admin-platform-settings');
       if (error) throw error;
 
-      if (data?.value) {
-        setSettings({ ...DEFAULT_SETTINGS, ...(data.value as any) });
+      const settingsValue = (data as any)?.settings;
+      if (settingsValue && typeof settingsValue === 'object') {
+        setSettings({ ...DEFAULT_SETTINGS, ...(settingsValue as any) });
       } else {
         setSettings(DEFAULT_SETTINGS);
       }
-    } catch (error) {
+    } catch {
       // No settings found or no access, use defaults
       setSettings(DEFAULT_SETTINGS);
     } finally {

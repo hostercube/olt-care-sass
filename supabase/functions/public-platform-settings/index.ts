@@ -32,6 +32,8 @@ serve(async (req) => {
       .from("system_settings")
       .select("value")
       .eq("key", "platform_settings")
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (error) throw error;

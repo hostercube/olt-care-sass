@@ -124,14 +124,33 @@ export default function TenantManagement() {
     let matchesSubscription = true;
     if (subscriptionFilter !== 'all') {
       const sub = getTenantSubscription(tenant.id);
+      const now = Date.now();
+      const endsAtMs = sub?.ends_at ? Date.parse(sub.ends_at) : Number.NaN;
+      const trialEndsMs = tenant.trial_ends_at ? Date.parse(tenant.trial_ends_at) : Number.NaN;
+
+      const hasActiveWindow = Number.isFinite(endsAtMs) && endsAtMs >= now;
+      const isExpired = Number.isFinite(endsAtMs)
+        ? endsAtMs < now
+        : Number.isFinite(trialEndsMs)
+          ? trialEndsMs < now
+          : false;
+
+      const isTrial =
+        tenant.status === 'trial' ||
+        sub?.status === 'trial' ||
+        (Number.isFinite(trialEndsMs) && trialEndsMs >= now);
+
       if (subscriptionFilter === 'no_subscription') {
         matchesSubscription = !sub;
       } else if (subscriptionFilter === 'expired') {
-        matchesSubscription = sub ? new Date(sub.ends_at) < new Date() : false;
+        // Treat expired trial (no subscription + trial ended) as expired too
+        matchesSubscription = sub ? isExpired || sub.status === 'expired' : isExpired;
       } else if (subscriptionFilter === 'active') {
-        matchesSubscription = sub ? sub.status === 'active' && new Date(sub.ends_at) >= new Date() : false;
+        // If tenant is ACTIVE and subscription has a valid (future) ends_at, treat it as active
+        // (even if subscription.status isn't updated yet)
+        matchesSubscription = !!sub && hasActiveWindow && (sub.status === 'active' || tenant.status === 'active');
       } else if (subscriptionFilter === 'trial') {
-        matchesSubscription = tenant.status === 'trial';
+        matchesSubscription = isTrial;
       }
     }
     
