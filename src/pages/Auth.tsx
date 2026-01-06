@@ -72,6 +72,7 @@ export default function Auth() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const captchaEnabled = platformSettings.enableCaptcha === true && !!platformSettings.captchaSiteKey && platformSettings.captchaSiteKey.length > 10;
+  console.log('CAPTCHA check:', { enableCaptcha: platformSettings.enableCaptcha, siteKey: platformSettings.captchaSiteKey?.substring(0, 15), captchaEnabled });
   const [loginCaptchaToken, setLoginCaptchaToken] = useState<string | null>(null);
   const [signupCaptchaToken, setSignupCaptchaToken] = useState<string | null>(null);
   const [turnstileLoaded, setTurnstileLoaded] = useState(false);
@@ -124,18 +125,21 @@ export default function Auth() {
       // Fetch platform settings for trial days + captcha (works before login)
       try {
         const { data, error } = await supabase.functions.invoke('public-platform-settings');
+        console.log('Platform settings response:', { data, error });
         if (error) throw error;
 
         const s = (data as any)?.settings || {};
+        console.log('Parsed settings:', s);
         setPlatformSettings({
           defaultTrialDays: s.defaultTrialDays ?? 14,
           enableSignup: s.enableSignup ?? true,
           requireEmailVerification: s.requireEmailVerification ?? false,
-          enableCaptcha: s.enableCaptcha ?? false,
+          enableCaptcha: s.enableCaptcha === true,
           captchaSiteKey: s.captchaSiteKey ?? '',
           pollingServerUrl: s.pollingServerUrl ?? '',
         });
-      } catch {
+      } catch (err) {
+        console.error('Failed to fetch platform settings:', err);
         // Keep defaults
       }
     };
