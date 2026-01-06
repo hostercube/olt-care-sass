@@ -219,6 +219,7 @@ export default function Landing() {
         .from('packages')
         .select('*')
         .eq('is_active', true)
+        .eq('is_public', true)
         .order('sort_order', { ascending: true });
       setPackages((data as any[]) || []);
       setLoading(false);

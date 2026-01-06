@@ -14,7 +14,7 @@ import { useTenants } from '@/hooks/useTenants';
 import { usePackages } from '@/hooks/usePackages';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { usePlatformSettings } from '@/hooks/usePlatformSettings';
-import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2, Users, Router, MapPin, UserCheck, ArrowUpDown, RefreshCw, Calendar, Phone, Mail, Globe, Clock, CreditCard } from 'lucide-react';
+import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2, Users, Router, MapPin, UserCheck, ArrowUpDown, RefreshCw, Calendar, Phone, Mail, Globe, Clock, CreditCard, Shield, Settings } from 'lucide-react';
 import { resolvePollingServerUrl } from '@/lib/polling-server';
 import { format, differenceInDays, isAfter, isBefore, startOfDay, endOfDay, subDays } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -24,6 +24,9 @@ import type { TenantStatus } from '@/types/saas';
 import { DIVISIONS, getDistricts, getUpazilas } from '@/data/bangladeshLocations';
 import { useTablePagination, PaginationControls } from '@/components/common/TableWithPagination';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AVAILABLE_MODULES } from '@/types/saas';
 
 interface TenantStats {
   customers: number;
@@ -64,6 +67,11 @@ export default function TenantManagement() {
   const [newPassword, setNewPassword] = useState('');
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [selectedBillingCycle, setSelectedBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
+  const [manualFeaturesEnabled, setManualFeaturesEnabled] = useState(false);
+  const [manualFeatures, setManualFeatures] = useState<Record<string, boolean>>({});
+  const [manualLimits, setManualLimits] = useState<Record<string, number | null>>({});
+  const [isSavingPermissions, setIsSavingPermissions] = useState(false);
 
   const [newTenant, setNewTenant] = useState({
     name: '',
@@ -407,6 +415,45 @@ export default function TenantManagement() {
     }
   };
 
+  const openPermissionsDialog = (tenant: any) => {
+    setSelectedTenant(tenant);
+    setManualFeaturesEnabled(tenant.manual_features_enabled || false);
+    setManualFeatures((tenant.manual_features as Record<string, boolean>) || {});
+    setManualLimits((tenant.manual_limits as Record<string, number | null>) || {});
+    setIsPermissionsOpen(true);
+  };
+
+  const handleSavePermissions = async () => {
+    if (!selectedTenant) return;
+    
+    setIsSavingPermissions(true);
+    try {
+      const { error } = await supabase
+        .from('tenants')
+        .update({
+          manual_features_enabled: manualFeaturesEnabled,
+          manual_features: manualFeatures,
+          manual_limits: manualLimits,
+          max_onus: manualLimits.max_onus ?? null,
+          max_mikrotiks: manualLimits.max_mikrotiks ?? null,
+          max_customers: manualLimits.max_customers ?? null,
+          max_areas: manualLimits.max_areas ?? null,
+          max_resellers: manualLimits.max_resellers ?? null,
+        })
+        .eq('id', selectedTenant.id);
+
+      if (error) throw error;
+
+      toast({ title: 'Success', description: 'Manual permissions saved. Changes take effect immediately.' });
+      setIsPermissionsOpen(false);
+      fetchTenants();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsSavingPermissions(false);
+    }
+  };
+
   const handleSuspend = async () => {
     if (selectedTenant) {
       await suspendTenant(selectedTenant.id, suspendReason);
@@ -731,6 +778,9 @@ export default function TenantManagement() {
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setSelectedPackageId(getTenantSubscription(tenant.id)?.package_id || ''); setIsPackageOpen(true); }}>
                                   <ArrowUpDown className="h-4 w-4 mr-2" />Change Package
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openPermissionsDialog(tenant)}>
+                                  <Shield className="h-4 w-4 mr-2" />Manual Permissions
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsPasswordOpen(true); }}>
                                   <Key className="h-4 w-4 mr-2" />Reset Password
@@ -1102,6 +1152,138 @@ export default function TenantManagement() {
               <Button variant="destructive" onClick={handleDeleteConfirm} disabled={isDeleting}>
                 {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
                 Delete Permanently
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Manual Permissions Dialog */}
+        <Dialog open={isPermissionsOpen} onOpenChange={setIsPermissionsOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Manual Permissions - {selectedTenant?.company_name || selectedTenant?.name}
+              </DialogTitle>
+              <DialogDescription>
+                Override package permissions for this specific tenant. When enabled, these settings take priority over the package.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-6 mt-4">
+              {/* Enable Manual Override */}
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
+                <div>
+                  <Label className="font-medium">Enable Manual Permissions</Label>
+                  <p className="text-sm text-muted-foreground">Override package features with custom settings</p>
+                </div>
+                <Switch 
+                  checked={manualFeaturesEnabled} 
+                  onCheckedChange={setManualFeaturesEnabled}
+                />
+              </div>
+
+              {manualFeaturesEnabled && (
+                <>
+                  <Separator />
+                  
+                  {/* Resource Limits */}
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Resource Limits</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Max OLTs</Label>
+                        <Input 
+                          type="number" 
+                          value={manualLimits.max_olts ?? ''}
+                          onChange={(e) => setManualLimits(prev => ({ ...prev, max_olts: e.target.value ? parseInt(e.target.value) : null }))}
+                          placeholder="From package"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max Users</Label>
+                        <Input 
+                          type="number" 
+                          value={manualLimits.max_users ?? ''}
+                          onChange={(e) => setManualLimits(prev => ({ ...prev, max_users: e.target.value ? parseInt(e.target.value) : null }))}
+                          placeholder="From package"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max ONUs</Label>
+                        <Input 
+                          type="number" 
+                          value={manualLimits.max_onus ?? ''}
+                          onChange={(e) => setManualLimits(prev => ({ ...prev, max_onus: e.target.value ? parseInt(e.target.value) : null }))}
+                          placeholder="Unlimited"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max MikroTiks</Label>
+                        <Input 
+                          type="number" 
+                          value={manualLimits.max_mikrotiks ?? ''}
+                          onChange={(e) => setManualLimits(prev => ({ ...prev, max_mikrotiks: e.target.value ? parseInt(e.target.value) : null }))}
+                          placeholder="Unlimited"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max Customers</Label>
+                        <Input 
+                          type="number" 
+                          value={manualLimits.max_customers ?? ''}
+                          onChange={(e) => setManualLimits(prev => ({ ...prev, max_customers: e.target.value ? parseInt(e.target.value) : null }))}
+                          placeholder="Unlimited"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Max Resellers</Label>
+                        <Input 
+                          type="number" 
+                          value={manualLimits.max_resellers ?? ''}
+                          onChange={(e) => setManualLimits(prev => ({ ...prev, max_resellers: e.target.value ? parseInt(e.target.value) : null }))}
+                          placeholder="Unlimited"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Module Features */}
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Module Access</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {AVAILABLE_MODULES.map((module) => (
+                        <div key={module.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`module-${module.id}`}
+                            checked={manualFeatures[module.id] === true}
+                            onCheckedChange={(checked) => {
+                              setManualFeatures(prev => ({ ...prev, [module.id]: checked === true }));
+                            }}
+                          />
+                          <label
+                            htmlFor={`module-${module.id}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                          >
+                            {module.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <DialogFooter className="mt-6">
+              <Button variant="outline" onClick={() => setIsPermissionsOpen(false)} disabled={isSavingPermissions}>
+                Cancel
+              </Button>
+              <Button onClick={handleSavePermissions} disabled={isSavingPermissions}>
+                {isSavingPermissions && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Save Permissions
               </Button>
             </DialogFooter>
           </DialogContent>
