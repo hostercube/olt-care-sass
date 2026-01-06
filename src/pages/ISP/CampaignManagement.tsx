@@ -90,25 +90,45 @@ export default function ISPCampaignManagement() {
   useEffect(() => {
     const fetchTenantId = async () => {
       if (!user?.id) return;
-      const { data } = await supabase
+
+      setLoading(true);
+      const { data, error } = await supabase
         .from('tenant_users')
         .select('tenant_id')
         .eq('user_id', user.id)
         .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching tenant id:', error);
+        setTenantId(null);
+        setLoading(false);
+        return;
+      }
+
       if (data?.tenant_id) {
         setTenantId(data.tenant_id);
+      } else {
+        setTenantId(null);
+        setLoading(false);
       }
     };
+
     fetchTenantId();
   }, [user?.id]);
 
   useEffect(() => {
-    if (tenantId) {
-      fetchCampaigns();
-      fetchCustomers();
-      fetchResellers();
-      fetchTemplates();
-    }
+    if (!tenantId) return;
+
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([fetchCampaigns(), fetchCustomers(), fetchResellers(), fetchTemplates()]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
   }, [tenantId, currentPage, pageSize, statusFilter]);
 
   const fetchCampaigns = async () => {
@@ -127,18 +147,19 @@ export default function ISPCampaignManagement() {
         query = query.ilike('name', `%${searchTerm}%`);
       }
 
-      const { data, error, count } = await query
-        .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+      const { data, error, count } = await query.range(
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize - 1,
+      );
 
       if (error) throw error;
       setCampaigns(data || []);
       setTotalCampaigns(count || 0);
     } catch (err) {
       console.error('Error fetching campaigns:', err);
-    } finally {
-      setLoading(false);
     }
   };
+
 
   const fetchCustomers = async () => {
     if (!tenantId) return;
@@ -448,15 +469,25 @@ export default function ISPCampaignManagement() {
                       <Label className="flex items-center gap-2">
                         <FileText className="h-4 w-4" /> Use SMS Template
                       </Label>
-                      <Select value={formData.sms_template_id} onValueChange={handleTemplateSelect}>
+                      <Select
+                        value={formData.sms_template_id}
+                        onValueChange={(v) => {
+                          if (v === '__none__') {
+                            setFormData((prev) => ({ ...prev, sms_template_id: '' }));
+                            return;
+                          }
+                          handleTemplateSelect(v);
+                        }}
+                      >
                         <SelectTrigger><SelectValue placeholder="Select template..." /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">No template</SelectItem>
+                          <SelectItem value="__none__">No template</SelectItem>
                           {smsTemplates.map(t => (
                             <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+
                     </div>
                   )}
 
