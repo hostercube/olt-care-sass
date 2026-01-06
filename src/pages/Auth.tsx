@@ -428,6 +428,7 @@ export default function Auth() {
                       <TurnstileWidget
                         siteKey={captchaSiteKey}
                         onToken={(token) => setLoginCaptchaToken(token)}
+                        resetKey={loginCaptchaReset}
                       />
                     </div>
                   )}
@@ -642,6 +643,7 @@ export default function Auth() {
                         <TurnstileWidget
                           siteKey={captchaSiteKey}
                           onToken={(token) => setSignupCaptchaToken(token)}
+                          resetKey={signupCaptchaReset}
                         />
                       </div>
                     )}

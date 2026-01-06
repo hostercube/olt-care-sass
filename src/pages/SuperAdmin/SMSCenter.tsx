@@ -62,6 +62,8 @@ export default function SuperAdminSMSCenter() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Send SMS state
   const [sendMode, setSendMode] = useState<'single' | 'bulk' | 'template'>('single');
@@ -122,7 +124,7 @@ export default function SuperAdminSMSCenter() {
         query = query.eq('status', statusFilter);
       }
 
-      // Apply date filter
+      // Apply quick date filter
       if (dateFilter !== 'all') {
         const now = new Date();
         let startDate: Date;
@@ -140,6 +142,16 @@ export default function SuperAdminSMSCenter() {
             startDate = new Date(0);
         }
         query = query.gte('created_at', startDate.toISOString());
+      }
+
+      // Apply specific date range filter
+      if (dateFrom) {
+        query = query.gte('created_at', new Date(dateFrom).toISOString());
+      }
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        query = query.lte('created_at', endDate.toISOString());
       }
 
       // Apply search filter
@@ -580,8 +592,8 @@ export default function SuperAdminSMSCenter() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Filters */}
-                <div className="flex flex-col md:flex-row gap-3">
-                  <div className="relative flex-1">
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       placeholder="Search by phone or message..."
@@ -592,7 +604,7 @@ export default function SuperAdminSMSCenter() {
                     />
                   </div>
                   <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
-                    <SelectTrigger className="w-full md:w-40">
+                    <SelectTrigger className="w-full md:w-32">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -602,9 +614,9 @@ export default function SuperAdminSMSCenter() {
                       <SelectItem value="failed">Failed</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setCurrentPage(1); }}>
-                    <SelectTrigger className="w-full md:w-40">
-                      <SelectValue placeholder="Date" />
+                  <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setDateFrom(''); setDateTo(''); setCurrentPage(1); }}>
+                    <SelectTrigger className="w-full md:w-36">
+                      <SelectValue placeholder="Quick Date" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Time</SelectItem>
@@ -613,6 +625,23 @@ export default function SuperAdminSMSCenter() {
                       <SelectItem value="month">Last 30 Days</SelectItem>
                     </SelectContent>
                   </Select>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => { setDateFrom(e.target.value); setDateFilter('all'); }}
+                      className="w-36"
+                      placeholder="From"
+                    />
+                    <span className="text-muted-foreground">-</span>
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => { setDateTo(e.target.value); setDateFilter('all'); }}
+                      className="w-36"
+                      placeholder="To"
+                    />
+                  </div>
                   <Button variant="outline" onClick={handleSearch}>
                     <Filter className="h-4 w-4 mr-2" />
                     Filter

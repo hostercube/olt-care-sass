@@ -71,6 +71,8 @@ export default function CampaignManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [channelFilter, setChannelFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -107,6 +109,14 @@ export default function CampaignManagement() {
       }
       if (searchTerm) {
         query = query.ilike('name', `%${searchTerm}%`);
+      }
+      if (dateFrom) {
+        query = query.gte('created_at', new Date(dateFrom).toISOString());
+      }
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        query = query.lte('created_at', endDate.toISOString());
       }
 
       const { data, error, count } = await query
@@ -378,9 +388,12 @@ export default function CampaignManagement() {
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog open={dialogOpen} onOpenChange={(open) => {
+              if (open) resetForm();
+              setDialogOpen(open);
+            }}>
               <DialogTrigger asChild>
-                <Button onClick={resetForm}>
+                <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   New Campaign
                 </Button>
@@ -570,6 +583,22 @@ export default function CampaignManagement() {
                     <SelectItem value="both">Both</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="w-40">
+                <Label className="mb-2 block">From Date</Label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div className="w-40">
+                <Label className="mb-2 block">To Date</Label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
               </div>
               <Button onClick={handleSearch}>
                 <Filter className="h-4 w-4 mr-2" />
