@@ -82,6 +82,7 @@ const ispBillingItems: NavItem[] = [
 const ispNetworkItems: NavItem[] = [
   { title: 'MikroTik', href: '/isp/mikrotik', icon: Wifi, requiredModule: 'isp_mikrotik' },
   { title: 'SMS Center', href: '/isp/sms', icon: MessageSquare, requiredModule: 'sms_alerts' },
+  { title: 'Campaigns', href: '/isp/campaigns', icon: Megaphone },
   { title: 'Custom Domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
 ];
 

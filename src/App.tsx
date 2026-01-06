@@ -64,6 +64,7 @@ import Staff from "./pages/ISP/Staff";
 import Transactions from "./pages/ISP/Transactions";
 import Reports from "./pages/ISP/Reports";
 import CustomDomain from "./pages/ISP/CustomDomain";
+import ISPCampaignManagement from "./pages/ISP/CampaignManagement";
 
 // Customer Portal Pages
 import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
@@ -431,8 +432,14 @@ const App = () => (
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
+              <Route path="/isp/campaigns" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ISPCampaignManagement />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
 
-              {/* Customer Portal Routes (Public) */}
               <Route path="/portal/login" element={<CustomerLogin />} />
               <Route path="/portal/dashboard" element={<CustomerDashboard />} />
               <Route path="/portal/pay" element={<CustomerPayBill />} />

@@ -1331,6 +1331,8 @@ export type Database = {
           channel: string
           created_at: string
           created_by: string | null
+          custom_recipients: string[] | null
+          email_template_id: string | null
           failed_count: number | null
           id: string
           message: string
@@ -1341,6 +1343,7 @@ export type Database = {
           scheduled_at: string | null
           sent_at: string | null
           sent_count: number | null
+          sms_template_id: string | null
           status: string
           subject: string | null
           total_recipients: number | null
@@ -1350,6 +1353,8 @@ export type Database = {
           channel?: string
           created_at?: string
           created_by?: string | null
+          custom_recipients?: string[] | null
+          email_template_id?: string | null
           failed_count?: number | null
           id?: string
           message: string
@@ -1360,6 +1365,7 @@ export type Database = {
           scheduled_at?: string | null
           sent_at?: string | null
           sent_count?: number | null
+          sms_template_id?: string | null
           status?: string
           subject?: string | null
           total_recipients?: number | null
@@ -1369,6 +1375,8 @@ export type Database = {
           channel?: string
           created_at?: string
           created_by?: string | null
+          custom_recipients?: string[] | null
+          email_template_id?: string | null
           failed_count?: number | null
           id?: string
           message?: string
@@ -1379,6 +1387,7 @@ export type Database = {
           scheduled_at?: string | null
           sent_at?: string | null
           sent_count?: number | null
+          sms_template_id?: string | null
           status?: string
           subject?: string | null
           total_recipients?: number | null
@@ -4538,6 +4547,90 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tenant_backups_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_campaigns: {
+        Row: {
+          channel: string
+          created_at: string | null
+          created_by: string | null
+          custom_recipients: string[] | null
+          email_template_id: string | null
+          failed_count: number | null
+          id: string
+          message: string
+          name: string
+          recipient_filter: Json | null
+          recipient_type: string
+          scheduled_at: string | null
+          sent_at: string | null
+          sent_count: number | null
+          sms_template_id: string | null
+          status: string
+          subject: string | null
+          tenant_id: string
+          total_recipients: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          channel?: string
+          created_at?: string | null
+          created_by?: string | null
+          custom_recipients?: string[] | null
+          email_template_id?: string | null
+          failed_count?: number | null
+          id?: string
+          message: string
+          name: string
+          recipient_filter?: Json | null
+          recipient_type?: string
+          scheduled_at?: string | null
+          sent_at?: string | null
+          sent_count?: number | null
+          sms_template_id?: string | null
+          status?: string
+          subject?: string | null
+          tenant_id: string
+          total_recipients?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          channel?: string
+          created_at?: string | null
+          created_by?: string | null
+          custom_recipients?: string[] | null
+          email_template_id?: string | null
+          failed_count?: number | null
+          id?: string
+          message?: string
+          name?: string
+          recipient_filter?: Json | null
+          recipient_type?: string
+          scheduled_at?: string | null
+          sent_at?: string | null
+          sent_count?: number | null
+          sms_template_id?: string | null
+          status?: string
+          subject?: string | null
+          tenant_id?: string
+          total_recipients?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_campaigns_email_template_id_fkey"
+            columns: ["email_template_id"]
+            isOneToOne: false
+            referencedRelation: "email_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_campaigns_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
