@@ -87,21 +87,49 @@ serve(async (req) => {
       );
     }
 
+    const nowIso = new Date().toISOString();
+
     // Save settings using service role (bypasses RLS)
-    const { error: saveError } = await supabaseAdmin
+    // NOTE: We do NOT use upsert(onConflict=key) because `system_settings.key` may not be uniquely constrained.
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from("system_settings")
-      .upsert(
-        {
+      .select("id")
+      .eq("key", "platform_settings")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingError) {
+      console.error("Lookup error:", existingError);
+      throw existingError;
+    }
+
+    if (existing?.id) {
+      const { error: updateError } = await supabaseAdmin
+        .from("system_settings")
+        .update({
+          value: settings,
+          updated_at: nowIso,
+        })
+        .eq("id", existing.id);
+
+      if (updateError) {
+        console.error("Update error:", updateError);
+        throw updateError;
+      }
+    } else {
+      const { error: insertError } = await supabaseAdmin
+        .from("system_settings")
+        .insert({
           key: "platform_settings",
           value: settings,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "key" }
-      );
+          updated_at: nowIso,
+        } as any);
 
-    if (saveError) {
-      console.error("Save error:", saveError);
-      throw saveError;
+      if (insertError) {
+        console.error("Insert error:", insertError);
+        throw insertError;
+      }
     }
 
     return new Response(

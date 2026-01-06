@@ -135,8 +135,8 @@ export default function Auth() {
           enableSignup: s.enableSignup ?? true,
           requireEmailVerification: s.requireEmailVerification ?? false,
           enableCaptcha: s.enableCaptcha === true,
-          captchaSiteKey: s.captchaSiteKey ?? '',
-          pollingServerUrl: s.pollingServerUrl ?? '',
+          captchaSiteKey: (s.captchaSiteKey ?? '').toString().trim(),
+          pollingServerUrl: (s.pollingServerUrl ?? '').toString().trim(),
         });
       } catch (err) {
         console.error('Failed to fetch platform settings:', err);
