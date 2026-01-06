@@ -470,7 +470,7 @@ export default function ISPCampaignManagement() {
                         <FileText className="h-4 w-4" /> Use SMS Template
                       </Label>
                       <Select
-                        value={formData.sms_template_id}
+                        value={formData.sms_template_id || '__none__'}
                         onValueChange={(v) => {
                           if (v === '__none__') {
                             setFormData((prev) => ({ ...prev, sms_template_id: '' }));

@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useSuperAdmin, useTenantContext } from '@/hooks/useSuperAdmin';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { Loader2, AlertTriangle, Clock, Ban } from 'lucide-react';
+import { Loader2, AlertTriangle, Clock, Ban, UserX } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -13,9 +13,9 @@ interface TenantAccessGuardProps {
 
 export function TenantAccessGuard({ children }: TenantAccessGuardProps) {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const { isSuperAdmin, loading: superAdminLoading } = useSuperAdmin();
-  const { tenant, loading: tenantLoading } = useTenantContext();
+  const { tenant, tenantId, loading: tenantLoading } = useTenantContext();
   const { subscriptions, loading: subLoading } = useSubscriptions();
 
   const isLoading = authLoading || superAdminLoading || tenantLoading || subLoading;
@@ -35,6 +35,39 @@ export function TenantAccessGuard({ children }: TenantAccessGuardProps) {
   // Super admins bypass all restrictions
   if (isSuperAdmin) {
     return <>{children}</>;
+  }
+
+  // CRITICAL: If user is not a super admin and has no tenant association, block access
+  // This handles the case where the tenant was deleted but user session is still active
+  if (!tenant && !tenantId) {
+    const handleLogout = async () => {
+      await signOut();
+      navigate('/auth');
+    };
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mb-4">
+              <UserX className="h-8 w-8 text-destructive" />
+            </div>
+            <CardTitle>Account Not Found</CardTitle>
+            <CardDescription>
+              Your account is no longer associated with any organization. This may happen if your company account was deleted or your access was revoked.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground text-center">
+              Please contact your administrator or support for assistance.
+            </p>
+            <Button onClick={handleLogout} variant="destructive" className="w-full">
+              Logout
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   // Check tenant status
