@@ -1,4 +1,4 @@
-// Lovable Cloud function: verify Cloudflare Turnstile token using secret stored in platform_settings.
+// Lovable Cloud function: verify Cloudflare Turnstile token using secret stored in system_settings.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 
@@ -37,16 +37,28 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    const { data: row, error: sErr } = await admin
+    // Fetch enableCaptcha and captchaSecretKey from system_settings
+    const { data: settingsData, error: sErr } = await admin
       .from("system_settings")
-      .select("value")
-      .eq("key", "platform_settings")
-      .maybeSingle();
+      .select("key, value")
+      .in("key", ["enableCaptcha", "captchaSecretKey"]);
 
     if (sErr) throw sErr;
 
-    const settings = (row?.value ?? {}) as any;
-    const enabled = !!settings?.enableCaptcha;
+    // Parse settings
+    let enabled = false;
+    let secret = "";
+
+    for (const row of settingsData || []) {
+      const val = row.value as any;
+      const parsed = val?.value !== undefined ? val.value : val;
+      
+      if (row.key === "enableCaptcha") {
+        enabled = parsed === true;
+      } else if (row.key === "captchaSecretKey") {
+        secret = String(parsed || "").trim();
+      }
+    }
 
     if (!enabled) {
       return Response.json(
@@ -55,7 +67,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const secret = String(settings?.captchaSecretKey || "").trim();
     if (!secret) {
       return Response.json(
         { success: false, error: "Turnstile secret key not configured" },
@@ -94,4 +105,3 @@ Deno.serve(async (req) => {
     );
   }
 });
-

@@ -13,16 +13,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTenants } from '@/hooks/useTenants';
 import { usePackages } from '@/hooks/usePackages';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2, Users, Router, MapPin, UserCheck, ArrowUpDown, RefreshCw, AlertCircle } from 'lucide-react';
-import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
+import { usePlatformSettings } from '@/hooks/usePlatformSettings';
+import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2, Users, Router, MapPin, UserCheck, ArrowUpDown, RefreshCw, Calendar, Phone, Mail, Globe, Clock, CreditCard } from 'lucide-react';
 import { resolvePollingServerUrl } from '@/lib/polling-server';
-import { format } from 'date-fns';
+import { format, differenceInDays, isAfter, isBefore, startOfDay, endOfDay, subDays } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import type { TenantStatus } from '@/types/saas';
 import { DIVISIONS, getDistricts, getUpazilas } from '@/data/bangladeshLocations';
-import { useTablePagination, PaginationControls, SearchAndFilterBar } from '@/components/common/TableWithPagination';
+import { useTablePagination, PaginationControls } from '@/components/common/TableWithPagination';
+import { Separator } from '@/components/ui/separator';
 
 interface TenantStats {
   customers: number;
@@ -37,11 +38,16 @@ export default function TenantManagement() {
   const { tenants, loading, createTenant, updateTenant, suspendTenant, activateTenant, deleteTenant, fetchTenants } = useTenants();
   const { packages } = usePackages();
   const { subscriptions, createSubscription, fetchSubscriptions } = useSubscriptions();
-  const { pollingServerUrl } = usePollingServerUrl();
+  const { settings: platformSettings } = usePlatformSettings();
   const { toast } = useToast();
+  
+  // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [subscriptionFilter, setSubscriptionFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [packageFilter, setPackageFilter] = useState<string>('all');
+  
+  // Dialogs
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
@@ -78,7 +84,6 @@ export default function TenantManagement() {
   }, []);
 
   useEffect(() => {
-    // Fetch stats for all tenants
     const fetchStats = async () => {
       const stats: Record<string, TenantStats> = {};
       
@@ -110,54 +115,83 @@ export default function TenantManagement() {
     }
   }, [tenants]);
 
+  const getTenantSubscription = (tenantId: string) => {
+    return subscriptions.find(s => s.tenant_id === tenantId);
+  };
+
+  const getEffectiveStatus = (tenant: any) => {
+    const subscription = getTenantSubscription(tenant.id);
+    const now = new Date();
+    
+    if (subscription) {
+      const endsAt = new Date(subscription.ends_at);
+      if (subscription.status === 'active' && endsAt > now) return 'active';
+      if (subscription.status === 'trial') return 'trial';
+      if (endsAt < now) return 'expired';
+    }
+    if (tenant.trial_ends_at) {
+      const trialEnds = new Date(tenant.trial_ends_at);
+      if (trialEnds > now) return 'trial';
+      if (trialEnds < now && !subscription) return 'expired';
+    }
+    return tenant.status;
+  };
+
+  const getExpiryDate = (tenant: any) => {
+    const subscription = getTenantSubscription(tenant.id);
+    if (subscription?.ends_at) return new Date(subscription.ends_at);
+    if (tenant.trial_ends_at) return new Date(tenant.trial_ends_at);
+    return null;
+  };
+
   const filteredTenants = tenants.filter(tenant => {
     // Text search
     const matchesSearch = 
       tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       tenant.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tenant.company_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      tenant.company_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      tenant.phone?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    // Status filter
-    const matchesStatus = statusFilter === 'all' || tenant.status === statusFilter;
+    // Status filter (includes subscription status)
+    let matchesStatus = true;
+    if (statusFilter !== 'all') {
+      const effectiveStatus = getEffectiveStatus(tenant);
+      matchesStatus = effectiveStatus === statusFilter;
+    }
     
-    // Subscription filter
-    let matchesSubscription = true;
-    if (subscriptionFilter !== 'all') {
-      const sub = getTenantSubscription(tenant.id);
-      const now = Date.now();
-      const endsAtMs = sub?.ends_at ? Date.parse(sub.ends_at) : Number.NaN;
-      const trialEndsMs = tenant.trial_ends_at ? Date.parse(tenant.trial_ends_at) : Number.NaN;
+    // Date filter
+    let matchesDate = true;
+    const now = new Date();
+    const createdAt = new Date(tenant.created_at);
+    const expiryDate = getExpiryDate(tenant);
+    
+    if (dateFilter === 'today') {
+      matchesDate = createdAt >= startOfDay(now) && createdAt <= endOfDay(now);
+    } else if (dateFilter === 'week') {
+      matchesDate = createdAt >= subDays(now, 7);
+    } else if (dateFilter === 'month') {
+      matchesDate = createdAt >= subDays(now, 30);
+    } else if (dateFilter === 'expiring_soon') {
+      // Expiring within 7 days
+      matchesDate = expiryDate ? (differenceInDays(expiryDate, now) <= 7 && differenceInDays(expiryDate, now) >= 0) : false;
+    } else if (dateFilter === 'expired') {
+      matchesDate = expiryDate ? isBefore(expiryDate, now) : false;
+    }
 
-      const hasActiveWindow = Number.isFinite(endsAtMs) && endsAtMs >= now;
-      const isExpired = Number.isFinite(endsAtMs)
-        ? endsAtMs < now
-        : Number.isFinite(trialEndsMs)
-          ? trialEndsMs < now
-          : false;
-
-      const isTrial =
-        tenant.status === 'trial' ||
-        sub?.status === 'trial' ||
-        (Number.isFinite(trialEndsMs) && trialEndsMs >= now);
-
-      if (subscriptionFilter === 'no_subscription') {
-        matchesSubscription = !sub;
-      } else if (subscriptionFilter === 'expired') {
-        // Treat expired trial (no subscription + trial ended) as expired too
-        matchesSubscription = sub ? isExpired || sub.status === 'expired' : isExpired;
-      } else if (subscriptionFilter === 'active') {
-        // If tenant is ACTIVE and subscription has a valid (future) ends_at, treat it as active
-        // (even if subscription.status isn't updated yet)
-        matchesSubscription = !!sub && hasActiveWindow && (sub.status === 'active' || tenant.status === 'active');
-      } else if (subscriptionFilter === 'trial') {
-        matchesSubscription = isTrial;
+    // Package filter
+    let matchesPackage = true;
+    if (packageFilter !== 'all') {
+      const subscription = getTenantSubscription(tenant.id);
+      if (packageFilter === 'no_package') {
+        matchesPackage = !subscription;
+      } else {
+        matchesPackage = subscription?.package_id === packageFilter;
       }
     }
     
-    return matchesSearch && matchesStatus && matchesSubscription;
+    return matchesSearch && matchesStatus && matchesDate && matchesPackage;
   });
 
-  // Pagination
   const {
     paginatedData: paginatedTenants,
     currentPage,
@@ -170,19 +204,16 @@ export default function TenantManagement() {
     handlePageSizeChange,
   } = useTablePagination(filteredTenants, 10);
 
-  const getStatusBadge = (status: TenantStatus) => {
-    const variants: Record<TenantStatus, 'default' | 'success' | 'warning' | 'destructive'> = {
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, 'default' | 'success' | 'warning' | 'destructive'> = {
       active: 'success',
       trial: 'warning',
       pending: 'warning',
       suspended: 'destructive',
       cancelled: 'default',
+      expired: 'destructive',
     };
-    return <Badge variant={variants[status]}>{status.toUpperCase()}</Badge>;
-  };
-
-  const getTenantSubscription = (tenantId: string) => {
-    return subscriptions.find(s => s.tenant_id === tenantId);
+    return <Badge variant={variants[status] || 'default'}>{status.toUpperCase()}</Badge>;
   };
 
   const handleCreateTenant = async () => {
@@ -201,7 +232,7 @@ export default function TenantManagement() {
       return;
     }
 
-    const VPS_URL = resolvePollingServerUrl(pollingServerUrl);
+    const VPS_URL = resolvePollingServerUrl(platformSettings.pollingServerUrl || '');
     if (!VPS_URL) {
       toast({ title: 'Error', description: 'Polling server URL not configured. Please configure it in Platform Settings → Infrastructure.', variant: 'destructive' });
       return;
@@ -211,7 +242,6 @@ export default function TenantManagement() {
     try {
       const pkg = packages.find(p => p.id === newTenant.package_id);
       
-      // Use VPS admin endpoint to create user (auto-confirms email and creates user properly)
       const createUserRes = await fetch(`${VPS_URL}/api/admin/create-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -228,16 +258,7 @@ export default function TenantManagement() {
       }
 
       const userId = createUserData.user.id;
-
-      // Fetch platform settings for trial days
-      let trialDays = 14;
-      try {
-        const { data: settingsData } = await supabase.functions.invoke('public-platform-settings');
-        trialDays = settingsData?.settings?.defaultTrialDays ?? 14;
-      } catch {
-        // Use default
-      }
-
+      const trialDays = platformSettings.defaultTrialDays ?? 14;
       const requiresPayment = trialDays === 0;
       const tenantStatus = requiresPayment ? 'pending' : 'trial';
       const trialEndsAt = requiresPayment ? null : new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
@@ -303,30 +324,22 @@ export default function TenantManagement() {
       return;
     }
 
-    const VPS_URL = resolvePollingServerUrl(pollingServerUrl);
+    const VPS_URL = resolvePollingServerUrl(platformSettings.pollingServerUrl || '');
     if (!VPS_URL) {
-      toast({ title: 'Error', description: 'Polling server URL not configured. Please configure it in Platform Settings → Infrastructure.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Polling server URL not configured.', variant: 'destructive' });
       return;
     }
 
     setIsResettingPassword(true);
     try {
-      // Get tenant email to find user
-      const tenantEmail = selectedTenant.email;
-      if (!tenantEmail) {
-        throw new Error('Tenant email not found');
-      }
-
-      // Get current user ID for admin verification
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('Not authenticated');
 
-      // Call VPS endpoint to reset password using tenant email
       const response = await fetch(`${VPS_URL}/api/admin/reset-password-by-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: tenantEmail,
+          email: selectedTenant.email,
           newPassword,
           requestingUserId: user.id,
         }),
@@ -377,7 +390,6 @@ export default function TenantManagement() {
         });
       }
 
-      // Update tenant limits based on package
       await updateTenant(selectedTenant.id, {
         max_olts: pkg.max_olts,
         max_users: pkg.max_users,
@@ -417,6 +429,15 @@ export default function TenantManagement() {
       setLoggingInAs(null);
     }
   };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setDateFilter('all');
+    setPackageFilter('all');
+  };
+
+  const hasActiveFilters = searchQuery || statusFilter !== 'all' || dateFilter !== 'all' || packageFilter !== 'all';
 
   return (
     <DashboardLayout title="Tenant Management" subtitle="Manage ISP owner accounts">
@@ -529,190 +550,200 @@ export default function TenantManagement() {
         </div>
 
         <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />All ISP Companies ({filteredTenants.length})</CardTitle>
-                  <CardDescription>Registered ISP owners on the platform</CardDescription>
-                </div>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />All ISP Companies ({filteredTenants.length})</CardTitle>
+                <CardDescription>Registered ISP owners on the platform</CardDescription>
               </div>
-              
-              {/* Filters Row */}
-              <div className="flex flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search company, name, email..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
-                </div>
-                
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="trial">Trial</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="suspended">Suspended</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                <Select value={subscriptionFilter} onValueChange={setSubscriptionFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Subscription" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Subscriptions</SelectItem>
-                    <SelectItem value="active">Active Subscription</SelectItem>
-                    <SelectItem value="expired">Expired</SelectItem>
-                    <SelectItem value="trial">Trial Period</SelectItem>
-                    <SelectItem value="no_subscription">No Subscription</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Package</TableHead>
-                  <TableHead>Expires</TableHead>
-                  <TableHead>Stats</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
-                ) : paginatedTenants.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No tenants found</TableCell></TableRow>
-                ) : (
-                  paginatedTenants.map((tenant) => {
-                    const subscription = getTenantSubscription(tenant.id);
-                    const pkg = subscription ? packages.find(p => p.id === subscription.package_id) : null;
-                    const stats = tenantStats[tenant.id];
-                    
-                    // Determine effective status from subscription if available
-                    const getEffectiveStatus = () => {
-                      if (subscription) {
-                        const endsAt = new Date(subscription.ends_at);
-                        const now = new Date();
-                        if (subscription.status === 'active' && endsAt > now) return 'active';
-                        if (subscription.status === 'trial') return 'trial';
-                        if (endsAt < now) return 'expired';
-                      }
-                      if (tenant.trial_ends_at) {
-                        const trialEnds = new Date(tenant.trial_ends_at);
-                        if (trialEnds > new Date()) return 'trial';
-                      }
-                      return tenant.status;
-                    };
-                    
-                    const effectiveStatus = getEffectiveStatus();
-                    
-                    // Get expiry date
-                    const getExpiryDate = () => {
-                      if (subscription?.ends_at) return new Date(subscription.ends_at);
-                      if (tenant.trial_ends_at) return new Date(tenant.trial_ends_at);
-                      return null;
-                    };
-                    
-                    const expiryDate = getExpiryDate();
-                    const isExpired = expiryDate && expiryDate < new Date();
-                    
-                    return (
-                      <TableRow key={tenant.id}>
-                        <TableCell>
-                          <div className="font-medium">{tenant.company_name || tenant.name}</div>
-                          <div className="text-sm text-muted-foreground">{tenant.address?.split(',')[0] || ''}</div>
-                        </TableCell>
-                        <TableCell>
-                          <div>{tenant.name}</div>
-                          <div className="text-sm text-muted-foreground">{tenant.email}</div>
-                        </TableCell>
-                        <TableCell>
-                          {effectiveStatus === 'expired' ? (
-                            <Badge variant="destructive">EXPIRED</Badge>
-                          ) : (
-                            getStatusBadge(effectiveStatus as TenantStatus)
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {pkg ? (
-                            <Badge variant="outline">{pkg.name}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">No package</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {expiryDate ? (
-                            <div className={isExpired ? 'text-destructive font-medium' : ''}>
-                              {format(expiryDate, 'PP')}
-                              {isExpired && <span className="text-xs block">Expired</span>}
+          <CardContent className="space-y-4">
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Search company, name, email, phone..." 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                  className="pl-9" 
+                />
+              </div>
+              
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="trial">Trial</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="suspended">Suspended</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Date" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Created Today</SelectItem>
+                  <SelectItem value="week">Last 7 Days</SelectItem>
+                  <SelectItem value="month">Last 30 Days</SelectItem>
+                  <SelectItem value="expiring_soon">Expiring Soon</SelectItem>
+                  <SelectItem value="expired">Already Expired</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={packageFilter} onValueChange={setPackageFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Package" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Packages</SelectItem>
+                  <SelectItem value="no_package">No Package</SelectItem>
+                  {packages.map(pkg => (
+                    <SelectItem key={pkg.id} value={pkg.id}>{pkg.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Table */}
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Package</TableHead>
+                    <TableHead>Expires</TableHead>
+                    <TableHead>Stats</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                  ) : paginatedTenants.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No tenants found</TableCell></TableRow>
+                  ) : (
+                    paginatedTenants.map((tenant) => {
+                      const subscription = getTenantSubscription(tenant.id);
+                      const pkg = subscription ? packages.find(p => p.id === subscription.package_id) : null;
+                      const stats = tenantStats[tenant.id];
+                      const effectiveStatus = getEffectiveStatus(tenant);
+                      const expiryDate = getExpiryDate(tenant);
+                      const isExpired = expiryDate && expiryDate < new Date();
+                      const daysUntilExpiry = expiryDate ? differenceInDays(expiryDate, new Date()) : null;
+                      
+                      return (
+                        <TableRow key={tenant.id} className="hover:bg-muted/50">
+                          <TableCell>
+                            <div className="font-medium">{tenant.company_name || tenant.name}</div>
+                            <div className="text-sm text-muted-foreground truncate max-w-[200px]">{tenant.address?.split(',')[0] || ''}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Mail className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-sm truncate max-w-[150px]">{tenant.email}</span>
                             </div>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {stats && (
-                            <div className="flex gap-2 text-xs">
-                              <span title="Customers"><Users className="h-3 w-3 inline" /> {stats.customers}</span>
-                              <span title="OLTs"><Router className="h-3 w-3 inline" /> {stats.olts}</span>
-                              <span title="Areas"><MapPin className="h-3 w-3 inline" /> {stats.areas}</span>
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-popover border border-border">
-                              <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsViewOpen(true); }}>
-                                <Eye className="h-4 w-4 mr-2" />View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleLoginAsTenant(tenant)} disabled={loggingInAs === tenant.id}>
-                                {loggingInAs === tenant.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogIn className="h-4 w-4 mr-2" />}
-                                Login as Tenant
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setSelectedPackageId(getTenantSubscription(tenant.id)?.package_id || ''); setIsPackageOpen(true); }}>
-                                <ArrowUpDown className="h-4 w-4 mr-2" />Change Package
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsPasswordOpen(true); }}>
-                                <Key className="h-4 w-4 mr-2" />Reset Password
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {tenant.status === 'active' || tenant.status === 'trial' ? (
-                                <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsSuspendOpen(true); }} className="text-destructive">
-                                  <Ban className="h-4 w-4 mr-2" />Suspend
+                            {tenant.phone && (
+                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                <Phone className="h-3 w-3" />
+                                {tenant.phone}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(effectiveStatus)}
+                          </TableCell>
+                          <TableCell>
+                            {pkg ? (
+                              <Badge variant="outline">{pkg.name}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">No package</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {expiryDate ? (
+                              <div className={isExpired ? 'text-destructive' : daysUntilExpiry !== null && daysUntilExpiry <= 7 ? 'text-warning' : ''}>
+                                <div className="font-medium">{format(expiryDate, 'PP')}</div>
+                                {isExpired ? (
+                                  <span className="text-xs">Expired</span>
+                                ) : daysUntilExpiry !== null && daysUntilExpiry <= 7 ? (
+                                  <span className="text-xs">{daysUntilExpiry} days left</span>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {stats && (
+                              <div className="flex gap-3 text-xs">
+                                <span title="Customers" className="flex items-center gap-1"><Users className="h-3 w-3" /> {stats.customers}</span>
+                                <span title="OLTs" className="flex items-center gap-1"><Router className="h-3 w-3" /> {stats.olts}</span>
+                                <span title="Areas" className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {stats.areas}</span>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="bg-popover border border-border">
+                                <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsViewOpen(true); }}>
+                                  <Eye className="h-4 w-4 mr-2" />View Details
                                 </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem onClick={() => activateTenant(tenant.id)}>
-                                  <CheckCircle className="h-4 w-4 mr-2" />Activate
+                                <DropdownMenuItem onClick={() => handleLoginAsTenant(tenant)} disabled={loggingInAs === tenant.id}>
+                                  {loggingInAs === tenant.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogIn className="h-4 w-4 mr-2" />}
+                                  Login as Tenant
                                 </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem onClick={() => deleteTenant(tenant.id)} className="text-destructive">
-                                <Trash2 className="h-4 w-4 mr-2" />Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setSelectedPackageId(getTenantSubscription(tenant.id)?.package_id || ''); setIsPackageOpen(true); }}>
+                                  <ArrowUpDown className="h-4 w-4 mr-2" />Change Package
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsPasswordOpen(true); }}>
+                                  <Key className="h-4 w-4 mr-2" />Reset Password
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                {effectiveStatus === 'active' || effectiveStatus === 'trial' ? (
+                                  <DropdownMenuItem onClick={() => { setSelectedTenant(tenant); setIsSuspendOpen(true); }} className="text-destructive">
+                                    <Ban className="h-4 w-4 mr-2" />Suspend
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem onClick={() => activateTenant(tenant.id)}>
+                                    <CheckCircle className="h-4 w-4 mr-2" />Activate
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onClick={() => deleteTenant(tenant.id)} className="text-destructive">
+                                  <Trash2 className="h-4 w-4 mr-2" />Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
             
-            {/* Pagination */}
             <PaginationControls
               currentPage={currentPage}
               totalPages={totalPages}
@@ -726,55 +757,217 @@ export default function TenantManagement() {
           </CardContent>
         </Card>
 
-        {/* View Tenant Dialog */}
+        {/* View Tenant Dialog - Improved */}
         <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Tenant Details</DialogTitle></DialogHeader>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                {selectedTenant?.company_name || selectedTenant?.name}
+              </DialogTitle>
+              <DialogDescription>Tenant account details and statistics</DialogDescription>
+            </DialogHeader>
             {selectedTenant && (
-              <Tabs defaultValue="info">
-                <TabsList>
-                  <TabsTrigger value="info">Info</TabsTrigger>
+              <Tabs defaultValue="info" className="mt-4">
+                <TabsList className="grid grid-cols-3 w-full">
+                  <TabsTrigger value="info">Company Info</TabsTrigger>
                   <TabsTrigger value="stats">Statistics</TabsTrigger>
                   <TabsTrigger value="subscription">Subscription</TabsTrigger>
                 </TabsList>
-                <TabsContent value="info" className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><Label className="text-muted-foreground">Company</Label><p className="font-medium">{selectedTenant.company_name || '-'}</p></div>
-                    <div><Label className="text-muted-foreground">Name</Label><p className="font-medium">{selectedTenant.name}</p></div>
-                    <div><Label className="text-muted-foreground">Email</Label><p className="font-medium">{selectedTenant.email}</p></div>
-                    <div><Label className="text-muted-foreground">Phone</Label><p className="font-medium">{selectedTenant.phone || '-'}</p></div>
-                    <div><Label className="text-muted-foreground">Address</Label><p className="font-medium">{selectedTenant.address || '-'}</p></div>
-                    <div><Label className="text-muted-foreground">Status</Label><div className="mt-1">{getStatusBadge(selectedTenant.status)}</div></div>
-                    <div><Label className="text-muted-foreground">Max OLTs</Label><p className="font-medium">{selectedTenant.max_olts}</p></div>
-                    <div><Label className="text-muted-foreground">Created</Label><p className="font-medium">{format(new Date(selectedTenant.created_at), 'PPP')}</p></div>
+                
+                <TabsContent value="info" className="mt-4 space-y-6">
+                  {/* Company Details */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Company Name</Label>
+                      <p className="font-medium">{selectedTenant.company_name || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Owner Name</Label>
+                      <p className="font-medium">{selectedTenant.name}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Status</Label>
+                      <div>{getStatusBadge(getEffectiveStatus(selectedTenant))}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" /> Email</Label>
+                      <p className="font-medium">{selectedTenant.email}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</Label>
+                      <p className="font-medium">{selectedTenant.phone || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1"><Globe className="h-3 w-3" /> Address</Label>
+                      <p className="font-medium text-sm">{selectedTenant.address || '-'}</p>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  {/* Account Limits */}
+                  <div>
+                    <h4 className="font-medium mb-3">Account Limits</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <Card className="p-4">
+                        <div className="text-2xl font-bold">{selectedTenant.max_olts || 1}</div>
+                        <p className="text-xs text-muted-foreground">Max OLTs</p>
+                      </Card>
+                      <Card className="p-4">
+                        <div className="text-2xl font-bold">{selectedTenant.max_users || 1}</div>
+                        <p className="text-xs text-muted-foreground">Max Users</p>
+                      </Card>
+                      <Card className="p-4">
+                        <div className="text-2xl font-bold">{format(new Date(selectedTenant.created_at), 'PP')}</div>
+                        <p className="text-xs text-muted-foreground">Created On</p>
+                      </Card>
+                      <Card className="p-4">
+                        <div className="text-2xl font-bold">{selectedTenant.trial_ends_at ? format(new Date(selectedTenant.trial_ends_at), 'PP') : '-'}</div>
+                        <p className="text-xs text-muted-foreground">Trial Ends</p>
+                      </Card>
+                    </div>
                   </div>
                 </TabsContent>
-                <TabsContent value="stats" className="space-y-4">
-                  {tenantStats[selectedTenant.id] && (
-                    <div className="grid grid-cols-3 gap-4">
-                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].customers}</div><p className="text-muted-foreground">Customers</p></CardContent></Card>
-                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].resellers}</div><p className="text-muted-foreground">Resellers</p></CardContent></Card>
-                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].staff}</div><p className="text-muted-foreground">Staff</p></CardContent></Card>
-                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].olts}</div><p className="text-muted-foreground">OLTs</p></CardContent></Card>
-                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].mikrotiks}</div><p className="text-muted-foreground">MikroTiks</p></CardContent></Card>
-                      <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{tenantStats[selectedTenant.id].areas}</div><p className="text-muted-foreground">Areas</p></CardContent></Card>
+                
+                <TabsContent value="stats" className="mt-4">
+                  {tenantStats[selectedTenant.id] ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <Card className="p-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-full bg-primary/10">
+                            <Users className="h-6 w-6 text-primary" />
+                          </div>
+                          <div>
+                            <div className="text-3xl font-bold">{tenantStats[selectedTenant.id].customers}</div>
+                            <p className="text-muted-foreground">Customers</p>
+                          </div>
+                        </div>
+                      </Card>
+                      <Card className="p-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-full bg-green-500/10">
+                            <UserCheck className="h-6 w-6 text-green-500" />
+                          </div>
+                          <div>
+                            <div className="text-3xl font-bold">{tenantStats[selectedTenant.id].resellers}</div>
+                            <p className="text-muted-foreground">Resellers</p>
+                          </div>
+                        </div>
+                      </Card>
+                      <Card className="p-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-full bg-blue-500/10">
+                            <Users className="h-6 w-6 text-blue-500" />
+                          </div>
+                          <div>
+                            <div className="text-3xl font-bold">{tenantStats[selectedTenant.id].staff}</div>
+                            <p className="text-muted-foreground">Staff</p>
+                          </div>
+                        </div>
+                      </Card>
+                      <Card className="p-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-full bg-orange-500/10">
+                            <Router className="h-6 w-6 text-orange-500" />
+                          </div>
+                          <div>
+                            <div className="text-3xl font-bold">{tenantStats[selectedTenant.id].olts}</div>
+                            <p className="text-muted-foreground">OLTs</p>
+                          </div>
+                        </div>
+                      </Card>
+                      <Card className="p-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-full bg-purple-500/10">
+                            <Router className="h-6 w-6 text-purple-500" />
+                          </div>
+                          <div>
+                            <div className="text-3xl font-bold">{tenantStats[selectedTenant.id].mikrotiks}</div>
+                            <p className="text-muted-foreground">MikroTiks</p>
+                          </div>
+                        </div>
+                      </Card>
+                      <Card className="p-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 rounded-full bg-cyan-500/10">
+                            <MapPin className="h-6 w-6 text-cyan-500" />
+                          </div>
+                          <div>
+                            <div className="text-3xl font-bold">{tenantStats[selectedTenant.id].areas}</div>
+                            <p className="text-muted-foreground">Areas</p>
+                          </div>
+                        </div>
+                      </Card>
                     </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">Loading statistics...</div>
                   )}
                 </TabsContent>
-                <TabsContent value="subscription" className="space-y-4">
+                
+                <TabsContent value="subscription" className="mt-4">
                   {(() => {
                     const sub = getTenantSubscription(selectedTenant.id);
                     const pkg = sub ? packages.find(p => p.id === sub.package_id) : null;
+                    const expiryDate = sub ? new Date(sub.ends_at) : null;
+                    const isExpired = expiryDate && expiryDate < new Date();
+                    
                     return sub ? (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div><Label className="text-muted-foreground">Package</Label><p className="font-medium">{pkg?.name || 'Unknown'}</p></div>
-                        <div><Label className="text-muted-foreground">Billing Cycle</Label><p className="font-medium capitalize">{sub.billing_cycle}</p></div>
-                        <div><Label className="text-muted-foreground">Amount</Label><p className="font-medium">৳{sub.amount}</p></div>
-                        <div><Label className="text-muted-foreground">Status</Label><Badge variant={sub.status === 'active' ? 'success' : 'warning'}>{sub.status}</Badge></div>
-                        <div><Label className="text-muted-foreground">Ends At</Label><p className="font-medium">{format(new Date(sub.ends_at), 'PPP')}</p></div>
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Package</Label>
+                            <p className="font-medium text-lg">{pkg?.name || 'Unknown'}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Billing Cycle</Label>
+                            <p className="font-medium capitalize">{sub.billing_cycle}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Amount</Label>
+                            <p className="font-medium text-lg">৳{sub.amount}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Status</Label>
+                            <Badge variant={sub.status === 'active' ? 'success' : isExpired ? 'destructive' : 'warning'}>
+                              {isExpired ? 'EXPIRED' : sub.status.toUpperCase()}
+                            </Badge>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Started</Label>
+                            <p className="font-medium">{format(new Date(sub.starts_at), 'PPP')}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Ends</Label>
+                            <p className={`font-medium ${isExpired ? 'text-destructive' : ''}`}>
+                              {format(new Date(sub.ends_at), 'PPP')}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            onClick={() => { 
+                              setSelectedPackageId(sub.package_id); 
+                              setSelectedBillingCycle(sub.billing_cycle); 
+                              setIsViewOpen(false);
+                              setIsPackageOpen(true); 
+                            }}
+                          >
+                            <ArrowUpDown className="h-4 w-4 mr-2" />
+                            Change Package
+                          </Button>
+                        </div>
                       </div>
                     ) : (
-                      <p className="text-muted-foreground">No active subscription</p>
+                      <div className="text-center py-8">
+                        <p className="text-muted-foreground mb-4">No active subscription</p>
+                        <Button onClick={() => { setIsViewOpen(false); setIsPackageOpen(true); }}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Subscription
+                        </Button>
+                      </div>
                     );
                   })()}
                 </TabsContent>

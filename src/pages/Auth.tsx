@@ -10,21 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Wifi, Loader2, ArrowLeft, Eye, EyeOff, Shield } from 'lucide-react';
+import { Wifi, Loader2, ArrowLeft, Eye, EyeOff, Shield, AlertTriangle } from 'lucide-react';
 import { z } from 'zod';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { DIVISIONS, getDistricts, getUpazilas } from '@/data/bangladeshLocations';
 import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
 import { resolvePollingServerUrl } from '@/lib/polling-server';
-
-interface PlatformSettings {
-  defaultTrialDays: number;
-  enableSignup: boolean;
-  requireEmailVerification: boolean;
-  enableCaptcha: boolean;
-  captchaSiteKey: string;
-  pollingServerUrl: string;
-}
+import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 
 interface Package {
   id: string;
@@ -58,33 +50,18 @@ export default function Auth() {
 
   const [mode, setMode] = useState<'login' | 'signup'>(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
   const [packages, setPackages] = useState<Package[]>([]);
-  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
-    defaultTrialDays: 14,
-    enableSignup: true,
-    requireEmailVerification: false,
-    enableCaptcha: false,
-    captchaSiteKey: '',
-    pollingServerUrl: '',
-  });
+  const { settings: platformSettings, loading: settingsLoading } = usePlatformSettings();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const captchaEnabled = platformSettings.enableCaptcha === true && !!platformSettings.captchaSiteKey && platformSettings.captchaSiteKey.length > 10;
-  console.log('CAPTCHA check:', { enableCaptcha: platformSettings.enableCaptcha, siteKey: platformSettings.captchaSiteKey?.substring(0, 15), captchaEnabled });
+  const captchaEnabled = platformSettings.enableCaptcha === true && 
+    !!platformSettings.captchaSiteKey && 
+    platformSettings.captchaSiteKey.length > 10;
+  
   const [loginCaptchaToken, setLoginCaptchaToken] = useState<string | null>(null);
   const [signupCaptchaToken, setSignupCaptchaToken] = useState<string | null>(null);
-  const [turnstileLoaded, setTurnstileLoaded] = useState(false);
-
-  const verifyTurnstile = async (token: string) => {
-    const { data, error } = await supabase.functions.invoke('turnstile-verify', {
-      body: { token },
-    });
-
-    if (error) throw error;
-    if (!data?.success) throw new Error(data?.error || 'CAPTCHA verification failed');
-  };
 
   // Login form
   const [email, setEmail] = useState('');
@@ -113,37 +90,15 @@ export default function Auth() {
   }, [user, navigate, isSuperAdmin, superAdminLoading]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      // Fetch packages
+    const fetchPackages = async () => {
       const { data: pkgData } = await supabase
         .from('packages')
         .select('id, name, price_monthly, price_yearly, description')
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
       setPackages((pkgData as Package[]) || []);
-
-      // Fetch platform settings for trial days + captcha (works before login)
-      try {
-        const { data, error } = await supabase.functions.invoke('public-platform-settings');
-        console.log('Platform settings response:', { data, error });
-        if (error) throw error;
-
-        const s = (data as any)?.settings || {};
-        console.log('Parsed settings:', s);
-        setPlatformSettings({
-          defaultTrialDays: s.defaultTrialDays ?? 14,
-          enableSignup: s.enableSignup ?? true,
-          requireEmailVerification: s.requireEmailVerification ?? false,
-          enableCaptcha: s.enableCaptcha === true,
-          captchaSiteKey: (s.captchaSiteKey ?? '').toString().trim(),
-          pollingServerUrl: (s.pollingServerUrl ?? '').toString().trim(),
-        });
-      } catch (err) {
-        console.error('Failed to fetch platform settings:', err);
-        // Keep defaults
-      }
     };
-    fetchData();
+    fetchPackages();
   }, []);
 
   const validateLogin = () => {
@@ -183,34 +138,49 @@ export default function Auth() {
     }
   };
 
+  const verifyTurnstile = async (token: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('turnstile-verify', {
+        body: { token },
+      });
+      if (error) throw error;
+      return data?.success === true;
+    } catch (err) {
+      console.error('Turnstile verification failed:', err);
+      return false;
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateLogin()) return;
 
-    if (captchaEnabled) {
-      if (!loginCaptchaToken) {
-        toast({
-          variant: 'destructive',
-          title: 'CAPTCHA Required',
-          description: 'Please complete the CAPTCHA before logging in.',
-        });
-        return;
-      }
+    if (captchaEnabled && !loginCaptchaToken) {
+      toast({
+        variant: 'destructive',
+        title: 'CAPTCHA Required',
+        description: 'Please complete the CAPTCHA before logging in.',
+      });
+      return;
+    }
 
-      try {
-        await verifyTurnstile(loginCaptchaToken);
-      } catch (err: any) {
+    setIsSubmitting(true);
+
+    // Verify CAPTCHA if enabled
+    if (captchaEnabled && loginCaptchaToken) {
+      const verified = await verifyTurnstile(loginCaptchaToken);
+      if (!verified) {
         toast({
           variant: 'destructive',
           title: 'CAPTCHA Failed',
-          description: err?.message || 'Please try again.',
+          description: 'Please try again.',
         });
         setLoginCaptchaToken(null);
+        setIsSubmitting(false);
         return;
       }
     }
 
-    setIsSubmitting(true);
     const result = await signIn(email, password);
     setIsSubmitting(false);
 
@@ -238,41 +208,41 @@ export default function Auth() {
       return;
     }
 
-    if (captchaEnabled) {
-      if (!signupCaptchaToken) {
-        toast({
-          variant: 'destructive',
-          title: 'CAPTCHA Required',
-          description: 'Please complete the CAPTCHA before creating your account.',
-        });
-        return;
-      }
-
-      try {
-        await verifyTurnstile(signupCaptchaToken);
-      } catch (err: any) {
-        toast({
-          variant: 'destructive',
-          title: 'CAPTCHA Failed',
-          description: err?.message || 'Please try again.',
-        });
-        setSignupCaptchaToken(null);
-        return;
-      }
+    if (captchaEnabled && !signupCaptchaToken) {
+      toast({
+        variant: 'destructive',
+        title: 'CAPTCHA Required',
+        description: 'Please complete the CAPTCHA before creating your account.',
+      });
+      return;
     }
 
     setIsSubmitting(true);
 
+    // Verify CAPTCHA if enabled
+    if (captchaEnabled && signupCaptchaToken) {
+      const verified = await verifyTurnstile(signupCaptchaToken);
+      if (!verified) {
+        toast({
+          variant: 'destructive',
+          title: 'CAPTCHA Failed',
+          description: 'Please try again.',
+        });
+        setSignupCaptchaToken(null);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     try {
-      const VPS_URL = resolvePollingServerUrl(platformSettings.pollingServerUrl);
+      const VPS_URL = resolvePollingServerUrl(platformSettings.pollingServerUrl || '');
       if (!VPS_URL) {
         throw new Error('Polling server URL is not configured by Super Admin.');
       }
 
-      const trialDays = platformSettings.defaultTrialDays;
+      const trialDays = platformSettings.defaultTrialDays || 14;
 
-      // Use VPS admin endpoint to create user (bypasses Supabase email rate limits)
-      // This uses the service role key on VPS to auto-confirm email
+      // Use VPS admin endpoint to create user
       const createUserRes = await fetch(`${VPS_URL}/api/auth/full-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -319,7 +289,6 @@ export default function Auth() {
         description: 'Please login to continue.',
       });
 
-      // Switch to login mode
       setMode('login');
       setEmail(signupData.email);
     } catch (err: any) {
@@ -339,7 +308,7 @@ export default function Auth() {
     ? (signupData.billingCycle === 'monthly' ? selectedPackage.price_monthly : selectedPackage.price_yearly)
     : 0;
 
-  if (loading) {
+  if (loading || settingsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -371,7 +340,7 @@ export default function Auth() {
                 <Wifi className="h-8 w-8 text-primary" />
               </div>
             </div>
-            <CardTitle className="text-2xl">ISP Point</CardTitle>
+            <CardTitle className="text-2xl">{platformSettings.platformName || 'ISP Point'}</CardTitle>
             <CardDescription>
               {mode === 'login' ? 'Login to your dashboard' : 'Create your ISP account'}
             </CardDescription>
@@ -380,7 +349,7 @@ export default function Auth() {
           <Tabs value={mode} onValueChange={(v) => { setMode(v as 'login' | 'signup'); setErrors({}); }}>
             <TabsList className="grid grid-cols-2 mx-6">
               <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              <TabsTrigger value="signup" disabled={!platformSettings.enableSignup}>Sign Up</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login">
@@ -425,11 +394,8 @@ export default function Auth() {
                   {captchaEnabled && (
                     <div className="pt-2">
                       <TurnstileWidget
-                        siteKey={platformSettings.captchaSiteKey}
-                        onToken={(token) => {
-                          setLoginCaptchaToken(token);
-                          if (token) setTurnstileLoaded(true);
-                        }}
+                        siteKey={platformSettings.captchaSiteKey || ''}
+                        onToken={(token) => setLoginCaptchaToken(token)}
                       />
                     </div>
                   )}
@@ -450,238 +416,218 @@ export default function Auth() {
             </TabsContent>
 
             <TabsContent value="signup">
-              <form onSubmit={handleSignUp}>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Company Name *</Label>
-                      <Input
-                        value={signupData.companyName}
-                        onChange={(e) => setSignupData(prev => ({ ...prev, companyName: e.target.value }))}
-                        placeholder="Your ISP Name"
-                        required
-                      />
-                      {errors.companyName && <p className="text-sm text-destructive">{errors.companyName}</p>}
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Owner Name *</Label>
-                      <Input
-                        value={signupData.ownerName}
-                        onChange={(e) => setSignupData(prev => ({ ...prev, ownerName: e.target.value }))}
-                        placeholder="Your Name"
-                        required
-                      />
-                      {errors.ownerName && <p className="text-sm text-destructive">{errors.ownerName}</p>}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Email *</Label>
-                      <Input
-                        type="email"
-                        value={signupData.email}
-                        onChange={(e) => setSignupData(prev => ({ ...prev, email: e.target.value }))}
-                        placeholder="you@example.com"
-                        required
-                      />
-                      {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Phone *</Label>
-                      <Input
-                        value={signupData.phone}
-                        onChange={(e) => setSignupData(prev => ({ ...prev, phone: e.target.value }))}
-                        placeholder="01XXXXXXXXX"
-                        required
-                      />
-                      {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Password *</Label>
-                      <div className="relative">
-                        <Input
-                          type={showPassword ? 'text' : 'password'}
-                          value={signupData.password}
-                          onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
-                          placeholder="Min 6 characters"
-                          required
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                      {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Confirm Password *</Label>
-                      <div className="relative">
-                        <Input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          value={signupData.confirmPassword}
-                          onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                          placeholder="Confirm password"
-                          required
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        >
-                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                      {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Division</Label>
-                      <Select 
-                        value={signupData.division} 
-                        onValueChange={(v) => setSignupData(prev => ({ 
-                          ...prev, 
-                          division: v, 
-                          district: '', 
-                          upazila: '' 
-                        }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover border border-border z-50">
-                          {DIVISIONS.map(d => (
-                            <SelectItem key={d} value={d}>{d}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>District</Label>
-                      <Select 
-                        value={signupData.district} 
-                        onValueChange={(v) => setSignupData(prev => ({ ...prev, district: v, upazila: '' }))}
-                        disabled={!signupData.division}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={signupData.division ? "Select" : "Select Division first"} />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover border border-border z-50 max-h-[300px]">
-                          {getDistricts(signupData.division).map(d => (
-                            <SelectItem key={d} value={d}>{d}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Upazila/Thana</Label>
-                      <Select 
-                        value={signupData.upazila} 
-                        onValueChange={(v) => setSignupData(prev => ({ ...prev, upazila: v }))}
-                        disabled={!signupData.district}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={signupData.district ? "Select" : "Select District first"} />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover border border-border z-50 max-h-[300px]">
-                          {getUpazilas(signupData.district).map(u => (
-                            <SelectItem key={u} value={u}>{u}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Address</Label>
-                    <Input
-                      value={signupData.address}
-                      onChange={(e) => setSignupData(prev => ({ ...prev, address: e.target.value }))}
-                      placeholder="Full address"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Select Package</Label>
-                      <Select value={signupData.packageId} onValueChange={(v) => setSignupData(prev => ({ ...prev, packageId: v }))}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose a package" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {packages.map(pkg => (
-                            <SelectItem key={pkg.id} value={pkg.id}>
-                              {pkg.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Billing Cycle</Label>
-                      <Select value={signupData.billingCycle} onValueChange={(v: 'monthly' | 'yearly') => setSignupData(prev => ({ ...prev, billingCycle: v }))}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="yearly">Yearly (Save 20%)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  
-                  {selectedPackage && (
-                    <div className="p-3 rounded-lg bg-muted/50 border">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm">{selectedPackage.name} - {signupData.billingCycle}</span>
-                        <span className="font-bold text-primary">৳{displayPrice}/{signupData.billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
-                      </div>
-                      {platformSettings.defaultTrialDays > 0 ? (
-                        <p className="text-xs text-muted-foreground mt-1">{platformSettings.defaultTrialDays}-day free trial included</p>
-                      ) : (
-                        <p className="text-xs text-warning mt-1">Payment required to activate account</p>
-                      )}
-                    </div>
-                  )}
-
-                  {captchaEnabled && (
-                    <div className="pt-2">
-                      <TurnstileWidget
-                        siteKey={platformSettings.captchaSiteKey}
-                        onToken={(token) => {
-                          setSignupCaptchaToken(token);
-                          if (token) setTurnstileLoaded(true);
-                        }}
-                      />
-                    </div>
-                  )}
+              {!platformSettings.enableSignup ? (
+                <CardContent className="py-8 text-center">
+                  <AlertTriangle className="h-12 w-12 text-warning mx-auto mb-4" />
+                  <p className="text-muted-foreground">New registrations are currently disabled.</p>
                 </CardContent>
-                <CardFooter className="flex-col gap-2">
-                  <Button type="submit" className="w-full" disabled={isSubmitting || (captchaEnabled && !signupCaptchaToken)}>
-                    {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Create Account
-                  </Button>
-                  {captchaEnabled && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Shield className="h-3 w-3" />
-                      Protected by Cloudflare Turnstile
+              ) : (
+                <form onSubmit={handleSignUp}>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Company Name *</Label>
+                        <Input
+                          value={signupData.companyName}
+                          onChange={(e) => setSignupData(prev => ({ ...prev, companyName: e.target.value }))}
+                          placeholder="Your ISP Name"
+                          required
+                        />
+                        {errors.companyName && <p className="text-sm text-destructive">{errors.companyName}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Owner Name *</Label>
+                        <Input
+                          value={signupData.ownerName}
+                          onChange={(e) => setSignupData(prev => ({ ...prev, ownerName: e.target.value }))}
+                          placeholder="Your Name"
+                          required
+                        />
+                        {errors.ownerName && <p className="text-sm text-destructive">{errors.ownerName}</p>}
+                      </div>
                     </div>
-                  )}
-                </CardFooter>
-              </form>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Email *</Label>
+                        <Input
+                          type="email"
+                          value={signupData.email}
+                          onChange={(e) => setSignupData(prev => ({ ...prev, email: e.target.value }))}
+                          placeholder="you@example.com"
+                          required
+                        />
+                        {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Phone *</Label>
+                        <Input
+                          value={signupData.phone}
+                          onChange={(e) => setSignupData(prev => ({ ...prev, phone: e.target.value }))}
+                          placeholder="01XXXXXXXXX"
+                          required
+                        />
+                        {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Password *</Label>
+                        <div className="relative">
+                          <Input
+                            type={showPassword ? 'text' : 'password'}
+                            value={signupData.password}
+                            onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
+                            placeholder="Min 6 characters"
+                            required
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                        {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Confirm Password *</Label>
+                        <div className="relative">
+                          <Input
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            value={signupData.confirmPassword}
+                            onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                            placeholder="Confirm"
+                            required
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          >
+                            {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                        {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Division</Label>
+                        <Select
+                          value={signupData.division}
+                          onValueChange={(v) => setSignupData(prev => ({ ...prev, division: v, district: '', upazila: '' }))}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent className="bg-popover border border-border z-50">
+                            {DIVISIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>District</Label>
+                        <Select
+                          value={signupData.district}
+                          onValueChange={(v) => setSignupData(prev => ({ ...prev, district: v, upazila: '' }))}
+                          disabled={!signupData.division}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent className="bg-popover border border-border z-50 max-h-[300px]">
+                            {getDistricts(signupData.division).map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Upazila</Label>
+                        <Select
+                          value={signupData.upazila}
+                          onValueChange={(v) => setSignupData(prev => ({ ...prev, upazila: v }))}
+                          disabled={!signupData.district}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent className="bg-popover border border-border z-50 max-h-[300px]">
+                            {getUpazilas(signupData.district).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {packages.length > 0 && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Package</Label>
+                          <Select
+                            value={signupData.packageId}
+                            onValueChange={(v) => setSignupData(prev => ({ ...prev, packageId: v }))}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Select package" /></SelectTrigger>
+                            <SelectContent>
+                              {packages.map(pkg => (
+                                <SelectItem key={pkg.id} value={pkg.id}>{pkg.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Billing Cycle</Label>
+                          <Select
+                            value={signupData.billingCycle}
+                            onValueChange={(v: 'monthly' | 'yearly') => setSignupData(prev => ({ ...prev, billingCycle: v }))}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                              <SelectItem value="yearly">Yearly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedPackage && (
+                      <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">{selectedPackage.name}</span>
+                          <span className="font-semibold">৳{displayPrice}/{signupData.billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
+                        </div>
+                        {(platformSettings.defaultTrialDays || 0) > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Includes {platformSettings.defaultTrialDays} days free trial
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {captchaEnabled && (
+                      <div className="pt-2">
+                        <TurnstileWidget
+                          siteKey={platformSettings.captchaSiteKey || ''}
+                          onToken={(token) => setSignupCaptchaToken(token)}
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                  <CardFooter className="flex-col gap-2">
+                    <Button type="submit" className="w-full" disabled={isSubmitting || (captchaEnabled && !signupCaptchaToken)}>
+                      {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Create Account
+                    </Button>
+                    {captchaEnabled && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Shield className="h-3 w-3" />
+                        Protected by Cloudflare Turnstile
+                      </div>
+                    )}
+                  </CardFooter>
+                </form>
+              )}
             </TabsContent>
           </Tabs>
         </Card>

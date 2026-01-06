@@ -3021,6 +3021,75 @@ export type Database = {
           },
         ]
       }
+      platform_public_settings: {
+        Row: {
+          auto_suspend_days: number
+          captcha_site_key: string
+          created_at: string
+          currency: string
+          currency_symbol: string
+          date_format: string
+          default_trial_days: number
+          enable_captcha: boolean
+          enable_signup: boolean
+          key: string
+          maintenance_message: string
+          maintenance_mode: boolean
+          platform_email: string | null
+          platform_name: string | null
+          platform_phone: string | null
+          polling_server_url: string
+          require_email_verification: boolean
+          support_email: string | null
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          auto_suspend_days?: number
+          captcha_site_key?: string
+          created_at?: string
+          currency?: string
+          currency_symbol?: string
+          date_format?: string
+          default_trial_days?: number
+          enable_captcha?: boolean
+          enable_signup?: boolean
+          key?: string
+          maintenance_message?: string
+          maintenance_mode?: boolean
+          platform_email?: string | null
+          platform_name?: string | null
+          platform_phone?: string | null
+          polling_server_url?: string
+          require_email_verification?: boolean
+          support_email?: string | null
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          auto_suspend_days?: number
+          captcha_site_key?: string
+          created_at?: string
+          currency?: string
+          currency_symbol?: string
+          date_format?: string
+          default_trial_days?: number
+          enable_captcha?: boolean
+          enable_signup?: boolean
+          key?: string
+          maintenance_message?: string
+          maintenance_mode?: boolean
+          platform_email?: string | null
+          platform_name?: string | null
+          platform_phone?: string | null
+          polling_server_url?: string
+          require_email_verification?: boolean
+          support_email?: string | null
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       power_readings: {
         Row: {
           id: string
