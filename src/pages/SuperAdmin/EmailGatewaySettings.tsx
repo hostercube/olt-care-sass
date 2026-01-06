@@ -42,13 +42,13 @@ interface EmailLog {
 }
 
 const EMAIL_PROVIDERS = [
-  { value: 'php_mail', label: 'PHP Mail (Default)', host: '', port: 25, description: 'Use server default mail function - no SMTP config needed' },
   { value: 'smtp', label: 'Custom SMTP', host: '', port: 587, description: 'Configure custom SMTP server' },
-  { value: 'gmail', label: 'Gmail SMTP', host: 'smtp.gmail.com', port: 587, description: 'Use Gmail SMTP' },
+  { value: 'gmail', label: 'Gmail SMTP', host: 'smtp.gmail.com', port: 587, description: 'Use Gmail SMTP (requires App Password)' },
   { value: 'outlook', label: 'Outlook/Office 365', host: 'smtp.office365.com', port: 587, description: 'Use Microsoft SMTP' },
   { value: 'sendgrid', label: 'SendGrid', host: 'smtp.sendgrid.net', port: 587, description: 'Use SendGrid SMTP' },
   { value: 'mailgun', label: 'Mailgun', host: 'smtp.mailgun.org', port: 587, description: 'Use Mailgun SMTP' },
   { value: 'ses', label: 'Amazon SES', host: 'email-smtp.us-east-1.amazonaws.com', port: 587, description: 'Use Amazon SES' },
+  { value: 'zoho', label: 'Zoho Mail', host: 'smtp.zoho.com', port: 587, description: 'Use Zoho Mail SMTP' },
 ];
 
 export default function EmailGatewaySettings() {
@@ -73,7 +73,7 @@ export default function EmailGatewaySettings() {
   const [dateFilter, setDateFilter] = useState<string>('all');
 
   // Form state
-  const [provider, setProvider] = useState('php_mail');
+  const [provider, setProvider] = useState('smtp');
   const [smtpHost, setSmtpHost] = useState('');
   const [smtpPort, setSmtpPort] = useState(587);
   const [smtpUsername, setSmtpUsername] = useState('');
@@ -104,7 +104,7 @@ export default function EmailGatewaySettings() {
       
       if (data) {
         setSettings(data as EmailGatewaySettings);
-        setProvider(data.provider || 'php_mail');
+        setProvider(data.provider || 'smtp');
         setSmtpHost(data.smtp_host || '');
         setSmtpPort(data.smtp_port || 587);
         setSmtpUsername(data.smtp_username || '');
@@ -188,10 +188,10 @@ export default function EmailGatewaySettings() {
     try {
       const updateData = {
         provider,
-        smtp_host: provider === 'php_mail' ? null : (smtpHost || null),
-        smtp_port: provider === 'php_mail' ? null : smtpPort,
-        smtp_username: provider === 'php_mail' ? null : (smtpUsername || null),
-        smtp_password: provider === 'php_mail' ? null : (smtpPassword || null),
+        smtp_host: smtpHost || null,
+        smtp_port: smtpPort,
+        smtp_username: smtpUsername || null,
+        smtp_password: smtpPassword || null,
         sender_email: senderEmail || null,
         sender_name: senderName || null,
         use_tls: useTls,
@@ -381,63 +381,61 @@ export default function EmailGatewaySettings() {
                   />
                 </div>
 
-                {provider !== 'php_mail' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpHost">SMTP Host</Label>
-                      <Input
-                        id="smtpHost"
-                        value={smtpHost}
-                        onChange={(e) => setSmtpHost(e.target.value)}
-                        placeholder="smtp.example.com"
-                      />
-                    </div>
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpHost">SMTP Host *</Label>
+                    <Input
+                      id="smtpHost"
+                      value={smtpHost}
+                      onChange={(e) => setSmtpHost(e.target.value)}
+                      placeholder="smtp.example.com"
+                    />
+                  </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpPort">SMTP Port</Label>
-                      <Input
-                        id="smtpPort"
-                        type="number"
-                        value={smtpPort}
-                        onChange={(e) => setSmtpPort(parseInt(e.target.value) || 587)}
-                        placeholder="587"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpPort">SMTP Port *</Label>
+                    <Input
+                      id="smtpPort"
+                      type="number"
+                      value={smtpPort}
+                      onChange={(e) => setSmtpPort(parseInt(e.target.value) || 587)}
+                      placeholder="587"
+                    />
+                  </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpUsername">SMTP Username</Label>
-                      <Input
-                        id="smtpUsername"
-                        value={smtpUsername}
-                        onChange={(e) => setSmtpUsername(e.target.value)}
-                        placeholder="your-username"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpUsername">SMTP Username *</Label>
+                    <Input
+                      id="smtpUsername"
+                      value={smtpUsername}
+                      onChange={(e) => setSmtpUsername(e.target.value)}
+                      placeholder="your-username"
+                    />
+                  </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpPassword">SMTP Password</Label>
-                      <Input
-                        id="smtpPassword"
-                        type="password"
-                        value={smtpPassword}
-                        onChange={(e) => setSmtpPassword(e.target.value)}
-                        placeholder="Enter your password"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpPassword">SMTP Password *</Label>
+                    <Input
+                      id="smtpPassword"
+                      type="password"
+                      value={smtpPassword}
+                      onChange={(e) => setSmtpPassword(e.target.value)}
+                      placeholder="Enter your password"
+                    />
+                  </div>
 
-                    <div className="flex items-center space-x-2 md:col-span-2">
-                      <Switch
-                        id="useTls"
-                        checked={useTls}
-                        onCheckedChange={setUseTls}
-                      />
-                      <Label htmlFor="useTls" className="flex items-center gap-2">
-                        <Shield className="h-4 w-4" />
-                        Use TLS/SSL Encryption
-                      </Label>
-                    </div>
-                  </>
-                )}
+                  <div className="flex items-center space-x-2 md:col-span-2">
+                    <Switch
+                      id="useTls"
+                      checked={useTls}
+                      onCheckedChange={setUseTls}
+                    />
+                    <Label htmlFor="useTls" className="flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
+                      Use TLS/SSL Encryption
+                    </Label>
+                  </div>
+                </>
               </div>
 
               <div className="flex justify-end">

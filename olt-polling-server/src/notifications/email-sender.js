@@ -1,6 +1,9 @@
 /**
  * Email Sender Module - Handles sending emails via SMTP
  * Processes pending emails from email_logs table
+ * 
+ * IMPORTANT: Only SMTP is supported. PHP Mail option will also use SMTP if configured,
+ * otherwise emails will fail with a clear error message.
  */
 
 import nodemailer from 'nodemailer';
@@ -40,26 +43,24 @@ export function clearEmailSettingsCache() {
 
 /**
  * Create SMTP transporter
+ * PHP Mail mode is NOT supported on VPS - must use SMTP
  */
 function createSmtpTransporter(settings) {
-  // PHP Mail mode - no transporter needed, we'll use a simple approach
-  if (settings.provider === 'php_mail') {
-    // For PHP mail mode, we still need SMTP but can use local sendmail
-    return nodemailer.createTransport({
-      sendmail: true,
-      newline: 'unix',
-      path: '/usr/sbin/sendmail',
-    });
-  }
-
-  if (!settings.smtp_host || !settings.smtp_username) {
+  // Require SMTP configuration for all providers
+  if (!settings.smtp_host || !settings.smtp_username || !settings.smtp_password) {
+    logger.error('SMTP not configured. Please configure SMTP settings in Email Gateway.');
     return null;
   }
 
+  const port = settings.smtp_port || 587;
+  const secure = port === 465;
+
+  logger.info(`Creating SMTP transporter: ${settings.smtp_host}:${port} (secure: ${secure})`);
+
   return nodemailer.createTransport({
     host: settings.smtp_host,
-    port: settings.smtp_port || 587,
-    secure: settings.smtp_port === 465,
+    port: port,
+    secure: secure,
     auth: {
       user: settings.smtp_username,
       pass: settings.smtp_password,
@@ -133,7 +134,7 @@ async function sendEmail(settings, recipientEmail, subject, message) {
 
   const transporter = createSmtpTransporter(settings);
   if (!transporter) {
-    return { success: false, error: 'SMTP not configured properly' };
+    return { success: false, error: 'SMTP not configured. Please configure SMTP host, username, and password in Email Gateway settings.' };
   }
 
   try {
@@ -148,11 +149,13 @@ async function sendEmail(settings, recipientEmail, subject, message) {
       text: message,
     });
 
-    logger.info(`Email sent to ${recipientEmail}: ${subject}`);
+    logger.info(`Email sent successfully to ${recipientEmail}: ${subject}`);
     return { success: true };
   } catch (error) {
     logger.error(`Email send failed to ${recipientEmail}: ${error.message}`);
     return { success: false, error: error.message };
+  } finally {
+    transporter.close();
   }
 }
 
@@ -220,7 +223,7 @@ export async function processPendingEmails(supabase) {
     }
 
     // Small delay between emails to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   logger.info(`Email processing complete: ${sent} sent, ${failed} failed`);
@@ -306,7 +309,7 @@ export async function processTenantPendingEmails(supabase, tenantId) {
         .eq('id', email.id);
     }
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   return { processed: pendingEmails.length, sent, failed };
