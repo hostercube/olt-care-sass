@@ -57,19 +57,33 @@ export default function Auth() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const captchaSiteKey = platformSettings.captchaSiteKey?.trim() || '';
-  const captchaEnabled = platformSettings.enableCaptcha === true && 
+  const captchaEnabled = platformSettings.enableCaptcha === true &&
     captchaSiteKey.length > 10;
-  
-  // Debug log for CAPTCHA settings
-  console.log('Auth: CAPTCHA settings:', { 
-    enableCaptcha: platformSettings.enableCaptcha, 
-    hasSiteKey: !!captchaSiteKey, 
-    siteKeyLength: captchaSiteKey.length,
-    captchaEnabled 
-  });
-  
+
+  if (import.meta.env.DEV) {
+    // Avoid logging sensitive details in production
+    console.log('Auth: CAPTCHA settings:', {
+      enableCaptcha: platformSettings.enableCaptcha,
+      hasSiteKey: !!captchaSiteKey,
+      siteKeyLength: captchaSiteKey.length,
+      captchaEnabled,
+    });
+  }
+
   const [loginCaptchaToken, setLoginCaptchaToken] = useState<string | null>(null);
   const [signupCaptchaToken, setSignupCaptchaToken] = useState<string | null>(null);
+  const [loginCaptchaReset, setLoginCaptchaReset] = useState(0);
+  const [signupCaptchaReset, setSignupCaptchaReset] = useState(0);
+
+  const resetLoginCaptcha = () => {
+    setLoginCaptchaToken(null);
+    setLoginCaptchaReset((v) => v + 1);
+  };
+
+  const resetSignupCaptcha = () => {
+    setSignupCaptchaToken(null);
+    setSignupCaptchaReset((v) => v + 1);
+  };
 
   // Login form
   const [email, setEmail] = useState('');
@@ -146,16 +160,22 @@ export default function Auth() {
     }
   };
 
-  const verifyTurnstile = async (token: string): Promise<boolean> => {
+  const verifyTurnstile = async (token: string): Promise<{ ok: boolean; reason?: string }> => {
     try {
       const { data, error } = await supabase.functions.invoke('turnstile-verify', {
         body: { token },
       });
-      if (error) throw error;
-      return data?.success === true;
+
+      if (error) {
+        return { ok: false, reason: error.message };
+      }
+
+      const ok = data?.success === true;
+      return { ok, reason: ok ? undefined : (data?.error || 'Verification failed') };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err ?? 'Unknown error');
       console.error('Turnstile verification failed:', err);
-      return false;
+      return { ok: false, reason: msg };
     }
   };
 
@@ -174,16 +194,16 @@ export default function Auth() {
 
     setIsSubmitting(true);
 
-    // Verify CAPTCHA if enabled
+    // Verify CAPTCHA if enabled (token is single-use; reset after each attempt)
     if (captchaEnabled && loginCaptchaToken) {
-      const verified = await verifyTurnstile(loginCaptchaToken);
-      if (!verified) {
+      const { ok, reason } = await verifyTurnstile(loginCaptchaToken);
+      if (!ok) {
         toast({
           variant: 'destructive',
           title: 'CAPTCHA Failed',
-          description: 'Please try again.',
+          description: reason || 'Please try again.',
         });
-        setLoginCaptchaToken(null);
+        resetLoginCaptcha();
         setIsSubmitting(false);
         return;
       }
@@ -191,6 +211,10 @@ export default function Auth() {
 
     const result = await signIn(email, password);
     setIsSubmitting(false);
+
+    if (captchaEnabled) {
+      resetLoginCaptcha();
+    }
 
     if (result.error) {
       toast({
@@ -227,16 +251,16 @@ export default function Auth() {
 
     setIsSubmitting(true);
 
-    // Verify CAPTCHA if enabled
+    // Verify CAPTCHA if enabled (token is single-use; reset after each attempt)
     if (captchaEnabled && signupCaptchaToken) {
-      const verified = await verifyTurnstile(signupCaptchaToken);
-      if (!verified) {
+      const { ok, reason } = await verifyTurnstile(signupCaptchaToken);
+      if (!ok) {
         toast({
           variant: 'destructive',
           title: 'CAPTCHA Failed',
-          description: 'Please try again.',
+          description: reason || 'Please try again.',
         });
-        setSignupCaptchaToken(null);
+        resetSignupCaptcha();
         setIsSubmitting(false);
         return;
       }
