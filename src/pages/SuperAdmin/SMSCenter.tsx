@@ -10,11 +10,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
-  MessageSquare, Send, Users, Building2, Filter, Search, 
-  RefreshCw, Loader2, FileText, AlertCircle, CheckCircle, Clock
+  MessageSquare, Send, Users, Building2, Search, 
+  RefreshCw, Loader2, FileText, CheckCircle, XCircle, Clock, Filter, History
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -35,12 +36,32 @@ interface Tenant {
   status: string;
 }
 
+interface SMSLog {
+  id: string;
+  phone_number: string;
+  message: string;
+  status: string;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
 export default function SuperAdminSMSCenter() {
   const [templates, setTemplates] = useState<SMSTemplate[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [smsLogs, setSmsLogs] = useState<any[]>([]);
+  const [smsLogs, setSmsLogs] = useState<SMSLog[]>([]);
+  const [totalLogs, setTotalLogs] = useState(0);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
 
   // Send SMS state
   const [sendMode, setSendMode] = useState<'single' | 'bulk' | 'template'>('single');
@@ -59,6 +80,10 @@ export default function SuperAdminSMSCenter() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    fetchLogs();
+  }, [currentPage, pageSize, statusFilter, dateFilter]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -76,22 +101,67 @@ export default function SuperAdminSMSCenter() {
         .select('id, name, email, phone, status')
         .order('name');
 
-      // Fetch SMS logs (notification_queue with sms channel)
-      const { data: logsData } = await supabase
-        .from('notification_queue')
-        .select('*')
-        .eq('channel', 'sms')
-        .order('created_at', { ascending: false })
-        .limit(100);
-
       setTemplates((templatesData as any[]) || []);
       setTenants((tenantsData as Tenant[]) || []);
-      setSmsLogs(logsData || []);
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchLogs = async () => {
+    try {
+      let query = supabase
+        .from('sms_logs')
+        .select('*', { count: 'exact' })
+        .is('tenant_id', null);
+
+      // Apply status filter
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
+      }
+
+      // Apply date filter
+      if (dateFilter !== 'all') {
+        const now = new Date();
+        let startDate: Date;
+        switch (dateFilter) {
+          case 'today':
+            startDate = new Date(now.setHours(0, 0, 0, 0));
+            break;
+          case 'week':
+            startDate = new Date(now.setDate(now.getDate() - 7));
+            break;
+          case 'month':
+            startDate = new Date(now.setMonth(now.getMonth() - 1));
+            break;
+          default:
+            startDate = new Date(0);
+        }
+        query = query.gte('created_at', startDate.toISOString());
+      }
+
+      // Apply search filter
+      if (searchQuery.trim()) {
+        query = query.or(`phone_number.ilike.%${searchQuery}%,message.ilike.%${searchQuery}%`);
+      }
+
+      const { data, error, count } = await query
+        .order('created_at', { ascending: false })
+        .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+
+      if (error) throw error;
+      setSmsLogs((data || []) as SMSLog[]);
+      setTotalLogs(count || 0);
+    } catch (err) {
+      console.error('Error fetching logs:', err);
+    }
+  };
+
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchLogs();
   };
 
   const getFilteredTenants = () => {
@@ -196,6 +266,7 @@ export default function SuperAdminSMSCenter() {
         phone_number: r.phone,
         message: message.replace(/\{\{tenant_name\}\}/g, r.name),
         status: 'pending',
+        tenant_id: null,
       }));
 
       const { error } = await supabase
@@ -213,11 +284,24 @@ export default function SuperAdminSMSCenter() {
       setSelectedTemplate('');
       
       // Refresh logs after delay to show updated status
-      setTimeout(() => fetchData(), 3000);
+      setTimeout(() => fetchLogs(), 3000);
     } catch (err: any) {
       toast.error(err.message || 'Failed to queue SMS');
     } finally {
       setSending(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'sent':
+        return <Badge className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" /> Sent</Badge>;
+      case 'failed':
+        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Failed</Badge>;
+      case 'pending':
+        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" /> Pending</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -242,7 +326,7 @@ export default function SuperAdminSMSCenter() {
             <h1 className="text-3xl font-bold text-foreground">SMS Center</h1>
             <p className="text-muted-foreground">Send notifications and campaigns to ISP owners</p>
           </div>
-          <Button onClick={fetchData} variant="outline" size="sm">
+          <Button onClick={() => { fetchData(); fetchLogs(); }} variant="outline" size="sm">
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -255,8 +339,8 @@ export default function SuperAdminSMSCenter() {
               Send SMS
             </TabsTrigger>
             <TabsTrigger value="logs" className="gap-2">
-              <FileText className="h-4 w-4" />
-              SMS Logs
+              <History className="h-4 w-4" />
+              SMS Logs ({totalLogs})
             </TabsTrigger>
           </TabsList>
 
@@ -286,7 +370,6 @@ export default function SuperAdminSMSCenter() {
                           <Input
                             value={singlePhone}
                             onChange={(e) => {
-                              // Auto-format phone number
                               let value = e.target.value.replace(/[^\d+]/g, '');
                               if (value.startsWith('+880')) value = '0' + value.substring(4);
                               else if (value.startsWith('880')) value = '0' + value.substring(3);
@@ -441,29 +524,29 @@ export default function SuperAdminSMSCenter() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4 text-center">
-                      <div className="p-4 rounded-lg bg-primary/10">
+                      <div className="p-4 bg-muted rounded-lg">
                         <p className="text-2xl font-bold text-primary">{recipientCount}</p>
                         <p className="text-xs text-muted-foreground">Recipients</p>
                       </div>
-                      <div className="p-4 rounded-lg bg-muted">
+                      <div className="p-4 bg-muted rounded-lg">
                         <p className="text-2xl font-bold">{Math.ceil(message.length / 160) || 1}</p>
-                        <p className="text-xs text-muted-foreground">SMS Count</p>
+                        <p className="text-xs text-muted-foreground">SMS Parts</p>
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <Button 
-                        className="w-full" 
-                        variant="outline"
+                        variant="outline" 
+                        className="w-full"
                         onClick={handlePreview}
                         disabled={!message}
                       >
                         Preview Message
                       </Button>
                       <Button 
-                        className="w-full" 
+                        className="w-full"
                         onClick={handleSendSMS}
-                        disabled={sending || recipientCount === 0 || !message}
+                        disabled={sending || !message || recipientCount === 0}
                       >
                         {sending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                         <Send className="h-4 w-4 mr-2" />
@@ -472,73 +555,116 @@ export default function SuperAdminSMSCenter() {
                     </div>
                   </CardContent>
                 </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Available Variables</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      <p><code>{'{{tenant_name}}'}</code> - ISP company name</p>
-                      <p><code>{'{{package_name}}'}</code> - Subscription package</p>
-                      <p><code>{'{{expiry_date}}'}</code> - Subscription expiry</p>
-                      <p><code>{'{{amount}}'}</code> - Due amount</p>
-                      <p><code>{'{{company_name}}'}</code> - Your company</p>
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
             </div>
           </TabsContent>
 
-          <TabsContent value="logs">
+          <TabsContent value="logs" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>SMS Delivery Logs</CardTitle>
-                <CardDescription>Recent SMS notifications sent to ISP owners</CardDescription>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-primary" />
+                      SMS History
+                    </CardTitle>
+                    <CardDescription>
+                      All SMS messages sent through the platform ({totalLogs} total)
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchLogs}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {/* Filters */}
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by phone or message..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="w-full md:w-40">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="sent">Sent</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="w-full md:w-40">
+                      <SelectValue placeholder="Date" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="week">Last 7 Days</SelectItem>
+                      <SelectItem value="month">Last 30 Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" onClick={handleSearch}>
+                    <Filter className="h-4 w-4 mr-2" />
+                    Filter
+                  </Button>
+                </div>
+
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Recipient</TableHead>
+                      <TableHead>Phone Number</TableHead>
                       <TableHead>Message</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Error</TableHead>
                       <TableHead>Date</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {smsLogs.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                           No SMS logs found
                         </TableCell>
                       </TableRow>
                     ) : (
                       smsLogs.map((log) => (
                         <TableRow key={log.id}>
-                          <TableCell className="font-medium">{log.recipient}</TableCell>
-                          <TableCell className="max-w-xs truncate">{log.message}</TableCell>
-                          <TableCell>
-                            <Badge variant={
-                              log.status === 'sent' ? 'success' :
-                              log.status === 'failed' ? 'destructive' :
-                              'warning'
-                            }>
-                              {log.status === 'sent' && <CheckCircle className="h-3 w-3 mr-1" />}
-                              {log.status === 'failed' && <AlertCircle className="h-3 w-3 mr-1" />}
-                              {log.status === 'pending' && <Clock className="h-3 w-3 mr-1" />}
-                              {log.status}
-                            </Badge>
+                          <TableCell className="font-mono text-sm">{log.phone_number}</TableCell>
+                          <TableCell className="max-w-xs truncate text-sm">{log.message}</TableCell>
+                          <TableCell>{getStatusBadge(log.status)}</TableCell>
+                          <TableCell className="text-xs text-destructive max-w-xs truncate">
+                            {log.error_message || '-'}
                           </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {format(new Date(log.created_at), 'MMM d, HH:mm')}
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {log.sent_at 
+                              ? format(new Date(log.sent_at), 'MMM d, yyyy HH:mm')
+                              : format(new Date(log.created_at), 'MMM d, yyyy HH:mm')}
                           </TableCell>
                         </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
+
+                {totalLogs > pageSize && (
+                  <TablePagination
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    totalItems={totalLogs}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                  />
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -549,13 +675,13 @@ export default function SuperAdminSMSCenter() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Message Preview</DialogTitle>
-              <DialogDescription>This is how your SMS will look with sample data</DialogDescription>
+              <DialogDescription>This is how your message will look</DialogDescription>
             </DialogHeader>
-            <div className="p-4 rounded-lg bg-muted border">
+            <div className="p-4 bg-muted rounded-lg">
               <p className="whitespace-pre-wrap">{previewMessage}</p>
             </div>
             <DialogFooter>
-              <Button onClick={() => setPreviewOpen(false)}>Close</Button>
+              <Button variant="outline" onClick={() => setPreviewOpen(false)}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

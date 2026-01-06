@@ -173,12 +173,7 @@ export function TurnstileWidget({ siteKey, onToken }: Props) {
         </div>
       )}
       
-      {status === 'verified' && (
-        <div className="flex items-center gap-2 text-xs text-green-600">
-          <CheckCircle className="h-3 w-3" />
-          <span>Verified successfully</span>
-        </div>
-      )}
+      {/* No visible indicator for verified status - Cloudflare widget shows it */}
       
       {status === 'error' && (
         <div className="flex items-center gap-2 text-xs text-destructive">
