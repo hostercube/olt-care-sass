@@ -102,18 +102,34 @@ const tenantSystemItems: NavItem[] = [
   { title: 'Settings', href: '/settings', icon: Settings },
 ];
 
-// Super Admin items
-const superAdminItems: NavItem[] = [
+// Super Admin - Core items
+const superAdminCoreItems: NavItem[] = [
   { title: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { title: 'Tenants', href: '/admin/tenants', icon: Building2 },
   { title: 'Packages', href: '/admin/packages', icon: Package },
+];
+
+// Super Admin - Payment Settings
+const superAdminPaymentItems: NavItem[] = [
+  { title: 'Payment Gateway', href: '/admin/gateways', icon: Wallet },
   { title: 'Payments', href: '/admin/payments', icon: CreditCard },
-  { title: 'Payment Gateways', href: '/admin/gateways', icon: Wallet },
+];
+
+// Super Admin - Email Settings
+const superAdminEmailItems: NavItem[] = [
   { title: 'Email Gateway', href: '/admin/email-gateway', icon: Mail },
   { title: 'Email Templates', href: '/admin/email-templates', icon: FileText },
+];
+
+// Super Admin - SMS Settings
+const superAdminSMSItems: NavItem[] = [
   { title: 'SMS Gateway', href: '/admin/sms-gateway', icon: MessageSquare },
-  { title: 'SMS Templates', href: '/admin/sms-templates', icon: MessageSquare },
-  { title: 'SMS Center', href: '/admin/sms-center', icon: MessageSquare },
+  { title: 'SMS Templates', href: '/admin/sms-templates', icon: FileText },
+  { title: 'SMS Log', href: '/admin/sms-center', icon: Terminal },
+];
+
+// Super Admin - Other
+const superAdminOtherItems: NavItem[] = [
   { title: 'Notifications', href: '/admin/notifications', icon: Bell },
   { title: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
   { title: 'Settings', href: '/admin/settings', icon: Settings },
@@ -147,6 +163,11 @@ export function Sidebar() {
   const [operationsExpanded, setOperationsExpanded] = useState(false);
   const [systemExpanded, setSystemExpanded] = useState(false);
   const [impersonation, setImpersonation] = useState<{ tenantId: string; tenantName?: string } | null>(null);
+  
+  // Super Admin section expansions
+  const [paymentSettingsExpanded, setPaymentSettingsExpanded] = useState(false);
+  const [emailSettingsExpanded, setEmailSettingsExpanded] = useState(false);
+  const [smsSettingsExpanded, setSmsSettingsExpanded] = useState(false);
 
   const location = useLocation();
   const { isAdmin } = useUserRole();
@@ -293,7 +314,27 @@ export function Sidebar() {
             {!collapsed && (
               <p className="px-3 mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Super Admin</p>
             )}
-            <div className="flex flex-col gap-0.5">{superAdminItems.map(renderNavItem)}</div>
+            <div className="flex flex-col gap-0.5">{superAdminCoreItems.map(renderNavItem)}</div>
+            
+            {renderSection('Payment Settings', superAdminPaymentItems, {
+              collapsible: true,
+              expanded: paymentSettingsExpanded,
+              onToggle: () => setPaymentSettingsExpanded((v) => !v),
+            })}
+            
+            {renderSection('Email Settings', superAdminEmailItems, {
+              collapsible: true,
+              expanded: emailSettingsExpanded,
+              onToggle: () => setEmailSettingsExpanded((v) => !v),
+            })}
+            
+            {renderSection('SMS Settings', superAdminSMSItems, {
+              collapsible: true,
+              expanded: smsSettingsExpanded,
+              onToggle: () => setSmsSettingsExpanded((v) => !v),
+            })}
+            
+            {renderSection('Other', superAdminOtherItems)}
           </>
         ) : (
           <>

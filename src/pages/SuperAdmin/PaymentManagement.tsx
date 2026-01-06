@@ -12,13 +12,17 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { usePayments } from '@/hooks/usePayments';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { downloadInvoicePDF } from '@/lib/invoice-pdf';
-import { CreditCard, Search, CheckCircle, XCircle, Clock, Eye, FileText, DollarSign, Trash2, Ban, ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import { format } from 'date-fns';
+import { CreditCard, Search, CheckCircle, XCircle, Clock, Eye, FileText, DollarSign, Trash2, Ban, ChevronLeft, ChevronRight, Download, CalendarIcon } from 'lucide-react';
+import { format, isWithinInterval, startOfDay, endOfDay, subDays } from 'date-fns';
+import { cn } from '@/lib/utils';
 import type { PaymentStatus, Payment, Invoice } from '@/types/saas';
+import type { DateRange } from 'react-day-picker';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
@@ -40,6 +44,10 @@ export default function PaymentManagement() {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('all');
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>('all');
   const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
+  
+  // Date range filters
+  const [paymentDateRange, setPaymentDateRange] = useState<DateRange | undefined>();
+  const [invoiceDateRange, setInvoiceDateRange] = useState<DateRange | undefined>();
   
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
@@ -77,7 +85,7 @@ export default function PaymentManagement() {
   const pendingPayments = payments.filter(p => p.status === 'pending');
   const completedPayments = payments.filter(p => p.status === 'completed');
 
-  // Filtered payments with status and method filters
+  // Filtered payments with status, method, and date filters
   const filteredPayments = useMemo(() => {
     return payments.filter(payment => {
       const matchesSearch = 
@@ -89,11 +97,21 @@ export default function PaymentManagement() {
       const matchesStatus = paymentStatusFilter === 'all' || payment.status === paymentStatusFilter;
       const matchesMethod = paymentMethodFilter === 'all' || payment.payment_method === paymentMethodFilter;
       
-      return matchesSearch && matchesStatus && matchesMethod;
+      // Date range filter
+      let matchesDate = true;
+      if (paymentDateRange?.from) {
+        const paymentDate = new Date(payment.created_at);
+        matchesDate = isWithinInterval(paymentDate, {
+          start: startOfDay(paymentDateRange.from),
+          end: endOfDay(paymentDateRange.to || paymentDateRange.from),
+        });
+      }
+      
+      return matchesSearch && matchesStatus && matchesMethod && matchesDate;
     });
-  }, [payments, searchQuery, paymentStatusFilter, paymentMethodFilter]);
+  }, [payments, searchQuery, paymentStatusFilter, paymentMethodFilter, paymentDateRange]);
 
-  // Filtered invoices
+  // Filtered invoices with date filter
   const filteredInvoices = useMemo(() => {
     return invoices.filter(invoice => {
       const matchesSearch = 
@@ -104,9 +122,19 @@ export default function PaymentManagement() {
       
       const matchesStatus = invoiceStatusFilter === 'all' || invoice.status === invoiceStatusFilter;
       
-      return matchesSearch && matchesStatus;
+      // Date range filter
+      let matchesDate = true;
+      if (invoiceDateRange?.from) {
+        const invoiceDate = new Date(invoice.created_at);
+        matchesDate = isWithinInterval(invoiceDate, {
+          start: startOfDay(invoiceDateRange.from),
+          end: endOfDay(invoiceDateRange.to || invoiceDateRange.from),
+        });
+      }
+      
+      return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [invoices, invoiceSearchQuery, invoiceStatusFilter]);
+  }, [invoices, invoiceSearchQuery, invoiceStatusFilter, invoiceDateRange]);
 
   // Invoice pagination
   const invoiceTotalPages = Math.ceil(filteredInvoices.length / invoicePageSize);
@@ -415,6 +443,56 @@ export default function PaymentManagement() {
                         <SelectItem value="manual">Manual</SelectItem>
                       </SelectContent>
                     </Select>
+                    
+                    {/* Date Range Picker */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-[240px] justify-start text-left font-normal",
+                            !paymentDateRange && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {paymentDateRange?.from ? (
+                            paymentDateRange.to ? (
+                              <>
+                                {format(paymentDateRange.from, "LLL dd, y")} -{" "}
+                                {format(paymentDateRange.to, "LLL dd, y")}
+                              </>
+                            ) : (
+                              format(paymentDateRange.from, "LLL dd, y")
+                            )
+                          ) : (
+                            <span>Pick date range</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <div className="flex flex-col gap-2 p-2">
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setPaymentDateRange({ from: subDays(new Date(), 7), to: new Date() })}>
+                              Last 7 days
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setPaymentDateRange({ from: subDays(new Date(), 30), to: new Date() })}>
+                              Last 30 days
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setPaymentDateRange(undefined)}>
+                              Clear
+                            </Button>
+                          </div>
+                          <Calendar
+                            initialFocus
+                            mode="range"
+                            defaultMonth={paymentDateRange?.from}
+                            selected={paymentDateRange}
+                            onSelect={setPaymentDateRange}
+                            numberOfMonths={2}
+                          />
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
               </CardHeader>
@@ -540,6 +618,56 @@ export default function PaymentManagement() {
                         <SelectItem value="cancelled">Cancelled</SelectItem>
                       </SelectContent>
                     </Select>
+                    
+                    {/* Invoice Date Range Picker */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-[240px] justify-start text-left font-normal",
+                            !invoiceDateRange && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {invoiceDateRange?.from ? (
+                            invoiceDateRange.to ? (
+                              <>
+                                {format(invoiceDateRange.from, "LLL dd, y")} -{" "}
+                                {format(invoiceDateRange.to, "LLL dd, y")}
+                              </>
+                            ) : (
+                              format(invoiceDateRange.from, "LLL dd, y")
+                            )
+                          ) : (
+                            <span>Pick date range</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <div className="flex flex-col gap-2 p-2">
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setInvoiceDateRange({ from: subDays(new Date(), 7), to: new Date() })}>
+                              Last 7 days
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setInvoiceDateRange({ from: subDays(new Date(), 30), to: new Date() })}>
+                              Last 30 days
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setInvoiceDateRange(undefined)}>
+                              Clear
+                            </Button>
+                          </div>
+                          <Calendar
+                            initialFocus
+                            mode="range"
+                            defaultMonth={invoiceDateRange?.from}
+                            selected={invoiceDateRange}
+                            onSelect={setInvoiceDateRange}
+                            numberOfMonths={2}
+                          />
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
               </CardHeader>

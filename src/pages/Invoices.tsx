@@ -10,12 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useTenantContext, useSuperAdmin } from '@/hooks/useSuperAdmin';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { downloadInvoicePDF } from '@/lib/invoice-pdf';
 import { PaginationControls, useTablePagination } from '@/components/common/TableWithPagination';
-import { format } from 'date-fns';
+import { format, isWithinInterval, startOfDay, endOfDay, subDays } from 'date-fns';
+import { cn } from '@/lib/utils';
 import {
   Search,
   Download,
@@ -27,8 +30,10 @@ import {
   XCircle,
   CreditCard,
   Eye,
+  CalendarIcon,
 } from 'lucide-react';
 import type { Invoice } from '@/types/saas';
+import type { DateRange } from 'react-day-picker';
 
 const statusConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
   paid: { icon: CheckCircle, color: 'bg-green-500/10 text-green-500 border-green-500/20', label: 'Paid' },
@@ -47,6 +52,7 @@ export default function Invoices() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
 
@@ -59,10 +65,20 @@ export default function Invoices() {
         invoice.tenant?.company_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
+      
+      // Date range filter
+      let matchesDate = true;
+      if (dateRange?.from) {
+        const invoiceDate = new Date(invoice.created_at);
+        matchesDate = isWithinInterval(invoiceDate, {
+          start: startOfDay(dateRange.from),
+          end: endOfDay(dateRange.to || dateRange.from),
+        });
+      }
 
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [invoices, searchTerm, statusFilter]);
+  }, [invoices, searchTerm, statusFilter, dateRange]);
 
   const {
     paginatedData,
@@ -210,6 +226,56 @@ export default function Invoices() {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
+              
+              {/* Date Range Picker */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full md:w-[260px] justify-start text-left font-normal",
+                      !dateRange && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, "LLL dd, y")} -{" "}
+                          {format(dateRange.to, "LLL dd, y")}
+                        </>
+                      ) : (
+                        format(dateRange.from, "LLL dd, y")
+                      )
+                    ) : (
+                      <span>Filter by date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="flex flex-col gap-2 p-2">
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setDateRange({ from: subDays(new Date(), 7), to: new Date() })}>
+                        Last 7 days
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setDateRange({ from: subDays(new Date(), 30), to: new Date() })}>
+                        Last 30 days
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDateRange(undefined)}>
+                        Clear
+                      </Button>
+                    </div>
+                    <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={dateRange?.from}
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </CardContent>
         </Card>
