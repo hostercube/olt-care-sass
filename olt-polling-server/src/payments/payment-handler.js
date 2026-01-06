@@ -952,6 +952,18 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
               ends_at: newEndDate.toISOString(),
             })
             .eq('id', invoice.subscription_id);
+
+          // Also update tenant status to 'active' when payment is successful
+          if (payment.tenant_id) {
+            await supabase
+              .from('tenants')
+              .update({ 
+                status: 'active',
+                trial_ends_at: null, // Clear trial since they are now a paying customer
+              })
+              .eq('id', payment.tenant_id);
+            logger.info(`Tenant ${payment.tenant_id} status updated to active after payment`);
+          }
         }
       }
     }

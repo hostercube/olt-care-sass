@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -47,16 +48,39 @@ export function TurnstileWidget({ siteKey, onToken }: Props) {
   const id = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'verified' | 'error'>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
+    // Validate site key
+    if (!siteKey || siteKey.length < 10) {
+      console.error('Turnstile: Invalid or missing site key');
+      setStatus('error');
+      setErrorMessage('CAPTCHA not configured properly');
+      onToken(null);
+      return;
+    }
+
     (async () => {
       try {
+        setStatus('loading');
+        console.log('Turnstile: Loading script...');
+        
         await loadTurnstileScript();
+        
         if (!mounted) return;
-        if (!containerRef.current) return;
-        if (!window.turnstile) return;
+        if (!containerRef.current) {
+          console.error('Turnstile: Container ref not available');
+          return;
+        }
+        if (!window.turnstile) {
+          console.error('Turnstile: window.turnstile not available after script load');
+          setStatus('error');
+          setErrorMessage('Failed to load CAPTCHA');
+          return;
+        }
 
         // Ensure clean re-render
         if (widgetIdRef.current) {
@@ -70,16 +94,48 @@ export function TurnstileWidget({ siteKey, onToken }: Props) {
 
         containerRef.current.innerHTML = '';
 
+        console.log('Turnstile: Rendering widget with site key:', siteKey.substring(0, 10) + '...');
+        
         const widgetId = window.turnstile.render(containerRef.current, {
           sitekey: siteKey,
           theme: 'auto',
-          callback: (token: string) => onToken(token || null),
-          'expired-callback': () => onToken(null),
-          'error-callback': () => onToken(null),
+          size: 'normal',
+          callback: (token: string) => {
+            console.log('Turnstile: Token received');
+            setStatus('verified');
+            onToken(token || null);
+          },
+          'expired-callback': () => {
+            console.log('Turnstile: Token expired');
+            setStatus('ready');
+            onToken(null);
+          },
+          'error-callback': (error: any) => {
+            console.error('Turnstile: Error callback', error);
+            setStatus('error');
+            setErrorMessage('Verification failed');
+            onToken(null);
+          },
+          'before-interactive-callback': () => {
+            console.log('Turnstile: Widget ready for interaction');
+            setStatus('ready');
+          },
         });
 
         widgetIdRef.current = widgetId;
-      } catch {
+        console.log('Turnstile: Widget rendered with ID:', widgetId);
+        
+        // If no callback fired, set to ready after a short delay
+        setTimeout(() => {
+          if (mounted && status === 'loading') {
+            setStatus('ready');
+          }
+        }, 1000);
+        
+      } catch (err: any) {
+        console.error('Turnstile: Error during initialization', err);
+        setStatus('error');
+        setErrorMessage(err?.message || 'Failed to load CAPTCHA');
         onToken(null);
       }
     })();
@@ -98,5 +154,36 @@ export function TurnstileWidget({ siteKey, onToken }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteKey, id]);
 
-  return <div ref={containerRef} className="min-h-[66px]" />;
+  return (
+    <div className="space-y-2">
+      {/* Turnstile container - must always be in DOM for widget rendering */}
+      <div 
+        ref={containerRef} 
+        className="min-h-[66px] flex items-center justify-center"
+        id={`turnstile-container-${id.replace(/:/g, '-')}`}
+      />
+      
+      {/* Status indicator */}
+      {status === 'loading' && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span>Loading security check...</span>
+        </div>
+      )}
+      
+      {status === 'verified' && (
+        <div className="flex items-center gap-2 text-xs text-green-600">
+          <CheckCircle className="h-3 w-3" />
+          <span>Verified successfully</span>
+        </div>
+      )}
+      
+      {status === 'error' && (
+        <div className="flex items-center gap-2 text-xs text-destructive">
+          <AlertCircle className="h-3 w-3" />
+          <span>{errorMessage || 'Verification error'}</span>
+        </div>
+      )}
+    </div>
+  );
 }
