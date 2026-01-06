@@ -14,7 +14,7 @@ import { useTenants } from '@/hooks/useTenants';
 import { usePackages } from '@/hooks/usePackages';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { usePlatformSettings } from '@/hooks/usePlatformSettings';
-import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2, Users, Router, MapPin, UserCheck, ArrowUpDown, RefreshCw, Calendar, Phone, Mail, Globe, Clock, CreditCard, Shield, Settings } from 'lucide-react';
+import { Building2, Plus, Search, MoreVertical, Edit, Trash2, Ban, CheckCircle, Eye, Key, LogIn, Loader2, Users, Router, MapPin, UserCheck, ArrowUpDown, RefreshCw, Calendar, Phone, Mail, Globe, Clock, CreditCard, Shield, Settings, MessageSquare } from 'lucide-react';
 import { resolvePollingServerUrl } from '@/lib/polling-server';
 import { format, differenceInDays, isAfter, isBefore, startOfDay, endOfDay, subDays } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -26,7 +26,7 @@ import { useTablePagination, PaginationControls } from '@/components/common/Tabl
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AVAILABLE_MODULES } from '@/types/saas';
+import { AVAILABLE_MODULES, PAYMENT_GATEWAYS, SMS_GATEWAYS } from '@/types/saas';
 
 interface TenantStats {
   customers: number;
@@ -71,6 +71,8 @@ export default function TenantManagement() {
   const [manualFeaturesEnabled, setManualFeaturesEnabled] = useState(false);
   const [manualFeatures, setManualFeatures] = useState<Record<string, boolean>>({});
   const [manualLimits, setManualLimits] = useState<Record<string, number | null>>({});
+  const [manualPaymentGateways, setManualPaymentGateways] = useState<Record<string, boolean>>({});
+  const [manualSMSGateways, setManualSMSGateways] = useState<Record<string, boolean>>({});
   const [isSavingPermissions, setIsSavingPermissions] = useState(false);
 
   const [newTenant, setNewTenant] = useState({
@@ -418,8 +420,12 @@ export default function TenantManagement() {
   const openPermissionsDialog = (tenant: any) => {
     setSelectedTenant(tenant);
     setManualFeaturesEnabled(tenant.manual_features_enabled || false);
-    setManualFeatures((tenant.manual_features as Record<string, boolean>) || {});
+    const features = (tenant.manual_features as Record<string, any>) || {};
+    setManualFeatures(features);
     setManualLimits((tenant.manual_limits as Record<string, number | null>) || {});
+    // Extract payment and SMS gateways from features
+    setManualPaymentGateways((features.payment_gateways as Record<string, boolean>) || {});
+    setManualSMSGateways((features.sms_gateways as Record<string, boolean>) || {});
     setIsPermissionsOpen(true);
   };
 
@@ -428,11 +434,18 @@ export default function TenantManagement() {
     
     setIsSavingPermissions(true);
     try {
+      // Combine features with gateway permissions
+      const combinedFeatures = {
+        ...manualFeatures,
+        payment_gateways: manualPaymentGateways,
+        sms_gateways: manualSMSGateways,
+      };
+
       const { error } = await supabase
         .from('tenants')
         .update({
           manual_features_enabled: manualFeaturesEnabled,
-          manual_features: manualFeatures,
+          manual_features: combinedFeatures,
           manual_limits: manualLimits,
           max_onus: manualLimits.max_onus ?? null,
           max_mikrotiks: manualLimits.max_mikrotiks ?? null,
@@ -468,7 +481,8 @@ export default function TenantManagement() {
     
     setIsDeleting(true);
     try {
-      await deleteTenant(selectedTenant.id);
+      const VPS_URL = resolvePollingServerUrl(platformSettings.pollingServerUrl || '');
+      await deleteTenant(selectedTenant.id, VPS_URL || undefined);
       setIsDeleteOpen(false);
       setSelectedTenant(null);
     } finally {
@@ -1268,6 +1282,64 @@ export default function TenantManagement() {
                             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                           >
                             {module.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Payment Gateways */}
+                  <div className="space-y-4">
+                    <h4 className="font-medium flex items-center gap-2">
+                      <CreditCard className="h-4 w-4" />
+                      Payment Gateways
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {PAYMENT_GATEWAYS.map((gateway) => (
+                        <div key={gateway.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`pg-${gateway.id}`}
+                            checked={manualPaymentGateways[gateway.id] === true}
+                            onCheckedChange={(checked) => {
+                              setManualPaymentGateways(prev => ({ ...prev, [gateway.id]: checked === true }));
+                            }}
+                          />
+                          <label
+                            htmlFor={`pg-${gateway.id}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                          >
+                            {gateway.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* SMS Gateways */}
+                  <div className="space-y-4">
+                    <h4 className="font-medium flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      SMS Gateways
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {SMS_GATEWAYS.map((gateway) => (
+                        <div key={gateway.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`sms-${gateway.id}`}
+                            checked={manualSMSGateways[gateway.id] === true}
+                            onCheckedChange={(checked) => {
+                              setManualSMSGateways(prev => ({ ...prev, [gateway.id]: checked === true }));
+                            }}
+                          />
+                          <label
+                            htmlFor={`sms-${gateway.id}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                          >
+                            {gateway.name}
                           </label>
                         </div>
                       ))}

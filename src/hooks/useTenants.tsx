@@ -155,7 +155,7 @@ export function useTenants() {
     }
   };
 
-  const deleteTenant = async (id: string) => {
+  const deleteTenant = async (id: string, pollingServerUrl?: string) => {
     try {
       // First, get all users associated with this tenant
       const { data: tenantUsers } = await supabase
@@ -163,19 +163,13 @@ export function useTenants() {
         .select('user_id')
         .eq('tenant_id', id);
 
-      // Delete subscriptions
-      await supabase
-        .from('subscriptions')
-        .delete()
-        .eq('tenant_id', id);
+      const userIds = tenantUsers?.map(tu => tu.user_id) || [];
 
-      // Delete tenant_users entries
-      await supabase
-        .from('tenant_users')
-        .delete()
-        .eq('tenant_id', id);
+      // Delete subscriptions and tenant_users first (FK constraints)
+      await supabase.from('subscriptions').delete().eq('tenant_id', id);
+      await supabase.from('tenant_users').delete().eq('tenant_id', id);
 
-      // Delete the tenant
+      // Delete the tenant - cascade should handle related data
       const { error } = await supabase
         .from('tenants')
         .delete()
@@ -183,9 +177,24 @@ export function useTenants() {
 
       if (error) throw error;
 
+      // Delete auth users via VPS if URL provided and we have user IDs
+      if (pollingServerUrl && userIds.length > 0) {
+        for (const userId of userIds) {
+          try {
+            await fetch(`${pollingServerUrl}/api/admin/delete-user`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId }),
+            });
+          } catch (authError) {
+            console.error('Error deleting auth user:', authError);
+          }
+        }
+      }
+
       toast({
         title: 'Tenant Deleted',
-        description: 'The tenant and all associated data have been permanently deleted. Users will be logged out on their next page refresh.',
+        description: 'The tenant and all associated data have been permanently deleted.',
       });
 
       await fetchTenants();
