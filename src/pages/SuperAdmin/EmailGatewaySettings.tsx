@@ -10,9 +10,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Mail, Settings, History, Send, CheckCircle, XCircle, Clock, Loader2, Shield } from 'lucide-react';
+import { Mail, Settings, History, Send, CheckCircle, XCircle, Clock, Loader2, Shield, RefreshCw, Search, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface EmailGatewaySettings {
@@ -41,27 +42,38 @@ interface EmailLog {
 }
 
 const EMAIL_PROVIDERS = [
-  { value: 'smtp', label: 'Custom SMTP', host: '', port: 587 },
-  { value: 'gmail', label: 'Gmail SMTP', host: 'smtp.gmail.com', port: 587 },
-  { value: 'outlook', label: 'Outlook/Office 365', host: 'smtp.office365.com', port: 587 },
-  { value: 'sendgrid', label: 'SendGrid', host: 'smtp.sendgrid.net', port: 587 },
-  { value: 'mailgun', label: 'Mailgun', host: 'smtp.mailgun.org', port: 587 },
-  { value: 'ses', label: 'Amazon SES', host: 'email-smtp.us-east-1.amazonaws.com', port: 587 },
+  { value: 'php_mail', label: 'PHP Mail (Default)', host: '', port: 25, description: 'Use server default mail function - no SMTP config needed' },
+  { value: 'smtp', label: 'Custom SMTP', host: '', port: 587, description: 'Configure custom SMTP server' },
+  { value: 'gmail', label: 'Gmail SMTP', host: 'smtp.gmail.com', port: 587, description: 'Use Gmail SMTP' },
+  { value: 'outlook', label: 'Outlook/Office 365', host: 'smtp.office365.com', port: 587, description: 'Use Microsoft SMTP' },
+  { value: 'sendgrid', label: 'SendGrid', host: 'smtp.sendgrid.net', port: 587, description: 'Use SendGrid SMTP' },
+  { value: 'mailgun', label: 'Mailgun', host: 'smtp.mailgun.org', port: 587, description: 'Use Mailgun SMTP' },
+  { value: 'ses', label: 'Amazon SES', host: 'email-smtp.us-east-1.amazonaws.com', port: 587, description: 'Use Amazon SES' },
 ];
 
 export default function EmailGatewaySettings() {
   const [settings, setSettings] = useState<EmailGatewaySettings | null>(null);
   const [logs, setLogs] = useState<EmailLog[]>([]);
+  const [totalLogs, setTotalLogs] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [testSubject, setTestSubject] = useState('Test Email from OLT Care SaaS');
-  const [testMessage, setTestMessage] = useState('This is a test email to verify your SMTP configuration is working correctly.');
+  const [testMessage, setTestMessage] = useState('This is a test email to verify your email configuration is working correctly.');
   const [sendingTest, setSendingTest] = useState(false);
   const { toast } = useToast();
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
+
   // Form state
-  const [provider, setProvider] = useState('smtp');
+  const [provider, setProvider] = useState('php_mail');
   const [smtpHost, setSmtpHost] = useState('');
   const [smtpPort, setSmtpPort] = useState(587);
   const [smtpUsername, setSmtpUsername] = useState('');
@@ -71,10 +83,15 @@ export default function EmailGatewaySettings() {
   const [useTls, setUseTls] = useState(true);
   const [isEnabled, setIsEnabled] = useState(false);
 
+  const selectedProvider = EMAIL_PROVIDERS.find(p => p.value === provider);
+
   useEffect(() => {
     fetchSettings();
-    fetchLogs();
   }, []);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [currentPage, pageSize, statusFilter, dateFilter]);
 
   const fetchSettings = async () => {
     try {
@@ -87,7 +104,7 @@ export default function EmailGatewaySettings() {
       
       if (data) {
         setSettings(data as EmailGatewaySettings);
-        setProvider(data.provider || 'smtp');
+        setProvider(data.provider || 'php_mail');
         setSmtpHost(data.smtp_host || '');
         setSmtpPort(data.smtp_port || 587);
         setSmtpUsername(data.smtp_username || '');
@@ -106,17 +123,55 @@ export default function EmailGatewaySettings() {
 
   const fetchLogs = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('email_logs')
-        .select('*')
+        .select('*', { count: 'exact' });
+
+      // Apply status filter
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
+      }
+
+      // Apply date filter
+      if (dateFilter !== 'all') {
+        const now = new Date();
+        let startDate: Date;
+        switch (dateFilter) {
+          case 'today':
+            startDate = new Date(now.setHours(0, 0, 0, 0));
+            break;
+          case 'week':
+            startDate = new Date(now.setDate(now.getDate() - 7));
+            break;
+          case 'month':
+            startDate = new Date(now.setMonth(now.getMonth() - 1));
+            break;
+          default:
+            startDate = new Date(0);
+        }
+        query = query.gte('created_at', startDate.toISOString());
+      }
+
+      // Apply search filter
+      if (searchQuery.trim()) {
+        query = query.or(`recipient_email.ilike.%${searchQuery}%,subject.ilike.%${searchQuery}%`);
+      }
+
+      const { data, error, count } = await query
         .order('created_at', { ascending: false })
-        .limit(50);
+        .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
 
       if (error) throw error;
       setLogs((data || []) as EmailLog[]);
+      setTotalLogs(count || 0);
     } catch (error) {
       console.error('Error fetching email logs:', error);
     }
+  };
+
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchLogs();
   };
 
   const handleProviderChange = (value: string) => {
@@ -133,10 +188,10 @@ export default function EmailGatewaySettings() {
     try {
       const updateData = {
         provider,
-        smtp_host: smtpHost || null,
-        smtp_port: smtpPort,
-        smtp_username: smtpUsername || null,
-        smtp_password: smtpPassword || null,
+        smtp_host: provider === 'php_mail' ? null : (smtpHost || null),
+        smtp_port: provider === 'php_mail' ? null : smtpPort,
+        smtp_username: provider === 'php_mail' ? null : (smtpUsername || null),
+        smtp_password: provider === 'php_mail' ? null : (smtpPassword || null),
         sender_email: senderEmail || null,
         sender_name: senderName || null,
         use_tls: useTls,
@@ -188,7 +243,6 @@ export default function EmailGatewaySettings() {
 
     setSendingTest(true);
     try {
-      // Queue the test email
       const { error } = await supabase
         .from('email_logs')
         .insert({
@@ -234,7 +288,7 @@ export default function EmailGatewaySettings() {
 
   if (loading) {
     return (
-      <DashboardLayout title="Email Gateway" subtitle="Configure SMTP email settings">
+      <DashboardLayout title="Email Gateway" subtitle="Configure email settings">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -243,7 +297,7 @@ export default function EmailGatewaySettings() {
   }
 
   return (
-    <DashboardLayout title="Email Gateway" subtitle="Configure SMTP email settings">
+    <DashboardLayout title="Email Gateway" subtitle="Configure email settings">
       <Tabs defaultValue="settings" className="space-y-6">
         <TabsList>
           <TabsTrigger value="settings" className="flex items-center gap-2">
@@ -265,7 +319,7 @@ export default function EmailGatewaySettings() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Mail className="h-5 w-5" />
-                SMTP Email Configuration
+                Email Configuration
               </CardTitle>
               <CardDescription>
                 Configure your email gateway to send notifications to tenants
@@ -287,7 +341,7 @@ export default function EmailGatewaySettings() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="provider">Email Provider</Label>
                   <Select value={provider} onValueChange={handleProviderChange}>
                     <SelectTrigger>
@@ -301,6 +355,9 @@ export default function EmailGatewaySettings() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {selectedProvider && (
+                    <p className="text-xs text-muted-foreground">{selectedProvider.description}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -314,48 +371,6 @@ export default function EmailGatewaySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="smtpHost">SMTP Host</Label>
-                  <Input
-                    id="smtpHost"
-                    value={smtpHost}
-                    onChange={(e) => setSmtpHost(e.target.value)}
-                    placeholder="smtp.example.com"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="smtpPort">SMTP Port</Label>
-                  <Input
-                    id="smtpPort"
-                    type="number"
-                    value={smtpPort}
-                    onChange={(e) => setSmtpPort(parseInt(e.target.value) || 587)}
-                    placeholder="587"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="smtpUsername">SMTP Username</Label>
-                  <Input
-                    id="smtpUsername"
-                    value={smtpUsername}
-                    onChange={(e) => setSmtpUsername(e.target.value)}
-                    placeholder="your-username"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="smtpPassword">SMTP Password</Label>
-                  <Input
-                    id="smtpPassword"
-                    type="password"
-                    value={smtpPassword}
-                    onChange={(e) => setSmtpPassword(e.target.value)}
-                    placeholder="Enter your password"
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="senderEmail">Sender Email Address</Label>
                   <Input
                     id="senderEmail"
@@ -366,17 +381,63 @@ export default function EmailGatewaySettings() {
                   />
                 </div>
 
-                <div className="flex items-center space-x-2 md:col-span-2">
-                  <Switch
-                    id="useTls"
-                    checked={useTls}
-                    onCheckedChange={setUseTls}
-                  />
-                  <Label htmlFor="useTls" className="flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    Use TLS/SSL Encryption
-                  </Label>
-                </div>
+                {provider !== 'php_mail' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="smtpHost">SMTP Host</Label>
+                      <Input
+                        id="smtpHost"
+                        value={smtpHost}
+                        onChange={(e) => setSmtpHost(e.target.value)}
+                        placeholder="smtp.example.com"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="smtpPort">SMTP Port</Label>
+                      <Input
+                        id="smtpPort"
+                        type="number"
+                        value={smtpPort}
+                        onChange={(e) => setSmtpPort(parseInt(e.target.value) || 587)}
+                        placeholder="587"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="smtpUsername">SMTP Username</Label>
+                      <Input
+                        id="smtpUsername"
+                        value={smtpUsername}
+                        onChange={(e) => setSmtpUsername(e.target.value)}
+                        placeholder="your-username"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="smtpPassword">SMTP Password</Label>
+                      <Input
+                        id="smtpPassword"
+                        type="password"
+                        value={smtpPassword}
+                        onChange={(e) => setSmtpPassword(e.target.value)}
+                        placeholder="Enter your password"
+                      />
+                    </div>
+
+                    <div className="flex items-center space-x-2 md:col-span-2">
+                      <Switch
+                        id="useTls"
+                        checked={useTls}
+                        onCheckedChange={setUseTls}
+                      />
+                      <Label htmlFor="useTls" className="flex items-center gap-2">
+                        <Shield className="h-4 w-4" />
+                        Use TLS/SSL Encryption
+                      </Label>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex justify-end">
@@ -451,28 +512,77 @@ export default function EmailGatewaySettings() {
         <TabsContent value="logs">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                Email Logs
-              </CardTitle>
-              <CardDescription>
-                Recent emails sent through the gateway
-              </CardDescription>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    Email Logs
+                  </CardTitle>
+                  <CardDescription>
+                    Recent emails sent through the gateway ({totalLogs} total)
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchLogs}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* Filters */}
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by email or subject..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full md:w-40">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full md:w-40">
+                    <SelectValue placeholder="Date" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="week">Last 7 Days</SelectItem>
+                    <SelectItem value="month">Last 30 Days</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={handleSearch}>
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filter
+                </Button>
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Recipient</TableHead>
                     <TableHead>Subject</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Sent At</TableHead>
+                    <TableHead>Error</TableHead>
+                    <TableHead>Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {logs.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                         No email logs found
                       </TableCell>
                     </TableRow>
@@ -482,6 +592,9 @@ export default function EmailGatewaySettings() {
                         <TableCell className="font-mono text-sm">{log.recipient_email}</TableCell>
                         <TableCell className="max-w-xs truncate">{log.subject}</TableCell>
                         <TableCell>{getStatusBadge(log.status)}</TableCell>
+                        <TableCell className="text-xs text-destructive max-w-xs truncate">
+                          {log.error_message || '-'}
+                        </TableCell>
                         <TableCell>
                           {log.sent_at 
                             ? format(new Date(log.sent_at), 'MMM d, yyyy HH:mm')
@@ -492,6 +605,16 @@ export default function EmailGatewaySettings() {
                   )}
                 </TableBody>
               </Table>
+
+              {totalLogs > pageSize && (
+                <TablePagination
+                  currentPage={currentPage}
+                  pageSize={pageSize}
+                  totalItems={totalLogs}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>

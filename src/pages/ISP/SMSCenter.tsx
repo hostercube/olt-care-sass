@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,23 +11,52 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useSMSTemplates, useSMSQueue } from '@/hooks/useSMSTemplates';
+import { TablePagination } from '@/components/ui/table-pagination';
+import { useSMSTemplates } from '@/hooks/useSMSTemplates';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useAreas } from '@/hooks/useAreas';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { 
   MessageSquare, Plus, Edit, Trash2, Send, Users, User, 
-  FileText, History, Loader2, Lock, CheckCircle, XCircle, Clock 
+  FileText, History, Loader2, Lock, CheckCircle, XCircle, Clock, Search, Filter, RefreshCw 
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 import type { SMSTemplate } from '@/types/saas';
+
+interface SMSLog {
+  id: string;
+  phone_number: string;
+  message: string;
+  status: string;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
 
 export default function SMSCenter() {
   const { hasAccess, isSuperAdmin } = useModuleAccess();
+  const { user } = useAuth();
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const { templates, loading: templatesLoading, createTemplate, updateTemplate, deleteTemplate } = useSMSTemplates();
-  const { queue, loading: queueLoading, sendSingleSMS, sendBulkSMS, sendGroupSMS } = useSMSQueue();
   const { customers } = useCustomers();
   const { areas } = useAreas();
+
+  // SMS logs state
+  const [smsLogs, setSmsLogs] = useState<SMSLog[]>([]);
+  const [totalLogs, setTotalLogs] = useState(0);
+  const [logsLoading, setLogsLoading] = useState(true);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
 
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<SMSTemplate | null>(null);
@@ -48,6 +77,81 @@ export default function SMSCenter() {
   const [isSending, setIsSending] = useState(false);
 
   const canAccess = isSuperAdmin || hasAccess('sms_alerts');
+
+  // Fetch tenant ID for current user
+  useEffect(() => {
+    const fetchTenantId = async () => {
+      if (!user) return;
+      const { data } = await (supabase as any).from('tenants').select('id').eq('owner_id', user.id).limit(1);
+      if (data?.[0]) setTenantId(data[0].id);
+    };
+    fetchTenantId();
+  }, [user]);
+
+  useEffect(() => {
+    if (canAccess && tenantId) {
+      fetchLogs();
+    }
+  }, [canAccess, tenantId, currentPage, pageSize, statusFilter, dateFilter]);
+
+  const fetchLogs = async () => {
+    if (!tenantId) return;
+    
+    setLogsLoading(true);
+    try {
+      let query = supabase
+        .from('sms_logs')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenantId);
+
+      // Apply status filter
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
+      }
+
+      // Apply date filter
+      if (dateFilter !== 'all') {
+        const now = new Date();
+        let startDate: Date;
+        switch (dateFilter) {
+          case 'today':
+            startDate = new Date(now.setHours(0, 0, 0, 0));
+            break;
+          case 'week':
+            startDate = new Date(now.setDate(now.getDate() - 7));
+            break;
+          case 'month':
+            startDate = new Date(now.setMonth(now.getMonth() - 1));
+            break;
+          default:
+            startDate = new Date(0);
+        }
+        query = query.gte('created_at', startDate.toISOString());
+      }
+
+      // Apply search filter
+      if (searchQuery.trim()) {
+        query = query.or(`phone_number.ilike.%${searchQuery}%,message.ilike.%${searchQuery}%`);
+      }
+
+      const { data, error, count } = await query
+        .order('created_at', { ascending: false })
+        .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+
+      if (error) throw error;
+      setSmsLogs((data || []) as SMSLog[]);
+      setTotalLogs(count || 0);
+    } catch (err) {
+      console.error('Error fetching SMS logs:', err);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchLogs();
+  };
 
   if (!canAccess) {
     return (
@@ -119,25 +223,82 @@ export default function SMSCenter() {
   const handleSendSMS = async () => {
     const message = getMessage();
     if (!message) {
+      toast.error('Please enter a message');
+      return;
+    }
+
+    if (!tenantId) {
+      toast.error('Tenant not found');
       return;
     }
 
     setIsSending(true);
     try {
+      // Normalize phone number helper
+      const normalizePhone = (phone: string) => {
+        let cleaned = phone.replace(/[^\d+]/g, '');
+        if (cleaned.startsWith('+880')) cleaned = cleaned.substring(1);
+        else if (cleaned.startsWith('0')) cleaned = '880' + cleaned.substring(1);
+        else if (!cleaned.startsWith('880')) cleaned = '880' + cleaned;
+        return cleaned;
+      };
+
+      let phones: string[] = [];
+
       if (sendMode === 'single') {
-        if (!singlePhone) return;
-        await sendSingleSMS(singlePhone, message, selectedTemplate || undefined);
-        setSinglePhone('');
+        if (!singlePhone) {
+          toast.error('Please enter a phone number');
+          return;
+        }
+        phones = [normalizePhone(singlePhone)];
       } else if (sendMode === 'bulk') {
-        const phones = bulkPhones.split('\n').filter(p => p.trim());
-        if (phones.length === 0) return;
-        await sendBulkSMS(phones, message, selectedTemplate || undefined);
-        setBulkPhones('');
+        phones = bulkPhones.split('\n').filter(p => p.trim()).map(normalizePhone);
+        if (phones.length === 0) {
+          toast.error('Please enter at least one phone number');
+          return;
+        }
       } else if (sendMode === 'group') {
-        await sendGroupSMS(groupFilter, message, selectedTemplate || undefined);
+        // Get customers based on filters
+        let filtered = customers;
+        if (groupFilter.area_id) {
+          filtered = filtered.filter(c => c.area_id === groupFilter.area_id);
+        }
+        if (groupFilter.status) {
+          filtered = filtered.filter(c => c.status === groupFilter.status);
+        }
+        phones = filtered.filter(c => c.phone).map(c => normalizePhone(c.phone!));
+        if (phones.length === 0) {
+          toast.error('No customers match the selected filters');
+          return;
+        }
       }
+
+      // Queue all SMS in sms_logs
+      const smsRecords = phones.map(phone => ({
+        phone_number: phone,
+        message: message,
+        status: 'pending',
+        tenant_id: tenantId,
+      }));
+
+      const { error } = await supabase
+        .from('sms_logs')
+        .insert(smsRecords);
+
+      if (error) throw error;
+
+      toast.success(`${phones.length} SMS queued successfully`);
+      
+      // Reset form
+      setSinglePhone('');
+      setBulkPhones('');
       setCustomMessage('');
       setSelectedTemplate('');
+      
+      // Refresh logs
+      setTimeout(() => fetchLogs(), 2000);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to queue SMS');
     } finally {
       setIsSending(false);
     }
@@ -145,14 +306,14 @@ export default function SMSCenter() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'completed':
-        return <Badge variant="success" className="gap-1"><CheckCircle className="h-3 w-3" />Completed</Badge>;
+      case 'sent':
+        return <Badge className="bg-green-500"><CheckCircle className="h-3 w-3 mr-1" /> Sent</Badge>;
       case 'failed':
-        return <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" />Failed</Badge>;
-      case 'processing':
-        return <Badge variant="default" className="gap-1"><Loader2 className="h-3 w-3 animate-spin" />Processing</Badge>;
+        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Failed</Badge>;
+      case 'pending':
+        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" /> Pending</Badge>;
       default:
-        return <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" />Pending</Badge>;
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -164,6 +325,10 @@ export default function SMSCenter() {
             <h1 className="text-2xl font-bold text-foreground">SMS Center</h1>
             <p className="text-muted-foreground text-sm">Manage SMS templates and send messages to customers</p>
           </div>
+          <Button onClick={fetchLogs} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
         </div>
 
         <Tabs defaultValue="send" className="space-y-4">
@@ -178,7 +343,7 @@ export default function SMSCenter() {
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               <History className="h-4 w-4" />
-              History
+              SMS History ({totalLogs})
             </TabsTrigger>
           </TabsList>
 
@@ -268,7 +433,6 @@ export default function SMSCenter() {
                       <Input
                         value={singlePhone}
                         onChange={(e) => {
-                          // Auto-format phone number
                           let value = e.target.value.replace(/[^\d+]/g, '');
                           if (value.startsWith('+880')) value = '0' + value.substring(4);
                           else if (value.startsWith('880')) value = '0' + value.substring(3);
@@ -453,7 +617,7 @@ export default function SMSCenter() {
                           </TableCell>
                           <TableCell>
                             {template.is_active ? (
-                              <Badge variant="success">Active</Badge>
+                              <Badge className="bg-green-500">Active</Badge>
                             ) : (
                               <Badge variant="secondary">Inactive</Badge>
                             )}
@@ -481,56 +645,115 @@ export default function SMSCenter() {
           <TabsContent value="history" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>SMS History</CardTitle>
-                <CardDescription>Recent SMS campaigns and their status</CardDescription>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <History className="h-5 w-5 text-primary" />
+                      SMS History
+                    </CardTitle>
+                    <CardDescription>All SMS messages sent ({totalLogs} total)</CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchLogs}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="space-y-4">
+                {/* Filters */}
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by phone or message..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="w-full md:w-40">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="sent">Sent</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="w-full md:w-40">
+                      <SelectValue placeholder="Date" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="week">Last 7 Days</SelectItem>
+                      <SelectItem value="month">Last 30 Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" onClick={handleSearch}>
+                    <Filter className="h-4 w-4 mr-2" />
+                    Filter
+                  </Button>
+                </div>
+
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead>Phone</TableHead>
                       <TableHead>Message</TableHead>
-                      <TableHead>Recipients</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Error</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {queueLoading ? (
+                    {logsLoading ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
-                    ) : queue.length === 0 ? (
+                    ) : smsLogs.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                           No SMS history yet
                         </TableCell>
                       </TableRow>
                     ) : (
-                      queue.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell className="whitespace-nowrap">
-                            {format(new Date(item.created_at), 'MMM d, yyyy HH:mm')}
+                      smsLogs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="whitespace-nowrap text-sm">
+                            {format(new Date(log.created_at), 'MMM d, yyyy HH:mm')}
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{item.send_type}</Badge>
-                          </TableCell>
+                          <TableCell className="font-mono text-sm">{log.phone_number}</TableCell>
                           <TableCell className="max-w-xs truncate text-sm">
-                            {item.message}
+                            {log.message}
                           </TableCell>
                           <TableCell>
-                            {item.send_type === 'group' ? 'Group' : `${item.sent_count}/${item.total_count}`}
+                            {getStatusBadge(log.status)}
                           </TableCell>
-                          <TableCell>
-                            {getStatusBadge(item.status)}
+                          <TableCell className="text-xs text-destructive max-w-xs truncate">
+                            {log.error_message || '-'}
                           </TableCell>
                         </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
+
+                {totalLogs > pageSize && (
+                  <TablePagination
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    totalItems={totalLogs}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                  />
+                )}
               </CardContent>
             </Card>
           </TabsContent>

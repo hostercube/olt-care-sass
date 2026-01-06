@@ -9,14 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { 
-  MessageSquare, Settings, History, Send, CheckCircle, XCircle, Clock, 
+  MessageSquare, Settings, Send, CheckCircle, XCircle, Clock, 
   Loader2, ExternalLink, Info, Wallet, AlertTriangle, RefreshCw
 } from 'lucide-react';
-import { format } from 'date-fns';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface SMSGatewaySettings {
@@ -27,16 +25,6 @@ interface SMSGatewaySettings {
   sender_id: string | null;
   is_enabled: boolean;
   config: Record<string, unknown> | null;
-}
-
-interface SMSLog {
-  id: string;
-  phone_number: string;
-  message: string;
-  status: string;
-  error_message: string | null;
-  sent_at: string | null;
-  created_at: string;
 }
 
 // SMS Provider configurations based on official documentation
@@ -149,7 +137,6 @@ const SMS_PROVIDERS = [
 
 export default function SMSGatewaySettings() {
   const [settings, setSettings] = useState<SMSGatewaySettings | null>(null);
-  const [logs, setLogs] = useState<SMSLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testNumber, setTestNumber] = useState('');
@@ -171,7 +158,6 @@ export default function SMSGatewaySettings() {
 
   useEffect(() => {
     fetchSettings();
-    fetchLogs();
   }, []);
 
   const fetchSettings = async () => {
@@ -198,22 +184,6 @@ export default function SMSGatewaySettings() {
       console.error('Error fetching SMS settings:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchLogs = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('sms_logs')
-        .select('*')
-        .is('tenant_id', null)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-      setLogs((data || []) as SMSLog[]);
-    } catch (error) {
-      console.error('Error fetching SMS logs:', error);
     }
   };
 
@@ -272,21 +242,71 @@ export default function SMSGatewaySettings() {
   };
 
   const handleCheckBalance = async () => {
-    if (!apiKey || provider !== 'smsnoc') {
+    if (!apiKey) {
       toast({
         title: 'Error',
-        description: 'Balance check is only available for SMS NOC with a valid API token',
+        description: 'Please enter and save your API key first',
         variant: 'destructive',
       });
       return;
     }
 
     setCheckingBalance(true);
+    setBalance(null);
+    
     try {
-      // This would typically be done via an edge function to avoid CORS
+      // Balance check based on provider
+      const providerConfig = SMS_PROVIDERS.find(p => p.value === provider);
+      
+      if (provider === 'smsnoc' && providerConfig?.balanceUrl) {
+        // For SMS NOC, we can try to fetch balance
+        const response = await fetch(providerConfig.balanceUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Accept': 'application/json',
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 'success' && data.data) {
+            setBalance(`৳${data.data.remaining_balance || 0}`);
+            toast({
+              title: 'Balance Retrieved',
+              description: `Current balance: ৳${data.data.remaining_balance || 0}`,
+            });
+          } else {
+            throw new Error(data.message || 'Failed to get balance');
+          }
+        } else {
+          throw new Error('Failed to check balance - API request failed');
+        }
+      } else if (provider === 'mimsms') {
+        // MIM SMS balance check
+        const response = await fetch(`https://esms.mimsms.com/smsapi?api_key=${apiKey}&action=balance`);
+        if (response.ok) {
+          const text = await response.text();
+          setBalance(text);
+          toast({
+            title: 'Balance Retrieved',
+            description: `Current balance: ${text}`,
+          });
+        } else {
+          throw new Error('Failed to check balance');
+        }
+      } else {
+        toast({
+          title: 'Balance Check',
+          description: 'Balance check is not available for this provider. Please check your provider dashboard.',
+        });
+      }
+    } catch (error: any) {
+      console.error('Balance check error:', error);
       toast({
-        title: 'Balance Check',
-        description: 'Balance checking requires server-side implementation. Please check your SMS NOC dashboard.',
+        title: 'Balance Check Failed',
+        description: error.message || 'Unable to retrieve balance. Please check your provider dashboard.',
+        variant: 'destructive',
       });
     } finally {
       setCheckingBalance(false);
@@ -322,7 +342,6 @@ export default function SMSGatewaySettings() {
         description: 'Test SMS has been queued. The polling server will process it using the configured gateway.',
       });
 
-      await fetchLogs();
       setTestNumber('');
     } catch (error: any) {
       console.error('Error sending test SMS:', error);
@@ -333,19 +352,6 @@ export default function SMSGatewaySettings() {
       });
     } finally {
       setSendingTest(false);
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'sent':
-        return <Badge className="bg-success text-success-foreground"><CheckCircle className="h-3 w-3 mr-1" /> Sent</Badge>;
-      case 'failed':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Failed</Badge>;
-      case 'pending':
-        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" /> Pending</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -366,12 +372,13 @@ export default function SMSGatewaySettings() {
           <Info className="h-4 w-4" />
           <AlertTitle>Super Admin SMS Gateway</AlertTitle>
           <AlertDescription>
-            Configure the SMS gateway for sending notifications to ISP owners/tenants. This is separate from tenant-level SMS gateways.
+            Configure the SMS gateway for sending notifications to ISP owners/tenants. This is separate from tenant-level SMS gateways. 
+            View SMS logs in the <strong>SMS Center</strong> page.
           </AlertDescription>
         </Alert>
 
         <Tabs defaultValue="settings" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Configuration
@@ -379,10 +386,6 @@ export default function SMSGatewaySettings() {
             <TabsTrigger value="test" className="flex items-center gap-2">
               <Send className="h-4 w-4" />
               Test SMS
-            </TabsTrigger>
-            <TabsTrigger value="logs" className="flex items-center gap-2">
-              <History className="h-4 w-4" />
-              Logs
             </TabsTrigger>
           </TabsList>
 
@@ -486,11 +489,18 @@ export default function SMSGatewaySettings() {
                     </div>
 
                     <div className="flex justify-between items-center pt-4 border-t">
-                      {provider === 'smsnoc' && apiKey && (
-                        <Button variant="outline" onClick={handleCheckBalance} disabled={checkingBalance}>
-                          {checkingBalance ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wallet className="h-4 w-4 mr-2" />}
-                          Check Balance
-                        </Button>
+                      {apiKey && (
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" onClick={handleCheckBalance} disabled={checkingBalance}>
+                            {checkingBalance ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wallet className="h-4 w-4 mr-2" />}
+                            Check Balance
+                          </Button>
+                          {balance && (
+                            <Badge variant="secondary" className="text-sm">
+                              Balance: {balance}
+                            </Badge>
+                          )}
+                        </div>
                       )}
                       <div className="ml-auto">
                         <Button onClick={handleSave} disabled={saving}>
@@ -620,66 +630,6 @@ export default function SMSGatewaySettings() {
                   <Send className="h-4 w-4 mr-2" />
                   Send Test SMS
                 </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="logs">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <History className="h-5 w-5 text-primary" />
-                      SMS Logs
-                    </CardTitle>
-                    <CardDescription>
-                      Recent SMS messages sent through the Super Admin gateway
-                    </CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={fetchLogs}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Phone Number</TableHead>
-                      <TableHead>Message</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Error</TableHead>
-                      <TableHead>Date</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {logs.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                          No SMS logs found
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      logs.map((log) => (
-                        <TableRow key={log.id}>
-                          <TableCell className="font-mono text-sm">{log.phone_number}</TableCell>
-                          <TableCell className="max-w-xs truncate text-sm">{log.message}</TableCell>
-                          <TableCell>{getStatusBadge(log.status)}</TableCell>
-                          <TableCell className="text-xs text-destructive max-w-xs truncate">
-                            {log.error_message || '-'}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {log.sent_at 
-                              ? format(new Date(log.sent_at), 'MMM d, yyyy HH:mm')
-                              : format(new Date(log.created_at), 'MMM d, yyyy HH:mm')}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
               </CardContent>
             </Card>
           </TabsContent>
