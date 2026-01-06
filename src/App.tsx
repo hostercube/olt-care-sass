@@ -37,6 +37,8 @@ import SMSTemplates from "./pages/SuperAdmin/SMSTemplates";
 import SuperAdminDashboard from "./pages/SuperAdmin/SuperAdminDashboard";
 import SuperAdminSMSCenter from "./pages/SuperAdmin/SMSCenter";
 import SuperAdminSettings from "./pages/SuperAdmin/Settings";
+import NotificationSettingsAdmin from "./pages/SuperAdmin/NotificationSettings";
+import CampaignManagement from "./pages/SuperAdmin/CampaignManagement";
 
 // ISP Billing Pages
 import MySubscription from "./pages/Billing/MySubscription";
@@ -216,6 +218,16 @@ const App = () => (
               <Route path="/admin/settings" element={
                 <SuperAdminRoute>
                   <SuperAdminSettings />
+                </SuperAdminRoute>
+              } />
+              <Route path="/admin/notifications" element={
+                <SuperAdminRoute>
+                  <NotificationSettingsAdmin />
+                </SuperAdminRoute>
+              } />
+              <Route path="/admin/campaigns" element={
+                <SuperAdminRoute>
+                  <CampaignManagement />
                 </SuperAdminRoute>
               } />
 

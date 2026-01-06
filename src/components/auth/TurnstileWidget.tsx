@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -165,13 +165,7 @@ export function TurnstileWidget({ siteKey, onToken }: Props) {
         id={`turnstile-container-${id.replace(/:/g, '-')}`}
       />
       
-      {/* Status indicator */}
-      {status === 'loading' && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Loading security check...</span>
-        </div>
-      )}
+      {/* No loading indicator - Cloudflare widget shows its own */}
       
       {/* No visible indicator for verified status - Cloudflare widget shows it */}
       
