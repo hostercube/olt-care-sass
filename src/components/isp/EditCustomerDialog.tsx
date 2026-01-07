@@ -215,7 +215,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
           <div className="space-y-2">
             <Label>User Type</Label>
             <Select
-              value={formData.customer_type_id}
+              value={formData.customer_type_id || 'none'}
               onValueChange={(value) => setFormData(prev => ({ ...prev, customer_type_id: value === 'none' ? '' : value }))}
             >
               <SelectTrigger>
@@ -272,14 +272,14 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
           <div className="space-y-2">
             <Label>Package</Label>
             <Select
-              value={formData.package_id}
-              onValueChange={(value) => setFormData(prev => ({ ...prev, package_id: value }))}
+              value={formData.package_id || 'none'}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, package_id: value === 'none' ? '' : value }))}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select package" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 {packages.map((pkg) => (
                   <SelectItem key={pkg.id} value={pkg.id}>
                     {pkg.name} - ৳{pkg.price}
@@ -314,17 +314,17 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
             <div className="space-y-2">
               <Label>Area</Label>
               <Select
-                value={formData.area_id}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, area_id: value }))}
+                value={formData.area_id || 'none'}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, area_id: value === 'none' ? '' : value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select area" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {areas.map((area) => (
                     <SelectItem key={area.id} value={area.id}>
-                      {area.name}
+                      {area.name} {area.upazila && `(${area.upazila})`} {area.district && `- ${area.district}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -348,6 +348,27 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Reseller */}
+          <div className="space-y-2">
+            <Label>Reseller</Label>
+            <Select
+              value={formData.reseller_id || 'none'}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, reseller_id: value === 'none' ? '' : value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select reseller" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None (Direct Customer)</SelectItem>
+                {resellers.filter(r => r.is_active).map((reseller) => (
+                  <SelectItem key={reseller.id} value={reseller.id}>
+                    {reseller.name} {reseller.phone && `(${reseller.phone})`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
