@@ -726,6 +726,28 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           {/* Step 3: Network (was step 2) */}
           {currentStep === 2 && (
             <div className="space-y-4">
+              {/* Connection Type */}
+              <div className="space-y-2">
+                <Label>Connection Type *</Label>
+                <Select
+                  value={formData.connection_type}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, connection_type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select connection type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pppoe">PPPoE</SelectItem>
+                    <SelectItem value="static">Static IP</SelectItem>
+                    <SelectItem value="hotspot">Hotspot</SelectItem>
+                    <SelectItem value="dhcp">DHCP</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Type of network connection for this customer
+                </p>
+              </div>
+              
               {/* MikroTik Selection */}
               <div className="space-y-2">
                 <Label>MikroTik Router</Label>
