@@ -314,6 +314,10 @@ export function useResellerSystem() {
   // Branch management
   const createBranch = async (data: Partial<ResellerBranch>) => {
     try {
+      if (!tenantId) {
+        throw new Error('No tenant context available');
+      }
+      
       const branchData = { ...data, tenant_id: tenantId };
       const { error } = await supabase
         .from('reseller_branches')
@@ -322,9 +326,9 @@ export function useResellerSystem() {
       if (error) throw error;
       toast.success('Branch created');
       fetchBranches();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating branch:', err);
-      toast.error('Failed to create branch');
+      toast.error(err?.message || 'Failed to create branch');
       throw err;
     }
   };

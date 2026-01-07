@@ -15,8 +15,9 @@ import { useISPPackages } from '@/hooks/useISPPackages';
 import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
 import { useMikroTikSync } from '@/hooks/useMikroTikSync';
+import { useCustomerTypes } from '@/hooks/useCustomerTypes';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Building2 } from 'lucide-react';
 import type { Customer } from '@/types/isp';
 
 interface EditCustomerDialogProps {
@@ -32,6 +33,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
   const { areas } = useAreas();
   const { resellers } = useResellers();
   const { updatePPPoEUser } = useMikroTikSync();
+  const { customerTypes } = useCustomerTypes();
   const [loading, setLoading] = useState(false);
   const [updateMikroTik, setUpdateMikroTik] = useState(true);
 
@@ -50,6 +52,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
     monthly_bill: '',
     notes: '',
     status: 'active' as 'active' | 'expired' | 'suspended' | 'pending' | 'cancelled',
+    customer_type_id: '',
   });
 
   useEffect(() => {
@@ -69,6 +72,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
         monthly_bill: customer.monthly_bill?.toString() || '',
         notes: customer.notes || '',
         status: customer.status,
+        customer_type_id: (customer as any).customer_type_id || '',
       });
     }
   }, [customer]);
@@ -148,6 +152,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
         monthly_bill: parseFloat(formData.monthly_bill) || 0,
         notes: formData.notes || null,
         status: formData.status,
+        customer_type_id: formData.customer_type_id || null,
       };
 
       // Only update PPPoE password if user explicitly typed one.
@@ -204,6 +209,30 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
               value={formData.email}
               onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
             />
+          </div>
+
+          {/* User Type */}
+          <div className="space-y-2">
+            <Label>User Type</Label>
+            <Select
+              value={formData.customer_type_id}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, customer_type_id: value === 'none' ? '' : value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select user type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {customerTypes.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      {type.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from '@/components/ui/dialog';
@@ -20,9 +20,10 @@ import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
 import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
 import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
+import { useCustomerTypes } from '@/hooks/useCustomerTypes';
 import {
   Loader2, User, Network, Package, MapPin, ChevronLeft, ChevronRight,
-  Check, Router, Key, Calendar
+  Check, Router, Key, Calendar, Building2, Plus
 } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import { toast } from 'sonner';
@@ -37,9 +38,9 @@ interface AddCustomerDialogProps {
 
 const STEPS = [
   { id: 'basic', label: 'Basic Info', icon: User },
+  { id: 'location', label: 'Location', icon: MapPin },
   { id: 'network', label: 'Network', icon: Network },
   { id: 'package', label: 'Package', icon: Package },
-  { id: 'location', label: 'Location', icon: MapPin },
 ];
 
 export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomerDialogProps) {
@@ -50,10 +51,18 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   const { routers } = useMikroTikRouters();
   const { pollingServerUrl } = usePollingServerUrl();
   const { tenantId } = useTenantContext();
+  const { customerTypes, createCustomerType } = useCustomerTypes();
   const apiBase = resolvePollingServerUrl(pollingServerUrl);
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [creatingPPPoE, setCreatingPPPoE] = useState(false);
+  const [showAddTypeDialog, setShowAddTypeDialog] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+
+  // Get primary router as default
+  const primaryRouter = useMemo(() => {
+    return routers.find(r => r.is_primary) || null;
+  }, [routers]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -73,10 +82,18 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     notes: '',
     is_auto_disable: true,
     create_mikrotik_user: true,
+    customer_type_id: '',
   });
 
   // Validation state
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Set primary router as default when routers load
+  useEffect(() => {
+    if (primaryRouter && !formData.mikrotik_id) {
+      setFormData(prev => ({ ...prev, mikrotik_id: primaryRouter.id }));
+    }
+  }, [primaryRouter]);
 
   // Auto-calculate expiry when package changes
   useEffect(() => {
@@ -118,18 +135,21 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           newErrors.email = 'Enter valid email address';
         }
         break;
-      case 1: // Network
+      case 1: // Location (now step 2)
+        // No required fields in location step
+        break;
+      case 2: // Network (now step 3)
         if (!formData.pppoe_username.trim()) newErrors.pppoe_username = 'PPPoE username is required';
         if (!formData.pppoe_password.trim()) newErrors.pppoe_password = 'PPPoE password is required';
         if (formData.pppoe_password.length < 4) newErrors.pppoe_password = 'Password must be at least 4 characters';
         break;
-      case 2: // Package
+      case 3: // Package (now step 4)
         if (!formData.package_id) newErrors.package_id = 'Please select a package';
         break;
     }
 
     // PPPoE username uniqueness (same tenant)
-    if (step === 1 && !newErrors.pppoe_username) {
+    if (step === 2 && !newErrors.pppoe_username) {
       const username = formData.pppoe_username.trim();
       if (username) {
         try {
@@ -279,7 +299,8 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         notes: formData.notes || null,
         is_auto_disable: formData.is_auto_disable,
         status: 'active',
-      });
+        customer_type_id: formData.customer_type_id && formData.customer_type_id !== 'none' ? formData.customer_type_id : null,
+      } as any);
       
       onSuccess?.();
       resetForm();
@@ -299,7 +320,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       address: '',
       area_id: '',
       reseller_id: '',
-      mikrotik_id: '',
+      mikrotik_id: primaryRouter?.id || '',
       pppoe_username: '',
       pppoe_password: '',
       package_id: '',
@@ -309,14 +330,48 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       notes: '',
       is_auto_disable: true,
       create_mikrotik_user: true,
+      customer_type_id: '',
     });
     setCurrentStep(0);
     setErrors({});
   };
 
+  const handleAddCustomerType = async () => {
+    if (!newTypeName.trim()) return;
+    try {
+      await createCustomerType({ name: newTypeName.trim() });
+      setNewTypeName('');
+      setShowAddTypeDialog(false);
+    } catch (err) {
+      // Error already handled in hook
+    }
+  };
+
+  // Get area display label with full location hierarchy
+  const getAreaDisplayLabel = (area: any) => {
+    const parts = [];
+    if (area.name) parts.push(area.name);
+    if (area.village) parts.push(area.village);
+    if (area.union_name) parts.push(area.union_name);
+    if (area.upazila) parts.push(area.upazila);
+    if (area.district) parts.push(`(${area.district})`);
+    return parts.join(', ') || area.name;
+  };
+
   const isLastStep = currentStep === STEPS.length - 1;
   const selectedPackage = packages.find(p => p.id === formData.package_id);
   const selectedRouter = routers.find(r => r.id === formData.mikrotik_id);
+  const selectedArea = areas.find(a => a.id === formData.area_id);
+
+  // Group resellers by level for better display
+  const resellersByLevel = useMemo(() => {
+    const active = resellers.filter(r => r.is_active);
+    return {
+      level1: active.filter(r => r.level === 1),
+      level2: active.filter(r => r.level === 2),
+      level3: active.filter(r => r.level === 3),
+    };
+  }, [resellers]);
 
   return (
     <Dialog open={open} onOpenChange={(open) => { if (!open) resetForm(); onOpenChange(open); }}>
@@ -424,6 +479,45 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 />
                 {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
               </div>
+
+              {/* User Type Field */}
+              <div className="space-y-2">
+                <Label>User Type</Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={formData.customer_type_id}
+                    onValueChange={(value) => setFormData((prev) => ({ ...prev, customer_type_id: value }))}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select user type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {customerTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4" />
+                            {type.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowAddTypeDialog(true)}
+                    title="Add new user type"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Customer category (Home, Office, Shop, etc.)
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
                 <Textarea
@@ -434,61 +528,130 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                   rows={2}
                 />
               </div>
+            </div>
+          )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Area</Label>
-                  <Select
-                    value={formData.area_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, area_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select area" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {areas.map((area) => (
-                        <SelectItem key={area.id} value={area.id}>
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4" />
-                            {area.name}
-                            {area.village && `, ${area.village}`}
-                            {area.upazila && `, ${area.upazila}`}
-                            {area.district && ` (${area.district})`}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+          {/* Step 2: Location (moved from step 4) */}
+          {currentStep === 1 && (
+            <div className="space-y-4">
+              {/* Area Selection with full location display */}
+              <div className="space-y-2">
+                <Label>Area / Location</Label>
+                <Select
+                  value={formData.area_id}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, area_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select area" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {areas.map((area) => (
+                      <SelectItem key={area.id} value={area.id}>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-muted-foreground" />
+                          <span>{getAreaDisplayLabel(area)}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Select the area where this customer is located
+                </p>
+              </div>
 
-                <div className="space-y-2">
-                  <Label>Reseller</Label>
-                  <Select
-                    value={formData.reseller_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, reseller_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select reseller (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {resellers
-                        .filter((r) => r.is_active)
-                        .map((reseller) => (
+              {/* Show selected area details */}
+              {selectedArea && (
+                <Card className="bg-muted/50">
+                  <CardContent className="p-4">
+                    <h4 className="font-medium mb-2 flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Selected Location
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div><span className="text-muted-foreground">Area:</span> <span className="font-medium">{selectedArea.name}</span></div>
+                      {selectedArea.village && <div><span className="text-muted-foreground">Village:</span> <span className="font-medium">{selectedArea.village}</span></div>}
+                      {selectedArea.union_name && <div><span className="text-muted-foreground">Union:</span> <span className="font-medium">{selectedArea.union_name}</span></div>}
+                      {selectedArea.upazila && <div><span className="text-muted-foreground">Upazila:</span> <span className="font-medium">{selectedArea.upazila}</span></div>}
+                      {selectedArea.district && <div><span className="text-muted-foreground">District:</span> <span className="font-medium">{selectedArea.district}</span></div>}
+                      {selectedArea.road_no && <div><span className="text-muted-foreground">Road:</span> <span className="font-medium">{selectedArea.road_no}</span></div>}
+                      {selectedArea.house_no && <div><span className="text-muted-foreground">House:</span> <span className="font-medium">{selectedArea.house_no}</span></div>}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Reseller Selection */}
+              <div className="space-y-2">
+                <Label>Reseller (Optional)</Label>
+                <Select
+                  value={formData.reseller_id}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, reseller_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select reseller (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (Direct Customer)</SelectItem>
+                    {resellersByLevel.level1.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Resellers</div>
+                        {resellersByLevel.level1.map((reseller) => (
                           <SelectItem key={reseller.id} value={reseller.id}>
-                            {reseller.name} {reseller.phone && `(${reseller.phone})`}
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">L1</Badge>
+                              {reseller.name} {reseller.phone && `(${reseller.phone})`}
+                            </div>
                           </SelectItem>
                         ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                      </>
+                    )}
+                    {resellersByLevel.level2.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Sub-Resellers</div>
+                        {resellersByLevel.level2.map((reseller) => (
+                          <SelectItem key={reseller.id} value={reseller.id}>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">L2</Badge>
+                              └ {reseller.name} {reseller.phone && `(${reseller.phone})`}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    {resellersByLevel.level3.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Sub-Sub-Resellers</div>
+                        {resellersByLevel.level3.map((reseller) => (
+                          <SelectItem key={reseller.id} value={reseller.id}>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">L3</Badge>
+                              └└ {reseller.name} {reseller.phone && `(${reseller.phone})`}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={formData.notes}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Additional notes..."
+                  rows={3}
+                />
               </div>
             </div>
           )}
 
-          {/* Step 2: Network */}
-          {currentStep === 1 && (
+          {/* Step 3: Network (was step 2) */}
+          {currentStep === 2 && (
             <div className="space-y-4">
               {/* MikroTik Selection */}
               <div className="space-y-2">
@@ -507,14 +670,14 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                         <div className="flex items-center gap-2">
                           <Router className="h-4 w-4" />
                           {router.name} ({router.ip_address})
-                          {router.is_primary && <Badge variant="outline" className="ml-1 text-xs">Primary</Badge>}
+                          {router.is_primary && <Badge variant="default" className="ml-1 text-xs bg-green-600">Primary</Badge>}
                         </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Select which MikroTik router this customer belongs to
+                  {primaryRouter ? `Primary router "${primaryRouter.name}" is selected by default` : 'Select which MikroTik router this customer belongs to'}
                 </p>
               </div>
 
@@ -590,8 +753,8 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
             </div>
           )}
 
-          {/* Step 3: Package */}
-          {currentStep === 2 && (
+          {/* Step 4: Package (was step 3) */}
+          {currentStep === 3 && (
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Package *</Label>
@@ -678,22 +841,6 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                   placeholder="0"
                 />
               </div>
-            </div>
-          )}
-
-          {/* Step 4: Location */}
-          {currentStep === 3 && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Additional notes..."
-                  rows={3}
-                />
-              </div>
 
               {/* Summary Card */}
               <Card className="bg-muted/50">
@@ -706,6 +853,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     <div><span className="text-muted-foreground">Package:</span> <span className="font-medium">{selectedPackage?.name || 'N/A'}</span></div>
                     <div><span className="text-muted-foreground">Router:</span> <span className="font-medium">{selectedRouter?.name || 'None'}</span></div>
                     <div><span className="text-muted-foreground">Monthly:</span> <span className="font-medium">৳{formData.monthly_bill || '0'}</span></div>
+                    {selectedArea && <div className="col-span-2"><span className="text-muted-foreground">Area:</span> <span className="font-medium">{getAreaDisplayLabel(selectedArea)}</span></div>}
                   </div>
                 </CardContent>
               </Card>
@@ -757,6 +905,32 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
             </div>
           </DialogFooter>
         </form>
+
+        {/* Add Customer Type Dialog */}
+        <Dialog open={showAddTypeDialog} onOpenChange={setShowAddTypeDialog}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Add User Type</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-type-name">Type Name</Label>
+                <Input
+                  id="new-type-name"
+                  value={newTypeName}
+                  onChange={(e) => setNewTypeName(e.target.value)}
+                  placeholder="e.g., Home, Office, Shop"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddTypeDialog(false)}>Cancel</Button>
+              <Button onClick={handleAddCustomerType} disabled={!newTypeName.trim()}>
+                Add Type
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
