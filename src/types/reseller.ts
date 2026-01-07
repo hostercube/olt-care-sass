@@ -86,13 +86,14 @@ export interface ResellerBranch {
   name: string;
   address: string | null;
   phone: string | null;
-  manager_reseller_id: string | null;
+  manager_reseller_id: string | null; // legacy
+  manager_staff_id?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  
+
   // Joined
-  manager?: { id: string; name: string };
+  manager?: { id: string; name: string; phone?: string | null };
 }
 
 export interface ResellerCustomRole {

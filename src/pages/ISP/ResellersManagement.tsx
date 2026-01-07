@@ -105,44 +105,22 @@ export default function ResellersManagement() {
     return resellers.filter(r => r.is_active && r.level < 3 && (!editingReseller || r.level < level));
   }, [resellers, editingReseller]);
 
-  // Build area options for searchable select
+  // Build area options for reseller (must reference legacy Areas table due to FK)
   const areaOptions = useMemo<SearchableSelectOption[]>(() => {
-    const options: SearchableSelectOption[] = [];
-    
-    // Add villages from location hierarchy
-    villages.forEach((village) => {
-      const union = unions.find(u => u.id === village.union_id);
-      const upazila = union ? upazilas.find(u => u.id === union.upazila_id) : null;
-      const district = upazila ? districts.find(d => d.id === upazila.district_id) : null;
-      
-      const parts = [village.name];
-      if (union) parts.push(union.name);
-      if (upazila) parts.push(upazila.name);
-      if (district) parts.push(`(${district.name})`);
-      
-      options.push({
-        value: village.id,
-        label: parts.join(', '),
-      });
-    });
-    
-    // Add legacy areas
-    areas.forEach((area) => {
-      const parts = [];
+    return areas.map((area) => {
+      const parts = [] as string[];
       if (area.name) parts.push(area.name);
       if (area.village) parts.push(area.village);
       if (area.union_name) parts.push(area.union_name);
       if (area.upazila) parts.push(area.upazila);
       if (area.district) parts.push(`(${area.district})`);
-      
-      options.push({
+
+      return {
         value: area.id,
         label: parts.join(', ') || area.name,
-      });
+      };
     });
-    
-    return options;
-  }, [villages, areas, unions, upazilas, districts]);
+  }, [areas]);
 
   // Build employee/staff options for branch manager
   const staffOptions = useMemo<SearchableSelectOption[]>(() => {
@@ -538,7 +516,8 @@ export default function ResellersManagement() {
                                   name: branch.name,
                                   address: branch.address || '',
                                   phone: branch.phone || '',
-                                  manager_reseller_id: branch.manager_reseller_id || '',
+                                  // branch manager is staff now
+                                  manager_reseller_id: (branch as any).manager_staff_id || branch.manager_reseller_id || '',
                                 });
                                 setShowBranchDialog(true);
                               }}
