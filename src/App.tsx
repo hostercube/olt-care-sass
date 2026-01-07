@@ -9,7 +9,12 @@ import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { SuperAdminRoute } from "@/components/layout/SuperAdminRoute";
 import { TenantAccessGuard } from "@/components/layout/TenantAccessGuard";
 import { ModuleAccessGuard } from "@/components/layout/ModuleAccessGuard";
+import { StaffAuthProvider } from "@/hooks/useStaffPermissions";
+import { StaffProtectedRoute } from "@/components/layout/StaffProtectedRoute";
 
+// Staff Portal Pages
+import StaffLogin from "./pages/StaffPortal/StaffLogin";
+import StaffDashboard from "./pages/StaffPortal/StaffDashboard";
 // Main Pages
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
@@ -459,6 +464,20 @@ const App = () => (
               <Route path="/portal/login" element={<CustomerLogin />} />
               <Route path="/portal/dashboard" element={<CustomerDashboard />} />
               <Route path="/portal/pay" element={<CustomerPayBill />} />
+
+              {/* Staff Portal Routes */}
+              <Route path="/staff/login" element={
+                <StaffAuthProvider>
+                  <StaffLogin />
+                </StaffAuthProvider>
+              } />
+              <Route path="/staff/dashboard" element={
+                <StaffAuthProvider>
+                  <StaffProtectedRoute>
+                    <StaffDashboard />
+                  </StaffProtectedRoute>
+                </StaffAuthProvider>
+              } />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

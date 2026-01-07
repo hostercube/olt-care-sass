@@ -10,15 +10,22 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
-import { Shield, Plus, Edit, Trash2, Loader2, Lock, Users } from 'lucide-react';
+import { Shield, Plus, Edit, Trash2, Loader2, Lock, Users, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Permission {
   key: string;
   label: string;
   description: string;
+}
+
+interface PermissionGroup {
+  name: string;
+  icon: string;
+  permissions: Permission[];
 }
 
 interface TenantRole {
@@ -32,16 +39,132 @@ interface TenantRole {
   created_at: string;
 }
 
-const PERMISSION_DEFINITIONS: Permission[] = [
-  { key: 'can_view_dashboard', label: 'View Dashboard', description: 'Access to the main dashboard' },
-  { key: 'can_manage_customers', label: 'Manage Customers', description: 'Add, edit, delete customers' },
-  { key: 'can_manage_staff', label: 'Manage Staff', description: 'Add, edit, delete staff members' },
-  { key: 'can_manage_resellers', label: 'Manage Resellers', description: 'Add, edit, delete resellers' },
-  { key: 'can_manage_billing', label: 'Manage Billing', description: 'Handle bills, payments, invoices' },
-  { key: 'can_manage_settings', label: 'Manage Settings', description: 'Access system settings' },
-  { key: 'can_view_reports', label: 'View Reports', description: 'Access reporting module' },
-  { key: 'can_manage_roles', label: 'Manage Roles', description: 'Create and edit roles' },
+// Granular permission definitions grouped by module
+const PERMISSION_GROUPS: PermissionGroup[] = [
+  {
+    name: 'Dashboard',
+    icon: '📊',
+    permissions: [
+      { key: 'dashboard_view', label: 'View Dashboard', description: 'Access main dashboard' },
+      { key: 'dashboard_stats', label: 'View Statistics', description: 'View business statistics and analytics' },
+    ],
+  },
+  {
+    name: 'Customer Management',
+    icon: '👥',
+    permissions: [
+      { key: 'customer_view', label: 'View Customers', description: 'View customer list and profiles' },
+      { key: 'customer_create', label: 'Create Customer', description: 'Add new customers' },
+      { key: 'customer_edit', label: 'Edit Customer', description: 'Modify customer information' },
+      { key: 'customer_delete', label: 'Delete Customer', description: 'Remove customers from system' },
+      { key: 'customer_recharge', label: 'Recharge Customer', description: 'Process customer recharges' },
+      { key: 'customer_status_change', label: 'Change Status', description: 'Enable/disable customer connections' },
+      { key: 'customer_view_balance', label: 'View Balance', description: 'View customer balance and dues' },
+      { key: 'customer_send_sms', label: 'Send SMS', description: 'Send SMS to customers' },
+    ],
+  },
+  {
+    name: 'Billing & Payments',
+    icon: '💰',
+    permissions: [
+      { key: 'billing_view', label: 'View Bills', description: 'View customer bills' },
+      { key: 'billing_create', label: 'Generate Bills', description: 'Create and generate bills' },
+      { key: 'billing_edit', label: 'Edit Bills', description: 'Modify bill details' },
+      { key: 'billing_delete', label: 'Delete Bills', description: 'Remove bills' },
+      { key: 'payment_collect', label: 'Collect Payment', description: 'Collect and record payments' },
+      { key: 'payment_view', label: 'View Payments', description: 'View payment history' },
+      { key: 'payment_refund', label: 'Process Refund', description: 'Issue payment refunds' },
+      { key: 'invoice_create', label: 'Create Invoice', description: 'Generate invoices' },
+      { key: 'invoice_view', label: 'View Invoices', description: 'View invoice history' },
+    ],
+  },
+  {
+    name: 'Reseller Management',
+    icon: '🏪',
+    permissions: [
+      { key: 'reseller_view', label: 'View Resellers', description: 'View reseller list' },
+      { key: 'reseller_create', label: 'Create Reseller', description: 'Add new resellers' },
+      { key: 'reseller_edit', label: 'Edit Reseller', description: 'Modify reseller info' },
+      { key: 'reseller_delete', label: 'Delete Reseller', description: 'Remove resellers' },
+      { key: 'reseller_balance', label: 'Manage Balance', description: 'Add/deduct reseller balance' },
+      { key: 'branch_view', label: 'View Branches', description: 'View reseller branches' },
+      { key: 'branch_create', label: 'Create Branch', description: 'Add new branches' },
+      { key: 'branch_edit', label: 'Edit Branch', description: 'Modify branch info' },
+      { key: 'branch_delete', label: 'Delete Branch', description: 'Remove branches' },
+    ],
+  },
+  {
+    name: 'Staff Management',
+    icon: '👔',
+    permissions: [
+      { key: 'staff_view', label: 'View Staff', description: 'View staff list' },
+      { key: 'staff_create', label: 'Create Staff', description: 'Add new staff members' },
+      { key: 'staff_edit', label: 'Edit Staff', description: 'Modify staff info' },
+      { key: 'staff_delete', label: 'Delete Staff', description: 'Remove staff' },
+      { key: 'staff_salary', label: 'Manage Salary', description: 'Process salary payments' },
+      { key: 'role_view', label: 'View Roles', description: 'View role list' },
+      { key: 'role_manage', label: 'Manage Roles', description: 'Create/edit roles and permissions' },
+    ],
+  },
+  {
+    name: 'Network & OLT',
+    icon: '🌐',
+    permissions: [
+      { key: 'olt_view', label: 'View OLTs', description: 'View OLT devices' },
+      { key: 'olt_manage', label: 'Manage OLTs', description: 'Add/edit OLT devices' },
+      { key: 'onu_view', label: 'View ONUs', description: 'View ONU devices' },
+      { key: 'onu_manage', label: 'Manage ONUs', description: 'Manage ONU devices' },
+      { key: 'mikrotik_view', label: 'View MikroTik', description: 'View routers' },
+      { key: 'mikrotik_manage', label: 'Manage MikroTik', description: 'Manage routers' },
+    ],
+  },
+  {
+    name: 'Packages & Areas',
+    icon: '📦',
+    permissions: [
+      { key: 'package_view', label: 'View Packages', description: 'View internet packages' },
+      { key: 'package_create', label: 'Create Package', description: 'Add new packages' },
+      { key: 'package_edit', label: 'Edit Package', description: 'Modify packages' },
+      { key: 'package_delete', label: 'Delete Package', description: 'Remove packages' },
+      { key: 'area_view', label: 'View Areas', description: 'View coverage areas' },
+      { key: 'area_manage', label: 'Manage Areas', description: 'Add/edit areas' },
+    ],
+  },
+  {
+    name: 'Reports & Analytics',
+    icon: '📈',
+    permissions: [
+      { key: 'report_view', label: 'View Reports', description: 'Access reports' },
+      { key: 'report_export', label: 'Export Reports', description: 'Export report data' },
+      { key: 'analytics_view', label: 'View Analytics', description: 'Access analytics' },
+      { key: 'activity_logs', label: 'View Activity Logs', description: 'View system logs' },
+    ],
+  },
+  {
+    name: 'Inventory',
+    icon: '📋',
+    permissions: [
+      { key: 'inventory_view', label: 'View Inventory', description: 'View inventory items' },
+      { key: 'inventory_manage', label: 'Manage Inventory', description: 'Add/edit inventory' },
+      { key: 'inventory_purchase', label: 'Record Purchase', description: 'Record stock purchases' },
+      { key: 'inventory_issue', label: 'Issue Items', description: 'Issue inventory items' },
+    ],
+  },
+  {
+    name: 'Settings',
+    icon: '⚙️',
+    permissions: [
+      { key: 'settings_view', label: 'View Settings', description: 'View system settings' },
+      { key: 'settings_manage', label: 'Manage Settings', description: 'Modify settings' },
+      { key: 'sms_gateway', label: 'SMS Gateway', description: 'Configure SMS settings' },
+      { key: 'payment_gateway', label: 'Payment Gateway', description: 'Configure payment settings' },
+      { key: 'automation_manage', label: 'Manage Automation', description: 'Configure billing automation' },
+    ],
+  },
 ];
+
+// Flatten all permissions for counting
+const ALL_PERMISSIONS = PERMISSION_GROUPS.flatMap(g => g.permissions);
 
 export default function RolesManagement() {
   const { tenantId } = useTenantContext();
@@ -87,7 +210,7 @@ export default function RolesManagement() {
     setFormData({
       name: '',
       description: '',
-      permissions: PERMISSION_DEFINITIONS.reduce((acc, p) => ({ ...acc, [p.key]: false }), {}),
+      permissions: ALL_PERMISSIONS.reduce((acc, p) => ({ ...acc, [p.key]: false }), {}),
     });
     setEditingRole(null);
   };
@@ -164,8 +287,20 @@ export default function RolesManagement() {
     }));
   };
 
+  const toggleGroupAll = (group: PermissionGroup, enable: boolean) => {
+    const updates = group.permissions.reduce((acc, p) => ({ ...acc, [p.key]: enable }), {});
+    setFormData(prev => ({
+      ...prev,
+      permissions: { ...prev.permissions, ...updates },
+    }));
+  };
+
   const getActivePermissionsCount = (permissions: Record<string, boolean>) => {
     return Object.values(permissions).filter(Boolean).length;
+  };
+
+  const getGroupPermissionCount = (group: PermissionGroup, permissions: Record<string, boolean>) => {
+    return group.permissions.filter(p => permissions[p.key]).length;
   };
 
   return (
@@ -214,7 +349,7 @@ export default function RolesManagement() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Roles List</CardTitle>
-            <CardDescription>Define roles and permissions for your team</CardDescription>
+            <CardDescription>Define roles and permissions for your team ({ALL_PERMISSIONS.length} available permissions)</CardDescription>
           </div>
           <Button onClick={() => { resetForm(); setShowDialog(true); }}>
             <Plus className="h-4 w-4 mr-2" />
@@ -254,7 +389,7 @@ export default function RolesManagement() {
                       <TableCell className="max-w-[200px] truncate">{role.description || '-'}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {getActivePermissionsCount(role.permissions || {})}/{PERMISSION_DEFINITIONS.length} permissions
+                          {getActivePermissionsCount(role.permissions || {})}/{ALL_PERMISSIONS.length}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -288,46 +423,92 @@ export default function RolesManagement() {
 
       {/* Add/Edit Role Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingRole ? 'Edit Role' : 'Add New Role'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-6">
-            <div className="space-y-2">
-              <Label>Role Name *</Label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
-                placeholder="e.g., Senior Technician"
-                disabled={editingRole?.is_system}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea
-                value={formData.description}
-                onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
-                placeholder="Brief description of this role"
-                rows={2}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Role Name *</Label>
+                <Input
+                  value={formData.name}
+                  onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g., Senior Technician"
+                  disabled={editingRole?.is_system}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Input
+                  value={formData.description}
+                  onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
+                  placeholder="Brief description"
+                />
+              </div>
             </div>
             
             <div className="space-y-4">
-              <Label className="text-base font-semibold">Permissions</Label>
-              <div className="grid gap-4">
-                {PERMISSION_DEFINITIONS.map((perm) => (
-                  <div key={perm.key} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <p className="font-medium">{perm.label}</p>
-                      <p className="text-sm text-muted-foreground">{perm.description}</p>
-                    </div>
-                    <Switch
-                      checked={formData.permissions[perm.key] || false}
-                      onCheckedChange={() => togglePermission(perm.key)}
-                    />
-                  </div>
-                ))}
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">Permissions</Label>
+                <Badge variant="outline">
+                  {getActivePermissionsCount(formData.permissions)}/{ALL_PERMISSIONS.length} selected
+                </Badge>
               </div>
+              
+              <Accordion type="multiple" className="w-full">
+                {PERMISSION_GROUPS.map((group) => (
+                  <AccordionItem key={group.name} value={group.name}>
+                    <AccordionTrigger className="hover:no-underline">
+                      <div className="flex items-center gap-3 flex-1">
+                        <span className="text-lg">{group.icon}</span>
+                        <span className="font-medium">{group.name}</span>
+                        <Badge variant="outline" className="ml-auto mr-4">
+                          {getGroupPermissionCount(group, formData.permissions)}/{group.permissions.length}
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-2 pt-2">
+                        <div className="flex gap-2 mb-3">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => toggleGroupAll(group, true)}
+                          >
+                            Select All
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => toggleGroupAll(group, false)}
+                          >
+                            Deselect All
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {group.permissions.map((perm) => (
+                            <div 
+                              key={perm.key} 
+                              className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                              onClick={() => togglePermission(perm.key)}
+                            >
+                              <div>
+                                <p className="font-medium text-sm">{perm.label}</p>
+                                <p className="text-xs text-muted-foreground">{perm.description}</p>
+                              </div>
+                              <Switch
+                                checked={formData.permissions[perm.key] || false}
+                                onCheckedChange={() => togglePermission(perm.key)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             </div>
           </div>
           <DialogFooter>
