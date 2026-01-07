@@ -61,6 +61,7 @@ import SMSCenter from "./pages/ISP/SMSCenter";
 import BkashPayments from "./pages/ISP/BkashPayments";
 import Inventory from "./pages/ISP/Inventory";
 import Staff from "./pages/ISP/Staff";
+import RolesManagement from "./pages/ISP/RolesManagement";
 import Transactions from "./pages/ISP/Transactions";
 import Reports from "./pages/ISP/Reports";
 import CustomDomain from "./pages/ISP/CustomDomain";
