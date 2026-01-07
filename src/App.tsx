@@ -65,6 +65,7 @@ import ISPGatewaySettings from "./pages/ISP/GatewaySettings";
 import SMSCenter from "./pages/ISP/SMSCenter";
 import BkashPayments from "./pages/ISP/BkashPayments";
 import Inventory from "./pages/ISP/Inventory";
+import POSInventory from "./pages/ISP/POSInventory";
 import Staff from "./pages/ISP/Staff";
 import RolesManagement from "./pages/ISP/RolesManagement";
 import Transactions from "./pages/ISP/Transactions";
@@ -412,6 +413,15 @@ const App = () => (
                   <TenantAccessGuard>
                     <ModuleAccessGuard module="isp_inventory" moduleName="Inventory Management">
                       <Inventory />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/pos" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_inventory" moduleName="POS & Sales">
+                      <POSInventory />
                     </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
