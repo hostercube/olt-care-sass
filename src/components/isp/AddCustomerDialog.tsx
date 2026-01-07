@@ -21,6 +21,7 @@ import { useResellers } from '@/hooks/useResellers';
 import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
 import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
 import { useCustomerTypes } from '@/hooks/useCustomerTypes';
+import { useLocationHierarchy } from '@/hooks/useLocationHierarchy';
 import {
   Loader2, User, Network, Package, MapPin, ChevronLeft, ChevronRight,
   Check, Router, Key, Calendar, Building2, Plus
@@ -47,6 +48,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   const { createCustomer } = useCustomers();
   const { packages } = useISPPackages();
   const { areas } = useAreas();
+  const { villages, unions, upazilas, districts, getUnionName, getUpazilaName, getDistrictName } = useLocationHierarchy();
   const { resellers } = useResellers();
   const { routers } = useMikroTikRouters();
   const { pollingServerUrl } = usePollingServerUrl();
@@ -350,7 +352,20 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     }
   };
 
-  // Get area display label with full location hierarchy
+  // Get village display label with full location hierarchy
+  const getVillageDisplayLabel = (village: any) => {
+    const union = unions.find(u => u.id === village.union_id);
+    const upazila = union ? upazilas.find(u => u.id === union.upazila_id) : null;
+    const district = upazila ? districts.find(d => d.id === upazila.district_id) : null;
+    
+    const parts = [village.name];
+    if (union) parts.push(union.name);
+    if (upazila) parts.push(upazila.name);
+    if (district) parts.push(`(${district.name})`);
+    return parts.join(', ');
+  };
+
+  // Get area display label with full location hierarchy (for legacy areas)
   const getAreaDisplayLabel = (area: any) => {
     const parts = [];
     if (area.name) parts.push(area.name);
@@ -360,6 +375,53 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     if (area.district) parts.push(`(${area.district})`);
     return parts.join(', ') || area.name;
   };
+
+  // Combine villages and areas for location dropdown
+  const allLocations = useMemo(() => {
+    // Convert villages to location objects
+    const villageLocations = villages.map(v => {
+      const union = unions.find(u => u.id === v.union_id);
+      const upazila = union ? upazilas.find(u => u.id === union.upazila_id) : null;
+      const district = upazila ? districts.find(d => d.id === upazila.district_id) : null;
+      
+      return {
+        id: `village_${v.id}`,
+        originalId: v.id,
+        type: 'village' as const,
+        name: v.name,
+        label: getVillageDisplayLabel(v),
+        union: union?.name || '',
+        upazila: upazila?.name || '',
+        district: district?.name || '',
+        section_block: v.section_block || null,
+        road_no: v.road_no || null,
+        house_no: v.house_no || null,
+      };
+    });
+    
+    // Convert legacy areas to location objects
+    const areaLocations = areas.map(a => ({
+      id: `area_${a.id}`,
+      originalId: a.id,
+      type: 'area' as const,
+      name: a.name,
+      label: getAreaDisplayLabel(a),
+      union: a.union_name || '',
+      upazila: a.upazila || '',
+      district: a.district || '',
+      section_block: a.road_no ? null : null, // Areas don't have section_block
+      road_no: a.road_no || null,
+      house_no: a.house_no || null,
+    }));
+    
+    // Prioritize villages, then add areas that aren't duplicates
+    return [...villageLocations, ...areaLocations];
+  }, [villages, areas, unions, upazilas, districts]);
+
+  const selectedLocation = allLocations.find(l => 
+    l.id === formData.area_id || 
+    l.originalId === formData.area_id
+  );
 
   const isLastStep = currentStep === STEPS.length - 1;
   const selectedPackage = packages.find(p => p.id === formData.package_id);
@@ -556,31 +618,51 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
               <div className="space-y-2">
                 <Label>Area / Location</Label>
                 <Select
-                  value={formData.area_id}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, area_id: value }))}
+                  value={formData.area_id || 'none'}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, area_id: value === 'none' ? '' : value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select area" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {areas.map((area) => (
-                      <SelectItem key={area.id} value={area.id}>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-muted-foreground" />
-                          <span>{getAreaDisplayLabel(area)}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
+                    {/* Show villages first (from location hierarchy) */}
+                    {villages.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Villages/Markets</div>
+                        {villages.map((village) => (
+                          <SelectItem key={`village_${village.id}`} value={village.id}>
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-muted-foreground" />
+                              <span>{getVillageDisplayLabel(village)}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    {/* Show legacy areas if any */}
+                    {areas.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Areas (Legacy)</div>
+                        {areas.map((area) => (
+                          <SelectItem key={`area_${area.id}`} value={area.id}>
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-muted-foreground" />
+                              <span>{getAreaDisplayLabel(area)}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Select the area where this customer is located
+                  Select the location where this customer is located
                 </p>
               </div>
 
-              {/* Show selected area details */}
-              {selectedArea && (
+              {/* Show selected location details */}
+              {selectedLocation && (
                 <Card className="bg-muted/50">
                   <CardContent className="p-4">
                     <h4 className="font-medium mb-2 flex items-center gap-2">
@@ -588,13 +670,12 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                       Selected Location
                     </h4>
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div><span className="text-muted-foreground">Area:</span> <span className="font-medium">{selectedArea.name}</span></div>
-                      {selectedArea.village && <div><span className="text-muted-foreground">Village:</span> <span className="font-medium">{selectedArea.village}</span></div>}
-                      {selectedArea.union_name && <div><span className="text-muted-foreground">Union:</span> <span className="font-medium">{selectedArea.union_name}</span></div>}
-                      {selectedArea.upazila && <div><span className="text-muted-foreground">Upazila:</span> <span className="font-medium">{selectedArea.upazila}</span></div>}
-                      {selectedArea.district && <div><span className="text-muted-foreground">District:</span> <span className="font-medium">{selectedArea.district}</span></div>}
-                      {selectedArea.road_no && <div><span className="text-muted-foreground">Road:</span> <span className="font-medium">{selectedArea.road_no}</span></div>}
-                      {selectedArea.house_no && <div><span className="text-muted-foreground">House:</span> <span className="font-medium">{selectedArea.house_no}</span></div>}
+                      <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{selectedLocation.name}</span></div>
+                      {selectedLocation.union && <div><span className="text-muted-foreground">Union:</span> <span className="font-medium">{selectedLocation.union}</span></div>}
+                      {selectedLocation.upazila && <div><span className="text-muted-foreground">Upazila:</span> <span className="font-medium">{selectedLocation.upazila}</span></div>}
+                      {selectedLocation.district && <div><span className="text-muted-foreground">District:</span> <span className="font-medium">{selectedLocation.district}</span></div>}
+                      {selectedLocation.road_no && <div><span className="text-muted-foreground">Road:</span> <span className="font-medium">{selectedLocation.road_no}</span></div>}
+                      {selectedLocation.house_no && <div><span className="text-muted-foreground">House:</span> <span className="font-medium">{selectedLocation.house_no}</span></div>}
                     </div>
                   </CardContent>
                 </Card>
