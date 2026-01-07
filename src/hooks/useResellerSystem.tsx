@@ -333,7 +333,13 @@ export function useResellerSystem() {
         throw new Error('No tenant context available');
       }
       
-      const branchData = { ...data, tenant_id: tenantId };
+      // Fix: Set manager_reseller_id to null if empty string to avoid UUID error
+      const branchData = { 
+        ...data, 
+        tenant_id: tenantId,
+        manager_reseller_id: data.manager_reseller_id || null,
+      };
+      
       const { error } = await supabase
         .from('reseller_branches')
         .insert(branchData as any);
