@@ -3264,6 +3264,270 @@ export type Database = {
         }
         Relationships: []
       }
+      pos_customer_payments: {
+        Row: {
+          amount: number
+          collected_by: string | null
+          created_at: string | null
+          customer_id: string
+          id: string
+          notes: string | null
+          payment_date: string | null
+          payment_method: string | null
+          reference: string | null
+          sale_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          amount: number
+          collected_by?: string | null
+          created_at?: string | null
+          customer_id: string
+          id?: string
+          notes?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          reference?: string | null
+          sale_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          collected_by?: string | null
+          created_at?: string | null
+          customer_id?: string
+          id?: string
+          notes?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          reference?: string | null
+          sale_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_customer_payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "pos_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_customer_payments_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "pos_sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_customer_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_customers: {
+        Row: {
+          address: string | null
+          company_name: string | null
+          created_at: string | null
+          customer_code: string | null
+          due_amount: number | null
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          notes: string | null
+          phone: string | null
+          tenant_id: string
+          total_purchase: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          company_name?: string | null
+          created_at?: string | null
+          customer_code?: string | null
+          due_amount?: number | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id: string
+          total_purchase?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          company_name?: string | null
+          created_at?: string | null
+          customer_code?: string | null
+          due_amount?: number | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id?: string
+          total_purchase?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_sale_items: {
+        Row: {
+          created_at: string | null
+          discount: number | null
+          id: string
+          item_id: string | null
+          item_name: string
+          quantity: number
+          sale_id: string
+          total_price: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string | null
+          discount?: number | null
+          id?: string
+          item_id?: string | null
+          item_name: string
+          quantity?: number
+          sale_id: string
+          total_price: number
+          unit_price: number
+        }
+        Update: {
+          created_at?: string | null
+          discount?: number | null
+          id?: string
+          item_id?: string | null
+          item_name?: string
+          quantity?: number
+          sale_id?: string
+          total_price?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_sale_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_sale_items_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "pos_sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_sales: {
+        Row: {
+          created_at: string | null
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          discount: number | null
+          due_amount: number | null
+          id: string
+          invoice_number: string
+          notes: string | null
+          paid_amount: number | null
+          payment_method: string | null
+          payment_reference: string | null
+          sale_date: string | null
+          send_sms: boolean | null
+          sms_sent: boolean | null
+          sold_by: string | null
+          status: string | null
+          subtotal: number | null
+          tax: number | null
+          tenant_id: string
+          total_amount: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          discount?: number | null
+          due_amount?: number | null
+          id?: string
+          invoice_number: string
+          notes?: string | null
+          paid_amount?: number | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          sale_date?: string | null
+          send_sms?: boolean | null
+          sms_sent?: boolean | null
+          sold_by?: string | null
+          status?: string | null
+          subtotal?: number | null
+          tax?: number | null
+          tenant_id: string
+          total_amount: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          discount?: number | null
+          due_amount?: number | null
+          id?: string
+          invoice_number?: string
+          notes?: string | null
+          paid_amount?: number | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          sale_date?: string | null
+          send_sms?: boolean | null
+          sms_sent?: boolean | null
+          sold_by?: string | null
+          status?: string | null
+          subtotal?: number | null
+          tax?: number | null
+          tenant_id?: string
+          total_amount?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_sales_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "pos_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_sales_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       power_readings: {
         Row: {
           id: string
