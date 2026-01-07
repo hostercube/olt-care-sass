@@ -832,7 +832,7 @@ export default function ResellersManagement() {
             <div className="space-y-2">
               <Label>Branch Manager</Label>
               <Select
-                value={branchFormData.manager_reseller_id}
+                value={branchFormData.manager_reseller_id || 'none'}
                 onValueChange={(value) => setBranchFormData(prev => ({ ...prev, manager_reseller_id: value === 'none' ? '' : value }))}
               >
                 <SelectTrigger>
@@ -840,11 +840,16 @@ export default function ResellersManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {resellers.filter(r => r.is_active && r.level === 1).map((reseller) => (
-                    <SelectItem key={reseller.id} value={reseller.id}>{reseller.name}</SelectItem>
+                  {resellers.filter(r => r.is_active).map((reseller) => (
+                    <SelectItem key={reseller.id} value={reseller.id}>
+                      {reseller.name} ({RESELLER_ROLE_LABELS[reseller.role] || `Level ${reseller.level}`})
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Create resellers first to assign as branch managers
+              </p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowBranchDialog(false)}>

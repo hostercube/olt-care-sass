@@ -69,6 +69,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     name: '',
     phone: '',
     email: '',
+    nid_number: '',
     address: '',
     area_id: '',
     reseller_id: '',
@@ -285,6 +286,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         name: formData.name,
         phone: formData.phone || null,
         email: formData.email || null,
+        nid_number: formData.nid_number || null,
         address: formData.address || null,
         area_id: formData.area_id && formData.area_id !== 'none' ? formData.area_id : null,
         reseller_id: formData.reseller_id && formData.reseller_id !== 'none' ? formData.reseller_id : null,
@@ -317,6 +319,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       name: '',
       phone: '',
       email: '',
+      nid_number: '',
       address: '',
       area_id: '',
       reseller_id: '',
@@ -480,13 +483,28 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
               </div>
 
+              {/* NID Number Field */}
+              <div className="space-y-2">
+                <Label htmlFor="nid_number">NID Number</Label>
+                <Input
+                  id="nid_number"
+                  value={formData.nid_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, nid_number: e.target.value.replace(/\D/g, '') }))}
+                  placeholder="National ID number"
+                  maxLength={17}
+                />
+                <p className="text-xs text-muted-foreground">
+                  10 or 17 digit NID (optional)
+                </p>
+              </div>
+
               {/* User Type Field */}
               <div className="space-y-2">
                 <Label>User Type</Label>
                 <div className="flex gap-2">
                   <Select
-                    value={formData.customer_type_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, customer_type_id: value }))}
+                    value={formData.customer_type_id || 'none'}
+                    onValueChange={(value) => setFormData((prev) => ({ ...prev, customer_type_id: value === 'none' ? '' : value }))}
                   >
                     <SelectTrigger className="flex-1">
                       <SelectValue placeholder="Select user type" />
