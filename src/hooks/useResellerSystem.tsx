@@ -50,7 +50,7 @@ export function useResellerSystem() {
         .from('reseller_branches')
         .select(`
           *,
-          manager:resellers(id, name)
+          manager:employees(id, name, designation, phone)
         `)
         .order('name');
 
@@ -333,11 +333,12 @@ export function useResellerSystem() {
         throw new Error('No tenant context available');
       }
       
-      // Fix: Set manager_reseller_id to null if empty string to avoid UUID error
+      // Fix: Set manager_employee_id instead of manager_reseller_id
       const branchData = { 
         ...data, 
         tenant_id: tenantId,
-        manager_reseller_id: data.manager_reseller_id || null,
+        manager_employee_id: data.manager_reseller_id || null, // Form uses manager_reseller_id but we save to manager_employee_id
+        manager_reseller_id: null, // Clear the old field
       };
       
       const { error } = await supabase

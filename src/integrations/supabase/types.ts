@@ -3506,6 +3506,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean | null
+          manager_employee_id: string | null
           manager_reseller_id: string | null
           name: string
           phone: string | null
@@ -3517,6 +3518,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean | null
+          manager_employee_id?: string | null
           manager_reseller_id?: string | null
           name: string
           phone?: string | null
@@ -3528,6 +3530,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean | null
+          manager_employee_id?: string | null
           manager_reseller_id?: string | null
           name?: string
           phone?: string | null
@@ -3535,6 +3538,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reseller_branches_manager_employee_id_fkey"
+            columns: ["manager_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reseller_branches_manager_reseller_id_fkey"
             columns: ["manager_reseller_id"]
