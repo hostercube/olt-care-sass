@@ -16,8 +16,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import { useResellerSystem } from '@/hooks/useResellerSystem';
 import { useAreas } from '@/hooks/useAreas';
+import { useEmployees } from '@/hooks/useEmployees';
+import { useLocationHierarchy } from '@/hooks/useLocationHierarchy';
 import { 
   Users, Plus, Edit, Trash2, Loader2, Wallet, ArrowRightLeft, 
   Building2, Shield, ChevronRight, Eye, UserPlus
@@ -38,6 +41,8 @@ export default function ResellersManagement() {
     getSubResellers
   } = useResellerSystem();
   const { areas } = useAreas();
+  const { employees } = useEmployees();
+  const { villages, unions, upazilas, districts } = useLocationHierarchy();
   
   const [activeTab, setActiveTab] = useState('resellers');
   const [showDialog, setShowDialog] = useState(false);
@@ -98,6 +103,55 @@ export default function ResellersManagement() {
     // Can only select resellers with level < current (or level < 3 for new)
     return resellers.filter(r => r.is_active && r.level < 3 && (!editingReseller || r.level < level));
   }, [resellers, editingReseller]);
+
+  // Build area options for searchable select
+  const areaOptions = useMemo<SearchableSelectOption[]>(() => {
+    const options: SearchableSelectOption[] = [];
+    
+    // Add villages from location hierarchy
+    villages.forEach((village) => {
+      const union = unions.find(u => u.id === village.union_id);
+      const upazila = union ? upazilas.find(u => u.id === union.upazila_id) : null;
+      const district = upazila ? districts.find(d => d.id === upazila.district_id) : null;
+      
+      const parts = [village.name];
+      if (union) parts.push(union.name);
+      if (upazila) parts.push(upazila.name);
+      if (district) parts.push(`(${district.name})`);
+      
+      options.push({
+        value: village.id,
+        label: parts.join(', '),
+      });
+    });
+    
+    // Add legacy areas
+    areas.forEach((area) => {
+      const parts = [];
+      if (area.name) parts.push(area.name);
+      if (area.village) parts.push(area.village);
+      if (area.union_name) parts.push(area.union_name);
+      if (area.upazila) parts.push(area.upazila);
+      if (area.district) parts.push(`(${area.district})`);
+      
+      options.push({
+        value: area.id,
+        label: parts.join(', ') || area.name,
+      });
+    });
+    
+    return options;
+  }, [villages, areas, unions, upazilas, districts]);
+
+  // Build employee/staff options for branch manager
+  const staffOptions = useMemo<SearchableSelectOption[]>(() => {
+    return employees
+      .filter(e => e.status === 'active')
+      .map(e => ({
+        value: e.id,
+        label: `${e.name}${e.designation ? ` (${e.designation})` : ''}${e.phone ? ` - ${e.phone}` : ''}`,
+      }));
+  }, [employees]);
 
   const resetForm = () => {
     setFormData({
@@ -584,20 +638,16 @@ export default function ResellersManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Area</Label>
-                <Select
+                <SearchableSelect
                   value={formData.area_id}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, area_id: value === 'none' ? '' : value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select area" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {areas.map((area) => (
-                      <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, area_id: value }))}
+                  options={areaOptions}
+                  placeholder="Search or select area..."
+                  searchPlaceholder="Search areas..."
+                  emptyText="No areas found"
+                  allowClear
+                  clearLabel="None"
+                />
               </div>
               <div className="space-y-2">
                 <Label>NID Number</Label>
@@ -830,25 +880,19 @@ export default function ResellersManagement() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Branch Manager</Label>
-              <Select
-                value={branchFormData.manager_reseller_id || 'none'}
-                onValueChange={(value) => setBranchFormData(prev => ({ ...prev, manager_reseller_id: value === 'none' ? '' : value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select manager" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {resellers.filter(r => r.is_active).map((reseller) => (
-                    <SelectItem key={reseller.id} value={reseller.id}>
-                      {reseller.name} ({RESELLER_ROLE_LABELS[reseller.role] || `Level ${reseller.level}`})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Branch Manager (Staff)</Label>
+              <SearchableSelect
+                value={branchFormData.manager_reseller_id}
+                onValueChange={(value) => setBranchFormData(prev => ({ ...prev, manager_reseller_id: value }))}
+                options={staffOptions}
+                placeholder="Search or select staff..."
+                searchPlaceholder="Search staff..."
+                emptyText="No staff found. Add staff first in Staff module."
+                allowClear
+                clearLabel="None"
+              />
               <p className="text-xs text-muted-foreground">
-                Create resellers first to assign as branch managers
+                Add staff from the Staff module to assign as branch managers
               </p>
             </div>
             <DialogFooter>

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useCustomers } from '@/hooks/useCustomers';
@@ -438,6 +439,45 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     };
   }, [resellers]);
 
+  // Searchable options for Area/Location
+  const locationOptions = useMemo<SearchableSelectOption[]>(() => {
+    const options: SearchableSelectOption[] = [];
+    
+    // Add villages
+    villages.forEach((village) => {
+      options.push({
+        value: village.id,
+        label: getVillageDisplayLabel(village),
+      });
+    });
+    
+    // Add areas
+    areas.forEach((area) => {
+      options.push({
+        value: area.id,
+        label: getAreaDisplayLabel(area),
+      });
+    });
+    
+    return options;
+  }, [villages, areas, unions, upazilas, districts]);
+
+  // Searchable options for Reseller
+  const resellerOptions = useMemo<SearchableSelectOption[]>(() => {
+    const options: SearchableSelectOption[] = [];
+    const active = resellers.filter(r => r.is_active);
+    
+    active.forEach((reseller) => {
+      const levelLabel = reseller.level === 1 ? 'Reseller' : reseller.level === 2 ? 'Sub-Reseller' : 'Sub-Sub-Reseller';
+      options.push({
+        value: reseller.id,
+        label: `${reseller.name} (${levelLabel})`,
+      });
+    });
+    
+    return options;
+  }, [resellers]);
+
   return (
     <Dialog open={open} onOpenChange={(open) => { if (!open) resetForm(); onOpenChange(open); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -614,48 +654,19 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           {/* Step 2: Location (moved from step 4) */}
           {currentStep === 1 && (
             <div className="space-y-4">
-              {/* Area Selection with full location display */}
+              {/* Area Selection with searchable dropdown */}
               <div className="space-y-2">
                 <Label>Area / Location</Label>
-                <Select
-                  value={formData.area_id || 'none'}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, area_id: value === 'none' ? '' : value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select area" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {/* Show villages first (from location hierarchy) */}
-                    {villages.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Villages/Markets</div>
-                        {villages.map((village) => (
-                          <SelectItem key={`village_${village.id}`} value={village.id}>
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-muted-foreground" />
-                              <span>{getVillageDisplayLabel(village)}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {/* Show legacy areas if any */}
-                    {areas.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Areas (Legacy)</div>
-                        {areas.map((area) => (
-                          <SelectItem key={`area_${area.id}`} value={area.id}>
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-muted-foreground" />
-                              <span>{getAreaDisplayLabel(area)}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={formData.area_id}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, area_id: value }))}
+                  options={locationOptions}
+                  placeholder="Search or select area..."
+                  searchPlaceholder="Search areas..."
+                  emptyText="No areas found"
+                  allowClear
+                  clearLabel="None"
+                />
                 <p className="text-xs text-muted-foreground">
                   Select the location where this customer is located
                 </p>
@@ -681,59 +692,19 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 </Card>
               )}
 
-              {/* Reseller Selection */}
+              {/* Reseller Selection - Searchable */}
               <div className="space-y-2">
                 <Label>Reseller (Optional)</Label>
-                <Select
+                <SearchableSelect
                   value={formData.reseller_id}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, reseller_id: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select reseller (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None (Direct Customer)</SelectItem>
-                    {resellersByLevel.level1.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Resellers</div>
-                        {resellersByLevel.level1.map((reseller) => (
-                          <SelectItem key={reseller.id} value={reseller.id}>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs">L1</Badge>
-                              {reseller.name} {reseller.phone && `(${reseller.phone})`}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {resellersByLevel.level2.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Sub-Resellers</div>
-                        {resellersByLevel.level2.map((reseller) => (
-                          <SelectItem key={reseller.id} value={reseller.id}>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs">L2</Badge>
-                              └ {reseller.name} {reseller.phone && `(${reseller.phone})`}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {resellersByLevel.level3.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">Sub-Sub-Resellers</div>
-                        {resellersByLevel.level3.map((reseller) => (
-                          <SelectItem key={reseller.id} value={reseller.id}>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs">L3</Badge>
-                              └└ {reseller.name} {reseller.phone && `(${reseller.phone})`}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
+                  options={resellerOptions}
+                  placeholder="Search or select reseller..."
+                  searchPlaceholder="Search resellers..."
+                  emptyText="No resellers found"
+                  allowClear
+                  clearLabel="None (Direct Customer)"
+                />
               </div>
 
               <div className="space-y-2">
