@@ -50,7 +50,7 @@ export function useResellerSystem() {
         .from('reseller_branches')
         .select(`
           *,
-          manager:employees(id, name, designation, phone)
+          manager:staff(id, name, phone)
         `)
         .order('name');
 
@@ -332,15 +332,19 @@ export function useResellerSystem() {
       if (!tenantId) {
         throw new Error('No tenant context available');
       }
-      
-      // Fix: Set manager_employee_id instead of manager_reseller_id
-      const branchData = { 
-        ...data, 
+
+      // UI still sends manager_reseller_id, but branch manager should be selected from Staff module
+      const managerStaffId = (data as any).manager_staff_id ?? (data as any).manager_reseller_id ?? null;
+
+      const branchData = {
+        ...data,
         tenant_id: tenantId,
-        manager_employee_id: data.manager_reseller_id || null, // Form uses manager_reseller_id but we save to manager_employee_id
-        manager_reseller_id: null, // Clear the old field
+        manager_staff_id: managerStaffId,
+        // keep legacy columns empty to avoid FK issues
+        manager_employee_id: null,
+        manager_reseller_id: null,
       };
-      
+
       const { error } = await supabase
         .from('reseller_branches')
         .insert(branchData as any);
@@ -357,9 +361,19 @@ export function useResellerSystem() {
 
   const updateBranch = async (id: string, data: Partial<ResellerBranch>) => {
     try {
+      const managerStaffId = (data as any).manager_staff_id ?? (data as any).manager_reseller_id;
+      const updateData: any = { ...data };
+
+      if (managerStaffId !== undefined) {
+        updateData.manager_staff_id = managerStaffId || null;
+        updateData.manager_employee_id = null;
+        updateData.manager_reseller_id = null;
+        delete updateData.manager_reseller_id;
+      }
+
       const { error } = await supabase
         .from('reseller_branches')
-        .update(data as any)
+        .update(updateData as any)
         .eq('id', id);
 
       if (error) throw error;
