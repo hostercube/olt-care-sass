@@ -18,7 +18,7 @@ import { usePOS, CartItem, POSCustomer } from '@/hooks/usePOS';
 import { 
   Package, Plus, Edit, Trash2, Loader2, ShoppingCart, Users, DollarSign,
   FileText, Download, Search, Printer, Send, X, Check, CreditCard,
-  TrendingUp, AlertTriangle, History, Wallet, Building2, Phone, BarChart3, Wifi
+  TrendingUp, AlertTriangle, History, Wallet, Building2, Phone, BarChart3, Wifi, Layers
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
@@ -101,6 +101,7 @@ export default function POSInventory() {
   const [saleItems, setSaleItems] = useState<any[]>([]);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [editingCategory, setEditingCategory] = useState<{ id: string; name: string; description?: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Reports state
@@ -112,6 +113,7 @@ export default function POSInventory() {
     unit_price: '0', sale_price: '0', location: '',
   });
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
+  const [fullCategories, setFullCategories] = useState<{ id: string; name: string; description: string | null }[]>([]);
   const [supplierForm, setSupplierForm] = useState({
     name: '', company_name: '', phone: '', email: '', address: '',
   });
@@ -134,13 +136,15 @@ export default function POSInventory() {
     setLoading(true);
     try {
       const [catRes, itemRes, supRes, purRes, ispRes] = await Promise.all([
-        supabase.from('inventory_categories').select('id, name').eq('tenant_id', tenantId).order('name'),
+        supabase.from('inventory_categories').select('id, name, description').eq('tenant_id', tenantId).order('name'),
         supabase.from('inventory_items').select('*, category:inventory_categories(name)').eq('tenant_id', tenantId).order('name'),
         supabase.from('suppliers').select('*').eq('tenant_id', tenantId).order('name'),
         supabase.from('purchase_orders').select('*, supplier:suppliers(name)').eq('tenant_id', tenantId).order('order_date', { ascending: false }).limit(50),
         supabase.from('customers').select('id, name, customer_code, phone, email').eq('tenant_id', tenantId).order('name').limit(500),
       ]);
-      setCategories((catRes.data || []) as any[]);
+      const categoryData = (catRes.data || []) as { id: string; name: string; description: string | null }[];
+      setCategories(categoryData.map(c => ({ id: c.id, name: c.name })));
+      setFullCategories(categoryData);
       setItems((itemRes.data || []) as InventoryItem[]);
       setSuppliers((supRes.data || []) as Supplier[]);
       setPurchases((purRes.data || []) as PurchaseOrderData[]);
@@ -286,19 +290,67 @@ export default function POSInventory() {
     if (!tenantId || !categoryForm.name) return;
     setSaving(true);
     try {
-      await supabase.from('inventory_categories').insert({
+      const data = {
         tenant_id: tenantId,
         name: categoryForm.name,
         description: categoryForm.description || null,
-      });
-      toast.success('Category added');
+      };
+
+      if (editingCategory) {
+        await supabase.from('inventory_categories').update(data).eq('id', editingCategory.id);
+        toast.success('Category updated');
+      } else {
+        await supabase.from('inventory_categories').insert(data);
+        toast.success('Category added');
+      }
       setShowCategoryDialog(false);
+      setEditingCategory(null);
       setCategoryForm({ name: '', description: '' });
       fetchData();
     } catch (err: any) {
       toast.error(err.message || 'Failed to save category');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleEditCategory = (category: { id: string; name: string; description?: string | null }) => {
+    setEditingCategory({ id: category.id, name: category.name, description: category.description || undefined });
+    setCategoryForm({ name: category.name, description: category.description || '' });
+    setShowCategoryDialog(true);
+  };
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    // Check if category has items
+    const itemsWithCategory = items.filter(i => i.category_id === categoryId);
+    if (itemsWithCategory.length > 0) {
+      toast.error(`Cannot delete category - ${itemsWithCategory.length} products are using it`);
+      return;
+    }
+    if (!confirm('Are you sure you want to delete this category?')) return;
+    try {
+      await supabase.from('inventory_categories').delete().eq('id', categoryId);
+      toast.success('Category deleted');
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete category');
+    }
+  };
+
+  const handleDeleteSupplier = async (supplierId: string) => {
+    // Check if supplier has purchase orders
+    const supplierPurchases = purchases.filter(p => p.supplier_id === supplierId);
+    if (supplierPurchases.length > 0) {
+      toast.error(`Cannot delete supplier - ${supplierPurchases.length} purchase orders are linked`);
+      return;
+    }
+    if (!confirm('Are you sure you want to delete this supplier?')) return;
+    try {
+      await supabase.from('suppliers').delete().eq('id', supplierId);
+      toast.success('Supplier deleted');
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete supplier');
     }
   };
 
@@ -691,6 +743,10 @@ Total Collection Amount,${report.collectionTotal}
               <Package className="h-4 w-4" />
               <span className="hidden sm:inline">Products</span>
             </TabsTrigger>
+            <TabsTrigger value="categories" className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              <span className="hidden sm:inline">Categories</span>
+            </TabsTrigger>
             <TabsTrigger value="suppliers" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Suppliers</span>
@@ -932,6 +988,60 @@ Total Collection Amount,${report.collectionTotal}
           </Card>
         </TabsContent>
 
+        {/* Categories Tab */}
+        <TabsContent value="categories">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Product Categories</CardTitle>
+                <CardDescription>Organize your products into categories</CardDescription>
+              </div>
+              <Button onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '' }); setShowCategoryDialog(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Category
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Products</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {fullCategories.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No categories found</TableCell></TableRow>
+                  ) : (
+                    fullCategories.map(category => {
+                      const productCount = items.filter(i => i.category_id === category.id).length;
+                      return (
+                        <TableRow key={category.id}>
+                          <TableCell className="font-medium">{category.name}</TableCell>
+                          <TableCell className="text-muted-foreground">{category.description || '-'}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{productCount}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="sm" onClick={() => handleEditCategory(category)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteCategory(category.id)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Suppliers Tab */}
         <TabsContent value="suppliers">
           <Card>
@@ -971,6 +1081,9 @@ Total Collection Amount,${report.collectionTotal}
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" onClick={() => handleEditSupplier(supplier)}>
                             <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteSupplier(supplier.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -1684,11 +1797,11 @@ Total Collection Amount,${report.collectionTotal}
         </DialogContent>
       </Dialog>
 
-      {/* Add Category Dialog */}
-      <Dialog open={showCategoryDialog} onOpenChange={setShowCategoryDialog}>
+      {/* Add/Edit Category Dialog */}
+      <Dialog open={showCategoryDialog} onOpenChange={(open) => { setShowCategoryDialog(open); if (!open) setEditingCategory(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Category</DialogTitle>
+            <DialogTitle>{editingCategory ? 'Edit Category' : 'Add Category'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -1704,7 +1817,7 @@ Total Collection Amount,${report.collectionTotal}
             <Button variant="outline" onClick={() => setShowCategoryDialog(false)}>Cancel</Button>
             <Button onClick={handleSaveCategory} disabled={saving || !categoryForm.name}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Add Category
+              {editingCategory ? 'Save Changes' : 'Add Category'}
             </Button>
           </DialogFooter>
         </DialogContent>
