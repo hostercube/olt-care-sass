@@ -130,26 +130,62 @@ export default function CustomerProfile() {
         }
       }
 
-      // Fetch ONU info if OLT access and ONU is linked
-      if (hasOltAccess && data?.onu_id) {
-        const { data: onuData } = await supabase
-          .from('onus')
-          .select('*, olt:olts(*)')
-          .eq('id', data.onu_id)
-          .single();
-        setOnuInfo(onuData);
-      } else if (hasOltAccess && data?.onu_mac) {
-        // Try to find ONU by MAC
-        const { data: onuData } = await supabase
-          .from('onus')
-          .select('*, olt:olts(*)')
-          .eq('mac_address', data.onu_mac)
-          .single();
-        if (onuData) {
-          setOnuInfo(onuData);
-          // Link ONU to customer
-          await supabase.from('customers').update({ onu_id: onuData.id }).eq('id', id);
+      // Fetch ONU info if OLT access - try multiple matching methods
+      if (hasOltAccess) {
+        let onuData = null;
+        
+        // Method 1: Direct ONU ID link
+        if (data?.onu_id) {
+          const { data: onu } = await supabase
+            .from('onus')
+            .select('*, olt:olts(*)')
+            .eq('id', data.onu_id)
+            .single();
+          onuData = onu;
         }
+        
+        // Method 2: Match by ONU MAC address
+        if (!onuData && data?.onu_mac) {
+          const { data: onu } = await supabase
+            .from('onus')
+            .select('*, olt:olts(*)')
+            .eq('mac_address', data.onu_mac)
+            .single();
+          if (onu) {
+            onuData = onu;
+            // Link ONU to customer
+            await supabase.from('customers').update({ onu_id: onu.id }).eq('id', id);
+          }
+        }
+        
+        // Method 3: Match by PPPoE username (common in ISP setups)
+        if (!onuData && data?.pppoe_username) {
+          const { data: onu } = await supabase
+            .from('onus')
+            .select('*, olt:olts(*)')
+            .eq('pppoe_username', data.pppoe_username)
+            .single();
+          if (onu) {
+            onuData = onu;
+            // Link ONU to customer
+            await supabase.from('customers').update({ onu_id: onu.id }).eq('id', id);
+          }
+        }
+        
+        // Method 4: Match by Router MAC (caller-id) in ONU name/description
+        if (!onuData && (data?.router_mac || data?.last_caller_id)) {
+          const macToSearch = data.router_mac || data.last_caller_id;
+          const { data: onus } = await supabase
+            .from('onus')
+            .select('*, olt:olts(*)')
+            .or(`description.ilike.%${macToSearch}%,name.ilike.%${macToSearch}%`);
+          if (onus && onus.length === 1) {
+            onuData = onus[0];
+            await supabase.from('customers').update({ onu_id: onus[0].id }).eq('id', id);
+          }
+        }
+        
+        setOnuInfo(onuData);
       }
 
       // Fetch bills
@@ -886,7 +922,7 @@ export default function CustomerProfile() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <p className="text-xs text-muted-foreground mb-1">ONU Status</p>
                     <Badge className={onuInfo.status === 'online' ? 'bg-green-500' : 'bg-red-500'}>
@@ -895,25 +931,43 @@ export default function CustomerProfile() {
                   </div>
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <p className="text-xs text-muted-foreground mb-1">ONU Name</p>
-                    <p className="font-medium text-sm">{onuInfo.description || onuInfo.name || 'N/A'}</p>
+                    <p className="font-medium text-sm truncate" title={onuInfo.description || onuInfo.name}>
+                      {onuInfo.description || onuInfo.name || 'N/A'}
+                    </p>
                   </div>
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <p className="text-xs text-muted-foreground mb-1">ONU MAC</p>
                     <p className="font-mono text-xs">{onuInfo.mac_address || 'N/A'}</p>
                   </div>
                   <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">Serial Number</p>
+                    <p className="font-mono text-xs">{onuInfo.serial_number || 'N/A'}</p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg border border-blue-500/20">
                     <p className="text-xs text-muted-foreground mb-1">RX Power (ONU)</p>
-                    <p className={`font-mono font-medium ${(parseFloat(onuInfo.rx_power) || 0) < -25 ? 'text-red-500' : 'text-green-500'}`}>
+                    <p className={`font-mono font-bold text-lg ${(parseFloat(onuInfo.rx_power) || 0) < -25 ? 'text-red-500' : (parseFloat(onuInfo.rx_power) || 0) < -22 ? 'text-yellow-500' : 'text-green-500'}`}>
                       {onuInfo.rx_power ? `${onuInfo.rx_power} dBm` : 'N/A'}
                     </p>
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-3 bg-muted/50 rounded-lg border border-green-500/20">
                     <p className="text-xs text-muted-foreground mb-1">TX Power (ONU)</p>
-                    <p className="font-mono font-medium">{onuInfo.tx_power ? `${onuInfo.tx_power} dBm` : 'N/A'}</p>
+                    <p className="font-mono font-bold text-lg">{onuInfo.tx_power ? `${onuInfo.tx_power} dBm` : 'N/A'}</p>
                   </div>
                   <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">Temperature</p>
-                    <p className="font-medium">{onuInfo.temperature ? `${onuInfo.temperature}°C` : 'N/A'}</p>
+                    <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                      <Thermometer className="h-3 w-3" /> Temperature
+                    </p>
+                    <p className={`font-medium ${(parseFloat(onuInfo.temperature) || 0) > 60 ? 'text-red-500' : ''}`}>
+                      {onuInfo.temperature ? `${onuInfo.temperature}°C` : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">Distance</p>
+                    <p className="font-medium">{onuInfo.distance ? `${onuInfo.distance} m` : 'N/A'}</p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">OLT</p>
+                    <p className="font-medium">{onuInfo.olt?.name || 'N/A'}</p>
                   </div>
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <p className="text-xs text-muted-foreground mb-1">PON Port</p>
@@ -923,28 +977,48 @@ export default function CustomerProfile() {
                     <p className="text-xs text-muted-foreground mb-1">ONU Index</p>
                     <p className="font-medium">{onuInfo.onu_index || customer.onu_index || 'N/A'}</p>
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">OLT</p>
-                    <p className="font-medium">{onuInfo.olt?.name || 'N/A'}</p>
-                  </div>
-                  {onuInfo.distance && (
+                  {onuInfo.pppoe_username && (
                     <div className="p-3 bg-muted/50 rounded-lg">
-                      <p className="text-xs text-muted-foreground mb-1">Distance</p>
-                      <p className="font-medium">{onuInfo.distance} m</p>
+                      <p className="text-xs text-muted-foreground mb-1">PPPoE Username</p>
+                      <p className="font-mono text-xs">{onuInfo.pppoe_username}</p>
                     </div>
                   )}
                   {onuInfo.offline_reason && (
-                    <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="p-3 bg-red-500/10 rounded-lg col-span-2">
                       <p className="text-xs text-muted-foreground mb-1">Offline Reason</p>
                       <p className="font-medium text-red-500">{onuInfo.offline_reason}</p>
                     </div>
                   )}
                   {onuInfo.last_down_time && (
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <p className="text-xs text-muted-foreground mb-1">Last Down</p>
+                    <div className="p-3 bg-muted/50 rounded-lg col-span-2">
+                      <p className="text-xs text-muted-foreground mb-1">Last Down Time</p>
                       <p className="font-medium text-xs">{onuInfo.last_down_time}</p>
                     </div>
                   )}
+                  {onuInfo.last_up_time && (
+                    <div className="p-3 bg-muted/50 rounded-lg col-span-2">
+                      <p className="text-xs text-muted-foreground mb-1">Last Up Time</p>
+                      <p className="font-medium text-xs">{onuInfo.last_up_time}</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* ONU Not Found Warning */}
+          {hasOltAccess && !onuInfo && (customer.onu_mac || customer.onu_id || customer.pppoe_username) && (
+            <Card className="border-yellow-500/30 bg-yellow-500/5">
+              <CardContent className="py-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                  <div>
+                    <p className="font-medium">ONU Not Found</p>
+                    <p className="text-sm text-muted-foreground">
+                      Customer has ONU reference but no matching device found in the OLT database.
+                      {customer.onu_mac && ` MAC: ${customer.onu_mac}`}
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
