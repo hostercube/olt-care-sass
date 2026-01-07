@@ -1059,6 +1059,47 @@ export type Database = {
           },
         ]
       }
+      customer_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_types_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string | null
@@ -1066,6 +1107,7 @@ export type Database = {
           connection_date: string | null
           created_at: string
           customer_code: string | null
+          customer_type_id: string | null
           due_amount: number | null
           email: string | null
           expiry_date: string | null
@@ -1100,6 +1142,7 @@ export type Database = {
           connection_date?: string | null
           created_at?: string
           customer_code?: string | null
+          customer_type_id?: string | null
           due_amount?: number | null
           email?: string | null
           expiry_date?: string | null
@@ -1134,6 +1177,7 @@ export type Database = {
           connection_date?: string | null
           created_at?: string
           customer_code?: string | null
+          customer_type_id?: string | null
           due_amount?: number | null
           email?: string | null
           expiry_date?: string | null
@@ -1168,6 +1212,13 @@ export type Database = {
             columns: ["area_id"]
             isOneToOne: false
             referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_customer_type_id_fkey"
+            columns: ["customer_type_id"]
+            isOneToOne: false
+            referencedRelation: "customer_types"
             referencedColumns: ["id"]
           },
           {
@@ -5273,6 +5324,7 @@ export type Database = {
           connection_date: string | null
           created_at: string
           customer_code: string | null
+          customer_type_id: string | null
           due_amount: number | null
           email: string | null
           expiry_date: string | null
