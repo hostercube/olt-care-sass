@@ -417,6 +417,13 @@ const App = () => (
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
+              <Route path="/isp/roles" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <RolesManagement />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
               <Route path="/isp/transactions" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>

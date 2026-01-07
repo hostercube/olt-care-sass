@@ -1105,6 +1105,7 @@ export type Database = {
           address: string | null
           area_id: string | null
           connection_date: string | null
+          connection_type: string | null
           created_at: string
           customer_code: string | null
           customer_type_id: string | null
@@ -1141,6 +1142,7 @@ export type Database = {
           address?: string | null
           area_id?: string | null
           connection_date?: string | null
+          connection_type?: string | null
           created_at?: string
           customer_code?: string | null
           customer_type_id?: string | null
@@ -1177,6 +1179,7 @@ export type Database = {
           address?: string | null
           area_id?: string | null
           connection_date?: string | null
+          connection_type?: string | null
           created_at?: string
           customer_code?: string | null
           customer_type_id?: string | null
@@ -3765,6 +3768,7 @@ export type Database = {
           name: string
           nid_number: string | null
           parent_id: string | null
+          password: string | null
           password_hash: string | null
           phone: string | null
           profile_photo: string | null
@@ -3804,6 +3808,7 @@ export type Database = {
           name: string
           nid_number?: string | null
           parent_id?: string | null
+          password?: string | null
           password_hash?: string | null
           phone?: string | null
           profile_photo?: string | null
@@ -3843,6 +3848,7 @@ export type Database = {
           name?: string
           nid_number?: string | null
           parent_id?: string | null
+          password?: string | null
           password_hash?: string | null
           phone?: string | null
           profile_photo?: string | null
@@ -4279,6 +4285,7 @@ export type Database = {
           address: string | null
           bank_account: string | null
           bank_name: string | null
+          can_login: boolean | null
           commission_rate: number | null
           created_at: string
           department: string | null
@@ -4289,18 +4296,22 @@ export type Database = {
           join_date: string | null
           name: string
           nid: string | null
+          password: string | null
           phone: string | null
           role: string | null
+          role_id: string | null
           salary: number | null
           salary_type: string | null
           tenant_id: string
           updated_at: string
           user_id: string | null
+          username: string | null
         }
         Insert: {
           address?: string | null
           bank_account?: string | null
           bank_name?: string | null
+          can_login?: boolean | null
           commission_rate?: number | null
           created_at?: string
           department?: string | null
@@ -4311,18 +4322,22 @@ export type Database = {
           join_date?: string | null
           name: string
           nid?: string | null
+          password?: string | null
           phone?: string | null
           role?: string | null
+          role_id?: string | null
           salary?: number | null
           salary_type?: string | null
           tenant_id: string
           updated_at?: string
           user_id?: string | null
+          username?: string | null
         }
         Update: {
           address?: string | null
           bank_account?: string | null
           bank_name?: string | null
+          can_login?: boolean | null
           commission_rate?: number | null
           created_at?: string
           department?: string | null
@@ -4333,15 +4348,25 @@ export type Database = {
           join_date?: string | null
           name?: string
           nid?: string | null
+          password?: string | null
           phone?: string | null
           role?: string | null
+          role_id?: string | null
           salary?: number | null
           salary_type?: string | null
           tenant_id?: string
           updated_at?: string
           user_id?: string | null
+          username?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "staff_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_roles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "staff_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -4864,6 +4889,50 @@ export type Database = {
           },
         ]
       }
+      tenant_roles: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_system: boolean | null
+          name: string
+          permissions: Json | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_system?: boolean | null
+          name: string
+          permissions?: Json | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_system?: boolean | null
+          name?: string
+          permissions?: Json | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_sms_gateways: {
         Row: {
           api_key: string | null
@@ -5335,6 +5404,7 @@ export type Database = {
           address: string | null
           area_id: string | null
           connection_date: string | null
+          connection_type: string | null
           created_at: string
           customer_code: string | null
           customer_type_id: string | null

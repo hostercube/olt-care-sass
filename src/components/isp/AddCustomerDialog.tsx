@@ -87,6 +87,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     is_auto_disable: true,
     create_mikrotik_user: true,
     customer_type_id: '',
+    connection_type: 'pppoe',
   });
 
   // Validation state
@@ -305,6 +306,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         is_auto_disable: formData.is_auto_disable,
         status: 'active',
         customer_type_id: formData.customer_type_id && formData.customer_type_id !== 'none' ? formData.customer_type_id : null,
+        connection_type: formData.connection_type || 'pppoe',
       } as any);
       
       onSuccess?.();
@@ -337,6 +339,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
       is_auto_disable: true,
       create_mikrotik_user: true,
       customer_type_id: '',
+      connection_type: 'pppoe',
     });
     setCurrentStep(0);
     setErrors({});

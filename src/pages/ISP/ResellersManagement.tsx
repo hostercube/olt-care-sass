@@ -82,6 +82,7 @@ export default function ResellersManagement() {
     can_delete_customers: false,
     nid_number: '',
     username: '',
+    password: '',
   });
 
   const [branchFormData, setBranchFormData] = useState({
@@ -177,6 +178,7 @@ export default function ResellersManagement() {
       can_delete_customers: false,
       nid_number: '',
       username: '',
+      password: '',
     });
     setEditingReseller(null);
   };
@@ -206,6 +208,7 @@ export default function ResellersManagement() {
       can_delete_customers: reseller.can_delete_customers,
       nid_number: reseller.nid_number || '',
       username: reseller.username || '',
+      password: '',
     });
     setShowDialog(true);
   };
@@ -239,6 +242,11 @@ export default function ResellersManagement() {
         nid_number: formData.nid_number || null,
         username: formData.username || null,
       };
+
+      // Only update password if provided
+      if (formData.password) {
+        data.password = formData.password;
+      }
 
       if (editingReseller) {
         await updateReseller(editingReseller.id, data);
@@ -578,6 +586,15 @@ export default function ResellersManagement() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label>Password {editingReseller ? '(leave empty to keep)' : ''}</Label>
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                  placeholder="••••••••"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label>Phone</Label>
                 <Input
                   value={formData.phone}
@@ -585,15 +602,16 @@ export default function ResellersManagement() {
                   placeholder="01XXXXXXXXX"
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="reseller@example.com"
-                />
-              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="reseller@example.com"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

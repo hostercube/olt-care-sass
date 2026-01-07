@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
-import { Users, Plus, Edit, Loader2, DollarSign, Calendar } from 'lucide-react';
+import { useTenantRoles } from '@/hooks/useTenantRoles';
+import { Users, Plus, Edit, Loader2, DollarSign, Calendar, Key } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -20,12 +22,16 @@ interface Staff {
   email: string | null;
   phone: string | null;
   role: string;
+  role_id: string | null;
   department: string | null;
   designation: string | null;
   salary: number;
   salary_type: string;
   is_active: boolean;
   join_date: string | null;
+  username: string | null;
+  password: string | null;
+  can_login: boolean;
 }
 
 interface SalaryPayment {
@@ -42,6 +48,7 @@ interface SalaryPayment {
 
 export default function StaffPage() {
   const { tenantId } = useTenantContext();
+  const { roles } = useTenantRoles();
   const [staff, setStaff] = useState<Staff[]>([]);
   const [payments, setPayments] = useState<SalaryPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,11 +63,15 @@ export default function StaffPage() {
     email: '',
     phone: '',
     role: 'staff',
+    role_id: '',
     department: '',
     designation: '',
     salary: '0',
     salary_type: 'monthly',
     join_date: format(new Date(), 'yyyy-MM-dd'),
+    username: '',
+    password: '',
+    can_login: false,
   });
 
   const [paymentForm, setPaymentForm] = useState({
@@ -95,18 +106,26 @@ export default function StaffPage() {
     if (!tenantId || !staffForm.name) return;
     setSaving(true);
     try {
-      const data = {
+      const data: any = {
         tenant_id: tenantId,
         name: staffForm.name,
         email: staffForm.email || null,
         phone: staffForm.phone || null,
         role: staffForm.role,
+        role_id: staffForm.role_id || null,
         department: staffForm.department || null,
         designation: staffForm.designation || null,
         salary: parseFloat(staffForm.salary) || 0,
         salary_type: staffForm.salary_type,
         join_date: staffForm.join_date || null,
+        can_login: staffForm.can_login,
       };
+
+      // Only update username/password if can_login is enabled
+      if (staffForm.can_login) {
+        if (staffForm.username) data.username = staffForm.username;
+        if (staffForm.password) data.password = staffForm.password;
+      }
 
       if (editingStaff) {
         await supabase.from('staff').update(data).eq('id', editingStaff.id);
@@ -159,11 +178,15 @@ export default function StaffPage() {
       email: '',
       phone: '',
       role: 'staff',
+      role_id: '',
       department: '',
       designation: '',
       salary: '0',
       salary_type: 'monthly',
       join_date: format(new Date(), 'yyyy-MM-dd'),
+      username: '',
+      password: '',
+      can_login: false,
     });
   };
 
@@ -174,11 +197,15 @@ export default function StaffPage() {
       email: s.email || '',
       phone: s.phone || '',
       role: s.role,
+      role_id: s.role_id || '',
       department: s.department || '',
       designation: s.designation || '',
       salary: s.salary.toString(),
       salary_type: s.salary_type,
       join_date: s.join_date || '',
+      username: s.username || '',
+      password: '',
+      can_login: s.can_login || false,
     });
     setShowStaffDialog(true);
   };
@@ -338,14 +365,33 @@ export default function StaffPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Role</Label>
-                <Select value={staffForm.role} onValueChange={(v) => setStaffForm(p => ({ ...p, role: v }))}>
+                <Select 
+                  value={staffForm.role_id || staffForm.role} 
+                  onValueChange={(v) => {
+                    const isRoleId = roles.some(r => r.id === v);
+                    if (isRoleId) {
+                      const role = roles.find(r => r.id === v);
+                      setStaffForm(p => ({ ...p, role_id: v, role: role?.name.toLowerCase() || 'staff' }));
+                    } else {
+                      setStaffForm(p => ({ ...p, role: v, role_id: '' }));
+                    }
+                  }}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="staff">Staff</SelectItem>
-                    <SelectItem value="technician">Technician</SelectItem>
-                    <SelectItem value="collector">Bill Collector</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    {roles.length > 0 ? (
+                      roles.map(role => (
+                        <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="staff">Staff</SelectItem>
+                        <SelectItem value="technician">Technician</SelectItem>
+                        <SelectItem value="collector">Bill Collector</SelectItem>
+                        <SelectItem value="manager">Manager</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -353,6 +399,44 @@ export default function StaffPage() {
                 <Label>Department</Label>
                 <Input value={staffForm.department} onChange={(e) => setStaffForm(p => ({ ...p, department: e.target.value }))} placeholder="Technical" />
               </div>
+            </div>
+            
+            {/* Login Credentials Section */}
+            <div className="border rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-medium flex items-center gap-2">
+                    <Key className="h-4 w-4" /> Login Access
+                  </Label>
+                  <p className="text-sm text-muted-foreground">Enable login credentials for this staff</p>
+                </div>
+                <Switch
+                  checked={staffForm.can_login}
+                  onCheckedChange={(checked) => setStaffForm(p => ({ ...p, can_login: checked }))}
+                />
+              </div>
+              
+              {staffForm.can_login && (
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-2">
+                    <Label>Username *</Label>
+                    <Input 
+                      value={staffForm.username} 
+                      onChange={(e) => setStaffForm(p => ({ ...p, username: e.target.value }))} 
+                      placeholder="staff_username" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Password {editingStaff ? '(leave empty to keep current)' : '*'}</Label>
+                    <Input 
+                      type="password"
+                      value={staffForm.password} 
+                      onChange={(e) => setStaffForm(p => ({ ...p, password: e.target.value }))} 
+                      placeholder="••••••••" 
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
