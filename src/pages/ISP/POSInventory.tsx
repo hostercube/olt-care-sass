@@ -69,7 +69,7 @@ export default function POSInventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [purchases, setPurchases] = useState<PurchaseOrder[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseOrderData[]>([]);
   
   // POS state
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -124,7 +124,7 @@ export default function POSInventory() {
       setCategories((catRes.data || []) as any[]);
       setItems((itemRes.data || []) as InventoryItem[]);
       setSuppliers((supRes.data || []) as Supplier[]);
-      setPurchases((purRes.data || []) as PurchaseOrder[]);
+      setPurchases((purRes.data || []) as PurchaseOrderData[]);
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
