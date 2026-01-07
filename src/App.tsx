@@ -64,7 +64,6 @@ import BillingAutomation from "./pages/ISP/BillingAutomation";
 import ISPGatewaySettings from "./pages/ISP/GatewaySettings";
 import SMSCenter from "./pages/ISP/SMSCenter";
 import BkashPayments from "./pages/ISP/BkashPayments";
-import Inventory from "./pages/ISP/Inventory";
 import POSInventory from "./pages/ISP/POSInventory";
 import Staff from "./pages/ISP/Staff";
 import RolesManagement from "./pages/ISP/RolesManagement";
@@ -412,7 +411,7 @@ const App = () => (
                 <ProtectedRoute>
                   <TenantAccessGuard>
                     <ModuleAccessGuard module="isp_inventory" moduleName="Inventory Management">
-                      <Inventory />
+                      <POSInventory />
                     </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
@@ -420,7 +419,7 @@ const App = () => (
               <Route path="/isp/pos" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
-                    <ModuleAccessGuard module="isp_inventory" moduleName="POS & Sales">
+                    <ModuleAccessGuard module="isp_inventory" moduleName="Inventory Management">
                       <POSInventory />
                     </ModuleAccessGuard>
                   </TenantAccessGuard>

@@ -18,10 +18,10 @@ import { usePOS, CartItem, POSCustomer } from '@/hooks/usePOS';
 import { 
   Package, Plus, Edit, Trash2, Loader2, ShoppingCart, Users, DollarSign,
   FileText, Download, Search, Printer, Send, X, Check, CreditCard,
-  TrendingUp, AlertTriangle, History, Wallet, Building2, Phone
+  TrendingUp, AlertTriangle, History, Wallet, Building2, Phone, BarChart3, Wifi
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 interface InventoryItem {
   id: string;
@@ -58,6 +58,13 @@ interface PurchaseOrderData {
   supplier?: { name: string } | null;
 }
 
+interface ISPCustomer {
+  id: string;
+  name: string;
+  customer_code: string | null;
+  phone: string | null;
+  email: string | null;
+}
 
 export default function POSInventory() {
   const { tenantId } = useTenantContext();
@@ -70,23 +77,34 @@ export default function POSInventory() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<PurchaseOrderData[]>([]);
+  const [ispCustomers, setIspCustomers] = useState<ISPCustomer[]>([]);
   
   // POS state
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<POSCustomer | null>(null);
+  const [selectedIspCustomer, setSelectedIspCustomer] = useState<ISPCustomer | null>(null);
   const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [showDuePayment, setShowDuePayment] = useState(false);
+  const [customerTab, setCustomerTab] = useState<'pos' | 'isp'>('pos');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   
   // Dialog states
   const [showItemDialog, setShowItemDialog] = useState(false);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
   const [showPurchaseDialog, setShowPurchaseDialog] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [selectedSale, setSelectedSale] = useState<any>(null);
+  const [saleItems, setSaleItems] = useState<any[]>([]);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Reports state
+  const [reportMonth, setReportMonth] = useState(format(new Date(), 'yyyy-MM'));
 
   // Forms
   const [itemForm, setItemForm] = useState({
@@ -107,7 +125,7 @@ export default function POSInventory() {
     customerId: '', amount: '0', method: 'cash', reference: '', notes: '',
   });
   const [purchaseForm, setPurchaseForm] = useState({
-    supplierId: '', items: [] as { itemId: string; quantity: number; price: number }[], notes: '',
+    supplierId: '', items: [] as { itemId: string; quantity: number; price: number }[], notes: '', paidAmount: '0',
   });
 
   // Fetch data
@@ -115,16 +133,18 @@ export default function POSInventory() {
     if (!tenantId) return;
     setLoading(true);
     try {
-      const [catRes, itemRes, supRes, purRes] = await Promise.all([
+      const [catRes, itemRes, supRes, purRes, ispRes] = await Promise.all([
         supabase.from('inventory_categories').select('id, name').eq('tenant_id', tenantId).order('name'),
         supabase.from('inventory_items').select('*, category:inventory_categories(name)').eq('tenant_id', tenantId).order('name'),
-        supabase.from('suppliers').select('*').eq('tenant_id', tenantId).eq('is_active', true).order('name'),
+        supabase.from('suppliers').select('*').eq('tenant_id', tenantId).order('name'),
         supabase.from('purchase_orders').select('*, supplier:suppliers(name)').eq('tenant_id', tenantId).order('order_date', { ascending: false }).limit(50),
+        supabase.from('customers').select('id, name, customer_code, phone, email').eq('tenant_id', tenantId).order('name').limit(500),
       ]);
       setCategories((catRes.data || []) as any[]);
       setItems((itemRes.data || []) as InventoryItem[]);
       setSuppliers((supRes.data || []) as Supplier[]);
       setPurchases((purRes.data || []) as PurchaseOrderData[]);
+      setIspCustomers((ispRes.data || []) as ISPCustomer[]);
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -140,6 +160,12 @@ export default function POSInventory() {
   const filteredItems = items.filter(item =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.sku?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredIspCustomers = ispCustomers.filter(c =>
+    c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+    c.customer_code?.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+    c.phone?.includes(customerSearchQuery)
   );
 
   // Cart functions
@@ -196,7 +222,7 @@ export default function POSInventory() {
         tenant_id: tenantId,
         name: itemForm.name,
         sku: itemForm.sku || null,
-        category_id: itemForm.category_id || null,
+        category_id: itemForm.category_id && itemForm.category_id !== 'none' ? itemForm.category_id : null,
         quantity: parseInt(itemForm.quantity) || 0,
         min_quantity: parseInt(itemForm.min_quantity) || 5,
         unit_price: parseFloat(itemForm.unit_price) || 0,
@@ -244,6 +270,17 @@ export default function POSInventory() {
     setShowItemDialog(true);
   };
 
+  const handleDeleteItem = async (itemId: string) => {
+    if (!confirm('Are you sure you want to delete this item?')) return;
+    try {
+      await supabase.from('inventory_items').delete().eq('id', itemId);
+      toast.success('Item deleted');
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete item');
+    }
+  };
+
   // Save category
   const handleSaveCategory = async () => {
     if (!tenantId || !categoryForm.name) return;
@@ -270,16 +307,24 @@ export default function POSInventory() {
     if (!tenantId || !supplierForm.name) return;
     setSaving(true);
     try {
-      await supabase.from('suppliers').insert({
+      const data = {
         tenant_id: tenantId,
         name: supplierForm.name,
         company_name: supplierForm.company_name || null,
         phone: supplierForm.phone || null,
         email: supplierForm.email || null,
         address: supplierForm.address || null,
-      });
-      toast.success('Supplier added');
+      };
+
+      if (editingSupplier) {
+        await supabase.from('suppliers').update(data).eq('id', editingSupplier.id);
+        toast.success('Supplier updated');
+      } else {
+        await supabase.from('suppliers').insert(data);
+        toast.success('Supplier added');
+      }
       setShowSupplierDialog(false);
+      setEditingSupplier(null);
       setSupplierForm({ name: '', company_name: '', phone: '', email: '', address: '' });
       fetchData();
     } catch (err: any) {
@@ -287,6 +332,18 @@ export default function POSInventory() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleEditSupplier = (supplier: Supplier) => {
+    setEditingSupplier(supplier);
+    setSupplierForm({
+      name: supplier.name,
+      company_name: supplier.company_name || '',
+      phone: supplier.phone || '',
+      email: supplier.email || '',
+      address: supplier.address || '',
+    });
+    setShowSupplierDialog(true);
   };
 
   // Save POS Customer
@@ -302,6 +359,20 @@ export default function POSInventory() {
     setSaving(false);
   };
 
+  // Select ISP customer for sale
+  const selectIspCustomerForSale = (customer: ISPCustomer) => {
+    setSelectedIspCustomer(customer);
+    setSelectedCustomer(null);
+    setShowCustomerDialog(false);
+  };
+
+  // Select POS customer for sale
+  const selectPosCustomerForSale = (customer: POSCustomer) => {
+    setSelectedCustomer(customer);
+    setSelectedIspCustomer(null);
+    setShowCustomerDialog(false);
+  };
+
   // Process checkout
   const handleCheckout = async () => {
     if (cart.length === 0) {
@@ -310,13 +381,13 @@ export default function POSInventory() {
     }
     setSaving(true);
     
+    const customerInfo = selectedIspCustomer 
+      ? { customerId: undefined, name: selectedIspCustomer.name, phone: selectedIspCustomer.phone || undefined, ispCustomerId: selectedIspCustomer.id }
+      : { customerId: selectedCustomer?.id, name: selectedCustomer?.name, phone: selectedCustomer?.phone || undefined };
+    
     const result = await pos.createSale(
       cart,
-      {
-        customerId: selectedCustomer?.id,
-        name: selectedCustomer?.name,
-        phone: selectedCustomer?.phone || undefined,
-      },
+      customerInfo,
       {
         paid: parseFloat(checkoutForm.paid) || 0,
         method: checkoutForm.method,
@@ -333,9 +404,16 @@ export default function POSInventory() {
     if (result) {
       setCart([]);
       setSelectedCustomer(null);
+      setSelectedIspCustomer(null);
       setShowCheckout(false);
       setCheckoutForm({ discount: '0', tax: '0', paid: '0', method: 'cash', reference: '', notes: '', sendSms: false });
       fetchData();
+      
+      // Show invoice dialog
+      setSelectedSale(result);
+      const items = await pos.getSaleItems(result.id);
+      setSaleItems(items || []);
+      setShowInvoice(true);
     }
     setSaving(false);
   };
@@ -364,6 +442,7 @@ export default function POSInventory() {
     setSaving(true);
     try {
       const total = purchaseForm.items.reduce((sum, i) => sum + (i.quantity * i.price), 0);
+      const paidAmount = parseFloat(purchaseForm.paidAmount) || 0;
       const year = new Date().getFullYear().toString().slice(-2);
       const { count } = await supabase.from('purchase_orders')
         .select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId);
@@ -374,6 +453,7 @@ export default function POSInventory() {
         order_number: orderNumber,
         supplier_id: purchaseForm.supplierId,
         total,
+        paid_amount: paidAmount,
         notes: purchaseForm.notes || null,
       }).select().single();
 
@@ -389,7 +469,7 @@ export default function POSInventory() {
 
       toast.success('Purchase order created');
       setShowPurchaseDialog(false);
-      setPurchaseForm({ supplierId: '', items: [], notes: '' });
+      setPurchaseForm({ supplierId: '', items: [], notes: '', paidAmount: '0' });
       fetchData();
     } catch (err: any) {
       toast.error(err.message || 'Failed to create purchase order');
@@ -402,10 +482,10 @@ export default function POSInventory() {
   const handleReceivePurchase = async (poId: string) => {
     if (!tenantId) return;
     try {
-      const { data: items } = await supabase.from('purchase_order_items').select('*').eq('purchase_order_id', poId);
-      if (!items) return;
+      const { data: poItems } = await supabase.from('purchase_order_items').select('*').eq('purchase_order_id', poId);
+      if (!poItems) return;
 
-      for (const item of items) {
+      for (const item of poItems) {
         const { data: invItem } = await supabase.from('inventory_items').select('quantity').eq('id', item.item_id).single();
         const currentQty = invItem?.quantity || 0;
         const newQty = currentQty + item.quantity;
@@ -434,11 +514,112 @@ export default function POSInventory() {
     }
   };
 
+  // View sale invoice
+  const handleViewInvoice = async (sale: any) => {
+    setSelectedSale(sale);
+    const items = await pos.getSaleItems(sale.id);
+    setSaleItems(items || []);
+    setShowInvoice(true);
+  };
+
+  // Print invoice
+  const handlePrintInvoice = () => {
+    const printContent = document.getElementById('invoice-content');
+    if (!printContent) return;
+    
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Invoice - ${selectedSale?.invoice_number}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .invoice-header { text-align: center; margin-bottom: 20px; }
+          .invoice-details { margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f5f5f5; }
+          .totals { text-align: right; }
+          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        ${printContent.innerHTML}
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  // Report calculations
+  const getReportData = useCallback(() => {
+    const startDate = startOfMonth(new Date(reportMonth));
+    const endDate = endOfMonth(new Date(reportMonth));
+    
+    const monthSales = pos.sales.filter(s => {
+      const saleDate = new Date(s.sale_date);
+      return saleDate >= startDate && saleDate <= endDate;
+    });
+    
+    const monthPayments = pos.payments.filter(p => {
+      const paymentDate = new Date(p.payment_date);
+      return paymentDate >= startDate && paymentDate <= endDate;
+    });
+    
+    const monthPurchases = purchases.filter(p => {
+      const purchaseDate = new Date(p.order_date);
+      return purchaseDate >= startDate && purchaseDate <= endDate;
+    });
+    
+    return {
+      totalSales: monthSales.reduce((sum, s) => sum + s.total_amount, 0),
+      totalPaid: monthSales.reduce((sum, s) => sum + s.paid_amount, 0),
+      totalDue: monthSales.reduce((sum, s) => sum + s.due_amount, 0),
+      salesCount: monthSales.length,
+      purchaseTotal: monthPurchases.reduce((sum, p) => sum + p.total, 0),
+      purchaseCount: monthPurchases.length,
+      collectionTotal: monthPayments.reduce((sum, p) => sum + p.amount, 0),
+      collectionCount: monthPayments.length,
+    };
+  }, [pos.sales, pos.payments, purchases, reportMonth]);
+
+  const exportReportCSV = () => {
+    const report = getReportData();
+    const csvContent = `Inventory Report - ${reportMonth}
+    
+Sales Summary
+Total Sales,${report.salesCount}
+Total Sales Amount,${report.totalSales}
+Total Paid,${report.totalPaid}
+Total Due,${report.totalDue}
+
+Purchase Summary
+Total Purchases,${report.purchaseCount}
+Total Purchase Amount,${report.purchaseTotal}
+
+Collection Summary
+Total Collections,${report.collectionCount}
+Total Collection Amount,${report.collectionTotal}
+`;
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inventory-report-${reportMonth}.csv`;
+    a.click();
+  };
+
   const lowStockItems = items.filter(i => i.quantity <= i.min_quantity);
   const totalValue = items.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
+  const reportData = getReportData();
 
   return (
-    <DashboardLayout title="Inventory & POS" subtitle="Manage products, stock, and point of sale">
+    <DashboardLayout title="Inventory Management" subtitle="Manage products, stock, sales, and purchases">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <Card>
@@ -500,32 +681,42 @@ export default function POSInventory() {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6 mb-6">
-          <TabsTrigger value="pos" className="flex items-center gap-2">
-            <ShoppingCart className="h-4 w-4" />
-            <span className="hidden sm:inline">POS</span>
-          </TabsTrigger>
-          <TabsTrigger value="products" className="flex items-center gap-2">
-            <Package className="h-4 w-4" />
-            <span className="hidden sm:inline">Products</span>
-          </TabsTrigger>
-          <TabsTrigger value="purchase" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Purchase</span>
-          </TabsTrigger>
-          <TabsTrigger value="sales" className="flex items-center gap-2">
-            <History className="h-4 w-4" />
-            <span className="hidden sm:inline">Sales</span>
-          </TabsTrigger>
-          <TabsTrigger value="customers" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Customers</span>
-          </TabsTrigger>
-          <TabsTrigger value="dues" className="flex items-center gap-2">
-            <Wallet className="h-4 w-4" />
-            <span className="hidden sm:inline">Dues</span>
-          </TabsTrigger>
-        </TabsList>
+        <ScrollArea className="w-full">
+          <TabsList className="inline-flex w-auto min-w-full mb-6">
+            <TabsTrigger value="pos" className="flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              <span className="hidden sm:inline">POS</span>
+            </TabsTrigger>
+            <TabsTrigger value="products" className="flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              <span className="hidden sm:inline">Products</span>
+            </TabsTrigger>
+            <TabsTrigger value="suppliers" className="flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Suppliers</span>
+            </TabsTrigger>
+            <TabsTrigger value="purchase" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">Purchase</span>
+            </TabsTrigger>
+            <TabsTrigger value="sales" className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              <span className="hidden sm:inline">Sales</span>
+            </TabsTrigger>
+            <TabsTrigger value="customers" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Customers</span>
+            </TabsTrigger>
+            <TabsTrigger value="dues" className="flex items-center gap-2">
+              <Wallet className="h-4 w-4" />
+              <span className="hidden sm:inline">Dues</span>
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Reports</span>
+            </TabsTrigger>
+          </TabsList>
+        </ScrollArea>
 
         {/* POS Tab */}
         <TabsContent value="pos">
@@ -589,13 +780,16 @@ export default function POSInventory() {
                       </Button>
                     )}
                   </div>
-                  {selectedCustomer ? (
+                  {selectedCustomer || selectedIspCustomer ? (
                     <div className="flex items-center justify-between bg-muted p-2 rounded">
                       <div>
-                        <p className="font-medium text-sm">{selectedCustomer.name}</p>
-                        <p className="text-xs text-muted-foreground">{selectedCustomer.phone}</p>
+                        <p className="font-medium text-sm">{selectedCustomer?.name || selectedIspCustomer?.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {selectedCustomer?.phone || selectedIspCustomer?.phone}
+                          {selectedIspCustomer && <Badge variant="outline" className="ml-2 text-xs">ISP</Badge>}
+                        </p>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => setSelectedCustomer(null)}>
+                      <Button variant="ghost" size="sm" onClick={() => { setSelectedCustomer(null); setSelectedIspCustomer(null); }}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -680,10 +874,6 @@ export default function POSInventory() {
                   <Plus className="h-4 w-4 mr-2" />
                   Category
                 </Button>
-                <Button variant="outline" onClick={() => setShowSupplierDialog(true)}>
-                  <Building2 className="h-4 w-4 mr-2" />
-                  Supplier
-                </Button>
                 <Button onClick={() => { resetItemForm(); setEditingItem(null); setShowItemDialog(true); }}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Product
@@ -728,6 +918,9 @@ export default function POSInventory() {
                             <Button variant="ghost" size="sm" onClick={() => handleEditItem(item)}>
                               <Edit className="h-4 w-4" />
                             </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteItem(item.id)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))
@@ -735,6 +928,56 @@ export default function POSInventory() {
                   </TableBody>
                 </Table>
               </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Suppliers Tab */}
+        <TabsContent value="suppliers">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Suppliers</CardTitle>
+                <CardDescription>Manage your product suppliers</CardDescription>
+              </div>
+              <Button onClick={() => { setEditingSupplier(null); setSupplierForm({ name: '', company_name: '', phone: '', email: '', address: '' }); setShowSupplierDialog(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Supplier
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Address</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {suppliers.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No suppliers found</TableCell></TableRow>
+                  ) : (
+                    suppliers.map(supplier => (
+                      <TableRow key={supplier.id}>
+                        <TableCell className="font-medium">{supplier.name}</TableCell>
+                        <TableCell>{supplier.company_name || '-'}</TableCell>
+                        <TableCell>{supplier.phone || '-'}</TableCell>
+                        <TableCell>{supplier.email || '-'}</TableCell>
+                        <TableCell className="max-w-[200px] truncate">{supplier.address || '-'}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleEditSupplier(supplier)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -761,13 +1004,14 @@ export default function POSInventory() {
                     <TableHead>Date</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Paid</TableHead>
+                    <TableHead>Due</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {purchases.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No purchase orders</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No purchase orders</TableCell></TableRow>
                   ) : (
                     purchases.map(po => (
                       <TableRow key={po.id}>
@@ -775,7 +1019,10 @@ export default function POSInventory() {
                         <TableCell>{(po.supplier as any)?.name || '-'}</TableCell>
                         <TableCell>{format(new Date(po.order_date), 'dd MMM yyyy')}</TableCell>
                         <TableCell>৳{po.total.toLocaleString()}</TableCell>
-                        <TableCell>৳{(po.paid_amount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-green-600">৳{(po.paid_amount || 0).toLocaleString()}</TableCell>
+                        <TableCell className={po.total - (po.paid_amount || 0) > 0 ? 'text-orange-600' : ''}>
+                          ৳{(po.total - (po.paid_amount || 0)).toLocaleString()}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={po.status === 'received' ? 'default' : po.status === 'pending' ? 'secondary' : 'outline'}>
                             {po.status}
@@ -847,7 +1094,7 @@ export default function POSInventory() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" onClick={() => handleViewInvoice(sale)}>
                               <Printer className="h-4 w-4" />
                             </Button>
                           </TableCell>
@@ -1015,32 +1262,173 @@ export default function POSInventory() {
             </Card>
           </div>
         </TabsContent>
+
+        {/* Reports Tab */}
+        <TabsContent value="reports">
+          <div className="grid gap-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Inventory Reports</CardTitle>
+                  <CardDescription>Sales, purchase, and collection reports</CardDescription>
+                </div>
+                <div className="flex gap-2 items-center">
+                  <Input 
+                    type="month" 
+                    value={reportMonth} 
+                    onChange={(e) => setReportMonth(e.target.value)}
+                    className="w-40"
+                  />
+                  <Button variant="outline" onClick={exportReportCSV}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export CSV
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-3 gap-6 mb-6">
+                  <Card>
+                    <CardContent className="p-4">
+                      <h4 className="font-semibold text-muted-foreground mb-2">Sales Summary</h4>
+                      <p className="text-3xl font-bold text-green-600">৳{reportData.totalSales.toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground">{reportData.salesCount} sales</p>
+                      <div className="mt-2 text-sm">
+                        <p>Paid: <span className="text-green-600">৳{reportData.totalPaid.toLocaleString()}</span></p>
+                        <p>Due: <span className="text-orange-600">৳{reportData.totalDue.toLocaleString()}</span></p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <h4 className="font-semibold text-muted-foreground mb-2">Purchase Summary</h4>
+                      <p className="text-3xl font-bold text-blue-600">৳{reportData.purchaseTotal.toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground">{reportData.purchaseCount} purchases</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <h4 className="font-semibold text-muted-foreground mb-2">Collection Summary</h4>
+                      <p className="text-3xl font-bold text-primary">৳{reportData.collectionTotal.toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground">{reportData.collectionCount} collections</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Low Stock Alert */}
+                {lowStockItems.length > 0 && (
+                  <Card className="border-destructive">
+                    <CardHeader>
+                      <CardTitle className="text-destructive flex items-center gap-2">
+                        <AlertTriangle className="h-5 w-5" />
+                        Low Stock Alert ({lowStockItems.length} items)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Product</TableHead>
+                            <TableHead>Current Stock</TableHead>
+                            <TableHead>Min Stock</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {lowStockItems.slice(0, 10).map(item => (
+                            <TableRow key={item.id}>
+                              <TableCell className="font-medium">{item.name}</TableCell>
+                              <TableCell><Badge variant="destructive">{item.quantity}</Badge></TableCell>
+                              <TableCell>{item.min_quantity}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
 
-      {/* Select Customer Dialog */}
+      {/* Select Customer Dialog - Updated with ISP customers */}
       <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Select Customer</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="h-[300px]">
-            {pos.customers.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No customers found</p>
-            ) : (
-              <div className="space-y-2">
-                {pos.customers.map(customer => (
-                  <div
-                    key={customer.id}
-                    onClick={() => { setSelectedCustomer(customer); setShowCustomerDialog(false); }}
-                    className="p-3 border rounded-lg cursor-pointer hover:bg-muted"
-                  >
-                    <p className="font-medium">{customer.name}</p>
-                    <p className="text-sm text-muted-foreground">{customer.phone} {customer.due_amount > 0 && `• Due: ৳${customer.due_amount}`}</p>
-                  </div>
-                ))}
+          <Tabs value={customerTab} onValueChange={(v) => setCustomerTab(v as 'pos' | 'isp')}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="pos">POS Customers</TabsTrigger>
+              <TabsTrigger value="isp" className="flex items-center gap-1">
+                <Wifi className="h-3 w-3" />
+                ISP Customers
+              </TabsTrigger>
+            </TabsList>
+            
+            <div className="mt-3">
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Search customers..." 
+                  value={customerSearchQuery}
+                  onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
               </div>
-            )}
-          </ScrollArea>
+            </div>
+            
+            <TabsContent value="pos">
+              <ScrollArea className="h-[300px]">
+                {pos.customers.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No POS customers found</p>
+                ) : (
+                  <div className="space-y-2">
+                    {pos.customers.filter(c => 
+                      c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                      c.phone?.includes(customerSearchQuery)
+                    ).map(customer => (
+                      <div
+                        key={customer.id}
+                        onClick={() => selectPosCustomerForSale(customer)}
+                        className="p-3 border rounded-lg cursor-pointer hover:bg-muted"
+                      >
+                        <p className="font-medium">{customer.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {customer.phone} 
+                          {customer.due_amount > 0 && <span className="text-orange-600 ml-2">Due: ৳{customer.due_amount}</span>}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </TabsContent>
+            
+            <TabsContent value="isp">
+              <ScrollArea className="h-[300px]">
+                {filteredIspCustomers.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No ISP customers found</p>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredIspCustomers.map(customer => (
+                      <div
+                        key={customer.id}
+                        onClick={() => selectIspCustomerForSale(customer)}
+                        className="p-3 border rounded-lg cursor-pointer hover:bg-muted"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium">{customer.name}</p>
+                          <Badge variant="outline" className="text-xs">{customer.customer_code}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{customer.phone || customer.email}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
@@ -1163,7 +1551,7 @@ export default function POSInventory() {
                 <p className="text-sm text-orange-700 dark:text-orange-300">
                   <AlertTriangle className="inline h-4 w-4 mr-1" />
                   Due amount: ৳{((cartTotal - (parseFloat(checkoutForm.discount) || 0) + (parseFloat(checkoutForm.tax) || 0)) - (parseFloat(checkoutForm.paid) || 0)).toLocaleString()}
-                  {!selectedCustomer && ' - Please select a customer to track due'}
+                  {!selectedCustomer && !selectedIspCustomer && ' - Please select a customer to track due'}
                 </p>
               </div>
             )}
@@ -1322,11 +1710,11 @@ export default function POSInventory() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Supplier Dialog */}
+      {/* Add/Edit Supplier Dialog */}
       <Dialog open={showSupplierDialog} onOpenChange={setShowSupplierDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Supplier</DialogTitle>
+            <DialogTitle>{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -1358,110 +1746,98 @@ export default function POSInventory() {
             <Button variant="outline" onClick={() => setShowSupplierDialog(false)}>Cancel</Button>
             <Button onClick={handleSaveSupplier} disabled={saving || !supplierForm.name}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Add Supplier
+              {editingSupplier ? 'Save Changes' : 'Add Supplier'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Create Purchase Order Dialog */}
+      {/* Purchase Order Dialog */}
       <Dialog open={showPurchaseDialog} onOpenChange={setShowPurchaseDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create Purchase Order</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Supplier *</Label>
-              <Select value={purchaseForm.supplierId} onValueChange={(v) => setPurchaseForm(p => ({ ...p, supplierId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
-                <SelectContent>
-                  {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Add Items</Label>
-              <div className="flex gap-2">
-                <Select onValueChange={(v) => {
-                  if (!purchaseForm.items.find(i => i.itemId === v)) {
-                    const item = items.find(i => i.id === v);
-                    if (item) {
-                      setPurchaseForm(p => ({
-                        ...p,
-                        items: [...p.items, { itemId: v, quantity: 1, price: item.unit_price }]
-                      }));
-                    }
-                  }
-                }}>
-                  <SelectTrigger className="flex-1"><SelectValue placeholder="Select product to add" /></SelectTrigger>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Supplier *</Label>
+                <Select value={purchaseForm.supplierId} onValueChange={(v) => setPurchaseForm(p => ({ ...p, supplierId: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
                   <SelectContent>
-                    {items.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                    {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Paid Amount</Label>
+                <Input 
+                  type="number" 
+                  value={purchaseForm.paidAmount} 
+                  onChange={(e) => setPurchaseForm(p => ({ ...p, paidAmount: e.target.value }))} 
+                />
+              </div>
             </div>
 
-            {purchaseForm.items.length > 0 && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Unit Price</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {purchaseForm.items.map((item, idx) => {
-                    const product = items.find(i => i.id === item.itemId);
-                    return (
-                      <TableRow key={item.itemId}>
-                        <TableCell>{product?.name}</TableCell>
-                        <TableCell>
-                          <Input 
-                            type="number" 
-                            value={item.quantity} 
-                            onChange={(e) => {
-                              const newItems = [...purchaseForm.items];
-                              newItems[idx].quantity = parseInt(e.target.value) || 1;
-                              setPurchaseForm(p => ({ ...p, items: newItems }));
-                            }}
-                            className="w-20"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input 
-                            type="number" 
-                            value={item.price} 
-                            onChange={(e) => {
-                              const newItems = [...purchaseForm.items];
-                              newItems[idx].price = parseFloat(e.target.value) || 0;
-                              setPurchaseForm(p => ({ ...p, items: newItems }));
-                            }}
-                            className="w-24"
-                          />
-                        </TableCell>
-                        <TableCell>৳{(item.quantity * item.price).toLocaleString()}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => {
-                            setPurchaseForm(p => ({ ...p, items: p.items.filter((_, i) => i !== idx) }));
-                          }}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  <TableRow className="font-bold">
-                    <TableCell colSpan={3}>Total</TableCell>
-                    <TableCell colSpan={2}>৳{purchaseForm.items.reduce((s, i) => s + (i.quantity * i.price), 0).toLocaleString()}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            )}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Items</Label>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setPurchaseForm(p => ({ ...p, items: [...p.items, { itemId: '', quantity: 1, price: 0 }] }))}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Item
+                </Button>
+              </div>
+              <ScrollArea className="h-[200px]">
+                {purchaseForm.items.map((item, idx) => (
+                  <div key={idx} className="grid grid-cols-4 gap-2 mb-2">
+                    <Select value={item.itemId} onValueChange={(v) => {
+                      const selectedItem = items.find(i => i.id === v);
+                      setPurchaseForm(p => ({
+                        ...p,
+                        items: p.items.map((i, iIdx) => iIdx === idx ? { 
+                          ...i, 
+                          itemId: v,
+                          price: selectedItem?.unit_price || 0
+                        } : i)
+                      }));
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
+                      <SelectContent>
+                        {items.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input 
+                      type="number" 
+                      placeholder="Qty"
+                      value={item.quantity}
+                      onChange={(e) => setPurchaseForm(p => ({
+                        ...p,
+                        items: p.items.map((i, iIdx) => iIdx === idx ? { ...i, quantity: parseInt(e.target.value) || 0 } : i)
+                      }))}
+                    />
+                    <Input 
+                      type="number" 
+                      placeholder="Price"
+                      value={item.price}
+                      onChange={(e) => setPurchaseForm(p => ({
+                        ...p,
+                        items: p.items.map((i, iIdx) => iIdx === idx ? { ...i, price: parseFloat(e.target.value) || 0 } : i)
+                      }))}
+                    />
+                    <Button variant="ghost" size="sm" onClick={() => setPurchaseForm(p => ({ ...p, items: p.items.filter((_, iIdx) => iIdx !== idx) }))}>
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </ScrollArea>
+              <div className="text-right font-bold">
+                Total: ৳{purchaseForm.items.reduce((sum, i) => sum + (i.quantity * i.price), 0).toLocaleString()}
+              </div>
+            </div>
 
             <div className="space-y-2">
               <Label>Notes</Label>
@@ -1472,7 +1848,96 @@ export default function POSInventory() {
             <Button variant="outline" onClick={() => setShowPurchaseDialog(false)}>Cancel</Button>
             <Button onClick={handleCreatePurchase} disabled={saving || !purchaseForm.supplierId || purchaseForm.items.length === 0}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create Purchase Order
+              Create Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice Dialog */}
+      <Dialog open={showInvoice} onOpenChange={setShowInvoice}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Invoice</DialogTitle>
+          </DialogHeader>
+          <div id="invoice-content" className="space-y-4">
+            {selectedSale && (
+              <>
+                <div className="text-center border-b pb-4">
+                  <h2 className="text-xl font-bold">INVOICE</h2>
+                  <p className="text-sm text-muted-foreground">#{selectedSale.invoice_number}</p>
+                  <p className="text-sm">{format(new Date(selectedSale.sale_date), 'dd MMM yyyy HH:mm')}</p>
+                </div>
+                
+                {selectedSale.customer_name && (
+                  <div className="border-b pb-3">
+                    <p className="font-semibold">Customer:</p>
+                    <p>{selectedSale.customer_name}</p>
+                    {selectedSale.customer_phone && <p className="text-sm text-muted-foreground">{selectedSale.customer_phone}</p>}
+                  </div>
+                )}
+                
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Price</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {saleItems.map((item, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{item.item_name}</TableCell>
+                        <TableCell className="text-right">{item.quantity}</TableCell>
+                        <TableCell className="text-right">৳{item.unit_price}</TableCell>
+                        <TableCell className="text-right">৳{(item.quantity * item.unit_price).toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                
+                <div className="border-t pt-3 space-y-1">
+                  <div className="flex justify-between">
+                    <span>Subtotal:</span>
+                    <span>৳{selectedSale.subtotal?.toLocaleString() || selectedSale.total_amount.toLocaleString()}</span>
+                  </div>
+                  {selectedSale.discount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span>Discount:</span>
+                      <span>-৳{selectedSale.discount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {selectedSale.tax > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span>Tax:</span>
+                      <span>+৳{selectedSale.tax.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-lg border-t pt-2">
+                    <span>Total:</span>
+                    <span>৳{selectedSale.total_amount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-green-600">
+                    <span>Paid:</span>
+                    <span>৳{selectedSale.paid_amount.toLocaleString()}</span>
+                  </div>
+                  {selectedSale.due_amount > 0 && (
+                    <div className="flex justify-between text-orange-600 font-medium">
+                      <span>Due:</span>
+                      <span>৳{selectedSale.due_amount.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInvoice(false)}>Close</Button>
+            <Button onClick={handlePrintInvoice}>
+              <Printer className="h-4 w-4 mr-2" />
+              Print
             </Button>
           </DialogFooter>
         </DialogContent>
