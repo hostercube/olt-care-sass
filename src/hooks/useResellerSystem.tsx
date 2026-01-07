@@ -12,13 +12,6 @@ export function useResellerSystem() {
   const [loading, setLoading] = useState(true);
 
   const fetchResellers = useCallback(async () => {
-    // Always require tenant context for ISP users
-    if (!isSuperAdmin && !tenantId) {
-      setResellers([]);
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       let query = supabase
@@ -31,13 +24,17 @@ export function useResellerSystem() {
         .order('level', { ascending: true })
         .order('created_at', { ascending: false });
 
-      // CRITICAL: Always filter by tenant_id for non-super-admins
+      // Filter by tenant_id for non-super-admins
       if (!isSuperAdmin && tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
 
       const { data, error } = await query;
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching resellers:', error);
+        throw error;
+      }
+      console.log('Fetched resellers:', data?.length || 0, 'items');
       setResellers((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching resellers:', err);
@@ -99,6 +96,7 @@ export function useResellerSystem() {
     try {
       const resellerData: any = { ...data };
       
+      // Set tenant_id - required for insert
       if (tenantId) {
         resellerData.tenant_id = tenantId;
         
@@ -111,8 +109,18 @@ export function useResellerSystem() {
             throw new Error(limitCheck.message);
           }
         }
-      } else if (!isSuperAdmin) {
-        throw new Error('No tenant context available');
+      } else {
+        // Try to get tenant_id from current user's tenant
+        const { data: tenantUser } = await supabase
+          .from('tenant_users')
+          .select('tenant_id')
+          .single();
+        
+        if (tenantUser?.tenant_id) {
+          resellerData.tenant_id = tenantUser.tenant_id;
+        } else {
+          throw new Error('No tenant context available');
+        }
       }
       
       // Set level based on parent
@@ -127,19 +135,26 @@ export function useResellerSystem() {
         resellerData.role = 'reseller';
       }
       
+      console.log('Creating reseller with data:', resellerData);
+      
       const { data: newReseller, error } = await supabase
         .from('resellers')
         .insert(resellerData)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Insert error:', error);
+        throw error;
+      }
+      
+      console.log('Created reseller:', newReseller);
       toast.success('Reseller created successfully');
-      fetchResellers();
+      await fetchResellers();
       return newReseller;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating reseller:', err);
-      toast.error('Failed to create reseller');
+      toast.error(err?.message || 'Failed to create reseller');
       throw err;
     }
   };

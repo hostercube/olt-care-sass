@@ -41,6 +41,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
     name: '',
     phone: '',
     email: '',
+    nid_number: '',
     address: '',
     area_id: '',
     reseller_id: '',
@@ -61,6 +62,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
         name: customer.name || '',
         phone: customer.phone || '',
         email: customer.email || '',
+        nid_number: (customer as any).nid_number || '',
         address: customer.address || '',
         area_id: customer.area_id || '',
         reseller_id: customer.reseller_id || '',
@@ -142,6 +144,7 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
         name: formData.name.trim(),
         phone: formData.phone || null,
         email: formData.email || null,
+        nid_number: formData.nid_number || null,
         address: formData.address || null,
         area_id: formData.area_id || null,
         reseller_id: formData.reseller_id || null,
@@ -208,6 +211,17 @@ export function EditCustomerDialog({ customer, open, onOpenChange, onSuccess }: 
               type="email"
               value={formData.email}
               onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-nid">NID Number</Label>
+            <Input
+              id="edit-nid"
+              value={formData.nid_number}
+              onChange={(e) => setFormData(prev => ({ ...prev, nid_number: e.target.value.replace(/\D/g, '') }))}
+              placeholder="National ID number"
+              maxLength={17}
             />
           </div>
 

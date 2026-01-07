@@ -1121,6 +1121,7 @@ export type Database = {
           mikrotik_id: string | null
           monthly_bill: number | null
           name: string
+          nid_number: string | null
           notes: string | null
           onu_id: string | null
           onu_index: number | null
@@ -1156,6 +1157,7 @@ export type Database = {
           mikrotik_id?: string | null
           monthly_bill?: number | null
           name: string
+          nid_number?: string | null
           notes?: string | null
           onu_id?: string | null
           onu_index?: number | null
@@ -1191,6 +1193,7 @@ export type Database = {
           mikrotik_id?: string | null
           monthly_bill?: number | null
           name?: string
+          nid_number?: string | null
           notes?: string | null
           onu_id?: string | null
           onu_index?: number | null
@@ -5338,6 +5341,7 @@ export type Database = {
           mikrotik_id: string | null
           monthly_bill: number | null
           name: string
+          nid_number: string | null
           notes: string | null
           onu_id: string | null
           onu_index: number | null

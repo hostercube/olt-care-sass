@@ -65,6 +65,7 @@ import Transactions from "./pages/ISP/Transactions";
 import Reports from "./pages/ISP/Reports";
 import CustomDomain from "./pages/ISP/CustomDomain";
 import ISPCampaignManagement from "./pages/ISP/CampaignManagement";
+import CustomerTypes from "./pages/ISP/CustomerTypes";
 
 // Customer Portal Pages
 import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
@@ -308,6 +309,13 @@ const App = () => (
                     <ModuleAccessGuard module="isp_customers" moduleName="Customer Management">
                       <CustomerManagement />
                     </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/customer-types" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <CustomerTypes />
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />

@@ -64,6 +64,7 @@ const oltCareItems: NavItem[] = [
 const ispCoreItems: NavItem[] = [
   { title: 'ISP Dashboard', href: '/isp', icon: LayoutDashboard },
   { title: 'Customers', href: '/isp/customers', icon: Users, requiredModule: 'isp_customers' },
+  { title: 'Customer Types', href: '/isp/customer-types', icon: UserCheck },
   { title: 'Packages', href: '/isp/packages', icon: Package },
   { title: 'Areas', href: '/isp/areas', icon: MapPin },
   { title: 'Resellers', href: '/isp/resellers', icon: UserCheck, requiredModule: 'isp_resellers' },
