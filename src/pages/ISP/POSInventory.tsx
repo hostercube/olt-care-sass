@@ -388,6 +388,40 @@ export default function POSInventory() {
     return filteredCustomersData.slice(start, start + customersPageSize);
   }, [filteredCustomersData, customersPage, customersPageSize]);
 
+  // ISP customers with POS purchases - calculate totals from sales
+  const ispCustomersWithPurchases = useMemo(() => {
+    const ispSales = pos.sales.filter(s => s.isp_customer_id);
+    const customerSalesMap = new Map<string, { total: number; due: number }>();
+    
+    ispSales.forEach(sale => {
+      if (sale.isp_customer_id) {
+        const existing = customerSalesMap.get(sale.isp_customer_id) || { total: 0, due: 0 };
+        customerSalesMap.set(sale.isp_customer_id, {
+          total: existing.total + sale.total_amount,
+          due: existing.due + sale.due_amount,
+        });
+      }
+    });
+    
+    return ispCustomers
+      .filter(c => customerSalesMap.has(c.id) || customersSearch)
+      .filter(c => 
+        c.name.toLowerCase().includes(customersSearch.toLowerCase()) ||
+        (c.phone || '').includes(customersSearch) ||
+        (c.customer_code || '').toLowerCase().includes(customersSearch.toLowerCase())
+      )
+      .map(c => ({
+        ...c,
+        pos_total: customerSalesMap.get(c.id)?.total || 0,
+        pos_due: customerSalesMap.get(c.id)?.due || 0,
+      }));
+  }, [ispCustomers, pos.sales, customersSearch]);
+
+  const paginatedIspCustomersWithPurchases = useMemo(() => {
+    const start = (customersPage - 1) * customersPageSize;
+    return ispCustomersWithPurchases.slice(start, start + customersPageSize);
+  }, [ispCustomersWithPurchases, customersPage, customersPageSize]);
+
   // Cart functions
   const addToCart = (item: InventoryItem) => {
     if (item.quantity <= 0) {
@@ -2005,8 +2039,10 @@ export default function POSInventory() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>POS Customers</CardTitle>
-                <CardDescription>Manage walk-in and regular customers ({filteredCustomersData.length} total)</CardDescription>
+                <CardTitle>Customers</CardTitle>
+                <CardDescription>
+                  POS: {filteredCustomersData.length} | ISP with purchases: {ispCustomersWithPurchases.filter(c => c.pos_total > 0).length}
+                </CardDescription>
               </div>
               <Button onClick={() => setShowNewCustomer(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -2025,65 +2061,124 @@ export default function POSInventory() {
                 />
               </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Total Purchase</TableHead>
-                    <TableHead>Due Amount</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedCustomers.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No customers found</TableCell></TableRow>
-                  ) : (
-                    paginatedCustomers.map(customer => (
-                      <TableRow key={customer.id}>
-                        <TableCell className="font-mono">{customer.customer_code}</TableCell>
-                        <TableCell className="font-medium">{customer.name}</TableCell>
-                        <TableCell>{customer.phone || '-'}</TableCell>
-                        <TableCell>{customer.company_name || '-'}</TableCell>
-                        <TableCell>৳{customer.total_purchase.toLocaleString()}</TableCell>
-                        <TableCell className={customer.due_amount > 0 ? 'text-orange-600 font-medium' : ''}>
-                          ৳{customer.due_amount.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right space-x-1">
-                          <Button variant="ghost" size="sm" onClick={() => loadCustomerProfile(customer.id)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {customer.due_amount > 0 && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => {
-                                setDuePaymentForm(prev => ({ 
-                                  ...prev, 
-                                  customerId: customer.id,
-                                  amount: customer.due_amount.toString(),
-                                }));
-                                setShowDuePayment(true);
-                              }}
-                            >
-                              <DollarSign className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </TableCell>
+              <Tabs defaultValue="pos" className="w-full">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="pos">POS Customers ({filteredCustomersData.length})</TabsTrigger>
+                  <TabsTrigger value="isp">ISP Customers ({ispCustomersWithPurchases.filter(c => c.pos_total > 0).length})</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="pos">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Company</TableHead>
+                        <TableHead>Total Purchase</TableHead>
+                        <TableHead>Due Amount</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-              <TablePagination
-                totalItems={filteredCustomersData.length}
-                currentPage={customersPage}
-                pageSize={customersPageSize}
-                onPageChange={setCustomersPage}
-                onPageSizeChange={setCustomersPageSize}
-              />
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedCustomers.length === 0 ? (
+                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No customers found</TableCell></TableRow>
+                      ) : (
+                        paginatedCustomers.map(customer => (
+                          <TableRow key={customer.id}>
+                            <TableCell className="font-mono">{customer.customer_code}</TableCell>
+                            <TableCell className="font-medium">{customer.name}</TableCell>
+                            <TableCell>{customer.phone || '-'}</TableCell>
+                            <TableCell>{customer.company_name || '-'}</TableCell>
+                            <TableCell>৳{customer.total_purchase.toLocaleString()}</TableCell>
+                            <TableCell className={customer.due_amount > 0 ? 'text-orange-600 font-medium' : ''}>
+                              ৳{customer.due_amount.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right space-x-1">
+                              <Button variant="ghost" size="sm" onClick={() => loadCustomerProfile(customer.id)}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {customer.due_amount > 0 && (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => {
+                                    setDuePaymentForm(prev => ({ 
+                                      ...prev, 
+                                      customerId: customer.id,
+                                      amount: customer.due_amount.toString(),
+                                    }));
+                                    setShowDuePayment(true);
+                                  }}
+                                >
+                                  <DollarSign className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                  <TablePagination
+                    totalItems={filteredCustomersData.length}
+                    currentPage={customersPage}
+                    pageSize={customersPageSize}
+                    onPageChange={setCustomersPage}
+                    onPageSizeChange={setCustomersPageSize}
+                  />
+                </TabsContent>
+
+                <TabsContent value="isp">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Package</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>POS Purchase</TableHead>
+                        <TableHead>POS Due</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedIspCustomersWithPurchases.filter(c => c.pos_total > 0).length === 0 ? (
+                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No ISP customers with POS purchases</TableCell></TableRow>
+                      ) : (
+                        paginatedIspCustomersWithPurchases.filter(c => c.pos_total > 0).map(customer => (
+                          <TableRow key={customer.id}>
+                            <TableCell className="font-mono">{customer.customer_code}</TableCell>
+                            <TableCell className="font-medium">{customer.name}</TableCell>
+                            <TableCell>{customer.phone || '-'}</TableCell>
+                            <TableCell>
+                              {customer.package_name ? (
+                                <Badge variant="secondary">{customer.package_name}</Badge>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={customer.status === 'active' ? 'default' : 'destructive'}>
+                                {customer.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>৳{customer.pos_total.toLocaleString()}</TableCell>
+                            <TableCell className={customer.pos_due > 0 ? 'text-orange-600 font-medium' : ''}>
+                              ৳{customer.pos_due.toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                  <TablePagination
+                    totalItems={ispCustomersWithPurchases.filter(c => c.pos_total > 0).length}
+                    currentPage={customersPage}
+                    pageSize={customersPageSize}
+                    onPageChange={setCustomersPage}
+                    onPageSizeChange={setCustomersPageSize}
+                  />
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </TabsContent>
