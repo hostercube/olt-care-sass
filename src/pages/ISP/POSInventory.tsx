@@ -219,14 +219,32 @@ export default function POSInventory() {
   const [purchasesStatus, setPurchasesStatus] = useState('all');
   const [purchasesPage, setPurchasesPage] = useState(1);
   const [purchasesPageSize, setPurchasesPageSize] = useState(20);
+  const [purchasesDateFrom, setPurchasesDateFrom] = useState('');
+  const [purchasesDateTo, setPurchasesDateTo] = useState('');
+  const [purchasesSupplier, setPurchasesSupplier] = useState('all');
 
   const [salesSearch, setSalesSearch] = useState('');
   const [salesPage, setSalesPage] = useState(1);
   const [salesPageSize, setSalesPageSize] = useState(20);
+  const [salesDateFrom, setSalesDateFrom] = useState('');
+  const [salesDateTo, setSalesDateTo] = useState('');
+  const [salesStatus, setSalesStatus] = useState('all');
+  const [salesPaymentMethod, setSalesPaymentMethod] = useState('all');
 
   const [customersSearch, setCustomersSearch] = useState('');
   const [customersPage, setCustomersPage] = useState(1);
   const [customersPageSize, setCustomersPageSize] = useState(20);
+  const [customersHasDue, setCustomersHasDue] = useState(false);
+
+  // Dues tab filters
+  const [duesSearchCustomer, setDuesSearchCustomer] = useState('');
+  const [duesSearchSupplier, setDuesSearchSupplier] = useState('');
+  const [duesMinAmount, setDuesMinAmount] = useState('');
+  const [duesMaxAmount, setDuesMaxAmount] = useState('');
+
+  // Products advanced filters
+  const [productsBrand, setProductsBrand] = useState('all');
+  const [productsStock, setProductsStock] = useState<'all' | 'low' | 'out' | 'in'>('all');
 
   // Forms
   const [itemForm, setItemForm] = useState({
@@ -309,13 +327,24 @@ export default function POSInventory() {
   const filteredProductsData = useMemo(() => {
     let filtered = items.filter(item =>
       item.name.toLowerCase().includes(productsSearch.toLowerCase()) ||
-      item.sku?.toLowerCase().includes(productsSearch.toLowerCase())
+      item.sku?.toLowerCase().includes(productsSearch.toLowerCase()) ||
+      item.barcode?.toLowerCase().includes(productsSearch.toLowerCase())
     );
     if (productsCategory !== 'all') {
       filtered = filtered.filter(item => item.category_id === productsCategory);
     }
+    if (productsBrand !== 'all') {
+      filtered = filtered.filter(item => item.brand_id === productsBrand);
+    }
+    if (productsStock === 'low') {
+      filtered = filtered.filter(item => item.quantity > 0 && item.quantity <= item.min_quantity);
+    } else if (productsStock === 'out') {
+      filtered = filtered.filter(item => item.quantity <= 0);
+    } else if (productsStock === 'in') {
+      filtered = filtered.filter(item => item.quantity > item.min_quantity);
+    }
     return filtered;
-  }, [items, productsSearch, productsCategory]);
+  }, [items, productsSearch, productsCategory, productsBrand, productsStock]);
 
   const paginatedProducts = useMemo(() => {
     const start = (productsPage - 1) * productsPageSize;
@@ -355,8 +384,21 @@ export default function POSInventory() {
     if (purchasesStatus !== 'all') {
       filtered = filtered.filter(po => po.status === purchasesStatus);
     }
+    if (purchasesSupplier !== 'all') {
+      filtered = filtered.filter(po => po.supplier_id === purchasesSupplier);
+    }
+    if (purchasesDateFrom) {
+      const fromDate = new Date(purchasesDateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter(po => new Date(po.order_date) >= fromDate);
+    }
+    if (purchasesDateTo) {
+      const toDate = new Date(purchasesDateTo);
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(po => new Date(po.order_date) <= toDate);
+    }
     return filtered;
-  }, [purchases, purchasesSearch, purchasesStatus]);
+  }, [purchases, purchasesSearch, purchasesStatus, purchasesSupplier, purchasesDateFrom, purchasesDateTo]);
 
   const paginatedPurchases = useMemo(() => {
     const start = (purchasesPage - 1) * purchasesPageSize;
@@ -364,11 +406,28 @@ export default function POSInventory() {
   }, [filteredPurchasesData, purchasesPage, purchasesPageSize]);
 
   const filteredSalesData = useMemo(() => {
-    return pos.sales.filter(sale =>
+    let filtered = pos.sales.filter(sale =>
       (sale.invoice_number || '').toLowerCase().includes(salesSearch.toLowerCase()) ||
       (sale.customer_name || '').toLowerCase().includes(salesSearch.toLowerCase())
     );
-  }, [pos.sales, salesSearch]);
+    if (salesStatus !== 'all') {
+      filtered = filtered.filter(sale => sale.status === salesStatus);
+    }
+    if (salesPaymentMethod !== 'all') {
+      filtered = filtered.filter(sale => sale.payment_method === salesPaymentMethod);
+    }
+    if (salesDateFrom) {
+      const fromDate = new Date(salesDateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter(sale => new Date(sale.sale_date) >= fromDate);
+    }
+    if (salesDateTo) {
+      const toDate = new Date(salesDateTo);
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(sale => new Date(sale.sale_date) <= toDate);
+    }
+    return filtered;
+  }, [pos.sales, salesSearch, salesStatus, salesPaymentMethod, salesDateFrom, salesDateTo]);
 
   const paginatedSales = useMemo(() => {
     const start = (salesPage - 1) * salesPageSize;
@@ -376,12 +435,16 @@ export default function POSInventory() {
   }, [filteredSalesData, salesPage, salesPageSize]);
 
   const filteredCustomersData = useMemo(() => {
-    return pos.customers.filter(cust =>
+    let filtered = pos.customers.filter(cust =>
       cust.name.toLowerCase().includes(customersSearch.toLowerCase()) ||
       (cust.phone || '').includes(customersSearch) ||
       (cust.customer_code || '').toLowerCase().includes(customersSearch.toLowerCase())
     );
-  }, [pos.customers, customersSearch]);
+    if (customersHasDue) {
+      filtered = filtered.filter(cust => cust.due_amount > 0);
+    }
+    return filtered;
+  }, [pos.customers, customersSearch, customersHasDue]);
 
   const paginatedCustomers = useMemo(() => {
     const start = (customersPage - 1) * customersPageSize;
@@ -403,18 +466,23 @@ export default function POSInventory() {
       }
     });
     
-    return ispCustomers
-      .filter(c => customerSalesMap.has(c.id) || customersSearch)
-      .filter(c => 
-        c.name.toLowerCase().includes(customersSearch.toLowerCase()) ||
-        (c.phone || '').includes(customersSearch) ||
-        (c.customer_code || '').toLowerCase().includes(customersSearch.toLowerCase())
-      )
-      .map(c => ({
-        ...c,
-        pos_total: customerSalesMap.get(c.id)?.total || 0,
-        pos_due: customerSalesMap.get(c.id)?.due || 0,
-      }));
+    // Show all ISP customers who have made POS purchases
+    const customersWithPurchases = ispCustomers.filter(c => customerSalesMap.has(c.id));
+    
+    // Apply search filter
+    const filteredCustomers = customersSearch 
+      ? customersWithPurchases.filter(c => 
+          c.name.toLowerCase().includes(customersSearch.toLowerCase()) ||
+          (c.phone || '').includes(customersSearch) ||
+          (c.customer_code || '').toLowerCase().includes(customersSearch.toLowerCase())
+        )
+      : customersWithPurchases;
+    
+    return filteredCustomers.map(c => ({
+      ...c,
+      pos_total: customerSalesMap.get(c.id)?.total || 0,
+      pos_due: customerSalesMap.get(c.id)?.due || 0,
+    }));
   }, [ispCustomers, pos.sales, customersSearch]);
 
   const paginatedIspCustomersWithPurchases = useMemo(() => {
@@ -1508,7 +1576,7 @@ export default function POSInventory() {
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setShowQRPrinter(true)}>
                   <QrCode className="h-4 w-4 mr-2" />
-                  Print QR Codes
+                  Print Barcode/QR
                 </Button>
                 <Button onClick={() => { setEditingItem(null); resetItemForm(); setShowItemDialog(true); }}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -1518,18 +1586,18 @@ export default function POSInventory() {
             </CardHeader>
             <CardContent>
               {/* Search and Filter */}
-              <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                <div className="relative flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
-                    placeholder="Search by name or SKU..." 
+                    placeholder="Search name, SKU, barcode..." 
                     value={productsSearch}
                     onChange={(e) => { setProductsSearch(e.target.value); setProductsPage(1); }}
                     className="pl-9"
                   />
                 </div>
                 <Select value={productsCategory} onValueChange={(v) => { setProductsCategory(v); setProductsPage(1); }}>
-                  <SelectTrigger className="w-[200px]">
+                  <SelectTrigger>
                     <SelectValue placeholder="All Categories" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1537,6 +1605,28 @@ export default function POSInventory() {
                     {categories.map(cat => (
                       <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+                <Select value={productsBrand} onValueChange={(v) => { setProductsBrand(v); setProductsPage(1); }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Brands" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Brands</SelectItem>
+                    {inventoryExt.brands.map(brand => (
+                      <SelectItem key={brand.id} value={brand.id}>{brand.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={productsStock} onValueChange={(v: any) => { setProductsStock(v); setProductsPage(1); }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Stock Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Stock</SelectItem>
+                    <SelectItem value="in">In Stock</SelectItem>
+                    <SelectItem value="low">Low Stock</SelectItem>
+                    <SelectItem value="out">Out of Stock</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1857,19 +1947,30 @@ export default function POSInventory() {
               </Button>
             </CardHeader>
             <CardContent>
-              {/* Search and Filter */}
-              <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                <div className="relative flex-1">
+              {/* Advanced Search and Filter */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+                <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
-                    placeholder="Search by order # or supplier..." 
+                    placeholder="Search order # or supplier..." 
                     value={purchasesSearch}
                     onChange={(e) => { setPurchasesSearch(e.target.value); setPurchasesPage(1); }}
                     className="pl-9"
                   />
                 </div>
+                <Select value={purchasesSupplier} onValueChange={(v) => { setPurchasesSupplier(v); setPurchasesPage(1); }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Suppliers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Suppliers</SelectItem>
+                    {suppliers.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={purchasesStatus} onValueChange={(v) => { setPurchasesStatus(v); setPurchasesPage(1); }}>
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger>
                     <SelectValue placeholder="All Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1879,6 +1980,22 @@ export default function POSInventory() {
                     <SelectItem value="paid">Paid</SelectItem>
                   </SelectContent>
                 </Select>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">From Date</Label>
+                  <Input 
+                    type="date" 
+                    value={purchasesDateFrom}
+                    onChange={(e) => { setPurchasesDateFrom(e.target.value); setPurchasesPage(1); }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">To Date</Label>
+                  <Input 
+                    type="date" 
+                    value={purchasesDateTo}
+                    onChange={(e) => { setPurchasesDateTo(e.target.value); setPurchasesPage(1); }}
+                  />
+                </div>
               </div>
 
               <Table>
@@ -1963,15 +2080,57 @@ export default function POSInventory() {
               <CardDescription>View all POS sales and invoices ({filteredSalesData.length} total)</CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Search */}
-              <div className="relative max-w-sm mb-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search by invoice # or customer..." 
-                  value={salesSearch}
-                  onChange={(e) => { setSalesSearch(e.target.value); setSalesPage(1); }}
-                  className="pl-9"
-                />
+              {/* Advanced Search and Filter */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search invoice # or customer..." 
+                    value={salesSearch}
+                    onChange={(e) => { setSalesSearch(e.target.value); setSalesPage(1); }}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={salesStatus} onValueChange={(v) => { setSalesStatus(v); setSalesPage(1); }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="partial">Partial</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={salesPaymentMethod} onValueChange={(v) => { setSalesPaymentMethod(v); setSalesPage(1); }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Methods" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Methods</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bkash">bKash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="bank">Bank</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">From Date</Label>
+                  <Input 
+                    type="date" 
+                    value={salesDateFrom}
+                    onChange={(e) => { setSalesDateFrom(e.target.value); setSalesPage(1); }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">To Date</Label>
+                  <Input 
+                    type="date" 
+                    value={salesDateTo}
+                    onChange={(e) => { setSalesDateTo(e.target.value); setSalesPage(1); }}
+                  />
+                </div>
               </div>
 
               <Table>
@@ -2050,15 +2209,25 @@ export default function POSInventory() {
               </Button>
             </CardHeader>
             <CardContent>
-              {/* Search */}
-              <div className="relative max-w-sm mb-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search by name, phone, or code..." 
-                  value={customersSearch}
-                  onChange={(e) => { setCustomersSearch(e.target.value); setCustomersPage(1); }}
-                  className="pl-9"
-                />
+              {/* Search and Filters */}
+              <div className="flex flex-wrap gap-4 mb-4">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search by name, phone, or code..." 
+                    value={customersSearch}
+                    onChange={(e) => { setCustomersSearch(e.target.value); setCustomersPage(1); }}
+                    className="pl-9"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch 
+                    id="has-due"
+                    checked={customersHasDue}
+                    onCheckedChange={setCustomersHasDue}
+                  />
+                  <Label htmlFor="has-due" className="text-sm">Has Due</Label>
+                </div>
               </div>
 
               <Tabs defaultValue="pos" className="w-full">
@@ -2186,13 +2355,75 @@ export default function POSInventory() {
         {/* Dues Tab */}
         <TabsContent value="dues">
           <div className="grid gap-6">
+            {/* Filter Controls */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Filter className="h-5 w-5" />
+                  Dues Filters
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label>Customer Search</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Search customer..." 
+                        value={duesSearchCustomer}
+                        onChange={(e) => setDuesSearchCustomer(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Supplier Search</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Search supplier..." 
+                        value={duesSearchSupplier}
+                        onChange={(e) => setDuesSearchSupplier(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Min Amount</Label>
+                    <Input 
+                      type="number"
+                      placeholder="Min ৳" 
+                      value={duesMinAmount}
+                      onChange={(e) => setDuesMinAmount(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Max Amount</Label>
+                    <Input 
+                      type="number"
+                      placeholder="Max ৳" 
+                      value={duesMaxAmount}
+                      onChange={(e) => setDuesMaxAmount(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             <div className="grid md:grid-cols-2 gap-6">
               {/* Customer Dues */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
                     <CardTitle>Customer Dues</CardTitle>
-                    <CardDescription>Outstanding payments from customers</CardDescription>
+                    <CardDescription>Outstanding payments from customers ({pos.customers.filter(c => {
+                      if (c.due_amount <= 0) return false;
+                      if (duesSearchCustomer && !c.name.toLowerCase().includes(duesSearchCustomer.toLowerCase()) && !(c.phone || '').includes(duesSearchCustomer)) return false;
+                      if (duesMinAmount && c.due_amount < parseFloat(duesMinAmount)) return false;
+                      if (duesMaxAmount && c.due_amount > parseFloat(duesMaxAmount)) return false;
+                      return true;
+                    }).length} total)</CardDescription>
                   </div>
                   <Button onClick={() => setShowDuePayment(true)}>
                     <DollarSign className="h-4 w-4 mr-2" />
@@ -2201,11 +2432,23 @@ export default function POSInventory() {
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[400px]">
-                    {pos.customers.filter(c => c.due_amount > 0).length === 0 ? (
+                    {pos.customers.filter(c => {
+                      if (c.due_amount <= 0) return false;
+                      if (duesSearchCustomer && !c.name.toLowerCase().includes(duesSearchCustomer.toLowerCase()) && !(c.phone || '').includes(duesSearchCustomer)) return false;
+                      if (duesMinAmount && c.due_amount < parseFloat(duesMinAmount)) return false;
+                      if (duesMaxAmount && c.due_amount > parseFloat(duesMaxAmount)) return false;
+                      return true;
+                    }).length === 0 ? (
                       <p className="text-center text-muted-foreground py-8">No pending dues</p>
                     ) : (
                       <div className="space-y-3">
-                        {pos.customers.filter(c => c.due_amount > 0).map(customer => (
+                        {pos.customers.filter(c => {
+                          if (c.due_amount <= 0) return false;
+                          if (duesSearchCustomer && !c.name.toLowerCase().includes(duesSearchCustomer.toLowerCase()) && !(c.phone || '').includes(duesSearchCustomer)) return false;
+                          if (duesMinAmount && c.due_amount < parseFloat(duesMinAmount)) return false;
+                          if (duesMaxAmount && c.due_amount > parseFloat(duesMaxAmount)) return false;
+                          return true;
+                        }).sort((a, b) => b.due_amount - a.due_amount).map(customer => (
                           <div key={customer.id} className="flex items-center justify-between p-3 border rounded-lg">
                             <div>
                               <p className="font-medium">{customer.name}</p>
@@ -2242,7 +2485,13 @@ export default function POSInventory() {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
                     <CardTitle>Supplier Dues</CardTitle>
-                    <CardDescription>Outstanding payments to suppliers</CardDescription>
+                    <CardDescription>Outstanding payments to suppliers ({suppliers.filter(s => {
+                      if ((s.current_balance || 0) <= 0) return false;
+                      if (duesSearchSupplier && !s.name.toLowerCase().includes(duesSearchSupplier.toLowerCase()) && !(s.company_name || '').toLowerCase().includes(duesSearchSupplier.toLowerCase())) return false;
+                      if (duesMinAmount && (s.current_balance || 0) < parseFloat(duesMinAmount)) return false;
+                      if (duesMaxAmount && (s.current_balance || 0) > parseFloat(duesMaxAmount)) return false;
+                      return true;
+                    }).length} total)</CardDescription>
                   </div>
                   <Button onClick={() => handleOpenSupplierPayment()}>
                     <DollarSign className="h-4 w-4 mr-2" />
@@ -2251,11 +2500,23 @@ export default function POSInventory() {
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[400px]">
-                    {suppliersWithDue.length === 0 ? (
+                    {suppliers.filter(s => {
+                      if ((s.current_balance || 0) <= 0) return false;
+                      if (duesSearchSupplier && !s.name.toLowerCase().includes(duesSearchSupplier.toLowerCase()) && !(s.company_name || '').toLowerCase().includes(duesSearchSupplier.toLowerCase())) return false;
+                      if (duesMinAmount && (s.current_balance || 0) < parseFloat(duesMinAmount)) return false;
+                      if (duesMaxAmount && (s.current_balance || 0) > parseFloat(duesMaxAmount)) return false;
+                      return true;
+                    }).length === 0 ? (
                       <p className="text-center text-muted-foreground py-8">No pending supplier dues</p>
                     ) : (
                       <div className="space-y-3">
-                        {suppliersWithDue.map(supplier => (
+                        {suppliers.filter(s => {
+                          if ((s.current_balance || 0) <= 0) return false;
+                          if (duesSearchSupplier && !s.name.toLowerCase().includes(duesSearchSupplier.toLowerCase()) && !(s.company_name || '').toLowerCase().includes(duesSearchSupplier.toLowerCase())) return false;
+                          if (duesMinAmount && (s.current_balance || 0) < parseFloat(duesMinAmount)) return false;
+                          if (duesMaxAmount && (s.current_balance || 0) > parseFloat(duesMaxAmount)) return false;
+                          return true;
+                        }).sort((a, b) => (b.current_balance || 0) - (a.current_balance || 0)).map(supplier => (
                           <div key={supplier.id} className="flex items-center justify-between p-3 border rounded-lg">
                             <div>
                               <p className="font-medium">{supplier.name}</p>
