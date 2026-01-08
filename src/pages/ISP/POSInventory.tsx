@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { usePOS, CartItem, POSCustomer } from '@/hooks/usePOS';
@@ -146,6 +147,33 @@ export default function POSInventory() {
   const [reportDateFrom, setReportDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [reportDateTo, setReportDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
+  // Pagination and filter state for all tables
+  const [productsSearch, setProductsSearch] = useState('');
+  const [productsCategory, setProductsCategory] = useState('all');
+  const [productsPage, setProductsPage] = useState(1);
+  const [productsPageSize, setProductsPageSize] = useState(20);
+
+  const [categoriesSearch, setCategoriesSearch] = useState('');
+  const [categoriesPage, setCategoriesPage] = useState(1);
+  const [categoriesPageSize, setCategoriesPageSize] = useState(20);
+
+  const [suppliersSearch, setSuppliersSearch] = useState('');
+  const [suppliersPage, setSuppliersPage] = useState(1);
+  const [suppliersPageSize, setSuppliersPageSize] = useState(20);
+
+  const [purchasesSearch, setPurchasesSearch] = useState('');
+  const [purchasesStatus, setPurchasesStatus] = useState('all');
+  const [purchasesPage, setPurchasesPage] = useState(1);
+  const [purchasesPageSize, setPurchasesPageSize] = useState(20);
+
+  const [salesSearch, setSalesSearch] = useState('');
+  const [salesPage, setSalesPage] = useState(1);
+  const [salesPageSize, setSalesPageSize] = useState(20);
+
+  const [customersSearch, setCustomersSearch] = useState('');
+  const [customersPage, setCustomersPage] = useState(1);
+  const [customersPageSize, setCustomersPageSize] = useState(20);
+
   // Forms
   const [itemForm, setItemForm] = useState({
     name: '', sku: '', category_id: '', quantity: '0', min_quantity: '5',
@@ -201,7 +229,7 @@ export default function POSInventory() {
     fetchData();
   }, [fetchData]);
 
-  // Filtered items for search
+  // Filtered items for POS search
   const filteredItems = items.filter(item =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.sku?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -212,6 +240,89 @@ export default function POSInventory() {
     c.customer_code?.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
     c.phone?.includes(customerSearchQuery)
   );
+
+  // Filtered and paginated data using useMemo
+  const filteredProductsData = useMemo(() => {
+    let filtered = items.filter(item =>
+      item.name.toLowerCase().includes(productsSearch.toLowerCase()) ||
+      item.sku?.toLowerCase().includes(productsSearch.toLowerCase())
+    );
+    if (productsCategory !== 'all') {
+      filtered = filtered.filter(item => item.category_id === productsCategory);
+    }
+    return filtered;
+  }, [items, productsSearch, productsCategory]);
+
+  const paginatedProducts = useMemo(() => {
+    const start = (productsPage - 1) * productsPageSize;
+    return filteredProductsData.slice(start, start + productsPageSize);
+  }, [filteredProductsData, productsPage, productsPageSize]);
+
+  const filteredCategoriesData = useMemo(() => {
+    return fullCategories.filter(cat =>
+      cat.name.toLowerCase().includes(categoriesSearch.toLowerCase()) ||
+      (cat.description || '').toLowerCase().includes(categoriesSearch.toLowerCase())
+    );
+  }, [fullCategories, categoriesSearch]);
+
+  const paginatedCategories = useMemo(() => {
+    const start = (categoriesPage - 1) * categoriesPageSize;
+    return filteredCategoriesData.slice(start, start + categoriesPageSize);
+  }, [filteredCategoriesData, categoriesPage, categoriesPageSize]);
+
+  const filteredSuppliersData = useMemo(() => {
+    return suppliers.filter(sup =>
+      sup.name.toLowerCase().includes(suppliersSearch.toLowerCase()) ||
+      (sup.company_name || '').toLowerCase().includes(suppliersSearch.toLowerCase()) ||
+      (sup.phone || '').includes(suppliersSearch)
+    );
+  }, [suppliers, suppliersSearch]);
+
+  const paginatedSuppliers = useMemo(() => {
+    const start = (suppliersPage - 1) * suppliersPageSize;
+    return filteredSuppliersData.slice(start, start + suppliersPageSize);
+  }, [filteredSuppliersData, suppliersPage, suppliersPageSize]);
+
+  const filteredPurchasesData = useMemo(() => {
+    let filtered = purchases.filter(po =>
+      po.order_number.toLowerCase().includes(purchasesSearch.toLowerCase()) ||
+      (po.supplier?.name || '').toLowerCase().includes(purchasesSearch.toLowerCase())
+    );
+    if (purchasesStatus !== 'all') {
+      filtered = filtered.filter(po => po.status === purchasesStatus);
+    }
+    return filtered;
+  }, [purchases, purchasesSearch, purchasesStatus]);
+
+  const paginatedPurchases = useMemo(() => {
+    const start = (purchasesPage - 1) * purchasesPageSize;
+    return filteredPurchasesData.slice(start, start + purchasesPageSize);
+  }, [filteredPurchasesData, purchasesPage, purchasesPageSize]);
+
+  const filteredSalesData = useMemo(() => {
+    return pos.sales.filter(sale =>
+      (sale.invoice_number || '').toLowerCase().includes(salesSearch.toLowerCase()) ||
+      (sale.customer_name || '').toLowerCase().includes(salesSearch.toLowerCase())
+    );
+  }, [pos.sales, salesSearch]);
+
+  const paginatedSales = useMemo(() => {
+    const start = (salesPage - 1) * salesPageSize;
+    return filteredSalesData.slice(start, start + salesPageSize);
+  }, [filteredSalesData, salesPage, salesPageSize]);
+
+  const filteredCustomersData = useMemo(() => {
+    return pos.customers.filter(cust =>
+      cust.name.toLowerCase().includes(customersSearch.toLowerCase()) ||
+      (cust.phone || '').includes(customersSearch) ||
+      (cust.customer_code || '').toLowerCase().includes(customersSearch.toLowerCase())
+    );
+  }, [pos.customers, customersSearch]);
+
+  const paginatedCustomers = useMemo(() => {
+    const start = (customersPage - 1) * customersPageSize;
+    return filteredCustomersData.slice(start, start + customersPageSize);
+  }, [filteredCustomersData, customersPage, customersPageSize]);
 
   // Cart functions
   const addToCart = (item: InventoryItem) => {
@@ -1170,7 +1281,7 @@ export default function POSInventory() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Products</CardTitle>
-                <CardDescription>Manage your inventory items</CardDescription>
+                <CardDescription>Manage your inventory items ({filteredProductsData.length} total)</CardDescription>
               </div>
               <Button onClick={() => { setEditingItem(null); resetItemForm(); setShowItemDialog(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -1178,51 +1289,80 @@ export default function POSInventory() {
               </Button>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[500px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Stock</TableHead>
-                      <TableHead>Cost</TableHead>
-                      <TableHead>Sale Price</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
-                    ) : items.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No products found</TableCell></TableRow>
-                    ) : (
-                      items.map(item => (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.name}</TableCell>
-                          <TableCell className="font-mono text-xs">{item.sku || '-'}</TableCell>
-                          <TableCell>{item.category?.name || '-'}</TableCell>
-                          <TableCell>
-                            <Badge variant={item.quantity <= item.min_quantity ? 'destructive' : 'secondary'}>
-                              {item.quantity}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>৳{item.unit_price}</TableCell>
-                          <TableCell>৳{item.sale_price}</TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => handleEditItem(item)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteItem(item.id)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+              {/* Search and Filter */}
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search by name or SKU..." 
+                    value={productsSearch}
+                    onChange={(e) => { setProductsSearch(e.target.value); setProductsPage(1); }}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={productsCategory} onValueChange={(v) => { setProductsCategory(v); setProductsPage(1); }}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {categories.map(cat => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Stock</TableHead>
+                    <TableHead>Cost</TableHead>
+                    <TableHead>Sale Price</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                  ) : paginatedProducts.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No products found</TableCell></TableRow>
+                  ) : (
+                    paginatedProducts.map(item => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell className="font-mono text-xs">{item.sku || '-'}</TableCell>
+                        <TableCell>{item.category?.name || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant={item.quantity <= item.min_quantity ? 'destructive' : 'secondary'}>
+                            {item.quantity}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>৳{item.unit_price}</TableCell>
+                        <TableCell>৳{item.sale_price}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleEditItem(item)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteItem(item.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              <TablePagination
+                totalItems={filteredProductsData.length}
+                currentPage={productsPage}
+                pageSize={productsPageSize}
+                onPageChange={setProductsPage}
+                onPageSizeChange={setProductsPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1233,7 +1373,7 @@ export default function POSInventory() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Product Categories</CardTitle>
-                <CardDescription>Organize your products into categories</CardDescription>
+                <CardDescription>Organize your products into categories ({filteredCategoriesData.length} total)</CardDescription>
               </div>
               <Button onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '' }); setShowCategoryDialog(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -1241,6 +1381,17 @@ export default function POSInventory() {
               </Button>
             </CardHeader>
             <CardContent>
+              {/* Search */}
+              <div className="relative max-w-sm mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Search categories..." 
+                  value={categoriesSearch}
+                  onChange={(e) => { setCategoriesSearch(e.target.value); setCategoriesPage(1); }}
+                  className="pl-9"
+                />
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1251,10 +1402,10 @@ export default function POSInventory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {fullCategories.length === 0 ? (
+                  {paginatedCategories.length === 0 ? (
                     <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No categories found</TableCell></TableRow>
                   ) : (
-                    fullCategories.map(category => {
+                    paginatedCategories.map(category => {
                       const productCount = items.filter(i => i.category_id === category.id).length;
                       return (
                         <TableRow key={category.id}>
@@ -1277,6 +1428,13 @@ export default function POSInventory() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={filteredCategoriesData.length}
+                currentPage={categoriesPage}
+                pageSize={categoriesPageSize}
+                onPageChange={setCategoriesPage}
+                onPageSizeChange={setCategoriesPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1287,7 +1445,7 @@ export default function POSInventory() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Suppliers</CardTitle>
-                <CardDescription>Manage your product suppliers</CardDescription>
+                <CardDescription>Manage your product suppliers ({filteredSuppliersData.length} total)</CardDescription>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => handleOpenSupplierPayment()}>
@@ -1301,6 +1459,17 @@ export default function POSInventory() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Search */}
+              <div className="relative max-w-sm mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Search by name, company, or phone..." 
+                  value={suppliersSearch}
+                  onChange={(e) => { setSuppliersSearch(e.target.value); setSuppliersPage(1); }}
+                  className="pl-9"
+                />
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1313,10 +1482,10 @@ export default function POSInventory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {suppliers.length === 0 ? (
+                  {paginatedSuppliers.length === 0 ? (
                     <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No suppliers found</TableCell></TableRow>
                   ) : (
-                    suppliers.map(supplier => (
+                    paginatedSuppliers.map(supplier => (
                       <TableRow key={supplier.id}>
                         <TableCell className="font-medium">{supplier.name}</TableCell>
                         <TableCell>{supplier.company_name || '-'}</TableCell>
@@ -1347,6 +1516,13 @@ export default function POSInventory() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={filteredSuppliersData.length}
+                currentPage={suppliersPage}
+                pageSize={suppliersPageSize}
+                onPageChange={setSuppliersPage}
+                onPageSizeChange={setSuppliersPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1357,7 +1533,7 @@ export default function POSInventory() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Purchase Orders</CardTitle>
-                <CardDescription>Track product purchases from suppliers</CardDescription>
+                <CardDescription>Track product purchases from suppliers ({filteredPurchasesData.length} total)</CardDescription>
               </div>
               <Button onClick={() => setShowPurchaseDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -1365,6 +1541,30 @@ export default function POSInventory() {
               </Button>
             </CardHeader>
             <CardContent>
+              {/* Search and Filter */}
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search by order # or supplier..." 
+                    value={purchasesSearch}
+                    onChange={(e) => { setPurchasesSearch(e.target.value); setPurchasesPage(1); }}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={purchasesStatus} onValueChange={(v) => { setPurchasesStatus(v); setPurchasesPage(1); }}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="received">Received</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1379,10 +1579,10 @@ export default function POSInventory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {purchases.length === 0 ? (
+                  {paginatedPurchases.length === 0 ? (
                     <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No purchase orders</TableCell></TableRow>
                   ) : (
-                    purchases.map(po => {
+                    paginatedPurchases.map(po => {
                       const due = po.total - (po.paid_amount || 0);
                       return (
                         <TableRow key={po.id}>
@@ -1428,6 +1628,13 @@ export default function POSInventory() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={filteredPurchasesData.length}
+                currentPage={purchasesPage}
+                pageSize={purchasesPageSize}
+                onPageChange={setPurchasesPage}
+                onPageSizeChange={setPurchasesPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1437,60 +1644,76 @@ export default function POSInventory() {
           <Card>
             <CardHeader>
               <CardTitle>Sales History</CardTitle>
-              <CardDescription>View all POS sales and invoices</CardDescription>
+              <CardDescription>View all POS sales and invoices ({filteredSalesData.length} total)</CardDescription>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[500px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice #</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Paid</TableHead>
-                      <TableHead>Due</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pos.loading ? (
-                      <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
-                    ) : pos.sales.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No sales found</TableCell></TableRow>
-                    ) : (
-                      pos.sales.map(sale => (
-                        <TableRow key={sale.id}>
-                          <TableCell className="font-mono">{sale.invoice_number}</TableCell>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{sale.customer_name || 'Walk-in'}</p>
-                              {sale.customer_phone && <p className="text-xs text-muted-foreground">{sale.customer_phone}</p>}
-                            </div>
-                          </TableCell>
-                          <TableCell>{format(new Date(sale.sale_date), 'dd MMM yyyy HH:mm')}</TableCell>
-                          <TableCell>৳{sale.total_amount.toLocaleString()}</TableCell>
-                          <TableCell className="text-green-600">৳{sale.paid_amount.toLocaleString()}</TableCell>
-                          <TableCell className={sale.due_amount > 0 ? 'text-orange-600' : ''}>
-                            ৳{sale.due_amount.toLocaleString()}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={sale.status === 'completed' ? 'default' : sale.status === 'partial' ? 'secondary' : 'outline'}>
-                              {sale.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => handleViewInvoice(sale)}>
-                              <Printer className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+              {/* Search */}
+              <div className="relative max-w-sm mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Search by invoice # or customer..." 
+                  value={salesSearch}
+                  onChange={(e) => { setSalesSearch(e.target.value); setSalesPage(1); }}
+                  className="pl-9"
+                />
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Invoice #</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Paid</TableHead>
+                    <TableHead>Due</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pos.loading ? (
+                    <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                  ) : paginatedSales.length === 0 ? (
+                    <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No sales found</TableCell></TableRow>
+                  ) : (
+                    paginatedSales.map(sale => (
+                      <TableRow key={sale.id}>
+                        <TableCell className="font-mono">{sale.invoice_number}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{sale.customer_name || 'Walk-in'}</p>
+                            {sale.customer_phone && <p className="text-xs text-muted-foreground">{sale.customer_phone}</p>}
+                          </div>
+                        </TableCell>
+                        <TableCell>{format(new Date(sale.sale_date), 'dd MMM yyyy HH:mm')}</TableCell>
+                        <TableCell>৳{sale.total_amount.toLocaleString()}</TableCell>
+                        <TableCell className="text-green-600">৳{sale.paid_amount.toLocaleString()}</TableCell>
+                        <TableCell className={sale.due_amount > 0 ? 'text-orange-600' : ''}>
+                          ৳{sale.due_amount.toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={sale.status === 'completed' ? 'default' : sale.status === 'partial' ? 'secondary' : 'outline'}>
+                            {sale.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleViewInvoice(sale)}>
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              <TablePagination
+                totalItems={filteredSalesData.length}
+                currentPage={salesPage}
+                pageSize={salesPageSize}
+                onPageChange={setSalesPage}
+                onPageSizeChange={setSalesPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1501,7 +1724,7 @@ export default function POSInventory() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>POS Customers</CardTitle>
-                <CardDescription>Manage walk-in and regular customers (separate from ISP subscribers)</CardDescription>
+                <CardDescription>Manage walk-in and regular customers ({filteredCustomersData.length} total)</CardDescription>
               </div>
               <Button onClick={() => setShowNewCustomer(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -1509,6 +1732,17 @@ export default function POSInventory() {
               </Button>
             </CardHeader>
             <CardContent>
+              {/* Search */}
+              <div className="relative max-w-sm mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Search by name, phone, or code..." 
+                  value={customersSearch}
+                  onChange={(e) => { setCustomersSearch(e.target.value); setCustomersPage(1); }}
+                  className="pl-9"
+                />
+              </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1522,10 +1756,10 @@ export default function POSInventory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pos.customers.length === 0 ? (
+                  {paginatedCustomers.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No customers found</TableCell></TableRow>
                   ) : (
-                    pos.customers.map(customer => (
+                    paginatedCustomers.map(customer => (
                       <TableRow key={customer.id}>
                         <TableCell className="font-mono">{customer.customer_code}</TableCell>
                         <TableCell className="font-medium">{customer.name}</TableCell>
@@ -1561,6 +1795,13 @@ export default function POSInventory() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={filteredCustomersData.length}
+                currentPage={customersPage}
+                pageSize={customersPageSize}
+                onPageChange={setCustomersPage}
+                onPageSizeChange={setCustomersPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
