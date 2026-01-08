@@ -17,11 +17,16 @@ import { TablePagination } from '@/components/ui/table-pagination';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { usePOS, CartItem, POSCustomer } from '@/hooks/usePOS';
+import { useInventoryExtended, UNIT_TYPES, DEFAULT_UNITS } from '@/hooks/useInventoryExtended';
+import { BarcodeScanner, useBarcodeScanner } from '@/components/pos/BarcodeScanner';
+import { printInvoice } from '@/components/pos/POSInvoicePrint';
+import { printReport, generateDuesReport, generateCustomerListReport, generateSalesReport, generateInventoryReport, generateSupplierDuesReport } from '@/components/pos/POSReportGenerator';
 import { 
   Package, Plus, Edit, Trash2, Loader2, ShoppingCart, Users, DollarSign,
   FileText, Download, Search, Printer, X, Check, CreditCard,
   TrendingUp, AlertTriangle, History, Wallet, Building2, BarChart3, Layers,
-  Eye, MinusCircle, PlusCircle, Filter, Calendar, ArrowUpDown
+  Eye, MinusCircle, PlusCircle, Filter, Calendar, ArrowUpDown, ScanLine, 
+  Tag, Ruler, Settings2, FileDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -84,8 +89,36 @@ interface ISPCustomer {
 export default function POSInventory() {
   const { tenantId } = useTenantContext();
   const pos = usePOS();
+  const inventoryExt = useInventoryExtended();
   const [activeTab, setActiveTab] = useState('pos');
   const [loading, setLoading] = useState(true);
+  
+  // Barcode scanner state
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  
+  // Brand/Unit management
+  const [showBrandDialog, setShowBrandDialog] = useState(false);
+  const [showUnitDialog, setShowUnitDialog] = useState(false);
+  const [showInvoiceSettings, setShowInvoiceSettings] = useState(false);
+  const [editingBrand, setEditingBrand] = useState<any>(null);
+  const [editingUnit, setEditingUnit] = useState<any>(null);
+  const [brandForm, setBrandForm] = useState({ name: '', description: '' });
+  const [unitForm, setUnitForm] = useState({ name: '', short_name: '', unit_type: 'quantity' });
+  const [invoiceSettingsForm, setInvoiceSettingsForm] = useState({
+    invoice_header: '', invoice_footer: '', invoice_terms: '', invoice_prefix: 'INV', thermal_printer_enabled: false
+  });
+  const [invoiceType, setInvoiceType] = useState<'thermal' | 'a4'>('a4');
+  
+  // Barcode scanner hook for continuous scanning
+  const handleBarcodeScan = useCallback((barcode: string) => {
+    const item = items.find(i => i.barcode === barcode || i.sku === barcode);
+    if (item) {
+      addToCart(item);
+      toast.success(`Added: ${item.name}`);
+    } else {
+      toast.error(`Product not found: ${barcode}`);
+    }
+  }, []);
   
   // Inventory state
   const [items, setItems] = useState<InventoryItem[]>([]);

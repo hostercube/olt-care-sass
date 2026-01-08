@@ -1890,6 +1890,47 @@ export type Database = {
           },
         ]
       }
+      inventory_brands: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          logo_url: string | null
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_brands_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_categories: {
         Row: {
           created_at: string
@@ -1934,49 +1975,76 @@ export type Database = {
       }
       inventory_items: {
         Row: {
+          barcode: string | null
+          brand_id: string | null
           category_id: string | null
+          color: string | null
           created_at: string
           description: string | null
+          dimensions: string | null
           id: string
+          image_url: string | null
           location: string | null
           min_quantity: number | null
           name: string
           quantity: number | null
           sale_price: number | null
+          size: string | null
           sku: string | null
           tenant_id: string
+          unit_id: string | null
           unit_price: number | null
           updated_at: string
+          warranty_period: string | null
+          weight: number | null
         }
         Insert: {
+          barcode?: string | null
+          brand_id?: string | null
           category_id?: string | null
+          color?: string | null
           created_at?: string
           description?: string | null
+          dimensions?: string | null
           id?: string
+          image_url?: string | null
           location?: string | null
           min_quantity?: number | null
           name: string
           quantity?: number | null
           sale_price?: number | null
+          size?: string | null
           sku?: string | null
           tenant_id: string
+          unit_id?: string | null
           unit_price?: number | null
           updated_at?: string
+          warranty_period?: string | null
+          weight?: number | null
         }
         Update: {
+          barcode?: string | null
+          brand_id?: string | null
           category_id?: string | null
+          color?: string | null
           created_at?: string
           description?: string | null
+          dimensions?: string | null
           id?: string
+          image_url?: string | null
           location?: string | null
           min_quantity?: number | null
           name?: string
           quantity?: number | null
           sale_price?: number | null
+          size?: string | null
           sku?: string | null
           tenant_id?: string
+          unit_id?: string | null
           unit_price?: number | null
           updated_at?: string
+          warranty_period?: string | null
+          weight?: number | null
         }
         Relationships: [
           {
@@ -2117,6 +2185,44 @@ export type Database = {
           },
           {
             foreignKeyName: "inventory_transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_units: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          name: string
+          short_name: string
+          tenant_id: string
+          unit_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          short_name: string
+          tenant_id: string
+          unit_type?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          short_name?: string
+          tenant_id?: string
+          unit_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_units_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -3448,6 +3554,7 @@ export type Database = {
           due_amount: number | null
           id: string
           invoice_number: string
+          isp_customer_id: string | null
           notes: string | null
           paid_amount: number | null
           payment_method: string | null
@@ -3472,6 +3579,7 @@ export type Database = {
           due_amount?: number | null
           id?: string
           invoice_number: string
+          isp_customer_id?: string | null
           notes?: string | null
           paid_amount?: number | null
           payment_method?: string | null
@@ -3496,6 +3604,7 @@ export type Database = {
           due_amount?: number | null
           id?: string
           invoice_number?: string
+          isp_customer_id?: string | null
           notes?: string | null
           paid_amount?: number | null
           payment_method?: string | null
@@ -5380,6 +5489,10 @@ export type Database = {
           email: string
           features: Json | null
           id: string
+          invoice_footer: string | null
+          invoice_header: string | null
+          invoice_prefix: string | null
+          invoice_terms: string | null
           language: string | null
           logo_url: string | null
           manual_features: Json | null
@@ -5401,6 +5514,7 @@ export type Database = {
           subdomain: string | null
           suspended_at: string | null
           suspended_reason: string | null
+          thermal_printer_enabled: boolean | null
           timezone: string | null
           trial_ends_at: string | null
           upazila: string | null
@@ -5418,6 +5532,10 @@ export type Database = {
           email: string
           features?: Json | null
           id?: string
+          invoice_footer?: string | null
+          invoice_header?: string | null
+          invoice_prefix?: string | null
+          invoice_terms?: string | null
           language?: string | null
           logo_url?: string | null
           manual_features?: Json | null
@@ -5439,6 +5557,7 @@ export type Database = {
           subdomain?: string | null
           suspended_at?: string | null
           suspended_reason?: string | null
+          thermal_printer_enabled?: boolean | null
           timezone?: string | null
           trial_ends_at?: string | null
           upazila?: string | null
@@ -5456,6 +5575,10 @@ export type Database = {
           email?: string
           features?: Json | null
           id?: string
+          invoice_footer?: string | null
+          invoice_header?: string | null
+          invoice_prefix?: string | null
+          invoice_terms?: string | null
           language?: string | null
           logo_url?: string | null
           manual_features?: Json | null
@@ -5477,6 +5600,7 @@ export type Database = {
           subdomain?: string | null
           suspended_at?: string | null
           suspended_reason?: string | null
+          thermal_printer_enabled?: boolean | null
           timezone?: string | null
           trial_ends_at?: string | null
           upazila?: string | null
