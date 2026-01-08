@@ -36,12 +36,23 @@ interface InventoryItem {
   name: string;
   sku: string | null;
   category_id: string | null;
+  brand_id: string | null;
+  unit_id: string | null;
+  barcode: string | null;
+  color: string | null;
+  size: string | null;
+  weight: number | null;
+  dimensions: string | null;
+  warranty_period: string | null;
+  image_url: string | null;
   quantity: number;
   min_quantity: number;
   unit_price: number;
   sale_price: number;
   location: string | null;
   category?: { name: string };
+  brand?: { name: string };
+  unit?: { name: string; short_name: string };
 }
 
 interface Supplier {
@@ -209,8 +220,9 @@ export default function POSInventory() {
 
   // Forms
   const [itemForm, setItemForm] = useState({
-    name: '', sku: '', category_id: '', quantity: '0', min_quantity: '5',
-    unit_price: '0', sale_price: '0', location: '',
+    name: '', sku: '', category_id: '', brand_id: '', unit_id: '', barcode: '',
+    color: '', size: '', weight: '', dimensions: '', warranty_period: '',
+    quantity: '0', min_quantity: '5', unit_price: '0', sale_price: '0', location: '',
   });
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
   const [fullCategories, setFullCategories] = useState<{ id: string; name: string; description: string | null }[]>([]);
@@ -265,7 +277,8 @@ export default function POSInventory() {
   // Filtered items for POS search
   const filteredItems = items.filter(item =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.sku?.toLowerCase().includes(searchQuery.toLowerCase())
+    item.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredIspCustomers = ispCustomers.filter(c =>
@@ -412,6 +425,14 @@ export default function POSInventory() {
         name: itemForm.name,
         sku: itemForm.sku || null,
         category_id: itemForm.category_id && itemForm.category_id !== 'none' ? itemForm.category_id : null,
+        brand_id: itemForm.brand_id && itemForm.brand_id !== 'none' ? itemForm.brand_id : null,
+        unit_id: itemForm.unit_id && itemForm.unit_id !== 'none' ? itemForm.unit_id : null,
+        barcode: itemForm.barcode || null,
+        color: itemForm.color || null,
+        size: itemForm.size || null,
+        weight: itemForm.weight ? parseFloat(itemForm.weight) : null,
+        dimensions: itemForm.dimensions || null,
+        warranty_period: itemForm.warranty_period || null,
         quantity: parseInt(itemForm.quantity) || 0,
         min_quantity: parseInt(itemForm.min_quantity) || 5,
         unit_price: parseFloat(itemForm.unit_price) || 0,
@@ -437,10 +458,84 @@ export default function POSInventory() {
     }
   };
 
+  // Brand management handlers
+  const handleSaveBrand = async () => {
+    if (!brandForm.name) return;
+    setSaving(true);
+    if (editingBrand) {
+      await inventoryExt.updateBrand(editingBrand.id, brandForm);
+    } else {
+      await inventoryExt.createBrand(brandForm);
+    }
+    setShowBrandDialog(false);
+    setEditingBrand(null);
+    setBrandForm({ name: '', description: '' });
+    setSaving(false);
+  };
+
+  const handleEditBrand = (brand: any) => {
+    setEditingBrand(brand);
+    setBrandForm({ name: brand.name, description: brand.description || '' });
+    setShowBrandDialog(true);
+  };
+
+  const handleDeleteBrand = async (id: string) => {
+    if (!confirm('Delete this brand?')) return;
+    await inventoryExt.deleteBrand(id);
+  };
+
+  // Unit management handlers
+  const handleSaveUnit = async () => {
+    if (!unitForm.name || !unitForm.short_name) return;
+    setSaving(true);
+    if (editingUnit) {
+      await inventoryExt.updateUnit(editingUnit.id, unitForm);
+    } else {
+      await inventoryExt.createUnit(unitForm);
+    }
+    setShowUnitDialog(false);
+    setEditingUnit(null);
+    setUnitForm({ name: '', short_name: '', unit_type: 'quantity' });
+    setSaving(false);
+  };
+
+  const handleEditUnit = (unit: any) => {
+    setEditingUnit(unit);
+    setUnitForm({ name: unit.name, short_name: unit.short_name, unit_type: unit.unit_type });
+    setShowUnitDialog(true);
+  };
+
+  const handleDeleteUnit = async (id: string) => {
+    if (!confirm('Delete this unit?')) return;
+    await inventoryExt.deleteUnit(id);
+  };
+
+  // Invoice settings handler
+  const handleSaveInvoiceSettings = async () => {
+    setSaving(true);
+    await inventoryExt.updateTenantInvoiceSettings(invoiceSettingsForm);
+    setShowInvoiceSettings(false);
+    setSaving(false);
+  };
+
+  // Load invoice settings
+  useEffect(() => {
+    if (inventoryExt.tenantInfo) {
+      setInvoiceSettingsForm({
+        invoice_header: inventoryExt.tenantInfo.invoice_header || '',
+        invoice_footer: inventoryExt.tenantInfo.invoice_footer || '',
+        invoice_terms: inventoryExt.tenantInfo.invoice_terms || '',
+        invoice_prefix: inventoryExt.tenantInfo.invoice_prefix || 'INV',
+        thermal_printer_enabled: inventoryExt.tenantInfo.thermal_printer_enabled || false,
+      });
+    }
+  }, [inventoryExt.tenantInfo]);
+
   const resetItemForm = () => {
     setItemForm({
-      name: '', sku: '', category_id: '', quantity: '0', min_quantity: '5',
-      unit_price: '0', sale_price: '0', location: '',
+      name: '', sku: '', category_id: '', brand_id: '', unit_id: '', barcode: '',
+      color: '', size: '', weight: '', dimensions: '', warranty_period: '',
+      quantity: '0', min_quantity: '5', unit_price: '0', sale_price: '0', location: '',
     });
   };
 
@@ -450,6 +545,14 @@ export default function POSInventory() {
       name: item.name,
       sku: item.sku || '',
       category_id: item.category_id || '',
+      brand_id: item.brand_id || '',
+      unit_id: item.unit_id || '',
+      barcode: item.barcode || '',
+      color: item.color || '',
+      size: item.size || '',
+      weight: item.weight?.toString() || '',
+      dimensions: item.dimensions || '',
+      warranty_period: item.warranty_period || '',
       quantity: item.quantity.toString(),
       min_quantity: item.min_quantity.toString(),
       unit_price: item.unit_price.toString(),
@@ -1141,6 +1244,14 @@ export default function POSInventory() {
               <Layers className="h-4 w-4" />
               <span className="hidden sm:inline">Categories</span>
             </TabsTrigger>
+            <TabsTrigger value="brands" className="flex items-center gap-2">
+              <Tag className="h-4 w-4" />
+              <span className="hidden sm:inline">Brands</span>
+            </TabsTrigger>
+            <TabsTrigger value="units" className="flex items-center gap-2">
+              <Ruler className="h-4 w-4" />
+              <span className="hidden sm:inline">Units</span>
+            </TabsTrigger>
             <TabsTrigger value="suppliers" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Suppliers</span>
@@ -1165,6 +1276,10 @@ export default function POSInventory() {
               <BarChart3 className="h-4 w-4" />
               <span className="hidden sm:inline">Reports</span>
             </TabsTrigger>
+            <TabsTrigger value="settings" className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Settings</span>
+            </TabsTrigger>
           </TabsList>
         </ScrollArea>
 
@@ -1177,14 +1292,20 @@ export default function POSInventory() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>Products</CardTitle>
-                    <div className="relative w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        placeholder="Search products..." 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9"
-                      />
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setShowBarcodeScanner(true)}>
+                        <ScanLine className="h-4 w-4 mr-1" />
+                        Scan
+                      </Button>
+                      <div className="relative w-48">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                          placeholder="Search..." 
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -1468,6 +1589,94 @@ export default function POSInventory() {
                 onPageChange={setCategoriesPage}
                 onPageSizeChange={setCategoriesPageSize}
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Brands Tab */}
+        <TabsContent value="brands">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Brands</CardTitle>
+                <CardDescription>Manage product brands ({inventoryExt.brands.length} total)</CardDescription>
+              </div>
+              <Button onClick={() => { setEditingBrand(null); setBrandForm({ name: '', description: '' }); setShowBrandDialog(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Brand
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {inventoryExt.brands.length === 0 ? (
+                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No brands found</TableCell></TableRow>
+                  ) : inventoryExt.brands.map(brand => (
+                    <TableRow key={brand.id}>
+                      <TableCell className="font-medium">{brand.name}</TableCell>
+                      <TableCell>{brand.description || '-'}</TableCell>
+                      <TableCell><Badge variant={brand.is_active ? 'default' : 'secondary'}>{brand.is_active ? 'Active' : 'Inactive'}</Badge></TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" onClick={() => handleEditBrand(brand)}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteBrand(brand.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Units Tab */}
+        <TabsContent value="units">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Units</CardTitle>
+                <CardDescription>Manage measurement units ({inventoryExt.units.length} total)</CardDescription>
+              </div>
+              <Button onClick={() => { setEditingUnit(null); setUnitForm({ name: '', short_name: '', unit_type: 'quantity' }); setShowUnitDialog(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Unit
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Short Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {inventoryExt.units.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No units found</TableCell></TableRow>
+                  ) : inventoryExt.units.map(unit => (
+                    <TableRow key={unit.id}>
+                      <TableCell className="font-medium">{unit.name}</TableCell>
+                      <TableCell>{unit.short_name}</TableCell>
+                      <TableCell><Badge variant="outline">{unit.unit_type}</Badge></TableCell>
+                      <TableCell><Badge variant={unit.is_active ? 'default' : 'secondary'}>{unit.is_active ? 'Active' : 'Inactive'}</Badge></TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" onClick={() => handleEditUnit(unit)}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteUnit(unit.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -2187,6 +2396,116 @@ export default function POSInventory() {
             </div>
           </div>
         </TabsContent>
+
+        {/* Settings Tab */}
+        <TabsContent value="settings">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Invoice Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Invoice Settings</CardTitle>
+                <CardDescription>Configure your invoice appearance</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Invoice Header</Label>
+                  <Textarea 
+                    value={invoiceSettingsForm.invoice_header} 
+                    onChange={(e) => setInvoiceSettingsForm(p => ({ ...p, invoice_header: e.target.value }))} 
+                    placeholder="Company name, address, contact info..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Invoice Footer</Label>
+                  <Textarea 
+                    value={invoiceSettingsForm.invoice_footer} 
+                    onChange={(e) => setInvoiceSettingsForm(p => ({ ...p, invoice_footer: e.target.value }))} 
+                    placeholder="Thank you message, return policy..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Terms & Conditions</Label>
+                  <Textarea 
+                    value={invoiceSettingsForm.invoice_terms} 
+                    onChange={(e) => setInvoiceSettingsForm(p => ({ ...p, invoice_terms: e.target.value }))} 
+                    placeholder="Terms of sale..."
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Invoice Prefix</Label>
+                    <Input 
+                      value={invoiceSettingsForm.invoice_prefix} 
+                      onChange={(e) => setInvoiceSettingsForm(p => ({ ...p, invoice_prefix: e.target.value }))} 
+                      placeholder="INV"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <Label>Enable Thermal Print</Label>
+                    <Switch 
+                      checked={invoiceSettingsForm.thermal_printer_enabled} 
+                      onCheckedChange={(c) => setInvoiceSettingsForm(p => ({ ...p, thermal_printer_enabled: c }))} 
+                    />
+                  </div>
+                </div>
+                <Button onClick={handleSaveInvoiceSettings} disabled={saving}>
+                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Save Invoice Settings
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Report Options */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Reports</CardTitle>
+                <CardDescription>Generate PDF reports</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start" 
+                  onClick={() => printReport(generateDuesReport(pos.customers))}
+                >
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Customer Dues Report
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start" 
+                  onClick={() => printReport(generateCustomerListReport(pos.customers))}
+                >
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Customer List Report
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start" 
+                  onClick={() => printReport(generateSalesReport(pos.sales, reportDateFrom, reportDateTo))}
+                >
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Sales Report ({reportDateFrom} to {reportDateTo})
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start" 
+                  onClick={() => printReport(generateInventoryReport(items as any))}
+                >
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Inventory Report
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start" 
+                  onClick={() => printReport(generateSupplierDuesReport(suppliers))}
+                >
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Supplier Dues Report
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* Customer Profile Sheet */}
@@ -2795,52 +3114,106 @@ export default function POSInventory() {
           <DialogHeader>
             <DialogTitle>{editingItem ? 'Edit Product' : 'Add Product'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Product Name *</Label>
-                <Input value={itemForm.name} onChange={(e) => setItemForm(p => ({ ...p, name: e.target.value }))} />
+          <ScrollArea className="h-[500px]">
+            <div className="space-y-4 pr-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Product Name *</Label>
+                  <Input value={itemForm.name} onChange={(e) => setItemForm(p => ({ ...p, name: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>SKU</Label>
+                  <Input value={itemForm.sku} onChange={(e) => setItemForm(p => ({ ...p, sku: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Barcode</Label>
+                  <Input value={itemForm.barcode} onChange={(e) => setItemForm(p => ({ ...p, barcode: e.target.value }))} placeholder="Scan or enter barcode" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <Select value={itemForm.category_id} onValueChange={(v) => setItemForm(p => ({ ...p, category_id: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Brand</Label>
+                  <Select value={itemForm.brand_id} onValueChange={(v) => setItemForm(p => ({ ...p, brand_id: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {inventoryExt.brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Unit</Label>
+                  <Select value={itemForm.unit_id} onValueChange={(v) => setItemForm(p => ({ ...p, unit_id: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {inventoryExt.units.map(u => <SelectItem key={u.id} value={u.id}>{u.name} ({u.short_name})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Color</Label>
+                  <Input value={itemForm.color} onChange={(e) => setItemForm(p => ({ ...p, color: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Size</Label>
+                  <Input value={itemForm.size} onChange={(e) => setItemForm(p => ({ ...p, size: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Weight</Label>
+                  <Input type="number" value={itemForm.weight} onChange={(e) => setItemForm(p => ({ ...p, weight: e.target.value }))} placeholder="kg" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Dimensions</Label>
+                  <Input value={itemForm.dimensions} onChange={(e) => setItemForm(p => ({ ...p, dimensions: e.target.value }))} placeholder="L x W x H" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Warranty Period</Label>
+                  <Input value={itemForm.warranty_period} onChange={(e) => setItemForm(p => ({ ...p, warranty_period: e.target.value }))} placeholder="e.g., 1 year" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Stock Quantity</Label>
+                  <Input type="number" value={itemForm.quantity} onChange={(e) => setItemForm(p => ({ ...p, quantity: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Min Stock Alert</Label>
+                  <Input type="number" value={itemForm.min_quantity} onChange={(e) => setItemForm(p => ({ ...p, min_quantity: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Cost Price (৳)</Label>
+                  <Input type="number" value={itemForm.unit_price} onChange={(e) => setItemForm(p => ({ ...p, unit_price: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Sale Price (৳)</Label>
+                  <Input type="number" value={itemForm.sale_price} onChange={(e) => setItemForm(p => ({ ...p, sale_price: e.target.value }))} />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>SKU</Label>
-                <Input value={itemForm.sku} onChange={(e) => setItemForm(p => ({ ...p, sku: e.target.value }))} />
+                <Label>Location / Shelf</Label>
+                <Input value={itemForm.location} onChange={(e) => setItemForm(p => ({ ...p, location: e.target.value }))} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={itemForm.category_id} onValueChange={(v) => setItemForm(p => ({ ...p, category_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Stock Quantity</Label>
-                <Input type="number" value={itemForm.quantity} onChange={(e) => setItemForm(p => ({ ...p, quantity: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Min Stock Alert</Label>
-                <Input type="number" value={itemForm.min_quantity} onChange={(e) => setItemForm(p => ({ ...p, min_quantity: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Cost Price (৳)</Label>
-                <Input type="number" value={itemForm.unit_price} onChange={(e) => setItemForm(p => ({ ...p, unit_price: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Sale Price (৳)</Label>
-                <Input type="number" value={itemForm.sale_price} onChange={(e) => setItemForm(p => ({ ...p, sale_price: e.target.value }))} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Location / Shelf</Label>
-              <Input value={itemForm.location} onChange={(e) => setItemForm(p => ({ ...p, location: e.target.value }))} />
-            </div>
-          </div>
+          </ScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowItemDialog(false)}>Cancel</Button>
             <Button onClick={handleSaveItem} disabled={saving || !itemForm.name}>
@@ -3045,16 +3418,62 @@ export default function POSInventory() {
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               Invoice
-              <Button variant="outline" size="sm" onClick={handlePrintInvoice}>
-                <Printer className="h-4 w-4 mr-2" />
-                Print
-              </Button>
+              <div className="flex gap-2">
+                <Select value={invoiceType} onValueChange={(v: 'thermal' | 'a4') => setInvoiceType(v)}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="a4">A4 Print</SelectItem>
+                    <SelectItem value="thermal">Thermal</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={() => {
+                  if (selectedSale && saleItems.length > 0) {
+                    printInvoice(
+                      {
+                        id: selectedSale.id,
+                        invoice_number: selectedSale.invoice_number,
+                        sale_date: selectedSale.sale_date,
+                        customer_name: selectedSale.customer_name || 'Walk-in',
+                        customer_phone: selectedSale.customer_phone,
+                        subtotal: selectedSale.subtotal,
+                        discount: selectedSale.discount,
+                        tax: selectedSale.tax,
+                        total_amount: selectedSale.total_amount,
+                        paid_amount: selectedSale.paid_amount,
+                        due_amount: selectedSale.due_amount,
+                        status: selectedSale.status,
+                        payment_method: selectedSale.payment_method,
+                      },
+                      saleItems.map(item => ({
+                        item_name: item.item_name,
+                        quantity: item.quantity,
+                        unit_price: item.unit_price,
+                        total_price: item.total_price,
+                      })),
+                      inventoryExt.tenantInfo,
+                      invoiceType
+                    );
+                  }
+                }}>
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print
+                </Button>
+              </div>
             </DialogTitle>
           </DialogHeader>
           
           <div id="invoice-content" className="space-y-4">
-            <div className="invoice-header text-center">
-              <h2 className="text-xl font-bold">INVOICE</h2>
+            {inventoryExt.tenantInfo?.company_name && (
+              <div className="invoice-header text-center">
+                <h2 className="text-xl font-bold">{inventoryExt.tenantInfo.company_name}</h2>
+                {inventoryExt.tenantInfo.address && <p className="text-xs text-muted-foreground">{inventoryExt.tenantInfo.address}</p>}
+                {inventoryExt.tenantInfo.phone && <p className="text-xs text-muted-foreground">Phone: {inventoryExt.tenantInfo.phone}</p>}
+              </div>
+            )}
+            <div className="text-center">
+              <p className="font-bold">INVOICE</p>
               <p className="text-sm text-muted-foreground">{selectedSale?.invoice_number}</p>
             </div>
             
@@ -3124,11 +3543,83 @@ export default function POSInventory() {
             </div>
             
             <div className="footer text-center text-xs text-muted-foreground pt-4 border-t">
-              <p>Thank you for your business!</p>
+              <p>{inventoryExt.tenantInfo?.invoice_footer || 'Thank you for your business!'}</p>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Brand Dialog */}
+      <Dialog open={showBrandDialog} onOpenChange={setShowBrandDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingBrand ? 'Edit Brand' : 'Add Brand'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Brand Name *</Label>
+              <Input value={brandForm.name} onChange={(e) => setBrandForm(p => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea value={brandForm.description} onChange={(e) => setBrandForm(p => ({ ...p, description: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBrandDialog(false)}>Cancel</Button>
+            <Button onClick={handleSaveBrand} disabled={saving || !brandForm.name}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editingBrand ? 'Save Changes' : 'Add Brand'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unit Dialog */}
+      <Dialog open={showUnitDialog} onOpenChange={setShowUnitDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingUnit ? 'Edit Unit' : 'Add Unit'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Unit Name *</Label>
+                <Input value={unitForm.name} onChange={(e) => setUnitForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Kilogram" />
+              </div>
+              <div className="space-y-2">
+                <Label>Short Name *</Label>
+                <Input value={unitForm.short_name} onChange={(e) => setUnitForm(p => ({ ...p, short_name: e.target.value }))} placeholder="e.g., kg" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Unit Type</Label>
+              <Select value={unitForm.unit_type} onValueChange={(v) => setUnitForm(p => ({ ...p, unit_type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {UNIT_TYPES.map(type => (
+                    <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUnitDialog(false)}>Cancel</Button>
+            <Button onClick={handleSaveUnit} disabled={saving || !unitForm.name || !unitForm.short_name}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editingUnit ? 'Save Changes' : 'Add Unit'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Barcode Scanner Dialog */}
+      <BarcodeScanner 
+        open={showBarcodeScanner} 
+        onOpenChange={setShowBarcodeScanner} 
+        onScan={handleBarcodeScan} 
+      />
     </DashboardLayout>
   );
 }
