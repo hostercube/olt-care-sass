@@ -111,7 +111,7 @@ export default function POSInventory() {
   
   // Barcode scanner hook for continuous scanning
   const handleBarcodeScan = useCallback((barcode: string) => {
-    const item = items.find(i => i.barcode === barcode || i.sku === barcode);
+    const item = items.find(i => (i as any).barcode === barcode || i.sku === barcode);
     if (item) {
       addToCart(item);
       toast.success(`Added: ${item.name}`);
