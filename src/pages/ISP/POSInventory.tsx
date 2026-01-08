@@ -890,11 +890,27 @@ export default function POSInventory() {
   // Supplier payment
   const handleOpenSupplierPayment = (supplierId?: string) => {
     if (supplierId) {
+      const supplier = suppliers.find(s => s.id === supplierId);
       const supplierPOs = purchases.filter(p => p.supplier_id === supplierId && p.total > (p.paid_amount || 0));
       setSelectedSupplierPurchases(supplierPOs);
-      setSupplierPaymentForm(prev => ({ ...prev, supplierId }));
+      setSupplierPaymentForm({
+        supplierId,
+        purchaseOrderId: '',
+        amount: (supplier?.current_balance || 0).toString(),
+        method: 'cash',
+        reference: '',
+        notes: '',
+      });
     } else {
       setSelectedSupplierPurchases([]);
+      setSupplierPaymentForm({
+        supplierId: '',
+        purchaseOrderId: '',
+        amount: '0',
+        method: 'cash',
+        reference: '',
+        notes: '',
+      });
     }
     setShowSupplierPayment(true);
   };
@@ -2591,10 +2607,23 @@ export default function POSInventory() {
                     <h3 className="text-xl font-bold">{selectedProfileCustomer.name}</h3>
                     <p className="text-muted-foreground">{selectedProfileCustomer.phone || 'No phone'}</p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setShowEditCustomer(true)}>
-                    <Edit className="h-4 w-4 mr-1" />
-                    Edit
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="sm" onClick={() => {
+                      printCustomerSummary({
+                        customer: selectedProfileCustomer,
+                        sales: customerSales,
+                        payments: customerPaymentsHistory,
+                        tenantInfo: inventoryExt.tenantInfo
+                      });
+                    }}>
+                      <Printer className="h-4 w-4 mr-1" />
+                      Print
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowEditCustomer(true)}>
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
@@ -2965,10 +2994,26 @@ export default function POSInventory() {
                         className="p-3 border rounded-lg cursor-pointer hover:bg-muted"
                       >
                         <div className="flex items-center justify-between">
-                          <p className="font-medium">{customer.name}</p>
+                          <div>
+                            <p className="font-medium">{customer.name}</p>
+                            <p className="text-xs text-muted-foreground">{customer.phone || customer.email}</p>
+                          </div>
                           <Badge variant="outline" className="text-xs">{customer.customer_code}</Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">{customer.phone || customer.email}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {customer.package_name && (
+                            <Badge variant="secondary" className="text-xs">{customer.package_name}</Badge>
+                          )}
+                          <Badge variant={customer.status === 'active' ? 'default' : 'destructive'} className="text-xs">
+                            {customer.status}
+                          </Badge>
+                          {customer.due_amount > 0 && (
+                            <span className="text-xs text-orange-600 font-medium">Due: ৳{customer.due_amount.toLocaleString()}</span>
+                          )}
+                          {customer.monthly_bill > 0 && (
+                            <span className="text-xs text-muted-foreground">Bill: ৳{customer.monthly_bill}</span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -3680,6 +3725,62 @@ export default function POSInventory() {
         open={showBarcodeScanner} 
         onOpenChange={setShowBarcodeScanner} 
         onScan={handleBarcodeScan} 
+      />
+
+      {/* QR Code Printer Dialog */}
+      <ProductQRPrinter
+        open={showQRPrinter}
+        onOpenChange={setShowQRPrinter}
+        products={items.map(item => ({
+          id: item.id,
+          name: item.name,
+          sku: item.sku,
+          barcode: item.barcode,
+          sale_price: item.sale_price,
+          quantity: item.quantity,
+        }))}
+        tenantName={inventoryExt.tenantInfo?.company_name || undefined}
+      />
+
+      {/* Advanced Reports Dialog */}
+      <AdvancedReportsDialog
+        open={showAdvancedReports}
+        onOpenChange={setShowAdvancedReports}
+        customers={pos.customers}
+        sales={pos.sales}
+        suppliers={suppliers.map(s => ({
+          id: s.id,
+          name: s.name,
+          company_name: s.company_name || null,
+          phone: s.phone || null,
+          current_balance: s.current_balance || 0,
+        }))}
+        purchases={purchases.map(p => ({
+          id: p.id,
+          order_number: p.order_number,
+          order_date: p.order_date,
+          supplier_name: p.supplier?.name || null,
+          total: p.total,
+          paid_amount: p.paid_amount,
+          status: p.status,
+        }))}
+        payments={pos.payments.map(pay => ({
+          id: pay.id,
+          customer_name: pos.customers.find(c => c.id === pay.customer_id)?.name || null,
+          amount: pay.amount,
+          payment_date: pay.payment_date,
+          payment_method: pay.payment_method,
+        }))}
+        inventory={items.map(item => ({
+          id: item.id,
+          name: item.name,
+          sku: item.sku,
+          category_name: item.category?.name || null,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          sale_price: item.sale_price,
+        }))}
+        tenantInfo={inventoryExt.tenantInfo}
       />
     </DashboardLayout>
   );
