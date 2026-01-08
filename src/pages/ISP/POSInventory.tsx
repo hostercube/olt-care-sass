@@ -175,6 +175,20 @@ export default function POSInventory() {
     name: '', phone: '', email: '', address: '', company_name: '', notes: '',
   });
   
+  // ISP Customer profile sheet for POS
+  const [showIspCustomerProfile, setShowIspCustomerProfile] = useState(false);
+  const [selectedIspProfileCustomer, setSelectedIspProfileCustomer] = useState<ISPCustomer & { pos_total: number; pos_due: number } | null>(null);
+  const [ispCustomerPosSales, setIspCustomerPosSales] = useState<any[]>([]);
+  const [showIspBalanceAdjust, setShowIspBalanceAdjust] = useState(false);
+  const [ispBalanceAdjustType, setIspBalanceAdjustType] = useState<'add' | 'deduct'>('add');
+  const [ispBalanceAdjustAmount, setIspBalanceAdjustAmount] = useState('0');
+  const [ispBalanceAdjustNotes, setIspBalanceAdjustNotes] = useState('');
+  const [showIspDuePayment, setShowIspDuePayment] = useState(false);
+  const [ispDuePaymentAmount, setIspDuePaymentAmount] = useState('0');
+  const [ispDuePaymentMethod, setIspDuePaymentMethod] = useState('cash');
+  const [ispDuePaymentReference, setIspDuePaymentReference] = useState('');
+  const [ispDuePaymentNotes, setIspDuePaymentNotes] = useState('');
+  
   // Supplier payment
   const [showSupplierPayment, setShowSupplierPayment] = useState(false);
   const [supplierPaymentForm, setSupplierPaymentForm] = useState({
@@ -910,6 +924,132 @@ export default function POSInventory() {
     setCustomerPaymentsHistory(payments || []);
     
     setShowCustomerProfile(true);
+  };
+
+  // Load ISP customer POS profile
+  const loadIspCustomerPosProfile = async (customer: ISPCustomer & { pos_total: number; pos_due: number }) => {
+    setSelectedIspProfileCustomer(customer);
+    
+    // Fetch POS sales for this ISP customer
+    const { data: sales } = await supabase
+      .from('pos_sales')
+      .select('*')
+      .eq('isp_customer_id', customer.id)
+      .order('sale_date', { ascending: false })
+      .limit(50);
+    setIspCustomerPosSales(sales || []);
+    
+    setIspBalanceAdjustAmount('0');
+    setIspBalanceAdjustNotes('');
+    setIspDuePaymentAmount(customer.pos_due > 0 ? customer.pos_due.toString() : '0');
+    setShowIspCustomerProfile(true);
+  };
+
+  // Handle ISP customer POS balance adjustment
+  const handleIspPosBalanceAdjust = async () => {
+    if (!selectedIspProfileCustomer || !ispBalanceAdjustAmount) return;
+    setSaving(true);
+    try {
+      const amount = parseFloat(ispBalanceAdjustAmount);
+      if (isNaN(amount) || amount <= 0) {
+        toast.error('Invalid amount');
+        setSaving(false);
+        return;
+      }
+
+      // Get all sales for this ISP customer and adjust the last one's due
+      const { data: lastSale } = await supabase
+        .from('pos_sales')
+        .select('id, due_amount')
+        .eq('isp_customer_id', selectedIspProfileCustomer.id)
+        .order('sale_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (lastSale) {
+        const newDue = ispBalanceAdjustType === 'add' 
+          ? lastSale.due_amount + amount 
+          : Math.max(0, lastSale.due_amount - amount);
+
+        await supabase.from('pos_sales').update({
+          due_amount: newDue,
+          status: newDue <= 0 ? 'completed' : 'partial',
+        }).eq('id', lastSale.id);
+
+        toast.success(`Balance ${ispBalanceAdjustType === 'add' ? 'added' : 'deducted'} successfully`);
+        setShowIspBalanceAdjust(false);
+        setIspBalanceAdjustAmount('0');
+        setIspBalanceAdjustNotes('');
+        
+        // Refresh data
+        pos.refetch();
+        fetchData();
+      } else {
+        toast.error('No POS sales found for this customer');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to adjust balance');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle ISP customer POS due payment
+  const handleIspPosDuePayment = async () => {
+    if (!selectedIspProfileCustomer || !ispDuePaymentAmount) return;
+    setSaving(true);
+    try {
+      const amount = parseFloat(ispDuePaymentAmount);
+      if (isNaN(amount) || amount <= 0) {
+        toast.error('Invalid amount');
+        setSaving(false);
+        return;
+      }
+
+      // Find unpaid sales and apply payment
+      const { data: unpaidSales } = await supabase
+        .from('pos_sales')
+        .select('id, due_amount')
+        .eq('isp_customer_id', selectedIspProfileCustomer.id)
+        .gt('due_amount', 0)
+        .order('sale_date', { ascending: true });
+
+      if (!unpaidSales || unpaidSales.length === 0) {
+        toast.error('No unpaid sales found');
+        setSaving(false);
+        return;
+      }
+
+      let remainingAmount = amount;
+      for (const sale of unpaidSales) {
+        if (remainingAmount <= 0) break;
+        
+        const paymentForSale = Math.min(remainingAmount, sale.due_amount);
+        const newDue = sale.due_amount - paymentForSale;
+        
+        await supabase.from('pos_sales').update({
+          due_amount: newDue,
+          status: newDue <= 0 ? 'completed' : 'partial',
+        }).eq('id', sale.id);
+
+        remainingAmount -= paymentForSale;
+      }
+
+      toast.success('Payment collected successfully');
+      setShowIspDuePayment(false);
+      setIspDuePaymentAmount('0');
+      setIspDuePaymentReference('');
+      setIspDuePaymentNotes('');
+      setShowIspCustomerProfile(false);
+      
+      // Refresh data
+      pos.refetch();
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to collect payment');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Select ISP customer for sale
@@ -2309,11 +2449,12 @@ export default function POSInventory() {
                         <TableHead>Status</TableHead>
                         <TableHead>POS Purchase</TableHead>
                         <TableHead>POS Due</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedIspCustomersWithPurchases.filter(c => c.pos_total > 0).length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No ISP customers with POS purchases</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No ISP customers with POS purchases</TableCell></TableRow>
                       ) : (
                         paginatedIspCustomersWithPurchases.filter(c => c.pos_total > 0).map(customer => (
                           <TableRow key={customer.id}>
@@ -2333,6 +2474,49 @@ export default function POSInventory() {
                             <TableCell>৳{customer.pos_total.toLocaleString()}</TableCell>
                             <TableCell className={customer.pos_due > 0 ? 'text-orange-600 font-medium' : ''}>
                               ৳{customer.pos_due.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right space-x-1">
+                              <Button variant="ghost" size="sm" onClick={() => loadIspCustomerPosProfile(customer)}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedIspProfileCustomer(customer);
+                                  setIspBalanceAdjustType('add');
+                                  setIspBalanceAdjustAmount('0');
+                                  setShowIspBalanceAdjust(true);
+                                }}
+                              >
+                                <PlusCircle className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedIspProfileCustomer(customer);
+                                  setIspBalanceAdjustType('deduct');
+                                  setIspBalanceAdjustAmount('0');
+                                  setShowIspBalanceAdjust(true);
+                                }}
+                              >
+                                <MinusCircle className="h-4 w-4" />
+                              </Button>
+                              {customer.pos_due > 0 && (
+                                <Button 
+                                  variant="default" 
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedIspProfileCustomer(customer);
+                                    setIspDuePaymentAmount(customer.pos_due.toString());
+                                    setIspDuePaymentMethod('cash');
+                                    setShowIspDuePayment(true);
+                                  }}
+                                >
+                                  <DollarSign className="h-4 w-4" />
+                                </Button>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))
@@ -4138,6 +4322,156 @@ export default function POSInventory() {
         }))}
         tenantInfo={inventoryExt.tenantInfo}
       />
+
+      {/* ISP Customer POS Profile Sheet */}
+      <Sheet open={showIspCustomerProfile} onOpenChange={setShowIspCustomerProfile}>
+        <SheetContent className="w-[400px] sm:w-[500px]">
+          <SheetHeader>
+            <SheetTitle>ISP Customer - POS Details</SheetTitle>
+            <SheetDescription>View POS purchases and manage balance</SheetDescription>
+          </SheetHeader>
+          {selectedIspProfileCustomer && (
+            <div className="mt-6 space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">{selectedIspProfileCustomer.name}</h3>
+                <p className="text-sm text-muted-foreground">{selectedIspProfileCustomer.customer_code}</p>
+                {selectedIspProfileCustomer.phone && <p className="text-sm">{selectedIspProfileCustomer.phone}</p>}
+                {selectedIspProfileCustomer.package_name && (
+                  <Badge variant="secondary">{selectedIspProfileCustomer.package_name}</Badge>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground">Total POS Purchase</p>
+                    <p className="text-xl font-bold">৳{selectedIspProfileCustomer.pos_total.toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground">POS Due</p>
+                    <p className={`text-xl font-bold ${selectedIspProfileCustomer.pos_due > 0 ? 'text-orange-600' : ''}`}>
+                      ৳{selectedIspProfileCustomer.pos_due.toLocaleString()}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => { setIspBalanceAdjustType('add'); setShowIspBalanceAdjust(true); }}>
+                  <PlusCircle className="h-4 w-4 mr-1" /> Add Due
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={() => { setIspBalanceAdjustType('deduct'); setShowIspBalanceAdjust(true); }}>
+                  <MinusCircle className="h-4 w-4 mr-1" /> Deduct
+                </Button>
+                {selectedIspProfileCustomer.pos_due > 0 && (
+                  <Button className="flex-1" onClick={() => { setIspDuePaymentAmount(selectedIspProfileCustomer.pos_due.toString()); setShowIspDuePayment(true); }}>
+                    <DollarSign className="h-4 w-4 mr-1" /> Collect
+                  </Button>
+                )}
+              </div>
+
+              <div>
+                <h4 className="font-semibold mb-3">POS Purchase History</h4>
+                <ScrollArea className="h-[200px]">
+                  {ispCustomerPosSales.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">No POS purchases</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {ispCustomerPosSales.map(sale => (
+                        <div key={sale.id} className="flex items-center justify-between p-2 border rounded text-sm">
+                          <div>
+                            <p className="font-mono text-xs">{sale.invoice_number}</p>
+                            <p className="text-xs text-muted-foreground">{format(new Date(sale.sale_date), 'dd MMM yyyy')}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium">৳{sale.total_amount}</p>
+                            <Badge variant={sale.due_amount > 0 ? 'destructive' : 'default'} className="text-xs">
+                              {sale.due_amount > 0 ? `Due: ৳${sale.due_amount}` : 'Paid'}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* ISP Customer Balance Adjust Dialog */}
+      <Dialog open={showIspBalanceAdjust} onOpenChange={setShowIspBalanceAdjust}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{ispBalanceAdjustType === 'add' ? 'Add Due Balance' : 'Deduct Due Balance'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Current POS Due: ৳{selectedIspProfileCustomer?.pos_due.toLocaleString()}</Label>
+            </div>
+            <div className="space-y-2">
+              <Label>Amount *</Label>
+              <Input type="number" value={ispBalanceAdjustAmount} onChange={(e) => setIspBalanceAdjustAmount(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea value={ispBalanceAdjustNotes} onChange={(e) => setIspBalanceAdjustNotes(e.target.value)} placeholder="Reason..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowIspBalanceAdjust(false)}>Cancel</Button>
+            <Button onClick={handleIspPosBalanceAdjust} disabled={saving || !ispBalanceAdjustAmount}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {ispBalanceAdjustType === 'add' ? 'Add' : 'Deduct'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ISP Customer Due Payment Dialog */}
+      <Dialog open={showIspDuePayment} onOpenChange={setShowIspDuePayment}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Collect POS Due - {selectedIspProfileCustomer?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground">Total POS Due</p>
+              <p className="text-xl font-bold text-orange-600">৳{selectedIspProfileCustomer?.pos_due.toLocaleString()}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Amount *</Label>
+              <Input type="number" value={ispDuePaymentAmount} onChange={(e) => setIspDuePaymentAmount(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Method</Label>
+              <Select value={ispDuePaymentMethod} onValueChange={setIspDuePaymentMethod}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bkash">bKash</SelectItem>
+                  <SelectItem value="nagad">Nagad</SelectItem>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Reference</Label>
+              <Input value={ispDuePaymentReference} onChange={(e) => setIspDuePaymentReference(e.target.value)} placeholder="Transaction ID..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowIspDuePayment(false)}>Cancel</Button>
+            <Button onClick={handleIspPosDuePayment} disabled={saving || !ispDuePaymentAmount}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Collect Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

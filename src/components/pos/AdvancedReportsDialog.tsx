@@ -9,9 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { 
   FileDown, Printer, Users, FileText, DollarSign, Package, 
-  Calendar, TrendingUp, AlertTriangle, Building2, Filter
+  Calendar, TrendingUp, AlertTriangle, Building2, Filter, Search
 } from 'lucide-react';
 import { format, startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 
@@ -94,6 +95,9 @@ export function AdvancedReportsDialog({
   const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const today = startOfDay(new Date());
   const yesterday = subDays(today, 1);
@@ -361,12 +365,40 @@ export function AdvancedReportsDialog({
     }
   }, [reportType, customers, sales, suppliers, purchases, payments, inventory, dateFrom, dateTo, selectedCustomerId]);
 
-  const printReport = () => {
+  // Filter rows by search query
+  const filteredRows = useMemo(() => {
+    if (!searchQuery.trim()) return reportData.rows;
+    const query = searchQuery.toLowerCase();
+    return reportData.rows.filter(row => 
+      row.some(cell => String(cell).toLowerCase().includes(query))
+    );
+  }, [reportData.rows, searchQuery]);
+
+  // Pagination
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, currentPage, pageSize]);
+
+  // Reset page when report type or search changes
+  const handleReportTypeChange = (type: ReportType) => {
+    setReportType(type);
+    setCurrentPage(1);
+    setSearchQuery('');
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+  };
+
+  const printReportFn = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    // For printing, use all filtered rows (not just current page)
     const tableHeaders = reportData.columns.map(col => `<th>${col}</th>`).join('');
-    const tableRows = reportData.rows.map(row => 
+    const tableRows = filteredRows.map(row => 
       `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`
     ).join('');
 
@@ -469,18 +501,18 @@ export function AdvancedReportsDialog({
       <DialogContent className="max-w-5xl max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Advanced Reports</DialogTitle>
-          <DialogDescription>Generate and print detailed reports with filters</DialogDescription>
+          <DialogDescription>Generate and print detailed reports with filters and pagination</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-4 gap-4">
           {/* Report Type Selection */}
           <div className="space-y-2">
             <Label>Report Type</Label>
-            <ScrollArea className="h-[400px] border rounded-lg">
+            <ScrollArea className="h-[450px] border rounded-lg">
               {REPORT_TYPES.map(rt => (
                 <div
                   key={rt.value}
-                  onClick={() => setReportType(rt.value)}
+                  onClick={() => handleReportTypeChange(rt.value)}
                   className={`flex items-center gap-2 p-3 cursor-pointer hover:bg-muted ${
                     reportType === rt.value ? 'bg-primary/10 border-l-2 border-primary' : ''
                   }`}
@@ -495,7 +527,22 @@ export function AdvancedReportsDialog({
           {/* Report Content */}
           <div className="col-span-3 space-y-4">
             {/* Filters */}
-            <div className="flex gap-4 items-end">
+            <div className="flex flex-wrap gap-4 items-end">
+              {/* Search Input */}
+              <div className="space-y-1 flex-1 min-w-[200px]">
+                <Label className="text-xs">Search</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search in report..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="h-8 pl-9"
+                  />
+                </div>
+              </div>
+              
               {needsDateFilter && (
                 <>
                   <div className="space-y-1">
@@ -503,7 +550,7 @@ export function AdvancedReportsDialog({
                     <Input
                       type="date"
                       value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
+                      onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
                       className="h-8"
                     />
                   </div>
@@ -512,14 +559,14 @@ export function AdvancedReportsDialog({
                     <Input
                       type="date"
                       value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
+                      onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
                       className="h-8"
                     />
                   </div>
                 </>
               )}
               {needsCustomerSelect && (
-                <div className="space-y-1 flex-1">
+                <div className="space-y-1 flex-1 min-w-[150px]">
                   <Label className="text-xs">Select Customer</Label>
                   <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
                     <SelectTrigger className="h-8">
@@ -533,9 +580,9 @@ export function AdvancedReportsDialog({
                   </Select>
                 </div>
               )}
-              <Button onClick={printReport} className="h-8" disabled={reportData.rows.length === 0}>
+              <Button onClick={printReportFn} className="h-8" disabled={filteredRows.length === 0}>
                 <Printer className="h-4 w-4 mr-2" />
-                Print
+                Print ({filteredRows.length})
               </Button>
             </div>
 
@@ -579,11 +626,13 @@ export function AdvancedReportsDialog({
 
             {/* Report Table */}
             <div className="border rounded-lg">
-              <div className="bg-muted px-3 py-2 border-b">
-                <h3 className="font-semibold text-sm">{reportData.title}</h3>
-                <p className="text-xs text-muted-foreground">{reportData.subtitle}</p>
+              <div className="bg-muted px-3 py-2 border-b flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-sm">{reportData.title}</h3>
+                  <p className="text-xs text-muted-foreground">{reportData.subtitle} • {filteredRows.length} records</p>
+                </div>
               </div>
-              <ScrollArea className="h-[300px]">
+              <ScrollArea className="h-[250px]">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -593,14 +642,14 @@ export function AdvancedReportsDialog({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.rows.length === 0 ? (
+                    {paginatedRows.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={reportData.columns.length || 1} className="text-center py-8 text-muted-foreground">
                           No data found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      reportData.rows.map((row, idx) => (
+                      paginatedRows.map((row, idx) => (
                         <TableRow key={idx}>
                           {row.map((cell, cellIdx) => (
                             <TableCell key={cellIdx} className="text-xs">{cell}</TableCell>
@@ -611,6 +660,18 @@ export function AdvancedReportsDialog({
                   </TableBody>
                 </Table>
               </ScrollArea>
+              
+              {/* Pagination */}
+              <div className="border-t px-3 py-2">
+                <TablePagination
+                  totalItems={filteredRows.length}
+                  currentPage={currentPage}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                  pageSizeOptions={[10, 20, 50, 100]}
+                />
+              </div>
             </div>
           </div>
         </div>
