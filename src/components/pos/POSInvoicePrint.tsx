@@ -22,6 +22,7 @@ interface TenantInfo {
 }
 
 interface SaleInfo {
+  id?: string;
   invoice_number: string;
   sale_date: string;
   customer_name?: string | null;

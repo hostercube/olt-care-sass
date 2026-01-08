@@ -25,6 +25,7 @@ export interface POSSale {
   tenant_id: string;
   invoice_number: string;
   customer_id: string | null;
+  isp_customer_id: string | null;
   customer_name: string | null;
   customer_phone: string | null;
   sale_date: string;
@@ -218,7 +219,7 @@ export function usePOS() {
   // Create Sale
   const createSale = async (
     cart: CartItem[],
-    customerInfo: { customerId?: string; name?: string; phone?: string },
+    customerInfo: { customerId?: string; name?: string; phone?: string; ispCustomerId?: string },
     payment: { paid: number; method: string; reference?: string },
     options: { discount?: number; tax?: number; notes?: string; sendSms?: boolean }
   ) => {
@@ -252,6 +253,7 @@ export function usePOS() {
           tenant_id: tenantId,
           invoice_number: invoiceNumber,
           customer_id: customerInfo.customerId || null,
+          isp_customer_id: customerInfo.ispCustomerId || null,
           customer_name: customerInfo.name || 'Walk-in Customer',
           customer_phone: customerInfo.phone || null,
           subtotal,
@@ -265,7 +267,7 @@ export function usePOS() {
           status: dueAmount > 0 ? 'partial' : 'completed',
           notes: options.notes || null,
           send_sms: options.sendSms || false,
-        })
+        } as any)
         .select()
         .single();
 

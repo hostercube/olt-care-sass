@@ -2048,6 +2048,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "inventory_items_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_brands"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "inventory_items_category_id_fkey"
             columns: ["category_id"]
             isOneToOne: false
@@ -2059,6 +2066,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_units"
             referencedColumns: ["id"]
           },
         ]

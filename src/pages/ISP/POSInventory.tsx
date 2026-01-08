@@ -249,7 +249,7 @@ export default function POSInventory() {
     try {
       const [catRes, itemRes, supRes, purRes, ispRes, supPayRes] = await Promise.all([
         supabase.from('inventory_categories').select('id, name, description').eq('tenant_id', tenantId).order('name'),
-        supabase.from('inventory_items').select('*, category:inventory_categories(name)').eq('tenant_id', tenantId).order('name'),
+        supabase.from('inventory_items').select('*, category:inventory_categories(name), brand:inventory_brands(name), unit:inventory_units(name, short_name)').eq('tenant_id', tenantId).order('name'),
         supabase.from('suppliers').select('*').eq('tenant_id', tenantId).order('name'),
         supabase.from('purchase_orders').select('*, supplier:suppliers(name)').eq('tenant_id', tenantId).order('order_date', { ascending: false }).limit(100),
         supabase.from('customers').select('id, name, customer_code, phone, email').eq('tenant_id', tenantId).order('name').limit(500),
@@ -258,7 +258,7 @@ export default function POSInventory() {
       const categoryData = (catRes.data || []) as { id: string; name: string; description: string | null }[];
       setCategories(categoryData.map(c => ({ id: c.id, name: c.name })));
       setFullCategories(categoryData);
-      setItems((itemRes.data || []) as InventoryItem[]);
+      setItems((itemRes.data || []) as unknown as InventoryItem[]);
       setSuppliers((supRes.data || []) as Supplier[]);
       setPurchases((purRes.data || []) as PurchaseOrderData[]);
       setIspCustomers((ispRes.data || []) as ISPCustomer[]);
