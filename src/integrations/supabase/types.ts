@@ -4751,6 +4751,70 @@ export type Database = {
           },
         ]
       }
+      supplier_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          notes: string | null
+          paid_by: string | null
+          payment_date: string
+          payment_method: string
+          purchase_order_id: string | null
+          reference: string | null
+          supplier_id: string
+          tenant_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_by?: string | null
+          payment_date?: string
+          payment_method?: string
+          purchase_order_id?: string | null
+          reference?: string | null
+          supplier_id: string
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          paid_by?: string | null
+          payment_date?: string
+          payment_method?: string
+          purchase_order_id?: string | null
+          reference?: string | null
+          supplier_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_payments_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_payments_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppliers: {
         Row: {
           address: string | null
