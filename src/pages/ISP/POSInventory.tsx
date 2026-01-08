@@ -12,16 +12,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { usePOS, CartItem, POSCustomer } from '@/hooks/usePOS';
 import { 
   Package, Plus, Edit, Trash2, Loader2, ShoppingCart, Users, DollarSign,
-  FileText, Download, Search, Printer, Send, X, Check, CreditCard,
-  TrendingUp, AlertTriangle, History, Wallet, Building2, Phone, BarChart3, Wifi, Layers
+  FileText, Download, Search, Printer, X, Check, CreditCard,
+  TrendingUp, AlertTriangle, History, Wallet, Building2, BarChart3, Layers,
+  Eye, MinusCircle, PlusCircle, Filter, Calendar, ArrowUpDown
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 interface InventoryItem {
   id: string;
@@ -45,6 +47,18 @@ interface Supplier {
   address?: string | null;
   current_balance?: number;
   is_active?: boolean;
+}
+
+interface SupplierPayment {
+  id: string;
+  supplier_id: string;
+  purchase_order_id: string | null;
+  amount: number;
+  payment_date: string;
+  payment_method: string;
+  reference: string | null;
+  notes: string | null;
+  supplier?: { name: string };
 }
 
 interface PurchaseOrderData {
@@ -77,6 +91,7 @@ export default function POSInventory() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<PurchaseOrderData[]>([]);
+  const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>([]);
   const [ispCustomers, setIspCustomers] = useState<ISPCustomer[]>([]);
   
   // POS state
@@ -90,6 +105,27 @@ export default function POSInventory() {
   const [showDuePayment, setShowDuePayment] = useState(false);
   const [customerTab, setCustomerTab] = useState<'pos' | 'isp'>('pos');
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  
+  // Customer profile sheet
+  const [showCustomerProfile, setShowCustomerProfile] = useState(false);
+  const [selectedProfileCustomer, setSelectedProfileCustomer] = useState<POSCustomer | null>(null);
+  const [customerSales, setCustomerSales] = useState<any[]>([]);
+  const [customerPaymentsHistory, setCustomerPaymentsHistory] = useState<any[]>([]);
+  const [showBalanceAdjust, setShowBalanceAdjust] = useState(false);
+  const [balanceAdjustType, setBalanceAdjustType] = useState<'add' | 'deduct'>('add');
+  const [balanceAdjustAmount, setBalanceAdjustAmount] = useState('0');
+  const [balanceAdjustNotes, setBalanceAdjustNotes] = useState('');
+  const [showEditCustomer, setShowEditCustomer] = useState(false);
+  const [editCustomerForm, setEditCustomerForm] = useState({
+    name: '', phone: '', email: '', address: '', company_name: '', notes: '',
+  });
+  
+  // Supplier payment
+  const [showSupplierPayment, setShowSupplierPayment] = useState(false);
+  const [supplierPaymentForm, setSupplierPaymentForm] = useState({
+    supplierId: '', purchaseOrderId: '', amount: '0', method: 'cash', reference: '', notes: '',
+  });
+  const [selectedSupplierPurchases, setSelectedSupplierPurchases] = useState<PurchaseOrderData[]>([]);
   
   // Dialog states
   const [showItemDialog, setShowItemDialog] = useState(false);
@@ -106,6 +142,9 @@ export default function POSInventory() {
 
   // Reports state
   const [reportMonth, setReportMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [reportFilter, setReportFilter] = useState<'all' | 'sales' | 'purchases' | 'payments'>('all');
+  const [reportDateFrom, setReportDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [reportDateTo, setReportDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
   // Forms
   const [itemForm, setItemForm] = useState({
@@ -135,12 +174,13 @@ export default function POSInventory() {
     if (!tenantId) return;
     setLoading(true);
     try {
-      const [catRes, itemRes, supRes, purRes, ispRes] = await Promise.all([
+      const [catRes, itemRes, supRes, purRes, ispRes, supPayRes] = await Promise.all([
         supabase.from('inventory_categories').select('id, name, description').eq('tenant_id', tenantId).order('name'),
         supabase.from('inventory_items').select('*, category:inventory_categories(name)').eq('tenant_id', tenantId).order('name'),
         supabase.from('suppliers').select('*').eq('tenant_id', tenantId).order('name'),
-        supabase.from('purchase_orders').select('*, supplier:suppliers(name)').eq('tenant_id', tenantId).order('order_date', { ascending: false }).limit(50),
+        supabase.from('purchase_orders').select('*, supplier:suppliers(name)').eq('tenant_id', tenantId).order('order_date', { ascending: false }).limit(100),
         supabase.from('customers').select('id, name, customer_code, phone, email').eq('tenant_id', tenantId).order('name').limit(500),
+        supabase.from('supplier_payments').select('*, supplier:suppliers(name)').eq('tenant_id', tenantId).order('payment_date', { ascending: false }).limit(100),
       ]);
       const categoryData = (catRes.data || []) as { id: string; name: string; description: string | null }[];
       setCategories(categoryData.map(c => ({ id: c.id, name: c.name })));
@@ -149,6 +189,7 @@ export default function POSInventory() {
       setSuppliers((supRes.data || []) as Supplier[]);
       setPurchases((purRes.data || []) as PurchaseOrderData[]);
       setIspCustomers((ispRes.data || []) as ISPCustomer[]);
+      setSupplierPayments((supPayRes.data || []) as SupplierPayment[]);
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -321,7 +362,6 @@ export default function POSInventory() {
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
-    // Check if category has items
     const itemsWithCategory = items.filter(i => i.category_id === categoryId);
     if (itemsWithCategory.length > 0) {
       toast.error(`Cannot delete category - ${itemsWithCategory.length} products are using it`);
@@ -338,7 +378,6 @@ export default function POSInventory() {
   };
 
   const handleDeleteSupplier = async (supplierId: string) => {
-    // Check if supplier has purchase orders
     const supplierPurchases = purchases.filter(p => p.supplier_id === supplierId);
     if (supplierPurchases.length > 0) {
       toast.error(`Cannot delete supplier - ${supplierPurchases.length} purchase orders are linked`);
@@ -409,6 +448,101 @@ export default function POSInventory() {
       setCustomerForm({ name: '', phone: '', email: '', address: '', company_name: '', notes: '' });
     }
     setSaving(false);
+  };
+
+  // Update POS Customer
+  const handleUpdateCustomer = async () => {
+    if (!selectedProfileCustomer || !editCustomerForm.name) return;
+    setSaving(true);
+    const result = await pos.updateCustomer(selectedProfileCustomer.id, editCustomerForm);
+    if (result) {
+      setShowEditCustomer(false);
+      loadCustomerProfile(selectedProfileCustomer.id);
+    }
+    setSaving(false);
+  };
+
+  // Adjust customer balance
+  const handleBalanceAdjust = async () => {
+    if (!selectedProfileCustomer || !balanceAdjustAmount) return;
+    setSaving(true);
+    try {
+      const amount = parseFloat(balanceAdjustAmount) || 0;
+      if (amount <= 0) {
+        toast.error('Invalid amount');
+        setSaving(false);
+        return;
+      }
+
+      const currentDue = selectedProfileCustomer.due_amount || 0;
+      let newDue: number;
+      
+      if (balanceAdjustType === 'add') {
+        newDue = currentDue + amount;
+      } else {
+        newDue = Math.max(0, currentDue - amount);
+        // If deducting, create a payment record
+        await supabase.from('pos_customer_payments').insert({
+          tenant_id: tenantId,
+          customer_id: selectedProfileCustomer.id,
+          amount: amount,
+          payment_method: 'adjustment',
+          notes: balanceAdjustNotes || `Balance adjustment - ${balanceAdjustType}`,
+        });
+      }
+
+      await supabase.from('pos_customers').update({
+        due_amount: newDue,
+        updated_at: new Date().toISOString(),
+      }).eq('id', selectedProfileCustomer.id);
+
+      toast.success(`Balance ${balanceAdjustType === 'add' ? 'added' : 'deducted'} successfully`);
+      setShowBalanceAdjust(false);
+      setBalanceAdjustAmount('0');
+      setBalanceAdjustNotes('');
+      loadCustomerProfile(selectedProfileCustomer.id);
+      pos.refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to adjust balance');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Load customer profile
+  const loadCustomerProfile = async (customerId: string) => {
+    const customer = pos.customers.find(c => c.id === customerId);
+    if (!customer) return;
+    
+    setSelectedProfileCustomer(customer);
+    setEditCustomerForm({
+      name: customer.name,
+      phone: customer.phone || '',
+      email: customer.email || '',
+      address: customer.address || '',
+      company_name: customer.company_name || '',
+      notes: customer.notes || '',
+    });
+    
+    // Fetch customer sales
+    const { data: sales } = await supabase
+      .from('pos_sales')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('sale_date', { ascending: false })
+      .limit(50);
+    setCustomerSales(sales || []);
+    
+    // Fetch customer payments
+    const { data: payments } = await supabase
+      .from('pos_customer_payments')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('payment_date', { ascending: false })
+      .limit(50);
+    setCustomerPaymentsHistory(payments || []);
+    
+    setShowCustomerProfile(true);
   };
 
   // Select ISP customer for sale
@@ -488,6 +622,66 @@ export default function POSInventory() {
     setSaving(false);
   };
 
+  // Supplier payment
+  const handleOpenSupplierPayment = (supplierId?: string) => {
+    if (supplierId) {
+      const supplierPOs = purchases.filter(p => p.supplier_id === supplierId && p.total > (p.paid_amount || 0));
+      setSelectedSupplierPurchases(supplierPOs);
+      setSupplierPaymentForm(prev => ({ ...prev, supplierId }));
+    } else {
+      setSelectedSupplierPurchases([]);
+    }
+    setShowSupplierPayment(true);
+  };
+
+  const handleSupplierPayment = async () => {
+    if (!tenantId || !supplierPaymentForm.supplierId || !supplierPaymentForm.amount) return;
+    setSaving(true);
+    try {
+      const amount = parseFloat(supplierPaymentForm.amount) || 0;
+      
+      // Create payment record
+      await supabase.from('supplier_payments').insert({
+        tenant_id: tenantId,
+        supplier_id: supplierPaymentForm.supplierId,
+        purchase_order_id: supplierPaymentForm.purchaseOrderId || null,
+        amount,
+        payment_method: supplierPaymentForm.method,
+        reference: supplierPaymentForm.reference || null,
+        notes: supplierPaymentForm.notes || null,
+      });
+
+      // Update purchase order if selected
+      if (supplierPaymentForm.purchaseOrderId) {
+        const po = purchases.find(p => p.id === supplierPaymentForm.purchaseOrderId);
+        if (po) {
+          const newPaid = (po.paid_amount || 0) + amount;
+          await supabase.from('purchase_orders').update({
+            paid_amount: newPaid,
+            status: newPaid >= po.total ? 'paid' : po.status,
+          }).eq('id', supplierPaymentForm.purchaseOrderId);
+        }
+      }
+
+      // Update supplier balance
+      const supplier = suppliers.find(s => s.id === supplierPaymentForm.supplierId);
+      if (supplier) {
+        await supabase.from('suppliers').update({
+          current_balance: Math.max(0, (supplier.current_balance || 0) - amount),
+        }).eq('id', supplierPaymentForm.supplierId);
+      }
+
+      toast.success('Payment recorded');
+      setShowSupplierPayment(false);
+      setSupplierPaymentForm({ supplierId: '', purchaseOrderId: '', amount: '0', method: 'cash', reference: '', notes: '' });
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to record payment');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Create purchase order
   const handleCreatePurchase = async () => {
     if (!tenantId || !purchaseForm.supplierId || purchaseForm.items.length === 0) return;
@@ -518,6 +712,29 @@ export default function POSInventory() {
         unit_price: i.price,
       }));
       await supabase.from('purchase_order_items').insert(poItems);
+
+      // Update supplier balance
+      const dueAmount = total - paidAmount;
+      if (dueAmount > 0) {
+        const supplier = suppliers.find(s => s.id === purchaseForm.supplierId);
+        if (supplier) {
+          await supabase.from('suppliers').update({
+            current_balance: (supplier.current_balance || 0) + dueAmount,
+          }).eq('id', purchaseForm.supplierId);
+        }
+      }
+
+      // Record initial payment if any
+      if (paidAmount > 0) {
+        await supabase.from('supplier_payments').insert({
+          tenant_id: tenantId,
+          supplier_id: purchaseForm.supplierId,
+          purchase_order_id: po.id,
+          amount: paidAmount,
+          payment_method: 'cash',
+          notes: 'Initial payment with purchase order',
+        });
+      }
 
       toast.success('Purchase order created');
       setShowPurchaseDialog(false);
@@ -607,10 +824,11 @@ export default function POSInventory() {
     printWindow.print();
   };
 
-  // Report calculations
+  // Report calculations with date filtering
   const getReportData = useCallback(() => {
-    const startDate = startOfMonth(new Date(reportMonth));
-    const endDate = endOfMonth(new Date(reportMonth));
+    const startDate = new Date(reportDateFrom);
+    const endDate = new Date(reportDateTo);
+    endDate.setHours(23, 59, 59, 999);
     
     const monthSales = pos.sales.filter(s => {
       const saleDate = new Date(s.sale_date);
@@ -626,6 +844,11 @@ export default function POSInventory() {
       const purchaseDate = new Date(p.order_date);
       return purchaseDate >= startDate && purchaseDate <= endDate;
     });
+
+    const monthSupplierPayments = supplierPayments.filter(p => {
+      const paymentDate = new Date(p.payment_date);
+      return paymentDate >= startDate && paymentDate <= endDate;
+    });
     
     return {
       totalSales: monthSales.reduce((sum, s) => sum + s.total_amount, 0),
@@ -634,51 +857,67 @@ export default function POSInventory() {
       salesCount: monthSales.length,
       purchaseTotal: monthPurchases.reduce((sum, p) => sum + p.total, 0),
       purchaseCount: monthPurchases.length,
+      purchasePaid: monthPurchases.reduce((sum, p) => sum + (p.paid_amount || 0), 0),
       collectionTotal: monthPayments.reduce((sum, p) => sum + p.amount, 0),
       collectionCount: monthPayments.length,
+      supplierPaymentTotal: monthSupplierPayments.reduce((sum, p) => sum + p.amount, 0),
+      supplierPaymentCount: monthSupplierPayments.length,
+      profit: monthSales.reduce((sum, s) => sum + s.total_amount, 0) - monthPurchases.reduce((sum, p) => sum + p.total, 0),
+      sales: monthSales,
+      purchases: monthPurchases,
+      payments: monthPayments,
+      supplierPayments: monthSupplierPayments,
     };
-  }, [pos.sales, pos.payments, purchases, reportMonth]);
+  }, [pos.sales, pos.payments, purchases, supplierPayments, reportDateFrom, reportDateTo]);
 
   const exportReportCSV = () => {
     const report = getReportData();
-    const csvContent = `Inventory Report - ${reportMonth}
+    let csvContent = `Inventory Report (${reportDateFrom} to ${reportDateTo})\n\n`;
     
-Sales Summary
-Total Sales,${report.salesCount}
-Total Sales Amount,${report.totalSales}
-Total Paid,${report.totalPaid}
-Total Due,${report.totalDue}
+    csvContent += `SUMMARY\n`;
+    csvContent += `Total Sales,${report.salesCount},৳${report.totalSales}\n`;
+    csvContent += `Total Paid,${report.salesCount},৳${report.totalPaid}\n`;
+    csvContent += `Total Due,,৳${report.totalDue}\n`;
+    csvContent += `Total Purchases,${report.purchaseCount},৳${report.purchaseTotal}\n`;
+    csvContent += `Collections,${report.collectionCount},৳${report.collectionTotal}\n`;
+    csvContent += `Supplier Payments,${report.supplierPaymentCount},৳${report.supplierPaymentTotal}\n`;
+    csvContent += `Gross Profit,,৳${report.profit}\n\n`;
+    
+    csvContent += `\nSALES DETAILS\n`;
+    csvContent += `Invoice,Date,Customer,Total,Paid,Due\n`;
+    report.sales.forEach(s => {
+      csvContent += `${s.invoice_number},${format(new Date(s.sale_date), 'yyyy-MM-dd')},${s.customer_name || 'Walk-in'},${s.total_amount},${s.paid_amount},${s.due_amount}\n`;
+    });
 
-Purchase Summary
-Total Purchases,${report.purchaseCount}
-Total Purchase Amount,${report.purchaseTotal}
-
-Collection Summary
-Total Collections,${report.collectionCount}
-Total Collection Amount,${report.collectionTotal}
-`;
+    csvContent += `\nPURCHASE DETAILS\n`;
+    csvContent += `Order,Date,Supplier,Total,Paid,Due\n`;
+    report.purchases.forEach(p => {
+      csvContent += `${p.order_number},${format(new Date(p.order_date), 'yyyy-MM-dd')},${(p.supplier as any)?.name || '-'},${p.total},${p.paid_amount || 0},${p.total - (p.paid_amount || 0)}\n`;
+    });
     
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `inventory-report-${reportMonth}.csv`;
+    a.download = `inventory-report-${reportDateFrom}-to-${reportDateTo}.csv`;
     a.click();
   };
 
   const lowStockItems = items.filter(i => i.quantity <= i.min_quantity);
   const totalValue = items.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
   const reportData = getReportData();
+  const suppliersWithDue = suppliers.filter(s => (s.current_balance || 0) > 0);
+  const totalSupplierDue = suppliers.reduce((sum, s) => sum + (s.current_balance || 0), 0);
 
   return (
-    <DashboardLayout title="Inventory Management" subtitle="Manage products, stock, sales, and purchases">
+    <DashboardLayout title="Inventory Management" subtitle="Manage products, stock, sales, purchases, and customers">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Products</p>
+                <p className="text-sm text-muted-foreground">Products</p>
                 <p className="text-2xl font-bold">{items.length}</p>
               </div>
               <Package className="h-8 w-8 text-primary" />
@@ -722,10 +961,21 @@ Total Collection Amount,${report.collectionTotal}
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Due</p>
+                <p className="text-sm text-muted-foreground">Customer Due</p>
                 <p className="text-2xl font-bold text-orange-600">৳{pos.stats.totalDue.toLocaleString()}</p>
               </div>
               <Wallet className="h-8 w-8 text-orange-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Supplier Due</p>
+                <p className="text-2xl font-bold text-red-600">৳{totalSupplierDue.toLocaleString()}</p>
+              </div>
+              <Building2 className="h-8 w-8 text-red-500" />
             </div>
           </CardContent>
         </Card>
@@ -902,10 +1152,7 @@ Total Collection Amount,${report.collectionTotal}
                       className="w-full" 
                       size="lg"
                       disabled={cart.length === 0}
-                      onClick={() => {
-                        setCheckoutForm(prev => ({ ...prev, paid: cartTotal.toString() }));
-                        setShowCheckout(true);
-                      }}
+                      onClick={() => setShowCheckout(true)}
                     >
                       <CreditCard className="h-5 w-5 mr-2" />
                       Checkout
@@ -922,19 +1169,13 @@ Total Collection Amount,${report.collectionTotal}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Inventory Products</CardTitle>
-                <CardDescription>Manage your products and stock levels</CardDescription>
+                <CardTitle>Products</CardTitle>
+                <CardDescription>Manage your inventory items</CardDescription>
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setShowCategoryDialog(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Category
-                </Button>
-                <Button onClick={() => { resetItemForm(); setEditingItem(null); setShowItemDialog(true); }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Product
-                </Button>
-              </div>
+              <Button onClick={() => { setEditingItem(null); resetItemForm(); setShowItemDialog(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Product
+              </Button>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-[500px]">
@@ -945,22 +1186,21 @@ Total Collection Amount,${report.collectionTotal}
                       <TableHead>SKU</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Stock</TableHead>
-                      <TableHead>Cost Price</TableHead>
+                      <TableHead>Cost</TableHead>
                       <TableHead>Sale Price</TableHead>
-                      <TableHead>Location</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableRow><TableCell colSpan={8} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
                     ) : items.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No products found</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No products found</TableCell></TableRow>
                     ) : (
                       items.map(item => (
                         <TableRow key={item.id}>
                           <TableCell className="font-medium">{item.name}</TableCell>
-                          <TableCell className="font-mono text-sm">{item.sku || '-'}</TableCell>
+                          <TableCell className="font-mono text-xs">{item.sku || '-'}</TableCell>
                           <TableCell>{item.category?.name || '-'}</TableCell>
                           <TableCell>
                             <Badge variant={item.quantity <= item.min_quantity ? 'destructive' : 'secondary'}>
@@ -969,7 +1209,6 @@ Total Collection Amount,${report.collectionTotal}
                           </TableCell>
                           <TableCell>৳{item.unit_price}</TableCell>
                           <TableCell>৳{item.sale_price}</TableCell>
-                          <TableCell>{item.location || '-'}</TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" onClick={() => handleEditItem(item)}>
                               <Edit className="h-4 w-4" />
@@ -1050,10 +1289,16 @@ Total Collection Amount,${report.collectionTotal}
                 <CardTitle>Suppliers</CardTitle>
                 <CardDescription>Manage your product suppliers</CardDescription>
               </div>
-              <Button onClick={() => { setEditingSupplier(null); setSupplierForm({ name: '', company_name: '', phone: '', email: '', address: '' }); setShowSupplierDialog(true); }}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Supplier
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => handleOpenSupplierPayment()}>
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Pay Supplier
+                </Button>
+                <Button onClick={() => { setEditingSupplier(null); setSupplierForm({ name: '', company_name: '', phone: '', email: '', address: '' }); setShowSupplierDialog(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Supplier
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -1063,7 +1308,7 @@ Total Collection Amount,${report.collectionTotal}
                     <TableHead>Company</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Address</TableHead>
+                    <TableHead>Due Balance</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1077,8 +1322,19 @@ Total Collection Amount,${report.collectionTotal}
                         <TableCell>{supplier.company_name || '-'}</TableCell>
                         <TableCell>{supplier.phone || '-'}</TableCell>
                         <TableCell>{supplier.email || '-'}</TableCell>
-                        <TableCell className="max-w-[200px] truncate">{supplier.address || '-'}</TableCell>
+                        <TableCell>
+                          {(supplier.current_balance || 0) > 0 ? (
+                            <span className="text-red-600 font-medium">৳{(supplier.current_balance || 0).toLocaleString()}</span>
+                          ) : (
+                            <span className="text-green-600">No Due</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
+                          {(supplier.current_balance || 0) > 0 && (
+                            <Button variant="outline" size="sm" className="mr-1" onClick={() => handleOpenSupplierPayment(supplier.id)}>
+                              <DollarSign className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button variant="ghost" size="sm" onClick={() => handleEditSupplier(supplier)}>
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -1126,31 +1382,49 @@ Total Collection Amount,${report.collectionTotal}
                   {purchases.length === 0 ? (
                     <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No purchase orders</TableCell></TableRow>
                   ) : (
-                    purchases.map(po => (
-                      <TableRow key={po.id}>
-                        <TableCell className="font-mono">{po.order_number}</TableCell>
-                        <TableCell>{(po.supplier as any)?.name || '-'}</TableCell>
-                        <TableCell>{format(new Date(po.order_date), 'dd MMM yyyy')}</TableCell>
-                        <TableCell>৳{po.total.toLocaleString()}</TableCell>
-                        <TableCell className="text-green-600">৳{(po.paid_amount || 0).toLocaleString()}</TableCell>
-                        <TableCell className={po.total - (po.paid_amount || 0) > 0 ? 'text-orange-600' : ''}>
-                          ৳{(po.total - (po.paid_amount || 0)).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={po.status === 'received' ? 'default' : po.status === 'pending' ? 'secondary' : 'outline'}>
-                            {po.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {po.status === 'pending' && (
-                            <Button variant="outline" size="sm" onClick={() => handleReceivePurchase(po.id)}>
-                              <Check className="h-4 w-4 mr-1" />
-                              Receive
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    purchases.map(po => {
+                      const due = po.total - (po.paid_amount || 0);
+                      return (
+                        <TableRow key={po.id}>
+                          <TableCell className="font-mono">{po.order_number}</TableCell>
+                          <TableCell>{(po.supplier as any)?.name || '-'}</TableCell>
+                          <TableCell>{format(new Date(po.order_date), 'dd MMM yyyy')}</TableCell>
+                          <TableCell>৳{po.total.toLocaleString()}</TableCell>
+                          <TableCell className="text-green-600">৳{(po.paid_amount || 0).toLocaleString()}</TableCell>
+                          <TableCell className={due > 0 ? 'text-red-600 font-medium' : ''}>
+                            ৳{due.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={po.status === 'received' ? 'default' : po.status === 'paid' ? 'default' : 'secondary'}>
+                              {po.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right space-x-1">
+                            {due > 0 && (
+                              <Button variant="outline" size="sm" onClick={() => {
+                                setSupplierPaymentForm({
+                                  supplierId: po.supplier_id || '',
+                                  purchaseOrderId: po.id,
+                                  amount: due.toString(),
+                                  method: 'cash',
+                                  reference: '',
+                                  notes: '',
+                                });
+                                setShowSupplierPayment(true);
+                              }}>
+                                <DollarSign className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {po.status === 'pending' && (
+                              <Button variant="outline" size="sm" onClick={() => handleReceivePurchase(po.id)}>
+                                <Check className="h-4 w-4 mr-1" />
+                                Receive
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -1261,7 +1535,10 @@ Total Collection Amount,${report.collectionTotal}
                         <TableCell className={customer.due_amount > 0 ? 'text-orange-600 font-medium' : ''}>
                           ৳{customer.due_amount.toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right space-x-1">
+                          <Button variant="ghost" size="sm" onClick={() => loadCustomerProfile(customer.id)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           {customer.due_amount > 0 && (
                             <Button 
                               variant="outline" 
@@ -1275,8 +1552,7 @@ Total Collection Amount,${report.collectionTotal}
                                 setShowDuePayment(true);
                               }}
                             >
-                              <DollarSign className="h-4 w-4 mr-1" />
-                              Collect
+                              <DollarSign className="h-4 w-4" />
                             </Button>
                           )}
                         </TableCell>
@@ -1292,78 +1568,146 @@ Total Collection Amount,${report.collectionTotal}
         {/* Dues Tab */}
         <TabsContent value="dues">
           <div className="grid gap-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Customer Dues */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Customer Dues</CardTitle>
+                    <CardDescription>Outstanding payments from customers</CardDescription>
+                  </div>
+                  <Button onClick={() => setShowDuePayment(true)}>
+                    <DollarSign className="h-4 w-4 mr-2" />
+                    Collect
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[400px]">
+                    {pos.customers.filter(c => c.due_amount > 0).length === 0 ? (
+                      <p className="text-center text-muted-foreground py-8">No pending dues</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {pos.customers.filter(c => c.due_amount > 0).map(customer => (
+                          <div key={customer.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div>
+                              <p className="font-medium">{customer.name}</p>
+                              <p className="text-sm text-muted-foreground">{customer.phone}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-orange-600">৳{customer.due_amount.toLocaleString()}</p>
+                              <Button 
+                                variant="link" 
+                                size="sm" 
+                                className="h-auto p-0"
+                                onClick={() => {
+                                  setDuePaymentForm(prev => ({ 
+                                    ...prev, 
+                                    customerId: customer.id,
+                                    amount: customer.due_amount.toString(),
+                                  }));
+                                  setShowDuePayment(true);
+                                }}
+                              >
+                                Collect
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              {/* Supplier Dues */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Supplier Dues</CardTitle>
+                    <CardDescription>Outstanding payments to suppliers</CardDescription>
+                  </div>
+                  <Button onClick={() => handleOpenSupplierPayment()}>
+                    <DollarSign className="h-4 w-4 mr-2" />
+                    Pay
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[400px]">
+                    {suppliersWithDue.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-8">No pending supplier dues</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {suppliersWithDue.map(supplier => (
+                          <div key={supplier.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div>
+                              <p className="font-medium">{supplier.name}</p>
+                              <p className="text-sm text-muted-foreground">{supplier.company_name || supplier.phone}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-red-600">৳{(supplier.current_balance || 0).toLocaleString()}</p>
+                              <Button 
+                                variant="link" 
+                                size="sm" 
+                                className="h-auto p-0"
+                                onClick={() => handleOpenSupplierPayment(supplier.id)}
+                              >
+                                Pay
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Recent Payments */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Due Collections</CardTitle>
-                  <CardDescription>Track and collect pending payments</CardDescription>
-                </div>
-                <Button onClick={() => setShowDuePayment(true)}>
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Collect Payment
-                </Button>
+              <CardHeader>
+                <CardTitle>Recent Payments</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid md:grid-cols-2 gap-6">
-                  {/* Customers with Due */}
                   <div>
-                    <h3 className="font-semibold mb-4">Customers with Due</h3>
-                    <ScrollArea className="h-[400px]">
-                      {pos.customers.filter(c => c.due_amount > 0).length === 0 ? (
-                        <p className="text-center text-muted-foreground py-8">No pending dues</p>
+                    <h4 className="font-semibold mb-3">Customer Payments</h4>
+                    <ScrollArea className="h-[300px]">
+                      {pos.payments.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">No payments yet</p>
                       ) : (
-                        <div className="space-y-3">
-                          {pos.customers.filter(c => c.due_amount > 0).map(customer => (
-                            <div key={customer.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="space-y-2">
+                          {pos.payments.slice(0, 20).map(payment => (
+                            <div key={payment.id} className="flex items-center justify-between p-2 border rounded text-sm">
                               <div>
-                                <p className="font-medium">{customer.name}</p>
-                                <p className="text-sm text-muted-foreground">{customer.phone}</p>
+                                <p className="font-medium">{payment.customer?.name || 'Unknown'}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {format(new Date(payment.payment_date), 'dd MMM yyyy')} - {payment.payment_method}
+                                </p>
                               </div>
-                              <div className="text-right">
-                                <p className="font-bold text-orange-600">৳{customer.due_amount.toLocaleString()}</p>
-                                <Button 
-                                  variant="link" 
-                                  size="sm" 
-                                  className="h-auto p-0"
-                                  onClick={() => {
-                                    setDuePaymentForm(prev => ({ 
-                                      ...prev, 
-                                      customerId: customer.id,
-                                      amount: customer.due_amount.toString(),
-                                    }));
-                                    setShowDuePayment(true);
-                                  }}
-                                >
-                                  Collect
-                                </Button>
-                              </div>
+                              <span className="font-bold text-green-600">৳{payment.amount.toLocaleString()}</span>
                             </div>
                           ))}
                         </div>
                       )}
                     </ScrollArea>
                   </div>
-
-                  {/* Recent Payments */}
                   <div>
-                    <h3 className="font-semibold mb-4">Recent Payments</h3>
-                    <ScrollArea className="h-[400px]">
-                      {pos.payments.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-8">No payments yet</p>
+                    <h4 className="font-semibold mb-3">Supplier Payments</h4>
+                    <ScrollArea className="h-[300px]">
+                      {supplierPayments.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">No supplier payments yet</p>
                       ) : (
-                        <div className="space-y-3">
-                          {pos.payments.slice(0, 20).map(payment => (
-                            <div key={payment.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="space-y-2">
+                          {supplierPayments.slice(0, 20).map(payment => (
+                            <div key={payment.id} className="flex items-center justify-between p-2 border rounded text-sm">
                               <div>
-                                <p className="font-medium">{(payment.customer as any)?.name || 'Unknown'}</p>
+                                <p className="font-medium">{payment.supplier?.name || 'Unknown'}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {format(new Date(payment.payment_date), 'dd MMM yyyy HH:mm')}
+                                  {format(new Date(payment.payment_date), 'dd MMM yyyy')} - {payment.payment_method}
                                 </p>
                               </div>
-                              <div className="text-right">
-                                <p className="font-bold text-green-600">৳{payment.amount.toLocaleString()}</p>
-                                <Badge variant="outline" className="text-xs">{payment.payment_method}</Badge>
-                              </div>
+                              <span className="font-bold text-blue-600">৳{payment.amount.toLocaleString()}</span>
                             </div>
                           ))}
                         </div>
@@ -1378,126 +1722,562 @@ Total Collection Amount,${report.collectionTotal}
 
         {/* Reports Tab */}
         <TabsContent value="reports">
-          <div className="grid gap-6">
+          <div className="space-y-6">
+            {/* Filter Controls */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Inventory Reports</CardTitle>
-                  <CardDescription>Sales, purchase, and collection reports</CardDescription>
-                </div>
-                <div className="flex gap-2 items-center">
-                  <Input 
-                    type="month" 
-                    value={reportMonth} 
-                    onChange={(e) => setReportMonth(e.target.value)}
-                    className="w-40"
-                  />
-                  <Button variant="outline" onClick={exportReportCSV}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Export CSV
-                  </Button>
-                </div>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Filter className="h-5 w-5" />
+                  Report Filters
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid md:grid-cols-3 gap-6 mb-6">
-                  <Card>
-                    <CardContent className="p-4">
-                      <h4 className="font-semibold text-muted-foreground mb-2">Sales Summary</h4>
-                      <p className="text-3xl font-bold text-green-600">৳{reportData.totalSales.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground">{reportData.salesCount} sales</p>
-                      <div className="mt-2 text-sm">
-                        <p>Paid: <span className="text-green-600">৳{reportData.totalPaid.toLocaleString()}</span></p>
-                        <p>Due: <span className="text-orange-600">৳{reportData.totalDue.toLocaleString()}</span></p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <h4 className="font-semibold text-muted-foreground mb-2">Purchase Summary</h4>
-                      <p className="text-3xl font-bold text-blue-600">৳{reportData.purchaseTotal.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground">{reportData.purchaseCount} purchases</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <h4 className="font-semibold text-muted-foreground mb-2">Collection Summary</h4>
-                      <p className="text-3xl font-bold text-primary">৳{reportData.collectionTotal.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground">{reportData.collectionCount} collections</p>
-                    </CardContent>
-                  </Card>
+                <div className="grid md:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label>From Date</Label>
+                    <Input 
+                      type="date" 
+                      value={reportDateFrom}
+                      onChange={(e) => setReportDateFrom(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>To Date</Label>
+                    <Input 
+                      type="date" 
+                      value={reportDateTo}
+                      onChange={(e) => setReportDateTo(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Quick Filter</Label>
+                    <Select 
+                      value="" 
+                      onValueChange={(v) => {
+                        const now = new Date();
+                        if (v === 'today') {
+                          setReportDateFrom(format(now, 'yyyy-MM-dd'));
+                          setReportDateTo(format(now, 'yyyy-MM-dd'));
+                        } else if (v === 'thisMonth') {
+                          setReportDateFrom(format(startOfMonth(now), 'yyyy-MM-dd'));
+                          setReportDateTo(format(endOfMonth(now), 'yyyy-MM-dd'));
+                        } else if (v === 'lastMonth') {
+                          const lastMonth = subMonths(now, 1);
+                          setReportDateFrom(format(startOfMonth(lastMonth), 'yyyy-MM-dd'));
+                          setReportDateTo(format(endOfMonth(lastMonth), 'yyyy-MM-dd'));
+                        }
+                      }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select range" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="thisMonth">This Month</SelectItem>
+                        <SelectItem value="lastMonth">Last Month</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>&nbsp;</Label>
+                    <Button onClick={exportReportCSV} className="w-full">
+                      <Download className="h-4 w-4 mr-2" />
+                      Export CSV
+                    </Button>
+                  </div>
                 </div>
-
-                {/* Low Stock Alert */}
-                {lowStockItems.length > 0 && (
-                  <Card className="border-destructive">
-                    <CardHeader>
-                      <CardTitle className="text-destructive flex items-center gap-2">
-                        <AlertTriangle className="h-5 w-5" />
-                        Low Stock Alert ({lowStockItems.length} items)
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Product</TableHead>
-                            <TableHead>Current Stock</TableHead>
-                            <TableHead>Min Stock</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {lowStockItems.slice(0, 10).map(item => (
-                            <TableRow key={item.id}>
-                              <TableCell className="font-medium">{item.name}</TableCell>
-                              <TableCell><Badge variant="destructive">{item.quantity}</Badge></TableCell>
-                              <TableCell>{item.min_quantity}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                )}
               </CardContent>
             </Card>
+
+            {/* Summary Cards */}
+            <div className="grid md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground">Total Sales</p>
+                  <p className="text-2xl font-bold text-green-600">৳{reportData.totalSales.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">{reportData.salesCount} invoices</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground">Total Purchases</p>
+                  <p className="text-2xl font-bold text-blue-600">৳{reportData.purchaseTotal.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">{reportData.purchaseCount} orders</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground">Collections</p>
+                  <p className="text-2xl font-bold text-emerald-600">৳{reportData.collectionTotal.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">{reportData.collectionCount} payments</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground">Gross Profit</p>
+                  <p className={`text-2xl font-bold ${reportData.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    ৳{reportData.profit.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Sales - Purchases</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Low Stock Alert */}
+            {lowStockItems.length > 0 && (
+              <Card className="border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-destructive">
+                    <AlertTriangle className="h-5 w-5" />
+                    Low Stock Alert ({lowStockItems.length} items)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {lowStockItems.slice(0, 10).map(item => (
+                      <Badge key={item.id} variant="destructive">
+                        {item.name}: {item.quantity} left
+                      </Badge>
+                    ))}
+                    {lowStockItems.length > 10 && (
+                      <Badge variant="outline">+{lowStockItems.length - 10} more</Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Detailed Tables */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sales in Period</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[300px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Invoice</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {reportData.sales.length === 0 ? (
+                          <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground">No sales</TableCell></TableRow>
+                        ) : (
+                          reportData.sales.map(s => (
+                            <TableRow key={s.id}>
+                              <TableCell className="font-mono text-xs">{s.invoice_number}</TableCell>
+                              <TableCell className="text-xs">{format(new Date(s.sale_date), 'dd MMM')}</TableCell>
+                              <TableCell className="font-medium">৳{s.total_amount.toLocaleString()}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Purchases in Period</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[300px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Order</TableHead>
+                          <TableHead>Supplier</TableHead>
+                          <TableHead>Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {reportData.purchases.length === 0 ? (
+                          <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground">No purchases</TableCell></TableRow>
+                        ) : (
+                          reportData.purchases.map(p => (
+                            <TableRow key={p.id}>
+                              <TableCell className="font-mono text-xs">{p.order_number}</TableCell>
+                              <TableCell className="text-xs">{(p.supplier as any)?.name || '-'}</TableCell>
+                              <TableCell className="font-medium">৳{p.total.toLocaleString()}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
       </Tabs>
 
-      {/* Select Customer Dialog - Updated with ISP customers */}
+      {/* Customer Profile Sheet */}
+      <Sheet open={showCustomerProfile} onOpenChange={setShowCustomerProfile}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Customer Profile
+            </SheetTitle>
+            <SheetDescription>
+              {selectedProfileCustomer?.customer_code}
+            </SheetDescription>
+          </SheetHeader>
+          
+          {selectedProfileCustomer && (
+            <div className="space-y-6 mt-6">
+              {/* Customer Info */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold">{selectedProfileCustomer.name}</h3>
+                    <p className="text-muted-foreground">{selectedProfileCustomer.phone || 'No phone'}</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setShowEditCustomer(true)}>
+                    <Edit className="h-4 w-4 mr-1" />
+                    Edit
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Purchase</p>
+                    <p className="text-xl font-bold">৳{selectedProfileCustomer.total_purchase.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Due Amount</p>
+                    <p className={`text-xl font-bold ${selectedProfileCustomer.due_amount > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                      ৳{selectedProfileCustomer.due_amount.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Balance Adjustment */}
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => { setBalanceAdjustType('add'); setShowBalanceAdjust(true); }}
+                  >
+                    <PlusCircle className="h-4 w-4 mr-1" />
+                    Add Due
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => { setBalanceAdjustType('deduct'); setShowBalanceAdjust(true); }}
+                  >
+                    <MinusCircle className="h-4 w-4 mr-1" />
+                    Deduct Due
+                  </Button>
+                  {selectedProfileCustomer.due_amount > 0 && (
+                    <Button 
+                      className="flex-1"
+                      onClick={() => {
+                        setDuePaymentForm({
+                          customerId: selectedProfileCustomer.id,
+                          amount: selectedProfileCustomer.due_amount.toString(),
+                          method: 'cash',
+                          reference: '',
+                          notes: '',
+                        });
+                        setShowDuePayment(true);
+                      }}
+                    >
+                      <DollarSign className="h-4 w-4 mr-1" />
+                      Collect
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Purchase History */}
+              <div>
+                <h4 className="font-semibold mb-3">Purchase History</h4>
+                <ScrollArea className="h-[200px]">
+                  {customerSales.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">No purchases yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {customerSales.map(sale => (
+                        <div key={sale.id} className="flex items-center justify-between p-2 border rounded text-sm">
+                          <div>
+                            <p className="font-mono text-xs">{sale.invoice_number}</p>
+                            <p className="text-xs text-muted-foreground">{format(new Date(sale.sale_date), 'dd MMM yyyy')}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium">৳{sale.total_amount}</p>
+                            <Badge variant={sale.due_amount > 0 ? 'destructive' : 'default'} className="text-xs">
+                              {sale.due_amount > 0 ? `Due: ৳${sale.due_amount}` : 'Paid'}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </div>
+
+              {/* Payment History */}
+              <div>
+                <h4 className="font-semibold mb-3">Payment History</h4>
+                <ScrollArea className="h-[200px]">
+                  {customerPaymentsHistory.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">No payments yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {customerPaymentsHistory.map(payment => (
+                        <div key={payment.id} className="flex items-center justify-between p-2 border rounded text-sm">
+                          <div>
+                            <p className="text-xs">{format(new Date(payment.payment_date), 'dd MMM yyyy HH:mm')}</p>
+                            <p className="text-xs text-muted-foreground">{payment.payment_method}</p>
+                          </div>
+                          <span className="font-bold text-green-600">৳{payment.amount.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </div>
+
+              {/* Additional Info */}
+              <div className="space-y-2 text-sm">
+                {selectedProfileCustomer.email && (
+                  <p><span className="text-muted-foreground">Email:</span> {selectedProfileCustomer.email}</p>
+                )}
+                {selectedProfileCustomer.address && (
+                  <p><span className="text-muted-foreground">Address:</span> {selectedProfileCustomer.address}</p>
+                )}
+                {selectedProfileCustomer.company_name && (
+                  <p><span className="text-muted-foreground">Company:</span> {selectedProfileCustomer.company_name}</p>
+                )}
+                {selectedProfileCustomer.notes && (
+                  <p><span className="text-muted-foreground">Notes:</span> {selectedProfileCustomer.notes}</p>
+                )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Edit Customer Dialog */}
+      <Dialog open={showEditCustomer} onOpenChange={setShowEditCustomer}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Customer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Name *</Label>
+                <Input value={editCustomerForm.name} onChange={(e) => setEditCustomerForm(p => ({ ...p, name: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input value={editCustomerForm.phone} onChange={(e) => setEditCustomerForm(p => ({ ...p, phone: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input value={editCustomerForm.email} onChange={(e) => setEditCustomerForm(p => ({ ...p, email: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Company</Label>
+                <Input value={editCustomerForm.company_name} onChange={(e) => setEditCustomerForm(p => ({ ...p, company_name: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Address</Label>
+              <Textarea value={editCustomerForm.address} onChange={(e) => setEditCustomerForm(p => ({ ...p, address: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea value={editCustomerForm.notes} onChange={(e) => setEditCustomerForm(p => ({ ...p, notes: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditCustomer(false)}>Cancel</Button>
+            <Button onClick={handleUpdateCustomer} disabled={saving || !editCustomerForm.name}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Balance Adjustment Dialog */}
+      <Dialog open={showBalanceAdjust} onOpenChange={setShowBalanceAdjust}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {balanceAdjustType === 'add' ? 'Add Due Balance' : 'Deduct Due Balance'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Current Due: ৳{selectedProfileCustomer?.due_amount.toLocaleString()}</Label>
+            </div>
+            <div className="space-y-2">
+              <Label>Amount *</Label>
+              <Input 
+                type="number" 
+                value={balanceAdjustAmount} 
+                onChange={(e) => setBalanceAdjustAmount(e.target.value)} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea 
+                value={balanceAdjustNotes} 
+                onChange={(e) => setBalanceAdjustNotes(e.target.value)}
+                placeholder="Reason for adjustment..." 
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBalanceAdjust(false)}>Cancel</Button>
+            <Button onClick={handleBalanceAdjust} disabled={saving || !balanceAdjustAmount}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {balanceAdjustType === 'add' ? 'Add Balance' : 'Deduct Balance'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Supplier Payment Dialog */}
+      <Dialog open={showSupplierPayment} onOpenChange={setShowSupplierPayment}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Pay Supplier</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Supplier *</Label>
+              <Select 
+                value={supplierPaymentForm.supplierId} 
+                onValueChange={(v) => {
+                  const supplierPOs = purchases.filter(p => p.supplier_id === v && p.total > (p.paid_amount || 0));
+                  setSelectedSupplierPurchases(supplierPOs);
+                  setSupplierPaymentForm(prev => ({ ...prev, supplierId: v, purchaseOrderId: '' }));
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                <SelectContent>
+                  {suppliers.map(s => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} {(s.current_balance || 0) > 0 && `- Due: ৳${s.current_balance}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {selectedSupplierPurchases.length > 0 && (
+              <div className="space-y-2">
+                <Label>Purchase Order (Optional)</Label>
+                <Select 
+                  value={supplierPaymentForm.purchaseOrderId} 
+                  onValueChange={(v) => {
+                    const po = purchases.find(p => p.id === v);
+                    if (po) {
+                      const due = po.total - (po.paid_amount || 0);
+                      setSupplierPaymentForm(prev => ({ ...prev, purchaseOrderId: v, amount: due.toString() }));
+                    } else {
+                      setSupplierPaymentForm(prev => ({ ...prev, purchaseOrderId: '' }));
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select order to pay" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">General Payment</SelectItem>
+                    {selectedSupplierPurchases.map(po => (
+                      <SelectItem key={po.id} value={po.id}>
+                        {po.order_number} - Due: ৳{(po.total - (po.paid_amount || 0)).toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Amount *</Label>
+                <Input 
+                  type="number" 
+                  value={supplierPaymentForm.amount} 
+                  onChange={(e) => setSupplierPaymentForm(p => ({ ...p, amount: e.target.value }))} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Payment Method</Label>
+                <Select value={supplierPaymentForm.method} onValueChange={(v) => setSupplierPaymentForm(p => ({ ...p, method: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bkash">bKash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="bank">Bank Transfer</SelectItem>
+                    <SelectItem value="cheque">Cheque</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Reference / Transaction ID</Label>
+              <Input value={supplierPaymentForm.reference} onChange={(e) => setSupplierPaymentForm(p => ({ ...p, reference: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea value={supplierPaymentForm.notes} onChange={(e) => setSupplierPaymentForm(p => ({ ...p, notes: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSupplierPayment(false)}>Cancel</Button>
+            <Button onClick={handleSupplierPayment} disabled={saving || !supplierPaymentForm.supplierId || !supplierPaymentForm.amount}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Record Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Select Customer Dialog */}
       <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Select Customer</DialogTitle>
           </DialogHeader>
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search customers..." 
+              value={customerSearchQuery}
+              onChange={(e) => setCustomerSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
           <Tabs value={customerTab} onValueChange={(v) => setCustomerTab(v as 'pos' | 'isp')}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="pos">POS Customers</TabsTrigger>
-              <TabsTrigger value="isp" className="flex items-center gap-1">
-                <Wifi className="h-3 w-3" />
-                ISP Customers
-              </TabsTrigger>
+            <TabsList className="w-full">
+              <TabsTrigger value="pos" className="flex-1">POS Customers</TabsTrigger>
+              <TabsTrigger value="isp" className="flex-1">ISP Customers</TabsTrigger>
             </TabsList>
-            
-            <div className="mt-3">
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search customers..." 
-                  value={customerSearchQuery}
-                  onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-            </div>
             
             <TabsContent value="pos">
               <ScrollArea className="h-[300px]">
-                {pos.customers.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No POS customers found</p>
+                {pos.customers.filter(c =>
+                  c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                  c.phone?.includes(customerSearchQuery)
+                ).length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No customers found</p>
                 ) : (
                   <div className="space-y-2">
-                    {pos.customers.filter(c => 
+                    {pos.customers.filter(c =>
                       c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
                       c.phone?.includes(customerSearchQuery)
                     ).map(customer => (
@@ -1865,11 +2645,11 @@ Total Collection Amount,${report.collectionTotal}
         </DialogContent>
       </Dialog>
 
-      {/* Purchase Order Dialog */}
+      {/* New Purchase Dialog */}
       <Dialog open={showPurchaseDialog} onOpenChange={setShowPurchaseDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Create Purchase Order</DialogTitle>
+            <DialogTitle>New Purchase Order</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -1884,70 +2664,88 @@ Total Collection Amount,${report.collectionTotal}
               </div>
               <div className="space-y-2">
                 <Label>Paid Amount</Label>
-                <Input 
-                  type="number" 
-                  value={purchaseForm.paidAmount} 
-                  onChange={(e) => setPurchaseForm(p => ({ ...p, paidAmount: e.target.value }))} 
-                />
+                <Input type="number" value={purchaseForm.paidAmount} onChange={(e) => setPurchaseForm(p => ({ ...p, paidAmount: e.target.value }))} />
               </div>
             </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Items</Label>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setPurchaseForm(p => ({ ...p, items: [...p.items, { itemId: '', quantity: 1, price: 0 }] }))}
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Item
-                </Button>
+            
+            {/* Item selection */}
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center gap-4 mb-4">
+                <Select onValueChange={(itemId) => {
+                  const item = items.find(i => i.id === itemId);
+                  if (item && !purchaseForm.items.find(i => i.itemId === itemId)) {
+                    setPurchaseForm(p => ({
+                      ...p,
+                      items: [...p.items, { itemId, quantity: 1, price: item.unit_price }]
+                    }));
+                  }
+                }}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Add item" /></SelectTrigger>
+                  <SelectContent>
+                    {items.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <ScrollArea className="h-[200px]">
-                {purchaseForm.items.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-4 gap-2 mb-2">
-                    <Select value={item.itemId} onValueChange={(v) => {
-                      const selectedItem = items.find(i => i.id === v);
-                      setPurchaseForm(p => ({
-                        ...p,
-                        items: p.items.map((i, iIdx) => iIdx === idx ? { 
-                          ...i, 
-                          itemId: v,
-                          price: selectedItem?.unit_price || 0
-                        } : i)
-                      }));
-                    }}>
-                      <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
-                      <SelectContent>
-                        {items.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Input 
-                      type="number" 
-                      placeholder="Qty"
-                      value={item.quantity}
-                      onChange={(e) => setPurchaseForm(p => ({
-                        ...p,
-                        items: p.items.map((i, iIdx) => iIdx === idx ? { ...i, quantity: parseInt(e.target.value) || 0 } : i)
-                      }))}
-                    />
-                    <Input 
-                      type="number" 
-                      placeholder="Price"
-                      value={item.price}
-                      onChange={(e) => setPurchaseForm(p => ({
-                        ...p,
-                        items: p.items.map((i, iIdx) => iIdx === idx ? { ...i, price: parseFloat(e.target.value) || 0 } : i)
-                      }))}
-                    />
-                    <Button variant="ghost" size="sm" onClick={() => setPurchaseForm(p => ({ ...p, items: p.items.filter((_, iIdx) => iIdx !== idx) }))}>
-                      <X className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-              </ScrollArea>
-              <div className="text-right font-bold">
+              
+              {purchaseForm.items.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">No items added</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Qty</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {purchaseForm.items.map((item, idx) => {
+                      const itemData = items.find(i => i.id === item.itemId);
+                      return (
+                        <TableRow key={item.itemId}>
+                          <TableCell>{itemData?.name}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const newItems = [...purchaseForm.items];
+                                newItems[idx].quantity = parseInt(e.target.value) || 1;
+                                setPurchaseForm(p => ({ ...p, items: newItems }));
+                              }}
+                              className="w-20"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={item.price}
+                              onChange={(e) => {
+                                const newItems = [...purchaseForm.items];
+                                newItems[idx].price = parseFloat(e.target.value) || 0;
+                                setPurchaseForm(p => ({ ...p, items: newItems }));
+                              }}
+                              className="w-24"
+                            />
+                          </TableCell>
+                          <TableCell>৳{(item.quantity * item.price).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="sm" onClick={() => {
+                              setPurchaseForm(p => ({ ...p, items: p.items.filter((_, i) => i !== idx) }));
+                            }}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+              
+              <div className="flex justify-end mt-4 font-bold">
                 Total: ৳{purchaseForm.items.reduce((sum, i) => sum + (i.quantity * i.price), 0).toLocaleString()}
               </div>
             </div>
@@ -1971,88 +2769,90 @@ Total Collection Amount,${report.collectionTotal}
       <Dialog open={showInvoice} onOpenChange={setShowInvoice}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Invoice</DialogTitle>
+            <DialogTitle className="flex items-center justify-between">
+              Invoice
+              <Button variant="outline" size="sm" onClick={handlePrintInvoice}>
+                <Printer className="h-4 w-4 mr-2" />
+                Print
+              </Button>
+            </DialogTitle>
           </DialogHeader>
+          
           <div id="invoice-content" className="space-y-4">
-            {selectedSale && (
-              <>
-                <div className="text-center border-b pb-4">
-                  <h2 className="text-xl font-bold">INVOICE</h2>
-                  <p className="text-sm text-muted-foreground">#{selectedSale.invoice_number}</p>
-                  <p className="text-sm">{format(new Date(selectedSale.sale_date), 'dd MMM yyyy HH:mm')}</p>
+            <div className="invoice-header text-center">
+              <h2 className="text-xl font-bold">INVOICE</h2>
+              <p className="text-sm text-muted-foreground">{selectedSale?.invoice_number}</p>
+            </div>
+            
+            <div className="invoice-details grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p><strong>Customer:</strong> {selectedSale?.customer_name || 'Walk-in'}</p>
+                {selectedSale?.customer_phone && <p><strong>Phone:</strong> {selectedSale.customer_phone}</p>}
+              </div>
+              <div className="text-right">
+                <p><strong>Date:</strong> {selectedSale && format(new Date(selectedSale.sale_date), 'dd MMM yyyy HH:mm')}</p>
+                <p><strong>Status:</strong> {selectedSale?.status}</p>
+              </div>
+            </div>
+            
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Qty</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {saleItems.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell>{item.item_name}</TableCell>
+                    <TableCell>{item.quantity}</TableCell>
+                    <TableCell>৳{item.unit_price}</TableCell>
+                    <TableCell className="text-right">৳{item.total_price}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            
+            <div className="totals space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span>Subtotal:</span>
+                <span>৳{selectedSale?.subtotal.toLocaleString()}</span>
+              </div>
+              {selectedSale?.discount > 0 && (
+                <div className="flex justify-between">
+                  <span>Discount:</span>
+                  <span>-৳{selectedSale.discount.toLocaleString()}</span>
                 </div>
-                
-                {selectedSale.customer_name && (
-                  <div className="border-b pb-3">
-                    <p className="font-semibold">Customer:</p>
-                    <p>{selectedSale.customer_name}</p>
-                    {selectedSale.customer_phone && <p className="text-sm text-muted-foreground">{selectedSale.customer_phone}</p>}
-                  </div>
-                )}
-                
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Item</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right">Price</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {saleItems.map((item, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell>{item.item_name}</TableCell>
-                        <TableCell className="text-right">{item.quantity}</TableCell>
-                        <TableCell className="text-right">৳{item.unit_price}</TableCell>
-                        <TableCell className="text-right">৳{(item.quantity * item.unit_price).toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                
-                <div className="border-t pt-3 space-y-1">
-                  <div className="flex justify-between">
-                    <span>Subtotal:</span>
-                    <span>৳{selectedSale.subtotal?.toLocaleString() || selectedSale.total_amount.toLocaleString()}</span>
-                  </div>
-                  {selectedSale.discount > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span>Discount:</span>
-                      <span>-৳{selectedSale.discount.toLocaleString()}</span>
-                    </div>
-                  )}
-                  {selectedSale.tax > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span>Tax:</span>
-                      <span>+৳{selectedSale.tax.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-bold text-lg border-t pt-2">
-                    <span>Total:</span>
-                    <span>৳{selectedSale.total_amount.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-green-600">
-                    <span>Paid:</span>
-                    <span>৳{selectedSale.paid_amount.toLocaleString()}</span>
-                  </div>
-                  {selectedSale.due_amount > 0 && (
-                    <div className="flex justify-between text-orange-600 font-medium">
-                      <span>Due:</span>
-                      <span>৳{selectedSale.due_amount.toLocaleString()}</span>
-                    </div>
-                  )}
+              )}
+              {selectedSale?.tax > 0 && (
+                <div className="flex justify-between">
+                  <span>Tax:</span>
+                  <span>+৳{selectedSale.tax.toLocaleString()}</span>
                 </div>
-              </>
-            )}
+              )}
+              <div className="flex justify-between font-bold text-lg border-t pt-2">
+                <span>Total:</span>
+                <span>৳{selectedSale?.total_amount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Paid:</span>
+                <span className="text-green-600">৳{selectedSale?.paid_amount.toLocaleString()}</span>
+              </div>
+              {selectedSale?.due_amount > 0 && (
+                <div className="flex justify-between font-medium">
+                  <span>Due:</span>
+                  <span className="text-orange-600">৳{selectedSale.due_amount.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="footer text-center text-xs text-muted-foreground pt-4 border-t">
+              <p>Thank you for your business!</p>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowInvoice(false)}>Close</Button>
-            <Button onClick={handlePrintInvoice}>
-              <Printer className="h-4 w-4 mr-2" />
-              Print
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </DashboardLayout>
