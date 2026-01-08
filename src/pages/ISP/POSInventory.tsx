@@ -2465,7 +2465,12 @@ export default function POSInventory() {
                 <Button 
                   variant="outline" 
                   className="w-full justify-start" 
-                  onClick={() => printReport(generateDuesReport(pos.customers))}
+                  onClick={() => printReport(generateDuesReport(pos.customers.filter(c => c.due_amount > 0).map(c => ({
+                    code: c.customer_code || c.id.slice(0, 8),
+                    name: c.name,
+                    phone: c.phone || '',
+                    due: c.due_amount
+                  }))))}
                 >
                   <FileDown className="h-4 w-4 mr-2" />
                   Customer Dues Report
@@ -2473,7 +2478,14 @@ export default function POSInventory() {
                 <Button 
                   variant="outline" 
                   className="w-full justify-start" 
-                  onClick={() => printReport(generateCustomerListReport(pos.customers))}
+                  onClick={() => printReport(generateCustomerListReport(pos.customers.map(c => ({
+                    code: c.customer_code || c.id.slice(0, 8),
+                    name: c.name,
+                    phone: c.phone || '',
+                    company: c.company_name || '',
+                    total: c.total_purchase,
+                    due: c.due_amount
+                  }))))}
                 >
                   <FileDown className="h-4 w-4 mr-2" />
                   Customer List Report
@@ -2481,7 +2493,14 @@ export default function POSInventory() {
                 <Button 
                   variant="outline" 
                   className="w-full justify-start" 
-                  onClick={() => printReport(generateSalesReport(pos.sales, reportDateFrom, reportDateTo))}
+                  onClick={() => printReport(generateSalesReport(pos.sales.map(s => ({
+                    invoice: s.invoice_number,
+                    date: format(new Date(s.sale_date), 'dd/MM/yyyy'),
+                    customer: s.customer_name || 'Walk-in',
+                    total: s.total_amount,
+                    paid: s.paid_amount,
+                    due: s.due_amount
+                  })), { from: reportDateFrom, to: reportDateTo }))}
                 >
                   <FileDown className="h-4 w-4 mr-2" />
                   Sales Report ({reportDateFrom} to {reportDateTo})
@@ -2489,7 +2508,14 @@ export default function POSInventory() {
                 <Button 
                   variant="outline" 
                   className="w-full justify-start" 
-                  onClick={() => printReport(generateInventoryReport(items as any))}
+                  onClick={() => printReport(generateInventoryReport(items.map(i => ({
+                    sku: i.sku || '',
+                    name: i.name,
+                    category: i.category?.name || '',
+                    qty: i.quantity || 0,
+                    price: i.sale_price || i.unit_price || 0,
+                    value: (i.quantity || 0) * (i.unit_price || 0)
+                  }))))}
                 >
                   <FileDown className="h-4 w-4 mr-2" />
                   Inventory Report
@@ -2497,7 +2523,12 @@ export default function POSInventory() {
                 <Button 
                   variant="outline" 
                   className="w-full justify-start" 
-                  onClick={() => printReport(generateSupplierDuesReport(suppliers))}
+                  onClick={() => printReport(generateSupplierDuesReport(suppliers.filter(s => (s.current_balance || 0) > 0).map(s => ({
+                    name: s.name,
+                    company: s.company_name || '',
+                    phone: s.phone || '',
+                    due: s.current_balance || 0
+                  }))))}
                 >
                   <FileDown className="h-4 w-4 mr-2" />
                   Supplier Dues Report
@@ -3432,7 +3463,6 @@ export default function POSInventory() {
                   if (selectedSale && saleItems.length > 0) {
                     printInvoice(
                       {
-                        id: selectedSale.id,
                         invoice_number: selectedSale.invoice_number,
                         sale_date: selectedSale.sale_date,
                         customer_name: selectedSale.customer_name || 'Walk-in',
@@ -3447,6 +3477,7 @@ export default function POSInventory() {
                         payment_method: selectedSale.payment_method,
                       },
                       saleItems.map(item => ({
+                        id: item.id,
                         item_name: item.item_name,
                         quantity: item.quantity,
                         unit_price: item.unit_price,
