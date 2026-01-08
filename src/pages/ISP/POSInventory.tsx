@@ -21,15 +21,18 @@ import { useInventoryExtended, UNIT_TYPES, DEFAULT_UNITS } from '@/hooks/useInve
 import { BarcodeScanner, useBarcodeScanner } from '@/components/pos/BarcodeScanner';
 import { printInvoice } from '@/components/pos/POSInvoicePrint';
 import { printReport, generateDuesReport, generateCustomerListReport, generateSalesReport, generateInventoryReport, generateSupplierDuesReport } from '@/components/pos/POSReportGenerator';
+import { ProductQRPrinter } from '@/components/pos/ProductQRPrinter';
+import { AdvancedReportsDialog } from '@/components/pos/AdvancedReportsDialog';
+import { printCustomerSummary } from '@/components/pos/CustomerSummaryPrint';
 import { 
   Package, Plus, Edit, Trash2, Loader2, ShoppingCart, Users, DollarSign,
   FileText, Download, Search, Printer, X, Check, CreditCard,
   TrendingUp, AlertTriangle, History, Wallet, Building2, BarChart3, Layers,
   Eye, MinusCircle, PlusCircle, Filter, Calendar, ArrowUpDown, ScanLine, 
-  Tag, Ruler, Settings2, FileDown
+  Tag, Ruler, Settings2, FileDown, QrCode
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, startOfDay } from 'date-fns';
 
 interface InventoryItem {
   id: string;
@@ -95,6 +98,11 @@ interface ISPCustomer {
   customer_code: string | null;
   phone: string | null;
   email: string | null;
+  due_amount: number;
+  monthly_bill: number;
+  status: string;
+  package_name?: string | null;
+  expiry_date: string | null;
 }
 
 export default function POSInventory() {
@@ -106,6 +114,8 @@ export default function POSInventory() {
   
   // Barcode scanner state
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [showQRPrinter, setShowQRPrinter] = useState(false);
+  const [showAdvancedReports, setShowAdvancedReports] = useState(false);
   
   // Brand/Unit management
   const [showBrandDialog, setShowBrandDialog] = useState(false);
@@ -252,7 +262,7 @@ export default function POSInventory() {
         supabase.from('inventory_items').select('*, category:inventory_categories(name), brand:inventory_brands(name), unit:inventory_units(name, short_name)').eq('tenant_id', tenantId).order('name'),
         supabase.from('suppliers').select('*').eq('tenant_id', tenantId).order('name'),
         supabase.from('purchase_orders').select('*, supplier:suppliers(name)').eq('tenant_id', tenantId).order('order_date', { ascending: false }).limit(100),
-        supabase.from('customers').select('id, name, customer_code, phone, email').eq('tenant_id', tenantId).order('name').limit(500),
+        supabase.from('customers').select('id, name, customer_code, phone, email, due_amount, monthly_bill, status, expiry_date, package:isp_packages(name)').eq('tenant_id', tenantId).order('name').limit(500),
         supabase.from('supplier_payments').select('*, supplier:suppliers(name)').eq('tenant_id', tenantId).order('payment_date', { ascending: false }).limit(100),
       ]);
       const categoryData = (catRes.data || []) as { id: string; name: string; description: string | null }[];
@@ -260,6 +270,14 @@ export default function POSInventory() {
       setFullCategories(categoryData);
       setItems((itemRes.data || []) as unknown as InventoryItem[]);
       setSuppliers((supRes.data || []) as Supplier[]);
+      setPurchases((purRes.data || []) as PurchaseOrderData[]);
+      setIspCustomers((ispRes.data || []).map((c: any) => ({
+        ...c,
+        due_amount: c.due_amount || 0,
+        monthly_bill: c.monthly_bill || 0,
+        package_name: c.package?.name || null,
+      })) as ISPCustomer[]);
+      setSupplierPayments((supPayRes.data || []) as SupplierPayment[]);
       setPurchases((purRes.data || []) as PurchaseOrderData[]);
       setIspCustomers((ispRes.data || []) as ISPCustomer[]);
       setSupplierPayments((supPayRes.data || []) as SupplierPayment[]);
@@ -1437,10 +1455,16 @@ export default function POSInventory() {
                 <CardTitle>Products</CardTitle>
                 <CardDescription>Manage your inventory items ({filteredProductsData.length} total)</CardDescription>
               </div>
-              <Button onClick={() => { setEditingItem(null); resetItemForm(); setShowItemDialog(true); }}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Product
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowQRPrinter(true)}>
+                  <QrCode className="h-4 w-4 mr-2" />
+                  Print QR Codes
+                </Button>
+                <Button onClick={() => { setEditingItem(null); resetItemForm(); setShowItemDialog(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Product
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {/* Search and Filter */}
@@ -2261,10 +2285,16 @@ export default function POSInventory() {
                   </div>
                   <div className="space-y-2">
                     <Label>&nbsp;</Label>
-                    <Button onClick={exportReportCSV} className="w-full">
-                      <Download className="h-4 w-4 mr-2" />
-                      Export CSV
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button onClick={exportReportCSV} className="flex-1">
+                        <Download className="h-4 w-4 mr-2" />
+                        Export CSV
+                      </Button>
+                      <Button variant="outline" onClick={() => setShowAdvancedReports(true)}>
+                        <FileDown className="h-4 w-4 mr-2" />
+                        All Reports
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>
