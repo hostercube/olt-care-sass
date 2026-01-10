@@ -158,6 +158,16 @@ export function ProductCodePrinter({ open, onOpenChange, products, tenantName }:
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    // Pre-generate all barcode SVGs
+    const barcodesSVG: string[] = [];
+    if (codeType === 'barcode') {
+      codes.forEach((product) => {
+        const codeValue = product.barcode || product.sku || product.id;
+        const barcodeValue = codeValue.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) || 'NOCODE';
+        barcodesSVG.push(generateBarcodeSVG(barcodeValue, sizeConfig.barcodeWidth, sizeConfig.barcodeHeight));
+      });
+    }
+
     // Generate all codes HTML
     let codesHTML = '';
     codes.forEach((product, idx) => {
@@ -165,11 +175,10 @@ export function ProductCodePrinter({ open, onOpenChange, products, tenantName }:
       let codeContent = '';
       
       if (codeType === 'barcode') {
-        const barcodeValue = codeValue.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) || 'NOCODE';
-        codeContent = generateBarcodeSVG(barcodeValue, sizeConfig.barcodeWidth, sizeConfig.barcodeHeight);
+        codeContent = barcodesSVG[idx];
       } else {
-        // Generate QR code using a temp element
-        codeContent = `<div class="qr-placeholder" data-value="${encodeURIComponent(codeValue)}" data-size="${sizeConfig.qrSize}"></div>`;
+        // Each QR code gets a unique ID for generation
+        codeContent = `<div class="qr-placeholder" id="qr-${idx}" data-value="${encodeURIComponent(codeValue)}" data-size="${sizeConfig.qrSize}"></div>`;
       }
       
       codesHTML += `
@@ -186,11 +195,14 @@ export function ProductCodePrinter({ open, onOpenChange, products, tenantName }:
       `;
     });
 
+    const totalCodesCount = codes.length;
+    const codeTypeName = codeType === 'qr' ? 'QR Codes' : 'Barcodes';
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>${codeType === 'qr' ? 'QR Codes' : 'Barcodes'} - ${tenantName || 'Products'}</title>
+        <title>${codeTypeName} - ${tenantName || 'Products'}</title>
         <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"><\/script>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -272,48 +284,58 @@ export function ProductCodePrinter({ open, onOpenChange, products, tenantName }:
       </head>
       <body>
         <div class="header">
-          <h1>${tenantName || 'Product Codes'}</h1>
-          <p>Total: ${totalCodes} ${codeType === 'qr' ? 'QR codes' : 'Barcodes'} | Generated: ${new Date().toLocaleString()}</p>
+          <h1>${codeTypeName} - ${tenantName || 'Product Codes'}</h1>
+          <p>Total: ${totalCodesCount} ${codeTypeName.toLowerCase()} | Generated: ${new Date().toLocaleString()}</p>
         </div>
         <div class="code-grid">
           ${codesHTML}
         </div>
         <script>
           // Generate QR codes after page load
-          document.querySelectorAll('.qr-placeholder').forEach(function(el) {
-            var value = decodeURIComponent(el.getAttribute('data-value'));
-            var size = parseInt(el.getAttribute('data-size')) || 100;
-            
-            try {
-              var qr = qrcode(0, 'M');
-              qr.addData(value);
-              qr.make();
+          var placeholders = document.querySelectorAll('.qr-placeholder');
+          var totalQR = placeholders.length;
+          var generated = 0;
+          
+          if (totalQR === 0) {
+            // No QR codes (barcode mode), just print
+            setTimeout(function() { window.print(); }, 200);
+          } else {
+            placeholders.forEach(function(el, index) {
+              var value = decodeURIComponent(el.getAttribute('data-value'));
+              var size = parseInt(el.getAttribute('data-size')) || 100;
               
-              var moduleCount = qr.getModuleCount();
-              var cellSize = Math.floor(size / moduleCount);
-              var actualSize = cellSize * moduleCount;
-              
-              var svg = '<svg width="' + actualSize + '" height="' + actualSize + '" xmlns="http://www.w3.org/2000/svg">';
-              svg += '<rect width="100%" height="100%" fill="white"/>';
-              
-              for (var row = 0; row < moduleCount; row++) {
-                for (var col = 0; col < moduleCount; col++) {
-                  if (qr.isDark(row, col)) {
-                    svg += '<rect x="' + (col * cellSize) + '" y="' + (row * cellSize) + '" width="' + cellSize + '" height="' + cellSize + '" fill="black"/>';
+              try {
+                var qr = qrcode(0, 'M');
+                qr.addData(value);
+                qr.make();
+                
+                var moduleCount = qr.getModuleCount();
+                var cellSize = Math.floor(size / moduleCount);
+                var actualSize = cellSize * moduleCount;
+                
+                var svg = '<svg width="' + actualSize + '" height="' + actualSize + '" xmlns="http://www.w3.org/2000/svg">';
+                svg += '<rect width="100%" height="100%" fill="white"/>';
+                
+                for (var row = 0; row < moduleCount; row++) {
+                  for (var col = 0; col < moduleCount; col++) {
+                    if (qr.isDark(row, col)) {
+                      svg += '<rect x="' + (col * cellSize) + '" y="' + (row * cellSize) + '" width="' + cellSize + '" height="' + cellSize + '" fill="black"/>';
+                    }
                   }
                 }
+                svg += '</svg>';
+                el.innerHTML = svg;
+              } catch(e) {
+                el.innerHTML = '<div style="font-size:10px;color:red;">Error</div>';
               }
-              svg += '</svg>';
-              el.innerHTML = svg;
-            } catch(e) {
-              el.innerHTML = '<div style="font-size:10px;color:red;">Error</div>';
-            }
-          });
-          
-          // Trigger print after QR generation
-          setTimeout(function() {
-            window.print();
-          }, 300);
+              
+              generated++;
+              if (generated === totalQR) {
+                // All QR codes generated, trigger print
+                setTimeout(function() { window.print(); }, 300);
+              }
+            });
+          }
         <\/script>
       </body>
       </html>
