@@ -29,7 +29,7 @@ import {
   FileText, Download, Search, Printer, X, Check, CreditCard,
   TrendingUp, AlertTriangle, History, Wallet, Building2, BarChart3, Layers,
   Eye, MinusCircle, PlusCircle, Filter, Calendar, ArrowUpDown, ScanLine, 
-  Tag, Ruler, Settings2, FileDown, Barcode
+  Tag, Ruler, Settings2, FileDown, Barcode, Keyboard
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, subMonths, startOfDay } from 'date-fns';
@@ -117,6 +117,10 @@ export default function POSInventory() {
   const [showBarcodePrinter, setShowBarcodePrinter] = useState(false);
   const [showAdvancedReports, setShowAdvancedReports] = useState(false);
   
+  // POS filters
+  const [posCategory, setPosCategory] = useState('all');
+  const [posBrand, setPosBrand] = useState('all');
+  
   // Brand/Unit management
   const [showBrandDialog, setShowBrandDialog] = useState(false);
   const [showUnitDialog, setShowUnitDialog] = useState(false);
@@ -129,17 +133,6 @@ export default function POSInventory() {
     invoice_header: '', invoice_footer: '', invoice_terms: '', invoice_prefix: 'INV', thermal_printer_enabled: false
   });
   const [invoiceType, setInvoiceType] = useState<'thermal' | 'a4'>('a4');
-  
-  // Barcode scanner hook for continuous scanning
-  const handleBarcodeScan = useCallback((barcode: string) => {
-    const item = items.find(i => (i as any).barcode === barcode || i.sku === barcode);
-    if (item) {
-      addToCart(item);
-      toast.success(`Added: ${item.name}`);
-    } else {
-      toast.error(`Product not found: ${barcode}`);
-    }
-  }, []);
   
   // Inventory state
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -324,12 +317,22 @@ export default function POSInventory() {
     fetchData();
   }, [fetchData]);
 
-  // Filtered items for POS search
-  const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filtered items for POS search with category and brand filters
+  const filteredItems = useMemo(() => {
+    let filtered = items.filter(item =>
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    if (posCategory !== 'all') {
+      filtered = filtered.filter(item => item.category_id === posCategory);
+    }
+    if (posBrand !== 'all') {
+      filtered = filtered.filter(item => item.brand_id === posBrand);
+    }
+    return filtered;
+  }, [items, searchQuery, posCategory, posBrand]);
+  
 
   const filteredIspCustomers = ispCustomers.filter(c =>
     c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
@@ -546,6 +549,20 @@ export default function POSInventory() {
   const removeFromCart = (itemId: string) => {
     setCart(prev => prev.filter(c => c.item_id !== itemId));
   };
+
+  // Barcode scanner hook for continuous scanning - auto scan without clicking button
+  const handleBarcodeScan = useCallback((barcode: string) => {
+    const item = items.find(i => (i as any).barcode === barcode || i.sku === barcode);
+    if (item) {
+      addToCart(item);
+      toast.success(`Added: ${item.name}`);
+    } else {
+      toast.error(`Product not found: ${barcode}`);
+    }
+  }, [items]);
+  
+  // Enable continuous barcode scanning on POS tab
+  useBarcodeScanner(handleBarcodeScan, activeTab === 'pos');
 
   const cartTotal = cart.reduce((sum, c) => sum + (c.quantity * c.unit_price) - c.discount, 0);
 
@@ -1565,28 +1582,77 @@ export default function POSInventory() {
             {/* Product Grid */}
             <div className="lg:col-span-2">
               <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Products</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setShowBarcodeScanner(true)}>
-                        <ScanLine className="h-4 w-4 mr-1" />
-                        Scan
-                      </Button>
-                      <div className="relative w-48">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input 
-                          placeholder="Search..." 
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-9"
-                        />
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        Products
+                        <Badge variant="outline" className="text-xs font-normal text-green-600 border-green-500">
+                          <ScanLine className="h-3 w-3 mr-1" />
+                          Auto-Scan Active
+                        </Badge>
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setShowBarcodeScanner(true)}>
+                          <Keyboard className="h-4 w-4 mr-1" />
+                          Manual
+                        </Button>
+                        <div className="relative w-40">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="Search..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-9"
+                          />
+                        </div>
                       </div>
+                    </div>
+                    {/* Filters */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select value={posCategory} onValueChange={setPosCategory}>
+                        <SelectTrigger className="w-[140px] h-8">
+                          <Layers className="h-3 w-3 mr-1" />
+                          <SelectValue placeholder="Category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Categories</SelectItem>
+                          {categories.map(cat => (
+                            <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={posBrand} onValueChange={setPosBrand}>
+                        <SelectTrigger className="w-[140px] h-8">
+                          <Tag className="h-3 w-3 mr-1" />
+                          <SelectValue placeholder="Brand" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Brands</SelectItem>
+                          {inventoryExt.brands.map(brand => (
+                            <SelectItem key={brand.id} value={brand.id}>{brand.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {(posCategory !== 'all' || posBrand !== 'all') && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => { setPosCategory('all'); setPosBrand('all'); }}
+                          className="h-8 text-xs"
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Clear
+                        </Button>
+                      )}
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {filteredItems.length} products
+                      </span>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[500px]">
+                  <ScrollArea className="h-[460px]">
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                       {filteredItems.map(item => (
                         <div 
@@ -1597,7 +1663,9 @@ export default function POSInventory() {
                           }`}
                         >
                           <p className="font-medium text-sm truncate">{item.name}</p>
-                          <p className="text-xs text-muted-foreground">{item.sku || 'No SKU'}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {item.category?.name || ''} {item.brand?.name ? `• ${item.brand.name}` : ''}
+                          </p>
                           <div className="flex justify-between items-center mt-2">
                             <span className="font-bold text-primary">৳{item.sale_price}</span>
                             <Badge variant={item.quantity <= item.min_quantity ? 'destructive' : 'secondary'} className="text-xs">
