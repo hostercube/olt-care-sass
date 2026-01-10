@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScanLine, Keyboard, X } from 'lucide-react';
+import { ScanLine, Keyboard } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface BarcodeScannerProps {
@@ -83,7 +83,7 @@ export function BarcodeScanner({ open, onOpenChange, onScan }: BarcodeScannerPro
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ScanLine className="h-5 w-5" />
-            Barcode / QR Scanner
+            Barcode Scanner
           </DialogTitle>
           <DialogDescription>
             Scan a barcode or enter the code manually

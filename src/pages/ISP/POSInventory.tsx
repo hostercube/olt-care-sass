@@ -21,7 +21,7 @@ import { useInventoryExtended, UNIT_TYPES, DEFAULT_UNITS } from '@/hooks/useInve
 import { BarcodeScanner, useBarcodeScanner } from '@/components/pos/BarcodeScanner';
 import { printInvoice } from '@/components/pos/POSInvoicePrint';
 import { printReport, generateDuesReport, generateCustomerListReport, generateSalesReport, generateInventoryReport, generateSupplierDuesReport } from '@/components/pos/POSReportGenerator';
-import { ProductCodePrinter } from '@/components/pos/ProductCodePrinter';
+import { ProductBarcodePrinter } from '@/components/pos/ProductBarcodePrinter';
 import { AdvancedReportsDialog } from '@/components/pos/AdvancedReportsDialog';
 import { printCustomerSummary } from '@/components/pos/CustomerSummaryPrint';
 import { 
@@ -29,7 +29,7 @@ import {
   FileText, Download, Search, Printer, X, Check, CreditCard,
   TrendingUp, AlertTriangle, History, Wallet, Building2, BarChart3, Layers,
   Eye, MinusCircle, PlusCircle, Filter, Calendar, ArrowUpDown, ScanLine, 
-  Tag, Ruler, Settings2, FileDown, QrCode
+  Tag, Ruler, Settings2, FileDown, Barcode
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, subMonths, startOfDay } from 'date-fns';
@@ -114,7 +114,7 @@ export default function POSInventory() {
   
   // Barcode scanner state
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
-  const [showQRPrinter, setShowQRPrinter] = useState(false);
+  const [showBarcodePrinter, setShowBarcodePrinter] = useState(false);
   const [showAdvancedReports, setShowAdvancedReports] = useState(false);
   
   // Brand/Unit management
@@ -1714,9 +1714,9 @@ export default function POSInventory() {
                 <CardDescription>Manage your inventory items ({filteredProductsData.length} total)</CardDescription>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setShowQRPrinter(true)}>
-                  <QrCode className="h-4 w-4 mr-2" />
-                  Print Barcode/QR
+                <Button variant="outline" onClick={() => setShowBarcodePrinter(true)}>
+                  <Barcode className="h-4 w-4 mr-2" />
+                  Print Barcode
                 </Button>
                 <Button onClick={() => { setEditingItem(null); resetItemForm(); setShowItemDialog(true); }}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -4267,10 +4267,10 @@ export default function POSInventory() {
         onScan={handleBarcodeScan} 
       />
 
-      {/* QR Code / Barcode Printer Dialog */}
-      <ProductCodePrinter
-        open={showQRPrinter}
-        onOpenChange={setShowQRPrinter}
+      {/* Barcode Printer Dialog */}
+      <ProductBarcodePrinter
+        open={showBarcodePrinter}
+        onOpenChange={setShowBarcodePrinter}
         products={items.map(item => ({
           id: item.id,
           name: item.name,
