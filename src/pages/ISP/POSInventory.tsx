@@ -21,7 +21,7 @@ import { useInventoryExtended, UNIT_TYPES, DEFAULT_UNITS } from '@/hooks/useInve
 import { BarcodeScanner, useBarcodeScanner } from '@/components/pos/BarcodeScanner';
 import { printInvoice } from '@/components/pos/POSInvoicePrint';
 import { printReport, generateDuesReport, generateCustomerListReport, generateSalesReport, generateInventoryReport, generateSupplierDuesReport } from '@/components/pos/POSReportGenerator';
-import { ProductQRPrinter } from '@/components/pos/ProductQRPrinter';
+import { ProductCodePrinter } from '@/components/pos/ProductCodePrinter';
 import { AdvancedReportsDialog } from '@/components/pos/AdvancedReportsDialog';
 import { printCustomerSummary } from '@/components/pos/CustomerSummaryPrint';
 import { 
@@ -4267,8 +4267,8 @@ export default function POSInventory() {
         onScan={handleBarcodeScan} 
       />
 
-      {/* QR Code Printer Dialog */}
-      <ProductQRPrinter
+      {/* QR Code / Barcode Printer Dialog */}
+      <ProductCodePrinter
         open={showQRPrinter}
         onOpenChange={setShowQRPrinter}
         products={items.map(item => ({
@@ -4276,8 +4276,8 @@ export default function POSInventory() {
           name: item.name,
           sku: item.sku,
           barcode: item.barcode,
-          sale_price: item.sale_price,
-          quantity: item.quantity,
+          sale_price: item.sale_price ?? 0,
+          quantity: item.quantity ?? 0,
         }))}
         tenantName={inventoryExt.tenantInfo?.company_name || undefined}
       />
