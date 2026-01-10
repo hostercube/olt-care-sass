@@ -24,6 +24,7 @@ import { printReport, generateDuesReport, generateCustomerListReport, generateSa
 import { ProductBarcodePrinter } from '@/components/pos/ProductBarcodePrinter';
 import { AdvancedReportsDialog } from '@/components/pos/AdvancedReportsDialog';
 import { printCustomerSummary } from '@/components/pos/CustomerSummaryPrint';
+import { InventorySummaryReport } from '@/components/pos/InventorySummaryReport';
 import { 
   Package, Plus, Edit, Trash2, Loader2, ShoppingCart, Users, DollarSign,
   FileText, Download, Search, Printer, X, Check, CreditCard,
@@ -116,6 +117,7 @@ export default function POSInventory() {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showBarcodePrinter, setShowBarcodePrinter] = useState(false);
   const [showAdvancedReports, setShowAdvancedReports] = useState(false);
+  const [showSummaryReport, setShowSummaryReport] = useState(false);
   
   // POS filters
   const [posCategory, setPosCategory] = useState('all');
@@ -2910,13 +2912,17 @@ export default function POSInventory() {
                   <div className="space-y-2">
                     <Label>&nbsp;</Label>
                     <div className="flex gap-2">
-                      <Button onClick={exportReportCSV} className="flex-1">
+                      <Button onClick={() => setShowSummaryReport(true)} className="flex-1">
+                        <Printer className="h-4 w-4 mr-2" />
+                        Summary Report
+                      </Button>
+                      <Button variant="outline" onClick={exportReportCSV}>
                         <Download className="h-4 w-4 mr-2" />
-                        Export CSV
+                        CSV
                       </Button>
                       <Button variant="outline" onClick={() => setShowAdvancedReports(true)}>
                         <FileDown className="h-4 w-4 mr-2" />
-                        All Reports
+                        All
                       </Button>
                     </div>
                   </div>
@@ -4540,6 +4546,16 @@ export default function POSInventory() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Inventory Summary Report Dialog */}
+      <InventorySummaryReport
+        open={showSummaryReport}
+        onOpenChange={setShowSummaryReport}
+        sales={pos.sales}
+        purchases={purchases}
+        customerPayments={pos.payments}
+        supplierPayments={supplierPayments}
+        tenantInfo={inventoryExt.tenantInfo}
+      />
     </DashboardLayout>
   );
 }
