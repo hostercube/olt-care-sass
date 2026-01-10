@@ -132,6 +132,7 @@ const superAdminSMSItems: NavItem[] = [
 
 // Super Admin - Other
 const superAdminOtherItems: NavItem[] = [
+  { title: 'Custom Domains', href: '/admin/custom-domains', icon: Network },
   { title: 'Notifications', href: '/admin/notifications', icon: Bell },
   { title: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
   { title: 'Settings', href: '/admin/settings', icon: Settings },

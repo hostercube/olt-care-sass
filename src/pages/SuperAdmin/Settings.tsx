@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select';
 import { 
   Settings as SettingsIcon, Shield, Globe, Bell, 
-  CreditCard, Loader2, Save, RefreshCw, Server
+  CreditCard, Loader2, Save, RefreshCw, Server, Network
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -42,6 +42,7 @@ interface SystemSettings {
   maintenanceMode: boolean;
   maintenanceMessage: string;
   pollingServerUrl: string;
+  customDomainServerIP: string;
   smsRateLimitPerMinute: number;
   smsRateLimitPerHour: number;
   smsRateLimitPerDay: number;
@@ -69,6 +70,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   maintenanceMode: false,
   maintenanceMessage: 'We are currently performing maintenance. Please check back later.',
   pollingServerUrl: '',
+  customDomainServerIP: '',
   smsRateLimitPerMinute: 10,
   smsRateLimitPerHour: 100,
   smsRateLimitPerDay: 1000,
@@ -386,6 +388,30 @@ export default function SuperAdminSettings() {
                   />
                   <p className="text-xs text-muted-foreground">
                     The URL of your VPS running the polling server (e.g., https://123.45.67.89:3001)
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Globe className="h-5 w-5 text-primary" />
+                  Custom Domain Settings
+                </CardTitle>
+                <CardDescription>Configure server IP for tenant custom domains</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Server IP Address</Label>
+                  <Input
+                    value={settings.customDomainServerIP}
+                    onChange={(e) => updateSetting('customDomainServerIP', e.target.value)}
+                    placeholder="185.158.133.1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The IP address that tenants should point their A records to for custom domains. 
+                    This will be displayed in the DNS configuration instructions.
                   </p>
                 </div>
               </CardContent>

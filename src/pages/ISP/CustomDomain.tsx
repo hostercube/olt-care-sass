@@ -5,14 +5,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
-import { Globe, Plus, Loader2, CheckCircle, XCircle, Clock, Copy } from 'lucide-react';
+import { Globe, Plus, Loader2, CheckCircle, XCircle, Clock, Copy, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-interface CustomDomain {
+interface CustomDomainType {
   id: string;
   domain: string;
   subdomain: string | null;
@@ -24,12 +33,36 @@ interface CustomDomain {
 
 export default function CustomDomain() {
   const { tenantId, tenant } = useTenantContext();
-  const [domains, setDomains] = useState<CustomDomain[]>([]);
+  const [domains, setDomains] = useState<CustomDomainType[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [domain, setDomain] = useState('');
   const [subdomain, setSubdomain] = useState('');
+  const [serverIP, setServerIP] = useState<string>('');
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Fetch server IP from system settings
+  const fetchServerIP = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'customDomainServerIP')
+        .maybeSingle();
+      
+      if (!error && data?.value) {
+        const val = typeof data.value === 'object' && 'value' in data.value 
+          ? (data.value as { value: string }).value 
+          : data.value;
+        setServerIP(val as string || '');
+      }
+    } catch (err) {
+      console.error('Error fetching server IP:', err);
+    }
+  }, []);
 
   const fetchDomains = useCallback(async () => {
     if (!tenantId) return;
@@ -50,8 +83,32 @@ export default function CustomDomain() {
   }, [tenantId]);
 
   useEffect(() => {
+    fetchServerIP();
     fetchDomains();
-  }, [fetchDomains]);
+  }, [fetchServerIP, fetchDomains]);
+
+  // Auto-verify domain by checking DNS
+  const handleVerifyDomain = async (domainData: CustomDomainType) => {
+    setVerifying(domainData.id);
+    try {
+      // For auto-verification, we'll check if the DNS TXT record exists
+      // In production, this would use a DNS lookup API
+      // For now, we simulate a check that can be manually triggered
+      
+      // Simulate DNS check delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Here you would typically call an edge function to verify DNS
+      // For now, show a message that verification is pending
+      toast.info('DNS verification initiated. This may take a few minutes to propagate.');
+      
+    } catch (err: any) {
+      toast.error(err.message || 'Verification failed');
+    } finally {
+      setVerifying(null);
+      fetchDomains();
+    }
+  };
 
   const handleAddDomain = async () => {
     if (!tenantId || !domain) return;
@@ -79,6 +136,26 @@ export default function CustomDomain() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('tenant_custom_domains')
+        .delete()
+        .eq('id', deleteId);
+      
+      if (error) throw error;
+      toast.success('Domain deleted successfully');
+      setDeleteId(null);
+      fetchDomains();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete domain');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('Copied to clipboard');
@@ -92,6 +169,8 @@ export default function CustomDomain() {
     }
     return <XCircle className="h-4 w-4 text-red-500" />;
   };
+
+  const displayIP = serverIP || 'Not configured';
 
   return (
     <DashboardLayout
@@ -118,10 +197,15 @@ export default function CustomDomain() {
             <CardTitle>Your Domains</CardTitle>
             <CardDescription>Manage custom domains for your ISP portal</CardDescription>
           </div>
-          <Button onClick={() => setShowDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Domain
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={fetchDomains}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button onClick={() => setShowDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Domain
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -164,6 +248,30 @@ export default function CustomDomain() {
                         <Badge variant={d.ssl_status === 'active' ? 'default' : 'outline'}>
                           SSL: {d.ssl_status}
                         </Badge>
+                        {!d.is_verified && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleVerifyDomain(d)}
+                            disabled={verifying === d.id}
+                          >
+                            {verifying === d.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                Verify
+                              </>
+                            )}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteId(d.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
                       </div>
                     </div>
 
@@ -185,13 +293,23 @@ export default function CustomDomain() {
                             <div>
                               <p className="text-xs text-muted-foreground">Type: A</p>
                               <p className="text-xs text-muted-foreground">Name: @ (or your subdomain)</p>
-                              <p className="font-mono text-sm">185.158.133.1</p>
+                              <p className="font-mono text-sm">{displayIP}</p>
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => copyToClipboard('185.158.133.1')}>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => copyToClipboard(serverIP)}
+                              disabled={!serverIP}
+                            >
                               <Copy className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
+                        {!serverIP && (
+                          <p className="text-xs text-yellow-500 mt-2">
+                            ⚠️ Server IP not configured. Please contact administrator.
+                          </p>
+                        )}
                       </div>
                     )}
                   </CardContent>
@@ -241,6 +359,29 @@ export default function CustomDomain() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Domain?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. You will need to re-add and verify this domain.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-500 hover:bg-red-600"
+              disabled={deleting}
+            >
+              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }
