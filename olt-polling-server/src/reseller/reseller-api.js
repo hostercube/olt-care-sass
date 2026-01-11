@@ -118,84 +118,117 @@ async function getAllowedAreas(supabase, reseller) {
 }
 
 /**
+ * Get reseller IDs including descendants (1-2 levels deep)
+ */
+async function getDescendantResellerIds(supabase, resellerId, maxDepth = 2) {
+  const result = new Set([resellerId]);
+  let frontier = [resellerId];
+
+  for (let depth = 0; depth < maxDepth; depth++) {
+    if (frontier.length === 0) break;
+
+    const { data: children, error } = await supabase
+      .from('resellers')
+      .select('id')
+      .in('parent_id', frontier);
+
+    if (error) {
+      logger.error('Error fetching descendant resellers:', error);
+      break;
+    }
+
+    const next = (children || []).map((c) => c.id).filter(Boolean);
+    frontier = [];
+    for (const id of next) {
+      if (!result.has(id)) {
+        result.add(id);
+        frontier.push(id);
+      }
+    }
+  }
+
+  return Array.from(result);
+}
+
+/**
  * Get reseller transactions
  */
-async function getResellerTransactions(supabase, resellerId, filters = {}) {
+async function getResellerTransactions(supabase, reseller, filters = {}) {
+  const ids = reseller.can_view_sub_customers
+    ? await getDescendantResellerIds(supabase, reseller.id, 2)
+    : [reseller.id];
+
   let query = supabase
     .from('reseller_transactions')
     .select(`
       *,
       customer:customers(id, name, customer_code)
     `)
-    .eq('reseller_id', resellerId)
+    .in('reseller_id', ids)
     .order('created_at', { ascending: false });
-  
+
   if (filters.type && filters.type !== 'all') {
     query = query.eq('type', filters.type);
   }
-  
+
   if (filters.dateFrom) {
     query = query.gte('created_at', filters.dateFrom);
   }
-  
+
   if (filters.dateTo) {
     query = query.lte('created_at', filters.dateTo + 'T23:59:59');
   }
-  
-  if (filters.limit) {
-    query = query.limit(filters.limit);
-  } else {
-    query = query.limit(500);
-  }
-  
+
+  query = query.limit(filters.limit ? filters.limit : 500);
+
   const { data, error } = await query;
-  
+
   if (error) {
     logger.error('Error fetching transactions:', error);
     return [];
   }
-  
+
   return data || [];
 }
 
 /**
  * Get customer recharge history for reseller
  */
-async function getResellerRecharges(supabase, resellerId, filters = {}) {
+async function getResellerRecharges(supabase, reseller, filters = {}) {
+  const ids = reseller.can_view_sub_customers
+    ? await getDescendantResellerIds(supabase, reseller.id, 2)
+    : [reseller.id];
+
   let query = supabase
     .from('customer_recharges')
     .select(`
       *,
       customer:customers(id, name, customer_code)
     `)
-    .eq('reseller_id', resellerId)
+    .in('reseller_id', ids)
     .order('recharge_date', { ascending: false });
-  
+
   if (filters.source && filters.source !== 'all') {
     query = query.eq('payment_method', filters.source);
   }
-  
+
   if (filters.dateFrom) {
     query = query.gte('recharge_date', filters.dateFrom);
   }
-  
+
   if (filters.dateTo) {
     query = query.lte('recharge_date', filters.dateTo + 'T23:59:59');
   }
-  
-  if (filters.limit) {
-    query = query.limit(filters.limit);
-  } else {
-    query = query.limit(500);
-  }
-  
+
+  query = query.limit(filters.limit ? filters.limit : 500);
+
   const { data, error } = await query;
-  
+
   if (error) {
     logger.error('Error fetching recharges:', error);
     return [];
   }
-  
+
   return data || [];
 }
 
@@ -283,19 +316,29 @@ async function rechargeCustomerFromWallet(supabase, reseller, customerId, amount
   // Calculate commission/discount
   let deductAmount = amount;
   let commission = 0;
-  
+
   const rateType = reseller.rate_type || 'discount';
   const commissionType = reseller.commission_type || 'percentage';
-  const commissionValue = reseller.commission_value || reseller.customer_rate || 0;
-  
+
+  // IMPORTANT: don't fallback percentage commission to legacy customer_rate.
+  const toNumber = (v) => {
+    const n = typeof v === 'string' ? parseFloat(v) : Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const commissionValue =
+    commissionType === 'percentage'
+      ? toNumber(reseller.commission_value)
+      : toNumber(reseller.commission_value ?? reseller.customer_rate);
+
   if (commissionValue > 0) {
     if (commissionType === 'percentage') {
       commission = Math.round((amount * commissionValue) / 100);
     } else {
-      commission = commissionValue * months;
+      commission = Math.round(commissionValue * months);
     }
-    
-    if (rateType === 'discount') {
+
+    if (rateType === 'discount' || rateType === 'per_customer') {
       deductAmount = amount - commission;
     }
   }
@@ -352,10 +395,13 @@ async function rechargeCustomerFromWallet(supabase, reseller, customerId, amount
   }
   
   // Create recharge record
+  const collectedByType = reseller.level === 2 ? 'sub_reseller' : reseller.level === 3 ? 'sub_sub_reseller' : 'reseller';
+  const ownerResellerId = customer.reseller_id || reseller.id;
+
   await supabase.from('customer_recharges').insert({
     tenant_id: reseller.tenant_id,
     customer_id: customerId,
-    reseller_id: reseller.id,
+    reseller_id: ownerResellerId,
     amount,
     months,
     discount: commission,
@@ -363,7 +409,10 @@ async function rechargeCustomerFromWallet(supabase, reseller, customerId, amount
     new_expiry: newExpiry.toISOString(),
     payment_method: paymentMethod,
     status: 'completed',
-    notes: `Recharged by ${reseller.name} (${reseller.role || 'reseller'})`,
+    collected_by: reseller.id,
+    collected_by_type: collectedByType,
+    collected_by_name: reseller.name,
+    notes: `Recharged by ${reseller.name} (${collectedByType})`,
   });
   
   // Create transaction record
@@ -850,8 +899,11 @@ export function setupResellerRoutes(app, supabase) {
   app.get('/api/reseller/transactions', authMiddleware, async (req, res) => {
     try {
       const { type, dateFrom, dateTo, limit } = req.query;
-      const transactions = await getResellerTransactions(supabase, req.reseller.id, {
-        type, dateFrom, dateTo, limit: limit ? parseInt(limit) : undefined,
+      const transactions = await getResellerTransactions(supabase, req.reseller, {
+        type,
+        dateFrom,
+        dateTo,
+        limit: limit ? parseInt(limit) : undefined,
       });
       res.json({ success: true, transactions });
     } catch (error) {
@@ -859,13 +911,16 @@ export function setupResellerRoutes(app, supabase) {
       res.status(500).json({ success: false, error: error.message });
     }
   });
-  
+
   // Get recharge history
   app.get('/api/reseller/recharges', authMiddleware, async (req, res) => {
     try {
       const { source, dateFrom, dateTo, limit } = req.query;
-      const recharges = await getResellerRecharges(supabase, req.reseller.id, {
-        source, dateFrom, dateTo, limit: limit ? parseInt(limit) : undefined,
+      const recharges = await getResellerRecharges(supabase, req.reseller, {
+        source,
+        dateFrom,
+        dateTo,
+        limit: limit ? parseInt(limit) : undefined,
       });
       res.json({ success: true, recharges });
     } catch (error) {
