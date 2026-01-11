@@ -117,7 +117,22 @@ export function useCustomerRecharges() {
         // commission_type: 'percentage' or 'flat'
         const rateType = reseller.rate_type || 'discount';
         const commissionType = reseller.commission_type || 'percentage';
-        const commissionValue = reseller.commission_value || reseller.customer_rate || 0;
+
+        // IMPORTANT: don't fallback percentage commission to legacy customer_rate.
+        // If commission_type is 'percentage' but commission_value is empty, commission should be 0.
+        const rawCommissionValue = (reseller as any).commission_value;
+        const legacyCustomerRate = (reseller as any).customer_rate;
+
+        const toNumber = (v: any) => {
+          const n = typeof v === 'string' ? parseFloat(v) : Number(v);
+          return Number.isFinite(n) ? n : 0;
+        };
+
+        const commissionValue =
+          commissionType === 'percentage'
+            ? toNumber(rawCommissionValue)
+            : toNumber(rawCommissionValue ?? legacyCustomerRate);
+
         const totalPackagePrice = packagePrice * months;
 
         if (commissionValue > 0) {
@@ -126,7 +141,7 @@ export function useCustomerRecharges() {
             commission = Math.round((totalPackagePrice * commissionValue) / 100);
           } else {
             // Flat rate per month: e.g., 2 taka per month
-            commission = commissionValue * months;
+            commission = Math.round(commissionValue * months);
           }
         }
 
@@ -155,6 +170,8 @@ export function useCustomerRecharges() {
     }
 
     // Create recharge record with tracking
+    const effectiveDiscount = (discount ?? 0) > 0 ? (discount ?? 0) : commission;
+
     const rechargeData: any = {
       tenant_id: tenantId,
       customer_id: customerId,
@@ -163,7 +180,7 @@ export function useCustomerRecharges() {
       payment_method: paymentMethod,
       old_expiry: oldExpiry,
       new_expiry: newExpiry,
-      discount,
+      discount: effectiveDiscount,
       notes,
       status: 'completed',
       collected_by_type: collectedByType,
@@ -200,7 +217,7 @@ export function useCustomerRecharges() {
       // Get current reseller balance again to avoid race conditions
       const { data: currentReseller } = await supabase
         .from('resellers')
-        .select('balance, name')
+        .select('balance, name, total_collections')
         .eq('id', resellerId)
         .single();
 

@@ -488,7 +488,21 @@ export default function CustomerProfile() {
           // commission_type: 'percentage' or 'flat'
           const rateType = reseller.rate_type || 'discount';
           const commissionType = reseller.commission_type || 'percentage';
-          const commissionValue = reseller.commission_value || reseller.customer_rate || 0;
+
+          // IMPORTANT: don't fallback percentage commission to legacy customer_rate.
+          const rawCommissionValue = (reseller as any).commission_value;
+          const legacyCustomerRate = (reseller as any).customer_rate;
+
+          const toNumber = (v: any) => {
+            const n = typeof v === 'string' ? parseFloat(v) : Number(v);
+            return Number.isFinite(n) ? n : 0;
+          };
+
+          const commissionValue =
+            commissionType === 'percentage'
+              ? toNumber(rawCommissionValue)
+              : toNumber(rawCommissionValue ?? legacyCustomerRate);
+
           const totalPackagePrice = packagePrice * rechargeMonths;
 
           if (commissionValue > 0) {
@@ -497,17 +511,15 @@ export default function CustomerProfile() {
               commission = Math.round((totalPackagePrice * commissionValue) / 100);
             } else {
               // Flat rate per month: e.g., 2 taka per month
-              commission = commissionValue * rechargeMonths;
+              commission = Math.round(commissionValue * rechargeMonths);
             }
           }
 
           // Calculate what reseller should pay
           // For rate_type 'discount': reseller pays (package price - commission)
-          // Example: Package = 100, Commission = 25% = 25, Reseller pays = 75
           if (rateType === 'discount' || rateType === 'per_customer') {
             deductAmount = totalPackagePrice - commission;
           } else {
-            // For other rate types, reseller pays full amount (no discount)
             deductAmount = totalPackagePrice;
           }
 
@@ -552,6 +564,7 @@ export default function CustomerProfile() {
         months: rechargeMonths,
         old_expiry: customer.expiry_date,
         new_expiry: newExpiry.toISOString().split('T')[0],
+        discount: commission,
         payment_method: 'cash',
         status: 'completed',
         collected_by: user?.id || null,
