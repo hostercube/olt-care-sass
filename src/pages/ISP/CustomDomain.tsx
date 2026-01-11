@@ -196,7 +196,8 @@ export default function CustomDomain() {
         return;
       }
 
-      const dnsResult = await checkDNSRecords(fullDomain, serverIP, domainData.dns_txt_record || '');
+      const rootDomain = domainData.domain;
+      const dnsResult = await checkDNSRecords(fullDomain, rootDomain, serverIP, domainData.dns_txt_record || '');
       
       console.log('DNS check result:', dnsResult);
 
