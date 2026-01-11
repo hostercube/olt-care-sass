@@ -329,6 +329,668 @@ export type Database = {
           },
         ]
       }
+      bandwidth_bill_collections: {
+        Row: {
+          amount: number
+          client_id: string | null
+          collection_date: string
+          created_at: string
+          created_by: string | null
+          id: string
+          invoice_id: string | null
+          payment_method: string | null
+          receipt_number: string
+          received_by: string | null
+          remarks: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          client_id?: string | null
+          collection_date?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_id?: string | null
+          payment_method?: string | null
+          receipt_number: string
+          received_by?: string | null
+          remarks?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          client_id?: string | null
+          collection_date?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_id?: string | null
+          payment_method?: string | null
+          receipt_number?: string
+          received_by?: string | null
+          remarks?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_bill_collections_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_bill_collections_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_sales_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_bill_collections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bandwidth_clients: {
+        Row: {
+          account_number: string | null
+          address: string | null
+          bank_details: string | null
+          company_name: string | null
+          contact_person: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          notes: string | null
+          phone: string | null
+          tenant_id: string
+          total_receivable: number | null
+          updated_at: string
+        }
+        Insert: {
+          account_number?: string | null
+          address?: string | null
+          bank_details?: string | null
+          company_name?: string | null
+          contact_person?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id: string
+          total_receivable?: number | null
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string | null
+          address?: string | null
+          bank_details?: string | null
+          company_name?: string | null
+          contact_person?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id?: string
+          total_receivable?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_clients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bandwidth_item_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_item_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bandwidth_items: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          tenant_id: string
+          unit: string | null
+          unit_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          tenant_id: string
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          tenant_id?: string
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_item_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bandwidth_provider_payments: {
+        Row: {
+          amount: number
+          bill_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          paid_by: string | null
+          payment_date: string
+          payment_method: string | null
+          payment_number: string
+          provider_id: string | null
+          remarks: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          bill_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          paid_by?: string | null
+          payment_date?: string
+          payment_method?: string | null
+          payment_number: string
+          provider_id?: string | null
+          remarks?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          bill_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          paid_by?: string | null
+          payment_date?: string
+          payment_method?: string | null
+          payment_number?: string
+          provider_id?: string | null
+          remarks?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_provider_payments_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_purchase_bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_provider_payments_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_provider_payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bandwidth_providers: {
+        Row: {
+          account_number: string | null
+          address: string | null
+          bank_details: string | null
+          company_name: string | null
+          contact_person: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          notes: string | null
+          phone: string | null
+          tenant_id: string
+          total_due: number | null
+          updated_at: string
+        }
+        Insert: {
+          account_number?: string | null
+          address?: string | null
+          bank_details?: string | null
+          company_name?: string | null
+          contact_person?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id: string
+          total_due?: number | null
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string | null
+          address?: string | null
+          bank_details?: string | null
+          company_name?: string | null
+          contact_person?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id?: string
+          total_due?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_providers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bandwidth_purchase_bill_items: {
+        Row: {
+          bill_id: string
+          created_at: string
+          description: string | null
+          from_date: string | null
+          id: string
+          item_id: string | null
+          item_name: string
+          quantity: number | null
+          rate: number | null
+          to_date: string | null
+          total: number | null
+          unit: string | null
+          vat_amount: number | null
+          vat_percent: number | null
+        }
+        Insert: {
+          bill_id: string
+          created_at?: string
+          description?: string | null
+          from_date?: string | null
+          id?: string
+          item_id?: string | null
+          item_name: string
+          quantity?: number | null
+          rate?: number | null
+          to_date?: string | null
+          total?: number | null
+          unit?: string | null
+          vat_amount?: number | null
+          vat_percent?: number | null
+        }
+        Update: {
+          bill_id?: string
+          created_at?: string
+          description?: string | null
+          from_date?: string | null
+          id?: string
+          item_id?: string | null
+          item_name?: string
+          quantity?: number | null
+          rate?: number | null
+          to_date?: string | null
+          total?: number | null
+          unit?: string | null
+          vat_amount?: number | null
+          vat_percent?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_purchase_bill_items_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_purchase_bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_purchase_bill_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bandwidth_purchase_bills: {
+        Row: {
+          attachment_url: string | null
+          billing_date: string
+          created_at: string
+          created_by: string | null
+          discount: number | null
+          due_amount: number | null
+          from_date: string | null
+          id: string
+          invoice_number: string
+          paid_amount: number | null
+          paid_by: string | null
+          payment_method: string | null
+          payment_status: string | null
+          provider_id: string | null
+          received_by: string | null
+          remarks: string | null
+          subtotal: number | null
+          tenant_id: string
+          to_date: string | null
+          total_amount: number | null
+          updated_at: string
+          vat_amount: number | null
+        }
+        Insert: {
+          attachment_url?: string | null
+          billing_date?: string
+          created_at?: string
+          created_by?: string | null
+          discount?: number | null
+          due_amount?: number | null
+          from_date?: string | null
+          id?: string
+          invoice_number: string
+          paid_amount?: number | null
+          paid_by?: string | null
+          payment_method?: string | null
+          payment_status?: string | null
+          provider_id?: string | null
+          received_by?: string | null
+          remarks?: string | null
+          subtotal?: number | null
+          tenant_id: string
+          to_date?: string | null
+          total_amount?: number | null
+          updated_at?: string
+          vat_amount?: number | null
+        }
+        Update: {
+          attachment_url?: string | null
+          billing_date?: string
+          created_at?: string
+          created_by?: string | null
+          discount?: number | null
+          due_amount?: number | null
+          from_date?: string | null
+          id?: string
+          invoice_number?: string
+          paid_amount?: number | null
+          paid_by?: string | null
+          payment_method?: string | null
+          payment_status?: string | null
+          provider_id?: string | null
+          received_by?: string | null
+          remarks?: string | null
+          subtotal?: number | null
+          tenant_id?: string
+          to_date?: string | null
+          total_amount?: number | null
+          updated_at?: string
+          vat_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_purchase_bills_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_purchase_bills_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bandwidth_sales_invoice_items: {
+        Row: {
+          created_at: string
+          description: string | null
+          from_date: string | null
+          id: string
+          invoice_id: string
+          item_id: string | null
+          item_name: string
+          quantity: number | null
+          rate: number | null
+          to_date: string | null
+          total: number | null
+          unit: string | null
+          vat_amount: number | null
+          vat_percent: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          from_date?: string | null
+          id?: string
+          invoice_id: string
+          item_id?: string | null
+          item_name: string
+          quantity?: number | null
+          rate?: number | null
+          to_date?: string | null
+          total?: number | null
+          unit?: string | null
+          vat_amount?: number | null
+          vat_percent?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          from_date?: string | null
+          id?: string
+          invoice_id?: string
+          item_id?: string | null
+          item_name?: string
+          quantity?: number | null
+          rate?: number | null
+          to_date?: string | null
+          total?: number | null
+          unit?: string | null
+          vat_amount?: number | null
+          vat_percent?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_sales_invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_sales_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_sales_invoice_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bandwidth_sales_invoices: {
+        Row: {
+          attachment_url: string | null
+          billing_date: string
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          discount: number | null
+          due_amount: number | null
+          due_date: string | null
+          from_date: string | null
+          id: string
+          invoice_number: string
+          paid_amount: number | null
+          payment_status: string | null
+          remarks: string | null
+          subtotal: number | null
+          tenant_id: string
+          to_date: string | null
+          total_amount: number | null
+          updated_at: string
+          vat_amount: number | null
+        }
+        Insert: {
+          attachment_url?: string | null
+          billing_date?: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          discount?: number | null
+          due_amount?: number | null
+          due_date?: string | null
+          from_date?: string | null
+          id?: string
+          invoice_number: string
+          paid_amount?: number | null
+          payment_status?: string | null
+          remarks?: string | null
+          subtotal?: number | null
+          tenant_id: string
+          to_date?: string | null
+          total_amount?: number | null
+          updated_at?: string
+          vat_amount?: number | null
+        }
+        Update: {
+          attachment_url?: string | null
+          billing_date?: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          discount?: number | null
+          due_amount?: number | null
+          due_date?: string | null
+          from_date?: string | null
+          id?: string
+          invoice_number?: string
+          paid_amount?: number | null
+          payment_status?: string | null
+          remarks?: string | null
+          subtotal?: number | null
+          tenant_id?: string
+          to_date?: string | null
+          total_amount?: number | null
+          updated_at?: string
+          vat_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_sales_invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_sales_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_accounts: {
         Row: {
           account_name: string
