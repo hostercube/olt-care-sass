@@ -139,6 +139,21 @@ export function SharedCustomerDialog({
     }
   }, [formData.package_id, formData.connection_date, contextData.packages, mode]);
 
+  // Sensible defaults (add mode): auto-select first allowed area/router
+  useEffect(() => {
+    if (mode !== 'add') return;
+
+    // Auto-select Area when only one option is available
+    if (!formData.area_id && contextData.areas.length === 1) {
+      setFormData(prev => ({ ...prev, area_id: contextData.areas[0].id }));
+    }
+
+    // Auto-select MikroTik when only one option is available
+    if (!formData.mikrotik_id && contextData.mikrotikRouters.length === 1) {
+      setFormData(prev => ({ ...prev, mikrotik_id: contextData.mikrotikRouters[0].id }));
+    }
+  }, [mode, contextData.areas, contextData.mikrotikRouters, formData.area_id, formData.mikrotik_id]);
+
   // Auto-generate PPPoE username when name changes (add mode only)
   useEffect(() => {
     if (mode === 'add' && formData.name && !formData.pppoe_username) {
@@ -225,11 +240,12 @@ export function SharedCustomerDialog({
     setLoading(true);
 
     try {
+      const resellerMode = !!contextData.resellerId;
+
       const customerData: any = {
         name: formData.name,
         phone: formData.phone || null,
         email: formData.email || null,
-        nid_number: formData.nid_number || null,
         address: formData.address || null,
         area_id: formData.area_id && formData.area_id !== 'none' ? formData.area_id : null,
         mikrotik_id: formData.mikrotik_id && formData.mikrotik_id !== 'none' ? formData.mikrotik_id : null,
@@ -240,6 +256,12 @@ export function SharedCustomerDialog({
         monthly_bill: parseFloat(formData.monthly_bill) || 0,
         notes: formData.notes || null,
       };
+
+      // NOTE: Some reseller backends don't have nid_number column yet.
+      // Keep it for tenant context only.
+      if (!resellerMode) {
+        customerData.nid_number = formData.nid_number || null;
+      }
 
       if (mode === 'add') {
         customerData.pppoe_password = formData.pppoe_password || null;
