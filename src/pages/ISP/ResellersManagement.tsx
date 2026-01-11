@@ -86,7 +86,7 @@ export default function ResellersManagement() {
     commission_type: 'percentage' as 'percentage' | 'flat',
     commission_value: '',
     customer_rate: '',
-    rate_type: 'per_customer',
+    rate_type: 'discount',
     max_sub_resellers: '0',
     max_customers: '',
     can_create_sub_reseller: false,
@@ -190,7 +190,7 @@ export default function ResellersManagement() {
       commission_type: 'percentage',
       commission_value: '',
       customer_rate: '',
-      rate_type: 'per_customer',
+      rate_type: 'discount',
       max_sub_resellers: '0',
       max_customers: '',
       can_create_sub_reseller: false,
@@ -877,11 +877,32 @@ export default function ResellersManagement() {
             {/* Commission Settings */}
             <div className="border rounded-lg p-4 space-y-4">
               <h4 className="font-medium flex items-center gap-2">
-                <Wallet className="h-4 w-4" /> Commission Settings
+                <Wallet className="h-4 w-4" /> Commission & Rate Settings
               </h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Commission Type</Label>
+                  <Label>Rate Type</Label>
+                  <Select
+                    value={formData.rate_type}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, rate_type: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="discount">Discount (Reseller pays less)</SelectItem>
+                      <SelectItem value="commission">Commission (Reseller earns after payment)</SelectItem>
+                      <SelectItem value="per_customer">Per Customer (Legacy)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {formData.rate_type === 'discount' && 'Reseller deducts discounted amount from balance'}
+                    {formData.rate_type === 'commission' && 'Reseller pays full amount, gets commission credited'}
+                    {formData.rate_type === 'per_customer' && 'Legacy per-customer rate mode'}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Commission/Discount Type</Label>
                   <Select
                     value={formData.commission_type}
                     onValueChange={(value: any) => setFormData(prev => ({ ...prev, commission_type: value }))}
@@ -891,12 +912,17 @@ export default function ResellersManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="percentage">Percentage (%)</SelectItem>
-                      <SelectItem value="flat">Flat Amount (৳)</SelectItem>
+                      <SelectItem value="flat">Flat Amount per Month (৳)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Commission Value</Label>
+                  <Label>
+                    {formData.rate_type === 'discount' ? 'Discount' : 'Commission'} Value
+                    {formData.commission_type === 'percentage' ? ' (%)' : ' (৳)'}
+                  </Label>
                   <Input
                     type="number"
                     value={formData.commission_value}
@@ -905,9 +931,15 @@ export default function ResellersManagement() {
                     min="0"
                     step="0.01"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    {formData.commission_type === 'percentage' 
+                      ? `Reseller gets ${formData.commission_value || 0}% ${formData.rate_type === 'discount' ? 'discount' : 'commission'}`
+                      : `৳${formData.commission_value || 0} per month`
+                    }
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Per Customer Rate (৳)</Label>
+                  <Label>Customer Rate (৳) - Optional</Label>
                   <Input
                     type="number"
                     value={formData.customer_rate}
@@ -915,6 +947,9 @@ export default function ResellersManagement() {
                     placeholder="0"
                     min="0"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Legacy per-customer rate (if commission_value is 0)
+                  </p>
                 </div>
               </div>
             </div>

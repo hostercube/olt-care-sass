@@ -36,7 +36,8 @@ export default function ResellerSubResellers() {
     fundSubReseller,
     deductSubReseller,
     updateSubReseller,
-    refetch 
+    refetch,
+    hasPermission,
   } = useResellerPortal();
   
   const [activeTab, setActiveTab] = useState('list');
@@ -63,7 +64,9 @@ export default function ResellerSubResellers() {
     can_recharge_customers: true,
     can_create_sub_reseller: false,
     can_view_sub_customers: false,
-    commission_rate: '5',
+    commission_type: 'percentage',
+    commission_value: '',
+    rate_type: 'discount',
     max_customers: '0',
     max_sub_resellers: '0',
   });
@@ -124,7 +127,9 @@ export default function ResellerSubResellers() {
       can_recharge_customers: true,
       can_create_sub_reseller: false,
       can_view_sub_customers: false,
-      commission_rate: '5',
+      commission_type: 'percentage',
+      commission_value: '',
+      rate_type: 'discount',
       max_customers: '0',
       max_sub_resellers: '0',
     });
@@ -237,7 +242,9 @@ export default function ResellerSubResellers() {
       can_recharge_customers: sub.can_recharge_customers ?? true,
       can_create_sub_reseller: sub.can_create_sub_reseller ?? false,
       can_view_sub_customers: sub.can_view_sub_customers ?? false,
-      commission_rate: sub.commission_rate?.toString() || '5',
+      commission_type: sub.commission_type || 'percentage',
+      commission_value: sub.commission_value?.toString() || '',
+      rate_type: sub.rate_type || 'discount',
       max_customers: sub.max_customers?.toString() || '0',
       max_sub_resellers: sub.max_sub_resellers?.toString() || '0',
     });
@@ -569,8 +576,15 @@ export default function ResellerSubResellers() {
                 <Input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} required />
               </div>
               <div className="space-y-2">
-                <Label>Commission Rate (%)</Label>
-                <Input type="number" value={formData.commission_rate} onChange={(e) => setFormData({...formData, commission_rate: e.target.value})} />
+                <Label>Discount/Commission Rate (%)</Label>
+                <Input 
+                  type="number" 
+                  value={formData.commission_value} 
+                  onChange={(e) => setFormData({...formData, commission_value: e.target.value})} 
+                  placeholder="e.g. 10"
+                  min="0"
+                />
+                <p className="text-xs text-muted-foreground">Discount on recharge amount</p>
               </div>
               <div className="space-y-2">
                 <Label>Max Customers (0 = Unlimited)</Label>
@@ -636,8 +650,14 @@ export default function ResellerSubResellers() {
                 <Input value={formData.address} onChange={(e) => setFormData({...formData, address: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label>Commission Rate (%)</Label>
-                <Input type="number" value={formData.commission_rate} onChange={(e) => setFormData({...formData, commission_rate: e.target.value})} />
+                <Label>Discount/Commission Rate (%)</Label>
+                <Input 
+                  type="number" 
+                  value={formData.commission_value} 
+                  onChange={(e) => setFormData({...formData, commission_value: e.target.value})} 
+                  placeholder="e.g. 10"
+                  min="0"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Max Customers (0 = Unlimited)</Label>
