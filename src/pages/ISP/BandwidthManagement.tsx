@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ModuleAccessGuard } from '@/components/layout/ModuleAccessGuard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,26 +12,33 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Plus, 
   Edit, 
   Trash2, 
-  ShoppingCart, 
-  ShoppingBag, 
   Users, 
   Building2, 
   Package,
-  FolderOpen,
   Receipt,
   CreditCard,
   Wallet,
   TrendingUp,
   TrendingDown,
+  Search,
+  Eye,
+  Printer,
+  Download,
   FileText,
-  Search
+  Calendar,
+  BarChart3,
+  ArrowUpRight,
+  ArrowDownRight,
+  RefreshCw
 } from 'lucide-react';
-import { useBandwidthManagement, BandwidthCategory, BandwidthItem, BandwidthProvider, BandwidthClient, PurchaseBillItem, SalesInvoiceItem } from '@/hooks/useBandwidthManagement';
-import { format } from 'date-fns';
+import { useBandwidthManagement, BandwidthCategory, BandwidthItem, BandwidthProvider, BandwidthClient, PurchaseBillItem, SalesInvoiceItem, BandwidthPurchaseBill, BandwidthSalesInvoice } from '@/hooks/useBandwidthManagement';
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 export default function BandwidthManagement() {
   return (
@@ -75,10 +82,19 @@ function BandwidthManagementContent() {
     deleteBillCollection,
     createProviderPayment,
     deleteProviderPayment,
+    fetchCategories,
+    fetchItems,
+    fetchProviders,
+    fetchClients,
+    fetchPurchaseBills,
+    fetchSalesInvoices,
+    fetchBillCollections,
+    fetchProviderPayments,
   } = useBandwidthManagement();
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [search, setSearch] = useState('');
+  const [dateFilter, setDateFilter] = useState({ from: format(startOfMonth(new Date()), 'yyyy-MM-dd'), to: format(endOfMonth(new Date()), 'yyyy-MM-dd') });
   
   // Dialog states
   const [categoryDialog, setCategoryDialog] = useState(false);
@@ -90,6 +106,12 @@ function BandwidthManagementContent() {
   const [collectionDialog, setCollectionDialog] = useState(false);
   const [providerPaymentDialog, setProviderPaymentDialog] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; type: string; id: string; name: string }>({ open: false, type: '', id: '', name: '' });
+  
+  // View details sheets
+  const [viewPurchaseBill, setViewPurchaseBill] = useState<BandwidthPurchaseBill | null>(null);
+  const [viewSalesInvoice, setViewSalesInvoice] = useState<BandwidthSalesInvoice | null>(null);
+  const [viewProviderLedger, setViewProviderLedger] = useState<BandwidthProvider | null>(null);
+  const [viewClientLedger, setViewClientLedger] = useState<BandwidthClient | null>(null);
   
   // Form states
   const [editingCategory, setEditingCategory] = useState<BandwidthCategory | null>(null);
@@ -173,6 +195,64 @@ function BandwidthManagementContent() {
     remarks: '',
   });
 
+  // Filtered data with search
+  const filteredProviders = useMemo(() => 
+    providers.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || 
+      (p.company_name && p.company_name.toLowerCase().includes(search.toLowerCase()))),
+    [providers, search]
+  );
+
+  const filteredClients = useMemo(() => 
+    clients.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || 
+      (c.company_name && c.company_name.toLowerCase().includes(search.toLowerCase()))),
+    [clients, search]
+  );
+
+  const filteredPurchaseBills = useMemo(() => 
+    purchaseBills.filter(b => {
+      const matchSearch = b.invoice_number.toLowerCase().includes(search.toLowerCase()) ||
+        (b.provider?.name && b.provider.name.toLowerCase().includes(search.toLowerCase()));
+      const billDate = new Date(b.billing_date);
+      const matchDate = billDate >= new Date(dateFilter.from) && billDate <= new Date(dateFilter.to);
+      return matchSearch && matchDate;
+    }),
+    [purchaseBills, search, dateFilter]
+  );
+
+  const filteredSalesInvoices = useMemo(() => 
+    salesInvoices.filter(i => {
+      const matchSearch = i.invoice_number.toLowerCase().includes(search.toLowerCase()) ||
+        (i.client?.name && i.client.name.toLowerCase().includes(search.toLowerCase()));
+      const invoiceDate = new Date(i.billing_date);
+      const matchDate = invoiceDate >= new Date(dateFilter.from) && invoiceDate <= new Date(dateFilter.to);
+      return matchSearch && matchDate;
+    }),
+    [salesInvoices, search, dateFilter]
+  );
+
+  // Calculate profit/loss stats
+  const profitLossStats = useMemo(() => {
+    const totalPurchases = purchaseBills.reduce((sum, b) => sum + b.total_amount, 0);
+    const totalSales = salesInvoices.reduce((sum, i) => sum + i.total_amount, 0);
+    const profit = totalSales - totalPurchases;
+    const profitPercentage = totalPurchases > 0 ? ((profit / totalPurchases) * 100).toFixed(1) : '0';
+    return { totalPurchases, totalSales, profit, profitPercentage };
+  }, [purchaseBills, salesInvoices]);
+
+  // Provider ledger data
+  const getProviderLedger = (providerId: string) => {
+    const bills = purchaseBills.filter(b => b.provider_id === providerId);
+    const payments = providerPayments.filter(p => p.provider_id === providerId);
+    return { bills, payments };
+  };
+
+  // Client ledger data
+  const getClientLedger = (clientId: string) => {
+    const invoices = salesInvoices.filter(i => i.client_id === clientId);
+    const collections = billCollections.filter(c => c.client_id === clientId);
+    return { invoices, collections };
+  };
+
   // Handlers
   const handleSaveCategory = async () => {
     if (editingCategory) {
@@ -219,7 +299,7 @@ function BandwidthManagementContent() {
   };
 
   const handleSavePurchaseBill = async () => {
-    const subtotal = purchaseBillItems.reduce((sum, item) => sum + item.total, 0);
+    const subtotal = purchaseBillItems.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
     const vatAmount = purchaseBillItems.reduce((sum, item) => sum + item.vat_amount, 0);
     const totalAmount = subtotal + vatAmount - purchaseBillForm.discount;
     const dueAmount = totalAmount - purchaseBillForm.paid_amount;
@@ -245,7 +325,7 @@ function BandwidthManagementContent() {
   };
 
   const handleSaveSalesInvoice = async () => {
-    const subtotal = salesInvoiceItems.reduce((sum, item) => sum + item.total, 0);
+    const subtotal = salesInvoiceItems.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
     const vatAmount = salesInvoiceItems.reduce((sum, item) => sum + item.vat_amount, 0);
     const totalAmount = subtotal + vatAmount - salesInvoiceForm.discount;
     
@@ -323,6 +403,153 @@ function BandwidthManagementContent() {
       case 'providerPayment': await deleteProviderPayment(deleteDialog.id); break;
     }
     setDeleteDialog({ open: false, type: '', id: '', name: '' });
+  };
+
+  const handleRefresh = () => {
+    fetchCategories();
+    fetchItems();
+    fetchProviders();
+    fetchClients();
+    fetchPurchaseBills();
+    fetchSalesInvoices();
+    fetchBillCollections();
+    fetchProviderPayments();
+  };
+
+  const handlePrint = (type: 'purchase' | 'sales', data: any) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = type === 'purchase' 
+      ? generatePurchaseBillPrintHTML(data)
+      : generateSalesInvoicePrintHTML(data);
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const generatePurchaseBillPrintHTML = (bill: BandwidthPurchaseBill) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Purchase Bill - ${bill.invoice_number}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .totals { text-align: right; }
+        .totals p { margin: 5px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Purchase Bill</h1>
+        <p>Invoice #: ${bill.invoice_number}</p>
+      </div>
+      <div class="info">
+        <div>
+          <p><strong>Provider:</strong> ${bill.provider?.name || 'N/A'}</p>
+          <p><strong>Company:</strong> ${bill.provider?.company_name || 'N/A'}</p>
+        </div>
+        <div>
+          <p><strong>Date:</strong> ${format(new Date(bill.billing_date), 'dd/MM/yyyy')}</p>
+          <p><strong>Status:</strong> ${bill.payment_status.toUpperCase()}</p>
+        </div>
+      </div>
+      <div class="totals">
+        <p><strong>Subtotal:</strong> ৳${(bill.subtotal || 0).toLocaleString()}</p>
+        <p><strong>VAT:</strong> ৳${(bill.vat_amount || 0).toLocaleString()}</p>
+        <p><strong>Discount:</strong> ৳${(bill.discount || 0).toLocaleString()}</p>
+        <p><strong>Total:</strong> ৳${bill.total_amount.toLocaleString()}</p>
+        <p><strong>Paid:</strong> ৳${bill.paid_amount.toLocaleString()}</p>
+        <p><strong>Due:</strong> ৳${bill.due_amount.toLocaleString()}</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const generateSalesInvoicePrintHTML = (invoice: BandwidthSalesInvoice) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Sales Invoice - ${invoice.invoice_number}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .totals { text-align: right; }
+        .totals p { margin: 5px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Sales Invoice</h1>
+        <p>Invoice #: ${invoice.invoice_number}</p>
+      </div>
+      <div class="info">
+        <div>
+          <p><strong>Client:</strong> ${invoice.client?.name || 'N/A'}</p>
+          <p><strong>Company:</strong> ${invoice.client?.company_name || 'N/A'}</p>
+        </div>
+        <div>
+          <p><strong>Date:</strong> ${format(new Date(invoice.billing_date), 'dd/MM/yyyy')}</p>
+          <p><strong>Due Date:</strong> ${invoice.due_date ? format(new Date(invoice.due_date), 'dd/MM/yyyy') : 'N/A'}</p>
+          <p><strong>Status:</strong> ${invoice.payment_status.toUpperCase()}</p>
+        </div>
+      </div>
+      <div class="totals">
+        <p><strong>Subtotal:</strong> ৳${(invoice.subtotal || 0).toLocaleString()}</p>
+        <p><strong>VAT:</strong> ৳${(invoice.vat_amount || 0).toLocaleString()}</p>
+        <p><strong>Discount:</strong> ৳${(invoice.discount || 0).toLocaleString()}</p>
+        <p><strong>Total:</strong> ৳${invoice.total_amount.toLocaleString()}</p>
+        <p><strong>Paid:</strong> ৳${invoice.paid_amount.toLocaleString()}</p>
+        <p><strong>Due:</strong> ৳${invoice.due_amount.toLocaleString()}</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const exportCSV = (type: 'providers' | 'clients' | 'purchases' | 'sales') => {
+    let csvContent = '';
+    let filename = '';
+
+    switch (type) {
+      case 'providers':
+        csvContent = 'Name,Company,Phone,Email,Total Due\n' + 
+          providers.map(p => `"${p.name}","${p.company_name || ''}","${p.phone || ''}","${p.email || ''}","${p.total_due}"`).join('\n');
+        filename = 'providers.csv';
+        break;
+      case 'clients':
+        csvContent = 'Name,Company,Phone,Email,Total Receivable\n' +
+          clients.map(c => `"${c.name}","${c.company_name || ''}","${c.phone || ''}","${c.email || ''}","${c.total_receivable}"`).join('\n');
+        filename = 'clients.csv';
+        break;
+      case 'purchases':
+        csvContent = 'Invoice,Provider,Date,Total,Paid,Due,Status\n' +
+          purchaseBills.map(b => `"${b.invoice_number}","${b.provider?.name || ''}","${b.billing_date}","${b.total_amount}","${b.paid_amount}","${b.due_amount}","${b.payment_status}"`).join('\n');
+        filename = 'purchase_bills.csv';
+        break;
+      case 'sales':
+        csvContent = 'Invoice,Client,Date,Total,Paid,Due,Status\n' +
+          salesInvoices.map(i => `"${i.invoice_number}","${i.client?.name || ''}","${i.billing_date}","${i.total_amount}","${i.paid_amount}","${i.due_amount}","${i.payment_status}"`).join('\n');
+        filename = 'sales_invoices.csv';
+        break;
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const resetPurchaseBillForm = () => {
@@ -445,6 +672,26 @@ function BandwidthManagementContent() {
     }
   };
 
+  // Calculate bill totals
+  const purchaseBillSubtotal = purchaseBillItems.reduce((sum, i) => sum + (i.quantity * i.rate), 0);
+  const purchaseBillVat = purchaseBillItems.reduce((sum, i) => sum + i.vat_amount, 0);
+  const purchaseBillTotal = purchaseBillSubtotal + purchaseBillVat - purchaseBillForm.discount;
+
+  const salesInvoiceSubtotal = salesInvoiceItems.reduce((sum, i) => sum + (i.quantity * i.rate), 0);
+  const salesInvoiceVat = salesInvoiceItems.reduce((sum, i) => sum + i.vat_amount, 0);
+  const salesInvoiceTotal = salesInvoiceSubtotal + salesInvoiceVat - salesInvoiceForm.discount;
+
+  if (loading && categories.length === 0) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32" />)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -452,19 +699,23 @@ function BandwidthManagementContent() {
           <h1 className="text-3xl font-bold tracking-tight">Bandwidth Management</h1>
           <p className="text-muted-foreground">Buy and sell bandwidth, manage providers and clients</p>
         </div>
+        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-9">
+        <TabsList className="grid w-full grid-cols-10">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="items">Items</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="providers">Providers</TabsTrigger>
-          <TabsTrigger value="purchase-bills">Purchase Bills</TabsTrigger>
+          <TabsTrigger value="purchase-bills">Purchases</TabsTrigger>
           <TabsTrigger value="clients">Clients</TabsTrigger>
-          <TabsTrigger value="sales-invoices">Sales Invoices</TabsTrigger>
-          <TabsTrigger value="collections">Bill Collections</TabsTrigger>
-          <TabsTrigger value="payments">Provider Payments</TabsTrigger>
+          <TabsTrigger value="sales-invoices">Sales</TabsTrigger>
+          <TabsTrigger value="collections">Collections</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
 
         {/* Dashboard Tab */}
@@ -477,6 +728,7 @@ function BandwidthManagementContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.totalProviders}</div>
+                <p className="text-xs text-muted-foreground">Bandwidth suppliers</p>
               </CardContent>
             </Card>
             <Card>
@@ -486,6 +738,7 @@ function BandwidthManagementContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.totalClients}</div>
+                <p className="text-xs text-muted-foreground">Bandwidth buyers</p>
               </CardContent>
             </Card>
             <Card>
@@ -495,6 +748,7 @@ function BandwidthManagementContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">৳{stats.totalPurchases.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">From providers</p>
               </CardContent>
             </Card>
             <Card>
@@ -504,6 +758,7 @@ function BandwidthManagementContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">৳{stats.totalSales.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">To clients</p>
               </CardContent>
             </Card>
           </div>
@@ -536,6 +791,7 @@ function BandwidthManagementContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">৳{stats.totalCollected.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">From clients</p>
               </CardContent>
             </Card>
             <Card>
@@ -545,9 +801,40 @@ function BandwidthManagementContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">৳{stats.totalPaid.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">To providers</p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Profit/Loss Summary */}
+          <Card className={profitLossStats.profit >= 0 ? 'border-green-200 bg-green-50/50 dark:bg-green-950/10' : 'border-red-200 bg-red-50/50 dark:bg-red-950/10'}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Profit/Loss Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Total Purchase</p>
+                  <p className="text-xl font-bold text-red-600">৳{profitLossStats.totalPurchases.toLocaleString()}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Total Sales</p>
+                  <p className="text-xl font-bold text-green-600">৳{profitLossStats.totalSales.toLocaleString()}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">{profitLossStats.profit >= 0 ? 'Profit' : 'Loss'}</p>
+                  <p className={`text-xl font-bold flex items-center justify-center gap-1 ${profitLossStats.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {profitLossStats.profit >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                    ৳{Math.abs(profitLossStats.profit).toLocaleString()}
+                    <span className="text-sm font-normal">({profitLossStats.profitPercentage}%)</span>
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Items Tab */}
@@ -668,9 +955,23 @@ function BandwidthManagementContent() {
                 <CardTitle>Bandwidth Providers</CardTitle>
                 <CardDescription>Suppliers you purchase bandwidth from</CardDescription>
               </div>
-              <Button onClick={() => { setEditingProvider(null); setProviderForm({ name: '', company_name: '', email: '', phone: '', address: '', contact_person: '', account_number: '', bank_details: '', notes: '' }); setProviderDialog(true); }}>
-                <Plus className="mr-2 h-4 w-4" /> Add Provider
-              </Button>
+              <div className="flex gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search providers..." 
+                    value={search} 
+                    onChange={(e) => setSearch(e.target.value)} 
+                    className="pl-8 w-64"
+                  />
+                </div>
+                <Button variant="outline" onClick={() => exportCSV('providers')}>
+                  <Download className="mr-2 h-4 w-4" /> Export
+                </Button>
+                <Button onClick={() => { setEditingProvider(null); setProviderForm({ name: '', company_name: '', email: '', phone: '', address: '', contact_person: '', account_number: '', bank_details: '', notes: '' }); setProviderDialog(true); }}>
+                  <Plus className="mr-2 h-4 w-4" /> Add Provider
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -685,7 +986,7 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {providers.map((provider) => (
+                  {filteredProviders.map((provider) => (
                     <TableRow key={provider.id}>
                       <TableCell className="font-medium">{provider.name}</TableCell>
                       <TableCell>{provider.company_name || '-'}</TableCell>
@@ -697,6 +998,9 @@ function BandwidthManagementContent() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => setViewProviderLedger(provider)} title="View Ledger">
+                          <Eye className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => { setEditingProvider(provider); setProviderForm({ name: provider.name, company_name: provider.company_name || '', email: provider.email || '', phone: provider.phone || '', address: provider.address || '', contact_person: provider.contact_person || '', account_number: provider.account_number || '', bank_details: provider.bank_details || '', notes: provider.notes || '' }); setProviderDialog(true); }}>
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -706,7 +1010,7 @@ function BandwidthManagementContent() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {providers.length === 0 && (
+                  {filteredProviders.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No providers found</TableCell>
                     </TableRow>
@@ -725,9 +1029,24 @@ function BandwidthManagementContent() {
                 <CardTitle>Purchase Bills</CardTitle>
                 <CardDescription>Bills from bandwidth providers</CardDescription>
               </div>
-              <Button onClick={() => { resetPurchaseBillForm(); setPurchaseBillDialog(true); }}>
-                <Plus className="mr-2 h-4 w-4" /> Create Bill
-              </Button>
+              <div className="flex gap-2 items-center">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <Input type="date" value={dateFilter.from} onChange={(e) => setDateFilter({ ...dateFilter, from: e.target.value })} className="w-36" />
+                  <span className="text-muted-foreground">to</span>
+                  <Input type="date" value={dateFilter.to} onChange={(e) => setDateFilter({ ...dateFilter, to: e.target.value })} className="w-36" />
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8 w-48" />
+                </div>
+                <Button variant="outline" onClick={() => exportCSV('purchases')}>
+                  <Download className="mr-2 h-4 w-4" /> Export
+                </Button>
+                <Button onClick={() => { resetPurchaseBillForm(); setPurchaseBillDialog(true); }}>
+                  <Plus className="mr-2 h-4 w-4" /> Create Bill
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -744,7 +1063,7 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {purchaseBills.map((bill) => (
+                  {filteredPurchaseBills.map((bill) => (
                     <TableRow key={bill.id}>
                       <TableCell className="font-medium">{bill.invoice_number}</TableCell>
                       <TableCell>{bill.provider?.name || '-'}</TableCell>
@@ -758,13 +1077,19 @@ function BandwidthManagementContent() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => setViewPurchaseBill(bill)} title="View Details">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handlePrint('purchase', bill)} title="Print">
+                          <Printer className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, type: 'purchaseBill', id: bill.id, name: bill.invoice_number })}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {purchaseBills.length === 0 && (
+                  {filteredPurchaseBills.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No purchase bills found</TableCell>
                     </TableRow>
@@ -783,9 +1108,18 @@ function BandwidthManagementContent() {
                 <CardTitle>Bandwidth Clients</CardTitle>
                 <CardDescription>Customers you sell bandwidth to</CardDescription>
               </div>
-              <Button onClick={() => { setEditingClient(null); setClientForm({ name: '', company_name: '', email: '', phone: '', address: '', contact_person: '', account_number: '', bank_details: '', notes: '' }); setClientDialog(true); }}>
-                <Plus className="mr-2 h-4 w-4" /> Add Client
-              </Button>
+              <div className="flex gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search clients..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8 w-64" />
+                </div>
+                <Button variant="outline" onClick={() => exportCSV('clients')}>
+                  <Download className="mr-2 h-4 w-4" /> Export
+                </Button>
+                <Button onClick={() => { setEditingClient(null); setClientForm({ name: '', company_name: '', email: '', phone: '', address: '', contact_person: '', account_number: '', bank_details: '', notes: '' }); setClientDialog(true); }}>
+                  <Plus className="mr-2 h-4 w-4" /> Add Client
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -800,7 +1134,7 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {clients.map((client) => (
+                  {filteredClients.map((client) => (
                     <TableRow key={client.id}>
                       <TableCell className="font-medium">{client.name}</TableCell>
                       <TableCell>{client.company_name || '-'}</TableCell>
@@ -812,6 +1146,9 @@ function BandwidthManagementContent() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => setViewClientLedger(client)} title="View Ledger">
+                          <Eye className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => { setEditingClient(client); setClientForm({ name: client.name, company_name: client.company_name || '', email: client.email || '', phone: client.phone || '', address: client.address || '', contact_person: client.contact_person || '', account_number: client.account_number || '', bank_details: client.bank_details || '', notes: client.notes || '' }); setClientDialog(true); }}>
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -821,7 +1158,7 @@ function BandwidthManagementContent() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {clients.length === 0 && (
+                  {filteredClients.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No clients found</TableCell>
                     </TableRow>
@@ -838,11 +1175,26 @@ function BandwidthManagementContent() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Sales Invoices</CardTitle>
-                <CardDescription>Invoices sent to clients</CardDescription>
+                <CardDescription>Invoices to bandwidth clients</CardDescription>
               </div>
-              <Button onClick={() => { resetSalesInvoiceForm(); setSalesInvoiceDialog(true); }}>
-                <Plus className="mr-2 h-4 w-4" /> Create Invoice
-              </Button>
+              <div className="flex gap-2 items-center">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <Input type="date" value={dateFilter.from} onChange={(e) => setDateFilter({ ...dateFilter, from: e.target.value })} className="w-36" />
+                  <span className="text-muted-foreground">to</span>
+                  <Input type="date" value={dateFilter.to} onChange={(e) => setDateFilter({ ...dateFilter, to: e.target.value })} className="w-36" />
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8 w-48" />
+                </div>
+                <Button variant="outline" onClick={() => exportCSV('sales')}>
+                  <Download className="mr-2 h-4 w-4" /> Export
+                </Button>
+                <Button onClick={() => { resetSalesInvoiceForm(); setSalesInvoiceDialog(true); }}>
+                  <Plus className="mr-2 h-4 w-4" /> Create Invoice
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -851,6 +1203,7 @@ function BandwidthManagementContent() {
                     <TableHead>Invoice #</TableHead>
                     <TableHead>Client</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead>Due Date</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Paid</TableHead>
                     <TableHead>Due</TableHead>
@@ -859,11 +1212,12 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {salesInvoices.map((invoice) => (
+                  {filteredSalesInvoices.map((invoice) => (
                     <TableRow key={invoice.id}>
                       <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                       <TableCell>{invoice.client?.name || '-'}</TableCell>
                       <TableCell>{format(new Date(invoice.billing_date), 'dd/MM/yyyy')}</TableCell>
+                      <TableCell>{invoice.due_date ? format(new Date(invoice.due_date), 'dd/MM/yyyy') : '-'}</TableCell>
                       <TableCell>৳{invoice.total_amount.toLocaleString()}</TableCell>
                       <TableCell>৳{invoice.paid_amount.toLocaleString()}</TableCell>
                       <TableCell>৳{invoice.due_amount.toLocaleString()}</TableCell>
@@ -873,15 +1227,21 @@ function BandwidthManagementContent() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => setViewSalesInvoice(invoice)} title="View Details">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handlePrint('sales', invoice)} title="Print">
+                          <Printer className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, type: 'salesInvoice', id: invoice.id, name: invoice.invoice_number })}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {salesInvoices.length === 0 && (
+                  {filteredSalesInvoices.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No sales invoices found</TableCell>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">No sales invoices found</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -890,7 +1250,7 @@ function BandwidthManagementContent() {
           </Card>
         </TabsContent>
 
-        {/* Collections Tab */}
+        {/* Bill Collections Tab */}
         <TabsContent value="collections" className="space-y-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -898,7 +1258,7 @@ function BandwidthManagementContent() {
                 <CardTitle>Bill Collections</CardTitle>
                 <CardDescription>Payments received from clients</CardDescription>
               </div>
-              <Button onClick={() => { setCollectionForm({ client_id: '', invoice_id: '', collection_date: format(new Date(), 'yyyy-MM-dd'), amount: 0, payment_method: 'cash', received_by: '', remarks: '' }); setCollectionDialog(true); }}>
+              <Button onClick={() => setCollectionDialog(true)}>
                 <Plus className="mr-2 h-4 w-4" /> Record Collection
               </Button>
             </CardHeader>
@@ -923,7 +1283,7 @@ function BandwidthManagementContent() {
                       <TableCell>{collection.invoice?.invoice_number || '-'}</TableCell>
                       <TableCell>{format(new Date(collection.collection_date), 'dd/MM/yyyy')}</TableCell>
                       <TableCell>৳{collection.amount.toLocaleString()}</TableCell>
-                      <TableCell>{collection.payment_method}</TableCell>
+                      <TableCell className="capitalize">{collection.payment_method?.replace('_', ' ') || '-'}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, type: 'collection', id: collection.id, name: collection.receipt_number })}>
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -950,7 +1310,7 @@ function BandwidthManagementContent() {
                 <CardTitle>Provider Payments</CardTitle>
                 <CardDescription>Payments made to providers</CardDescription>
               </div>
-              <Button onClick={() => { setProviderPaymentForm({ provider_id: '', bill_id: '', payment_date: format(new Date(), 'yyyy-MM-dd'), amount: 0, payment_method: 'bank_transfer', paid_by: '', remarks: '' }); setProviderPaymentDialog(true); }}>
+              <Button onClick={() => setProviderPaymentDialog(true)}>
                 <Plus className="mr-2 h-4 w-4" /> Record Payment
               </Button>
             </CardHeader>
@@ -975,7 +1335,7 @@ function BandwidthManagementContent() {
                       <TableCell>{payment.bill?.invoice_number || '-'}</TableCell>
                       <TableCell>{format(new Date(payment.payment_date), 'dd/MM/yyyy')}</TableCell>
                       <TableCell>৳{payment.amount.toLocaleString()}</TableCell>
-                      <TableCell>{payment.payment_method}</TableCell>
+                      <TableCell className="capitalize">{payment.payment_method?.replace('_', ' ') || '-'}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, type: 'providerPayment', id: payment.id, name: payment.payment_number })}>
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -993,6 +1353,172 @@ function BandwidthManagementContent() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Reports Tab */}
+        <TabsContent value="reports" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Monthly Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input 
+                    type="month" 
+                    value={format(new Date(dateFilter.from), 'yyyy-MM')}
+                    onChange={(e) => {
+                      const date = new Date(e.target.value + '-01');
+                      setDateFilter({
+                        from: format(startOfMonth(date), 'yyyy-MM-dd'),
+                        to: format(endOfMonth(date), 'yyyy-MM-dd')
+                      });
+                    }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Total Purchases</span>
+                    <span className="font-medium">৳{filteredPurchaseBills.reduce((sum, b) => sum + b.total_amount, 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Total Sales</span>
+                    <span className="font-medium">৳{filteredSalesInvoices.reduce((sum, i) => sum + i.total_amount, 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Profit/Loss</span>
+                    <span className={`font-medium ${(filteredSalesInvoices.reduce((sum, i) => sum + i.total_amount, 0) - filteredPurchaseBills.reduce((sum, b) => sum + b.total_amount, 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      ৳{(filteredSalesInvoices.reduce((sum, i) => sum + i.total_amount, 0) - filteredPurchaseBills.reduce((sum, b) => sum + b.total_amount, 0)).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Purchase Bills Count</span>
+                    <span className="font-medium">{filteredPurchaseBills.length}</span>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <span className="text-muted-foreground">Sales Invoices Count</span>
+                    <span className="font-medium">{filteredSalesInvoices.length}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Outstanding Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Total Payable to Providers</span>
+                    <span className="font-medium text-red-600">৳{stats.totalPayable.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Total Receivable from Clients</span>
+                    <span className="font-medium text-green-600">৳{stats.totalReceivable.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Net Position</span>
+                    <span className={`font-medium ${stats.totalReceivable - stats.totalPayable >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      ৳{(stats.totalReceivable - stats.totalPayable).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-muted-foreground">Providers with Due</span>
+                    <span className="font-medium">{providers.filter(p => p.total_due > 0).length}</span>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <span className="text-muted-foreground">Clients with Receivable</span>
+                    <span className="font-medium">{clients.filter(c => c.total_receivable > 0).length}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Top Providers by Purchase</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Provider</TableHead>
+                      <TableHead>Total Bills</TableHead>
+                      <TableHead>Total Amount</TableHead>
+                      <TableHead>Total Paid</TableHead>
+                      <TableHead>Total Due</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {providers.map(provider => {
+                      const providerBills = purchaseBills.filter(b => b.provider_id === provider.id);
+                      const totalAmount = providerBills.reduce((sum, b) => sum + b.total_amount, 0);
+                      const totalPaid = providerBills.reduce((sum, b) => sum + b.paid_amount, 0);
+                      return (
+                        <TableRow key={provider.id}>
+                          <TableCell className="font-medium">{provider.name}</TableCell>
+                          <TableCell>{providerBills.length}</TableCell>
+                          <TableCell>৳{totalAmount.toLocaleString()}</TableCell>
+                          <TableCell>৳{totalPaid.toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Badge variant={provider.total_due > 0 ? 'destructive' : 'secondary'}>
+                              ৳{(provider.total_due || 0).toLocaleString()}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Top Clients by Sales</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Total Invoices</TableHead>
+                      <TableHead>Total Amount</TableHead>
+                      <TableHead>Total Collected</TableHead>
+                      <TableHead>Total Receivable</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clients.map(client => {
+                      const clientInvoices = salesInvoices.filter(i => i.client_id === client.id);
+                      const totalAmount = clientInvoices.reduce((sum, i) => sum + i.total_amount, 0);
+                      const totalCollected = clientInvoices.reduce((sum, i) => sum + i.paid_amount, 0);
+                      return (
+                        <TableRow key={client.id}>
+                          <TableCell className="font-medium">{client.name}</TableCell>
+                          <TableCell>{clientInvoices.length}</TableCell>
+                          <TableCell>৳{totalAmount.toLocaleString()}</TableCell>
+                          <TableCell>৳{totalCollected.toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Badge variant={client.total_receivable > 0 ? 'default' : 'secondary'}>
+                              ৳{(client.total_receivable || 0).toLocaleString()}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* Category Dialog */}
@@ -1004,7 +1530,7 @@ function BandwidthManagementContent() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Name</Label>
+              <Label>Name *</Label>
               <Input value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="Category name" />
             </div>
             <div className="grid gap-2">
@@ -1014,7 +1540,7 @@ function BandwidthManagementContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCategoryDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveCategory}>Save</Button>
+            <Button onClick={handleSaveCategory} disabled={!categoryForm.name}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1028,7 +1554,7 @@ function BandwidthManagementContent() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Name</Label>
+              <Label>Name *</Label>
               <Input value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} placeholder="Item name" />
             </div>
             <div className="grid gap-2">
@@ -1059,7 +1585,7 @@ function BandwidthManagementContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setItemDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveItem}>Save</Button>
+            <Button onClick={handleSaveItem} disabled={!itemForm.name}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1117,7 +1643,7 @@ function BandwidthManagementContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProviderDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveProvider}>Save</Button>
+            <Button onClick={handleSaveProvider} disabled={!providerForm.name}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1175,7 +1701,7 @@ function BandwidthManagementContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setClientDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveClient}>Save</Button>
+            <Button onClick={handleSaveClient} disabled={!clientForm.name}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1190,7 +1716,7 @@ function BandwidthManagementContent() {
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label>Provider</Label>
+                <Label>Provider *</Label>
                 <Select value={purchaseBillForm.provider_id} onValueChange={(v) => setPurchaseBillForm({ ...purchaseBillForm, provider_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
                   <SelectContent>
@@ -1205,13 +1731,14 @@ function BandwidthManagementContent() {
                 <Input type="date" value={purchaseBillForm.billing_date} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, billing_date: e.target.value })} />
               </div>
               <div className="grid gap-2">
-                <Label>Payment Status</Label>
-                <Select value={purchaseBillForm.payment_status} onValueChange={(v) => setPurchaseBillForm({ ...purchaseBillForm, payment_status: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label>Payment Method</Label>
+                <Select value={purchaseBillForm.payment_method} onValueChange={(v) => setPurchaseBillForm({ ...purchaseBillForm, payment_method: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="due">Due</SelectItem>
-                    <SelectItem value="partial">Partial</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="bkash">bKash</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1271,7 +1798,7 @@ function BandwidthManagementContent() {
                       <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} />
                     </div>
                     <div className="col-span-2">
-                      <Label className="text-xs">Total</Label>
+                      <Label className="text-xs">Total (incl. VAT)</Label>
                       <Input value={`৳${item.total.toLocaleString()}`} readOnly />
                     </div>
                     <div className="col-span-1">
@@ -1284,7 +1811,15 @@ function BandwidthManagementContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-5 gap-4">
+              <div className="grid gap-2">
+                <Label>Subtotal</Label>
+                <Input value={`৳${purchaseBillSubtotal.toLocaleString()}`} readOnly />
+              </div>
+              <div className="grid gap-2">
+                <Label>VAT</Label>
+                <Input value={`৳${purchaseBillVat.toLocaleString()}`} readOnly />
+              </div>
               <div className="grid gap-2">
                 <Label>Discount</Label>
                 <Input type="number" value={purchaseBillForm.discount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, discount: Number(e.target.value) })} />
@@ -1294,20 +1829,8 @@ function BandwidthManagementContent() {
                 <Input type="number" value={purchaseBillForm.paid_amount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, paid_amount: Number(e.target.value) })} />
               </div>
               <div className="grid gap-2">
-                <Label>Payment Method</Label>
-                <Select value={purchaseBillForm.payment_method} onValueChange={(v) => setPurchaseBillForm({ ...purchaseBillForm, payment_method: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="bkash">bKash</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
                 <Label>Grand Total</Label>
-                <Input value={`৳${(purchaseBillItems.reduce((sum, i) => sum + i.total, 0) - purchaseBillForm.discount).toLocaleString()}`} readOnly className="font-bold" />
+                <Input value={`৳${purchaseBillTotal.toLocaleString()}`} readOnly className="font-bold" />
               </div>
             </div>
 
@@ -1318,7 +1841,7 @@ function BandwidthManagementContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPurchaseBillDialog(false)}>Cancel</Button>
-            <Button onClick={handleSavePurchaseBill}>Save Bill</Button>
+            <Button onClick={handleSavePurchaseBill} disabled={!purchaseBillForm.provider_id || purchaseBillItems.every(i => !i.rate)}>Save Bill</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1333,7 +1856,7 @@ function BandwidthManagementContent() {
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label>Client</Label>
+                <Label>Client *</Label>
                 <Select value={salesInvoiceForm.client_id} onValueChange={(v) => setSalesInvoiceForm({ ...salesInvoiceForm, client_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                   <SelectContent>
@@ -1407,7 +1930,7 @@ function BandwidthManagementContent() {
                       <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} />
                     </div>
                     <div className="col-span-2">
-                      <Label className="text-xs">Total</Label>
+                      <Label className="text-xs">Total (incl. VAT)</Label>
                       <Input value={`৳${item.total.toLocaleString()}`} readOnly />
                     </div>
                     <div className="col-span-1">
@@ -1420,14 +1943,22 @@ function BandwidthManagementContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
+              <div className="grid gap-2">
+                <Label>Subtotal</Label>
+                <Input value={`৳${salesInvoiceSubtotal.toLocaleString()}`} readOnly />
+              </div>
+              <div className="grid gap-2">
+                <Label>VAT</Label>
+                <Input value={`৳${salesInvoiceVat.toLocaleString()}`} readOnly />
+              </div>
               <div className="grid gap-2">
                 <Label>Discount</Label>
                 <Input type="number" value={salesInvoiceForm.discount} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, discount: Number(e.target.value) })} />
               </div>
               <div className="grid gap-2">
                 <Label>Grand Total</Label>
-                <Input value={`৳${(salesInvoiceItems.reduce((sum, i) => sum + i.total, 0) - salesInvoiceForm.discount).toLocaleString()}`} readOnly className="font-bold" />
+                <Input value={`৳${salesInvoiceTotal.toLocaleString()}`} readOnly className="font-bold" />
               </div>
             </div>
 
@@ -1438,7 +1969,7 @@ function BandwidthManagementContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSalesInvoiceDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveSalesInvoice}>Save Invoice</Button>
+            <Button onClick={handleSaveSalesInvoice} disabled={!salesInvoiceForm.client_id || salesInvoiceItems.every(i => !i.rate)}>Save Invoice</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1452,8 +1983,8 @@ function BandwidthManagementContent() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Client</Label>
-              <Select value={collectionForm.client_id} onValueChange={(v) => setCollectionForm({ ...collectionForm, client_id: v })}>
+              <Label>Client *</Label>
+              <Select value={collectionForm.client_id} onValueChange={(v) => setCollectionForm({ ...collectionForm, client_id: v, invoice_id: '' })}>
                 <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                 <SelectContent>
                   {clients.map((c) => (
@@ -1479,7 +2010,7 @@ function BandwidthManagementContent() {
                 <Input type="date" value={collectionForm.collection_date} onChange={(e) => setCollectionForm({ ...collectionForm, collection_date: e.target.value })} />
               </div>
               <div className="grid gap-2">
-                <Label>Amount</Label>
+                <Label>Amount *</Label>
                 <Input type="number" value={collectionForm.amount} onChange={(e) => setCollectionForm({ ...collectionForm, amount: Number(e.target.value) })} />
               </div>
             </div>
@@ -1508,7 +2039,7 @@ function BandwidthManagementContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCollectionDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveCollection}>Save</Button>
+            <Button onClick={handleSaveCollection} disabled={!collectionForm.client_id || !collectionForm.amount}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1522,8 +2053,8 @@ function BandwidthManagementContent() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Provider</Label>
-              <Select value={providerPaymentForm.provider_id} onValueChange={(v) => setProviderPaymentForm({ ...providerPaymentForm, provider_id: v })}>
+              <Label>Provider *</Label>
+              <Select value={providerPaymentForm.provider_id} onValueChange={(v) => setProviderPaymentForm({ ...providerPaymentForm, provider_id: v, bill_id: '' })}>
                 <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
                 <SelectContent>
                   {providers.map((p) => (
@@ -1549,7 +2080,7 @@ function BandwidthManagementContent() {
                 <Input type="date" value={providerPaymentForm.payment_date} onChange={(e) => setProviderPaymentForm({ ...providerPaymentForm, payment_date: e.target.value })} />
               </div>
               <div className="grid gap-2">
-                <Label>Amount</Label>
+                <Label>Amount *</Label>
                 <Input type="number" value={providerPaymentForm.amount} onChange={(e) => setProviderPaymentForm({ ...providerPaymentForm, amount: Number(e.target.value) })} />
               </div>
             </div>
@@ -1578,7 +2109,7 @@ function BandwidthManagementContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProviderPaymentDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveProviderPayment}>Save</Button>
+            <Button onClick={handleSaveProviderPayment} disabled={!providerPaymentForm.provider_id || !providerPaymentForm.amount}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1598,6 +2129,272 @@ function BandwidthManagementContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Purchase Bill Details Sheet */}
+      <Sheet open={!!viewPurchaseBill} onOpenChange={() => setViewPurchaseBill(null)}>
+        <SheetContent className="w-[600px] sm:max-w-[600px]">
+          <SheetHeader>
+            <SheetTitle>Purchase Bill Details</SheetTitle>
+            <SheetDescription>Invoice: {viewPurchaseBill?.invoice_number}</SheetDescription>
+          </SheetHeader>
+          {viewPurchaseBill && (
+            <div className="mt-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Provider</p>
+                  <p className="font-medium">{viewPurchaseBill.provider?.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Billing Date</p>
+                  <p className="font-medium">{format(new Date(viewPurchaseBill.billing_date), 'dd/MM/yyyy')}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant={viewPurchaseBill.payment_status === 'paid' ? 'default' : 'destructive'}>{viewPurchaseBill.payment_status}</Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Payment Method</p>
+                  <p className="font-medium capitalize">{viewPurchaseBill.payment_method?.replace('_', ' ') || 'N/A'}</p>
+                </div>
+              </div>
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>৳{(viewPurchaseBill.subtotal || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">VAT</span>
+                  <span>৳{(viewPurchaseBill.vat_amount || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Discount</span>
+                  <span>-৳{(viewPurchaseBill.discount || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between font-bold border-t pt-2">
+                  <span>Total</span>
+                  <span>৳{viewPurchaseBill.total_amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Paid</span>
+                  <span className="text-green-600">৳{viewPurchaseBill.paid_amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Due</span>
+                  <span className="text-red-600">৳{viewPurchaseBill.due_amount.toLocaleString()}</span>
+                </div>
+              </div>
+              {viewPurchaseBill.remarks && (
+                <div className="border-t pt-4">
+                  <p className="text-sm text-muted-foreground">Remarks</p>
+                  <p>{viewPurchaseBill.remarks}</p>
+                </div>
+              )}
+              <div className="flex gap-2 pt-4">
+                <Button onClick={() => handlePrint('purchase', viewPurchaseBill)} className="flex-1">
+                  <Printer className="mr-2 h-4 w-4" /> Print
+                </Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Sales Invoice Details Sheet */}
+      <Sheet open={!!viewSalesInvoice} onOpenChange={() => setViewSalesInvoice(null)}>
+        <SheetContent className="w-[600px] sm:max-w-[600px]">
+          <SheetHeader>
+            <SheetTitle>Sales Invoice Details</SheetTitle>
+            <SheetDescription>Invoice: {viewSalesInvoice?.invoice_number}</SheetDescription>
+          </SheetHeader>
+          {viewSalesInvoice && (
+            <div className="mt-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Client</p>
+                  <p className="font-medium">{viewSalesInvoice.client?.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Billing Date</p>
+                  <p className="font-medium">{format(new Date(viewSalesInvoice.billing_date), 'dd/MM/yyyy')}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Due Date</p>
+                  <p className="font-medium">{viewSalesInvoice.due_date ? format(new Date(viewSalesInvoice.due_date), 'dd/MM/yyyy') : 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant={viewSalesInvoice.payment_status === 'paid' ? 'default' : 'destructive'}>{viewSalesInvoice.payment_status}</Badge>
+                </div>
+              </div>
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>৳{(viewSalesInvoice.subtotal || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">VAT</span>
+                  <span>৳{(viewSalesInvoice.vat_amount || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Discount</span>
+                  <span>-৳{(viewSalesInvoice.discount || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between font-bold border-t pt-2">
+                  <span>Total</span>
+                  <span>৳{viewSalesInvoice.total_amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Paid</span>
+                  <span className="text-green-600">৳{viewSalesInvoice.paid_amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Due</span>
+                  <span className="text-red-600">৳{viewSalesInvoice.due_amount.toLocaleString()}</span>
+                </div>
+              </div>
+              {viewSalesInvoice.remarks && (
+                <div className="border-t pt-4">
+                  <p className="text-sm text-muted-foreground">Remarks</p>
+                  <p>{viewSalesInvoice.remarks}</p>
+                </div>
+              )}
+              <div className="flex gap-2 pt-4">
+                <Button onClick={() => handlePrint('sales', viewSalesInvoice)} className="flex-1">
+                  <Printer className="mr-2 h-4 w-4" /> Print
+                </Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Provider Ledger Sheet */}
+      <Sheet open={!!viewProviderLedger} onOpenChange={() => setViewProviderLedger(null)}>
+        <SheetContent className="w-[700px] sm:max-w-[700px]">
+          <SheetHeader>
+            <SheetTitle>Provider Ledger</SheetTitle>
+            <SheetDescription>{viewProviderLedger?.name} - {viewProviderLedger?.company_name}</SheetDescription>
+          </SheetHeader>
+          {viewProviderLedger && (
+            <div className="mt-6 space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Total Bills</p>
+                    <p className="text-xl font-bold">৳{getProviderLedger(viewProviderLedger.id).bills.reduce((sum, b) => sum + b.total_amount, 0).toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Total Paid</p>
+                    <p className="text-xl font-bold text-green-600">৳{getProviderLedger(viewProviderLedger.id).payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Balance Due</p>
+                    <p className="text-xl font-bold text-red-600">৳{(viewProviderLedger.total_due || 0).toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">Recent Transactions</h4>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[
+                      ...getProviderLedger(viewProviderLedger.id).bills.map(b => ({ date: b.billing_date, type: 'Bill', ref: b.invoice_number, amount: b.total_amount, isDebit: true })),
+                      ...getProviderLedger(viewProviderLedger.id).payments.map(p => ({ date: p.payment_date, type: 'Payment', ref: p.payment_number, amount: p.amount, isDebit: false })),
+                    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10).map((tx, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{format(new Date(tx.date), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell>{tx.type}</TableCell>
+                        <TableCell>{tx.ref}</TableCell>
+                        <TableCell className={`text-right ${tx.isDebit ? 'text-red-600' : 'text-green-600'}`}>
+                          {tx.isDebit ? '+' : '-'}৳{tx.amount.toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Client Ledger Sheet */}
+      <Sheet open={!!viewClientLedger} onOpenChange={() => setViewClientLedger(null)}>
+        <SheetContent className="w-[700px] sm:max-w-[700px]">
+          <SheetHeader>
+            <SheetTitle>Client Ledger</SheetTitle>
+            <SheetDescription>{viewClientLedger?.name} - {viewClientLedger?.company_name}</SheetDescription>
+          </SheetHeader>
+          {viewClientLedger && (
+            <div className="mt-6 space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Total Invoiced</p>
+                    <p className="text-xl font-bold">৳{getClientLedger(viewClientLedger.id).invoices.reduce((sum, i) => sum + i.total_amount, 0).toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Total Collected</p>
+                    <p className="text-xl font-bold text-green-600">৳{getClientLedger(viewClientLedger.id).collections.reduce((sum, c) => sum + c.amount, 0).toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Balance Receivable</p>
+                    <p className="text-xl font-bold text-orange-600">৳{(viewClientLedger.total_receivable || 0).toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">Recent Transactions</h4>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[
+                      ...getClientLedger(viewClientLedger.id).invoices.map(i => ({ date: i.billing_date, type: 'Invoice', ref: i.invoice_number, amount: i.total_amount, isDebit: true })),
+                      ...getClientLedger(viewClientLedger.id).collections.map(c => ({ date: c.collection_date, type: 'Collection', ref: c.receipt_number, amount: c.amount, isDebit: false })),
+                    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10).map((tx, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{format(new Date(tx.date), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell>{tx.type}</TableCell>
+                        <TableCell>{tx.ref}</TableCell>
+                        <TableCell className={`text-right ${tx.isDebit ? 'text-orange-600' : 'text-green-600'}`}>
+                          {tx.isDebit ? '+' : '-'}৳{tx.amount.toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
