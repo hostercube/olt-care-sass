@@ -656,16 +656,16 @@ export function useResellerSystem() {
       const token = crypto.randomUUID() + '-' + Date.now().toString(36);
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-      // Store token in DB (create table if RLS allows upsert)
+      // Store token in DB using type assertion for new table
       const { error } = await supabase
-        .from('reseller_login_tokens')
+        .from('reseller_login_tokens' as any)
         .insert({
           token,
           reseller_id: resellerId,
           tenant_id: effectiveTenantId,
           expires_at: expiresAt.toISOString(),
           used: false,
-        } as any);
+        });
 
       if (error) {
         console.error('Error storing impersonation token:', error);

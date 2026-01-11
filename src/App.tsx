@@ -80,6 +80,10 @@ import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
 import CustomerDashboard from "./pages/CustomerPortal/CustomerDashboard";
 import CustomerPayBill from "./pages/CustomerPortal/CustomerPayBill";
 
+// Reseller Portal Pages
+import ResellerLogin from "./pages/ResellerPortal/ResellerLogin";
+import ResellerDashboard from "./pages/ResellerPortal/ResellerDashboard";
+
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
 import NotificationPreferences from "./pages/NotificationPreferences";
@@ -489,6 +493,10 @@ const App = () => (
               <Route path="/portal/login" element={<CustomerLogin />} />
               <Route path="/portal/dashboard" element={<CustomerDashboard />} />
               <Route path="/portal/pay" element={<CustomerPayBill />} />
+
+              {/* Reseller Portal Routes */}
+              <Route path="/reseller/login" element={<ResellerLogin />} />
+              <Route path="/reseller/dashboard" element={<ResellerDashboard />} />
 
               {/* Staff Portal Routes */}
               <Route path="/staff/login" element={

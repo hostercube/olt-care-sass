@@ -24,8 +24,9 @@ import { useLocationHierarchy } from '@/hooks/useLocationHierarchy';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Users, Plus, Edit, Trash2, Loader2, Wallet, ArrowRightLeft, 
-  Building2, Shield, ChevronRight, Eye, UserPlus
+  Building2, Shield, ChevronRight, Eye, UserPlus, MinusCircle, KeyRound, LogIn
 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import type { Reseller, ResellerBranch } from '@/types/reseller';
 import { RESELLER_ROLE_LABELS } from '@/types/reseller';
 import {
@@ -38,8 +39,8 @@ import ResellerDetailsSheet from '@/components/reseller/ResellerDetailsSheet';
 export default function ResellersManagement() {
   const { 
     resellers, branches, loading, createReseller, updateReseller, 
-    deleteReseller, rechargeBalance, createBranch, updateBranch,
-    getSubResellers
+    deleteReseller, rechargeBalance, deductBalance, createBranch, updateBranch,
+    getSubResellers, resetPassword, generateImpersonationToken
   } = useResellerSystem();
   const { areas, refetch: refetchAreas } = useAreas();
   const { employees } = useEmployees();
@@ -48,6 +49,8 @@ export default function ResellersManagement() {
   const [activeTab, setActiveTab] = useState('resellers');
   const [showDialog, setShowDialog] = useState(false);
   const [showRechargeDialog, setShowRechargeDialog] = useState(false);
+  const [showDeductDialog, setShowDeductDialog] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [showTransactionsDialog, setShowTransactionsDialog] = useState(false);
   const [showDetailsSheet, setShowDetailsSheet] = useState(false);
   const [showBranchDialog, setShowBranchDialog] = useState(false);
@@ -58,6 +61,10 @@ export default function ResellersManagement() {
   const [saving, setSaving] = useState(false);
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [rechargeNote, setRechargeNote] = useState('');
+  const [deductAmount, setDeductAmount] = useState('');
+  const [deductReason, setDeductReason] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [filterLevel, setFilterLevel] = useState<string>('all');
 
   const [formData, setFormData] = useState({
@@ -342,6 +349,59 @@ export default function ResellersManagement() {
     }
   };
 
+  // Handle balance deduction
+  const handleDeduct = async () => {
+    if (selectedReseller && deductAmount && deductReason.trim()) {
+      setSaving(true);
+      try {
+        await deductBalance(selectedReseller.id, parseFloat(deductAmount), deductReason.trim());
+        setShowDeductDialog(false);
+        setSelectedReseller(null);
+        setDeductAmount('');
+        setDeductReason('');
+      } catch (err) {
+        console.error('Error deducting:', err);
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
+  // Handle password reset
+  const handlePasswordReset = async () => {
+    if (selectedReseller && newPassword && newPassword === confirmPassword) {
+      setSaving(true);
+      try {
+        await resetPassword(selectedReseller.id, newPassword);
+        setShowPasswordDialog(false);
+        setSelectedReseller(null);
+        setNewPassword('');
+        setConfirmPassword('');
+      } catch (err) {
+        console.error('Error resetting password:', err);
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
+  // Handle auto-login (admin impersonation)
+  const handleAutoLogin = async (reseller: Reseller) => {
+    setSaving(true);
+    try {
+      const token = await generateImpersonationToken(reseller.id);
+      if (token) {
+        // Open reseller portal with impersonation token
+        const url = `/reseller/dashboard?impersonate=${token}`;
+        window.open(url, '_blank');
+      }
+    } catch (err) {
+      console.error('Error generating login:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleBranchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -503,7 +563,16 @@ export default function ResellersManagement() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex items-center justify-end gap-1 flex-wrap">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                title="Auto Login"
+                                onClick={() => handleAutoLogin(reseller)}
+                                className="text-green-600 hover:text-green-700"
+                              >
+                                <LogIn className="h-4 w-4" />
+                              </Button>
                               <Button 
                                 variant="ghost" 
                                 size="sm"
@@ -525,8 +594,27 @@ export default function ResellersManagement() {
                                 size="sm"
                                 title="Recharge Balance"
                                 onClick={() => { setSelectedReseller(reseller); setShowRechargeDialog(true); }}
+                                className="text-green-600 hover:text-green-700"
                               >
                                 <Wallet className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                title="Deduct Balance"
+                                onClick={() => { setSelectedReseller(reseller); setShowDeductDialog(true); }}
+                                className="text-orange-600 hover:text-orange-700"
+                              >
+                                <MinusCircle className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                title="Reset Password"
+                                onClick={() => { setSelectedReseller(reseller); setShowPasswordDialog(true); }}
+                                className="text-blue-600 hover:text-blue-700"
+                              >
+                                <KeyRound className="h-4 w-4" />
                               </Button>
                               <Button variant="ghost" size="sm" onClick={() => handleEdit(reseller)}>
                                 <Edit className="h-4 w-4" />
@@ -928,7 +1016,131 @@ export default function ResellersManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Branch Dialog */}
+      {/* Deduct Balance Dialog */}
+      <Dialog open={showDeductDialog} onOpenChange={(open) => {
+        setShowDeductDialog(open);
+        if (!open) {
+          setDeductAmount('');
+          setDeductReason('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MinusCircle className="h-5 w-5 text-orange-600" />
+              Deduct Balance - {selectedReseller?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedReseller && (
+              <p className="text-sm text-muted-foreground">
+                Current Balance: <span className="font-medium text-foreground">৳{selectedReseller.balance.toLocaleString()}</span>
+              </p>
+            )}
+            <div className="space-y-2">
+              <Label>Deduct Amount (৳) *</Label>
+              <Input
+                type="number"
+                value={deductAmount}
+                onChange={(e) => setDeductAmount(e.target.value)}
+                placeholder="Enter amount"
+                min="1"
+                max={selectedReseller?.balance || undefined}
+              />
+              {selectedReseller && parseFloat(deductAmount) > selectedReseller.balance && (
+                <p className="text-xs text-destructive">
+                  Amount exceeds available balance
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                value={deductReason}
+                onChange={(e) => setDeductReason(e.target.value)}
+                placeholder="Enter reason for deduction (required)"
+                rows={3}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDeductDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleDeduct} 
+                disabled={saving || !deductAmount || !deductReason.trim() || (selectedReseller && parseFloat(deductAmount) > selectedReseller.balance)}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Deduct
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={showPasswordDialog} onOpenChange={(open) => {
+        setShowPasswordDialog(open);
+        if (!open) {
+          setNewPassword('');
+          setConfirmPassword('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-blue-600" />
+              Reset Password - {selectedReseller?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>New Password *</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password"
+                minLength={4}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Confirm Password *</Label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                minLength={4}
+              />
+              {confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-xs text-destructive">
+                  Passwords do not match
+                </p>
+              )}
+            </div>
+            {newPassword.length > 0 && newPassword.length < 4 && (
+              <p className="text-xs text-destructive">
+                Password must be at least 4 characters
+              </p>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowPasswordDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handlePasswordReset} 
+                disabled={saving || !newPassword || newPassword.length < 4 || newPassword !== confirmPassword}
+              >
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Reset Password
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showBranchDialog} onOpenChange={setShowBranchDialog}>
         <DialogContent>
           <DialogHeader>
