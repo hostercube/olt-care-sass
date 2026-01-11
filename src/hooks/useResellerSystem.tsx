@@ -16,7 +16,7 @@ export function useResellerSystem() {
     if (contextLoading) {
       return;
     }
-    
+
     // For non-super-admins, we need tenantId
     if (!isSuperAdmin && !tenantId) {
       console.log('No tenant context available for resellers fetch');
@@ -24,16 +24,14 @@ export function useResellerSystem() {
       setLoading(false);
       return;
     }
-    
+
     try {
       setLoading(true);
+
       let query = supabase
         .from('resellers')
-        .select(`
-          *,
-          area:areas(id, name),
-          parent:resellers!resellers_parent_id_fkey(id, name)
-        `)
+        // NOTE: keep this select simple to avoid breaking if FK/relationship names differ
+        .select('*')
         .order('level', { ascending: true })
         .order('created_at', { ascending: false });
 
@@ -45,10 +43,37 @@ export function useResellerSystem() {
       const { data, error } = await query;
       if (error) {
         console.error('Error fetching resellers:', error);
+        toast.error('Failed to load resellers');
         throw error;
       }
-      console.log('Fetched resellers:', data?.length || 0, 'items for tenant:', tenantId);
-      setResellers((data as any[]) || []);
+
+      const rows = ((data as any[]) || []) as any[];
+
+      // Enrich rows with parent + area in a safe way (no FK join required)
+      const idToName = new Map(rows.map((r) => [r.id, r.name]));
+
+      const areaIds = Array.from(
+        new Set(rows.map((r) => r.area_id).filter(Boolean))
+      ) as string[];
+
+      let areaById = new Map<string, { id: string; name: string }>();
+      if (areaIds.length > 0) {
+        const { data: areaRows } = await supabase
+          .from('areas')
+          .select('id, name')
+          .in('id', areaIds);
+
+        areaById = new Map(((areaRows as any[]) || []).map((a) => [a.id, a]));
+      }
+
+      const enriched = rows.map((r) => ({
+        ...r,
+        parent: r.parent_id ? { id: r.parent_id, name: idToName.get(r.parent_id) || '' } : null,
+        area: r.area_id ? areaById.get(r.area_id) || null : null,
+      }));
+
+      console.log('Fetched resellers:', enriched.length, 'items for tenant:', tenantId);
+      setResellers(enriched as any);
     } catch (err) {
       console.error('Error fetching resellers:', err);
       setResellers([]);

@@ -21,6 +21,7 @@ import { useResellerSystem } from '@/hooks/useResellerSystem';
 import { useAreas } from '@/hooks/useAreas';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useLocationHierarchy } from '@/hooks/useLocationHierarchy';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Users, Plus, Edit, Trash2, Loader2, Wallet, ArrowRightLeft, 
   Building2, Shield, ChevronRight, Eye, UserPlus
@@ -40,7 +41,7 @@ export default function ResellersManagement() {
     deleteReseller, rechargeBalance, createBranch, updateBranch,
     getSubResellers
   } = useResellerSystem();
-  const { areas } = useAreas();
+  const { areas, refetch: refetchAreas } = useAreas();
   const { employees } = useEmployees();
   const { villages, unions, upazilas, districts } = useLocationHierarchy();
   
@@ -106,22 +107,46 @@ export default function ResellersManagement() {
     return resellers.filter(r => r.is_active !== false && r.level < 3 && (!editingReseller || r.level < level));
   }, [resellers, editingReseller]);
 
-  // Build area options for reseller (must reference legacy Areas table due to FK)
+  // Build area options for reseller.
+  // Preferred source: legacy `areas` table (FK target).
+  // Fallback: villages list (will auto-create a matching `areas` row on save).
   const areaOptions = useMemo<SearchableSelectOption[]>(() => {
-    return areas.map((area) => {
-      const parts = [] as string[];
-      if (area.name) parts.push(area.name);
-      if (area.village) parts.push(area.village);
-      if (area.union_name) parts.push(area.union_name);
-      if (area.upazila) parts.push(area.upazila);
-      if (area.district) parts.push(`(${area.district})`);
+    if (areas.length > 0) {
+      return areas.map((area) => {
+        const parts = [] as string[];
+        if (area.name) parts.push(area.name);
+        if (area.village) parts.push(area.village);
+        if (area.union_name) parts.push(area.union_name);
+        if (area.upazila) parts.push(area.upazila);
+        if (area.district) parts.push(`(${area.district})`);
+
+        return {
+          value: area.id,
+          label: parts.join(', ') || area.name,
+        };
+      });
+    }
+
+    const unionById = new Map(unions.map((u) => [u.id, u]));
+    const upazilaById = new Map(upazilas.map((u) => [u.id, u]));
+    const districtById = new Map(districts.map((d) => [d.id, d]));
+
+    return villages.map((v) => {
+      const union = unionById.get(v.union_id);
+      const upazila = union ? upazilaById.get(union.upazila_id) : undefined;
+      const district = upazila ? districtById.get(upazila.district_id) : undefined;
+
+      const labelParts = [v.name];
+      if (union?.name) labelParts.push(union.name);
+      if (upazila?.name) labelParts.push(upazila.name);
+      if (district?.name) labelParts.push(`(${district.name})`);
 
       return {
-        value: area.id,
-        label: parts.join(', ') || area.name,
+        value: `village:${v.id}`,
+        label: labelParts.join(', '),
       };
     });
-  }, [areas]);
+  }, [areas, villages, unions, upazilas, districts]);
 
   // Build employee/staff options for branch manager
   const staffOptions = useMemo<SearchableSelectOption[]>(() => {
@@ -192,17 +217,75 @@ export default function ResellersManagement() {
     setShowDialog(true);
   };
 
+  const resolveLegacyAreaId = async (selected: string): Promise<string | null> => {
+    if (!selected) return null;
+
+    // Already a legacy areas.id
+    if (!selected.startsWith('village:')) return selected;
+
+    const villageId = selected.replace('village:', '').trim();
+    if (!villageId) return null;
+
+    // Find existing area row for this village
+    const { data: existingArea, error: existingErr } = await supabase
+      .from('areas')
+      .select('id')
+      .eq('village_id', villageId)
+      .maybeSingle();
+
+    if (!existingErr && existingArea?.id) return existingArea.id;
+
+    // Create minimal legacy area row from village + hierarchy
+    const village = villages.find((v) => v.id === villageId);
+    if (!village) return null;
+
+    const union = unions.find((u) => u.id === village.union_id);
+    const upazila = union ? upazilas.find((u) => u.id === union.upazila_id) : undefined;
+    const district = upazila ? districts.find((d) => d.id === upazila.district_id) : undefined;
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from('areas')
+      .insert({
+        // tenant_id will be set by DB default/RLS in most setups; but include if present in village
+        tenant_id: village.tenant_id,
+        name: village.name,
+        village: village.name,
+        village_id: village.id,
+        union_id: union?.id ?? null,
+        union_name: union?.name ?? null,
+        upazila_id: upazila?.id ?? null,
+        upazila: upazila?.name ?? null,
+        district_id: district?.id ?? null,
+        district: district?.name ?? null,
+        section_block: village.section_block ?? null,
+        road_no: village.road_no ?? null,
+        house_no: village.house_no ?? null,
+      } as any)
+      .select('id')
+      .single();
+
+    if (insertErr) {
+      console.error('Failed to create legacy area from village:', insertErr);
+      return null;
+    }
+
+    await refetchAreas();
+    return (inserted as any)?.id ?? null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
 
     try {
+      const resolvedAreaId = await resolveLegacyAreaId(formData.area_id);
+
       const data: any = {
         name: formData.name,
         phone: formData.phone || null,
         email: formData.email || null,
         address: formData.address || null,
-        area_id: formData.area_id || null,
+        area_id: resolvedAreaId,
         branch_id: formData.branch_id || null,
         parent_id: formData.parent_id || null,
         commission_type: formData.commission_type,

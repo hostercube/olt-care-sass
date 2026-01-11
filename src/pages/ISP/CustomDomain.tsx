@@ -143,9 +143,15 @@ export default function CustomDomain() {
       console.error('Error checking A record:', err);
     }
 
-    // TXT record check: always on root domain (_isppoint.rootDomain)
-    // Note: many DNS panels also accept "isppoint" (without underscore). We check both to reduce false negatives.
-    const candidates = [`_isppoint.${rootDomain}`, `isppoint.${rootDomain}`];
+    // TXT record check.
+    // Default: root domain (_isppoint.rootDomain) but some DNS setups may add it under the full host.
+    // Also: some panels drop the underscore; we check both to reduce false negatives.
+    const candidates = [
+      `_isppoint.${rootDomain}`,
+      `_isppoint.${fullDomain}`,
+      `isppoint.${rootDomain}`,
+      `isppoint.${fullDomain}`,
+    ];
     let txtCheckedName = candidates[0];
 
     for (const candidateName of candidates) {
@@ -168,7 +174,8 @@ export default function CustomDomain() {
           const txtValue = String(record.data).replace(/"/g, '').trim();
           txtRecordFound = txtValue;
 
-          if (txtValue === normalizedTXT) {
+          // Some providers may append extra chunks; allow exact or contains match.
+          if (txtValue === normalizedTXT || txtValue.includes(normalizedTXT)) {
             txtRecordValid = true;
             break;
           }
@@ -423,14 +430,36 @@ export default function CustomDomain() {
                     </div>
 
                     {!d.is_verified && (
-                      <div className="p-4 bg-muted rounded-lg">
-                        <p className="text-sm font-medium mb-2">DNS Configuration Required:</p>
+                      <div className="p-4 bg-muted rounded-lg space-y-3">
+                        <div>
+                          <p className="text-sm font-medium">DNS Configuration Required</p>
+                          <p className="text-xs text-muted-foreground">
+                            Add these DNS records in your domain provider (Cloudflare / Namecheap / etc). After saving DNS,
+                            wait 5–30 minutes, then click <span className="font-medium">Verify</span>.
+                          </p>
+                        </div>
+
+                        <ol className="text-xs text-muted-foreground list-decimal pl-4 space-y-1">
+                          <li>
+                            If you are using Cloudflare: set the A record to <span className="font-medium">DNS only</span>
+                            (grey cloud). Proxy (orange cloud) will break verification.
+                          </li>
+                          <li>
+                            TXT record name should be <span className="font-mono">_isppoint</span> (some panels may require
+                            full name like <span className="font-mono">_isppoint.{d.domain}</span>).
+                          </li>
+                          <li>
+                            For subdomain setup: create an A record for <span className="font-medium">{d.subdomain}</span>
+                            instead of <span className="font-mono">@</span>.
+                          </li>
+                        </ol>
+
                         <div className="space-y-2">
                           <div className="flex items-center justify-between p-2 bg-background rounded">
                             <div>
                               <p className="text-xs text-muted-foreground">Type: TXT</p>
                               <p className="text-xs text-muted-foreground">Name: _isppoint</p>
-                              <p className="font-mono text-sm">{d.dns_txt_record}</p>
+                              <p className="font-mono text-sm break-all">{d.dns_txt_record}</p>
                             </div>
                             <Button variant="ghost" size="sm" onClick={() => copyToClipboard(d.dns_txt_record || '')}>
                               <Copy className="h-4 w-4" />
@@ -439,7 +468,9 @@ export default function CustomDomain() {
                           <div className="flex items-center justify-between p-2 bg-background rounded">
                             <div>
                               <p className="text-xs text-muted-foreground">Type: A</p>
-                              <p className="text-xs text-muted-foreground">Name: @ (or your subdomain)</p>
+                              <p className="text-xs text-muted-foreground">
+                                Name: {d.subdomain ? d.subdomain : '@'}
+                              </p>
                               <p className="font-mono text-sm">{displayIP}</p>
                             </div>
                             <Button 
@@ -452,9 +483,10 @@ export default function CustomDomain() {
                             </Button>
                           </div>
                         </div>
+
                         {!serverIP && (
-                          <p className="text-xs text-yellow-500 mt-2">
-                            ⚠️ Server IP not configured. Please contact administrator.
+                          <p className="text-xs text-yellow-500">
+                            Server IP not configured. Please contact administrator.
                           </p>
                         )}
                       </div>
