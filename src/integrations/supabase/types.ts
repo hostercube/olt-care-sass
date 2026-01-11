@@ -4095,6 +4095,56 @@ export type Database = {
           },
         ]
       }
+      reseller_roles: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_system: boolean
+          level: number
+          name: string
+          permissions: Json
+          role_type: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          level?: number
+          name: string
+          permissions?: Json
+          role_type?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          level?: number
+          name?: string
+          permissions?: Json
+          role_type?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reseller_transactions: {
         Row: {
           amount: number
@@ -4223,6 +4273,7 @@ export type Database = {
           profile_photo: string | null
           rate_type: string | null
           role: string | null
+          role_id: string | null
           tenant_id: string
           total_collections: number | null
           total_customers: number | null
@@ -4267,6 +4318,7 @@ export type Database = {
           profile_photo?: string | null
           rate_type?: string | null
           role?: string | null
+          role_id?: string | null
           tenant_id: string
           total_collections?: number | null
           total_customers?: number | null
@@ -4311,6 +4363,7 @@ export type Database = {
           profile_photo?: string | null
           rate_type?: string | null
           role?: string | null
+          role_id?: string | null
           tenant_id?: string
           total_collections?: number | null
           total_customers?: number | null
@@ -4338,6 +4391,13 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resellers_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "reseller_roles"
             referencedColumns: ["id"]
           },
           {
