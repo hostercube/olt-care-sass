@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { 
   LayoutDashboard, Users, UserPlus, Wallet, ArrowRightLeft, 
-  Settings, LogOut, Menu, ChevronRight, ReceiptText, UserCog
+  Settings, LogOut, Menu, ChevronRight, ReceiptText, UserCog, MapPin
 } from 'lucide-react';
 import type { Reseller, ResellerPermissionKey } from '@/types/reseller';
 import { RESELLER_ROLE_LABELS } from '@/types/reseller';
@@ -22,37 +22,40 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  permission?: keyof Reseller | boolean;
+  show?: boolean;
 }
 
-export function ResellerPortalLayout({ children, reseller, onLogout }: ResellerPortalLayoutProps) {
+export function ResellerPortalLayout({ children, reseller, onLogout, hasPermission }: ResellerPortalLayoutProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navItems: NavItem[] = [
-    { label: 'Dashboard', href: '/reseller/dashboard', icon: LayoutDashboard },
-    { label: 'Billing Summary', href: '/reseller/billing', icon: ReceiptText },
-    { label: 'My Customers', href: '/reseller/customers', icon: Users },
+    { label: 'Dashboard', href: '/reseller/dashboard', icon: LayoutDashboard, show: true },
+    { label: 'Billing Summary', href: '/reseller/billing', icon: ReceiptText, show: true },
+    { label: 'My Customers', href: '/reseller/customers', icon: Users, show: true },
+    { 
+      label: 'Areas', 
+      href: '/reseller/areas', 
+      icon: MapPin,
+      show: hasPermission ? hasPermission('area_view') : false
+    },
     { 
       label: 'Sub-Resellers', 
       href: '/reseller/sub-resellers', 
       icon: UserPlus,
-      permission: reseller?.can_create_sub_reseller || reseller?.can_view_sub_customers
+      show: !!(reseller?.can_create_sub_reseller || reseller?.can_view_sub_customers)
     },
-    { label: 'Transactions', href: '/reseller/transactions', icon: ArrowRightLeft },
+    { label: 'Transactions', href: '/reseller/transactions', icon: ArrowRightLeft, show: true },
     { 
       label: 'Reports', 
       href: '/reseller/reports', 
       icon: Wallet,
-      permission: reseller?.can_view_reports
+      show: !!reseller?.can_view_reports
     },
-    { label: 'My Profile', href: '/reseller/profile', icon: Settings },
+    { label: 'My Profile', href: '/reseller/profile', icon: Settings, show: true },
   ];
 
-  const filteredNavItems = navItems.filter(item => {
-    if (item.permission === undefined) return true;
-    return !!item.permission;
-  });
+  const filteredNavItems = navItems.filter(item => item.show !== false);
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
