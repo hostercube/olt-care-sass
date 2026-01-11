@@ -17,6 +17,7 @@ export type ModuleName =
   | 'isp_crm'
   | 'isp_inventory'
   | 'isp_salary_payroll'
+  | 'isp_hr_payroll'
   | 'isp_btrc_reports'
   | 'isp_tickets'
   | 'sms_alerts'
@@ -73,6 +74,7 @@ export interface TenantFeatures {
   isp_crm?: boolean;
   isp_inventory?: boolean;
   isp_salary_payroll?: boolean;
+  isp_hr_payroll?: boolean;
   isp_btrc_reports?: boolean;
   isp_tickets?: boolean;
   // Alert features
@@ -366,6 +368,7 @@ export const AVAILABLE_MODULES: ModuleConfig[] = [
   { id: 'isp_crm', name: 'CRM', description: 'Customer relationship management', category: 'isp' },
   { id: 'isp_inventory', name: 'Inventory', description: 'Equipment and stock management', category: 'isp' },
   { id: 'isp_salary_payroll', name: 'Salary & Payroll', description: 'Staff salary and payroll management', category: 'isp' },
+  { id: 'isp_hr_payroll', name: 'HR & Payroll', description: 'Complete HR management with attendance, leave, performance, loans', category: 'isp' },
   { id: 'isp_btrc_reports', name: 'BTRC Reports', description: 'BTRC regulatory reports', category: 'isp' },
   { id: 'isp_tickets', name: 'Support Tickets', description: 'Customer support ticket system', category: 'isp' },
   
