@@ -20,6 +20,7 @@ export default function ResellerProfile() {
     logout,
     updateProfile,
     changePassword,
+    hasPermission,
   } = useResellerPortal();
 
   const [saving, setSaving] = useState(false);
@@ -102,7 +103,7 @@ export default function ResellerProfile() {
   }
 
   return (
-    <ResellerPortalLayout reseller={reseller} onLogout={logout}>
+    <ResellerPortalLayout reseller={reseller} onLogout={logout} hasPermission={hasPermission}>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Profile Settings</h1>

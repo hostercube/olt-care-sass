@@ -49,6 +49,15 @@ interface BillingSummary {
   commissionsEarned: number;
 }
 
+type AreaPayload = {
+  name: string;
+  description?: string | null;
+  district?: string | null;
+  upazila?: string | null;
+  union_name?: string | null;
+  village?: string | null;
+};
+
 export function useResellerPortal() {
   const navigate = useNavigate();
   const [session, setSession] = useState<ResellerSession | null>(null);
@@ -410,6 +419,70 @@ export function useResellerPortal() {
     return false;
   };
 
+  // Area operations
+  const createArea = async (data: AreaPayload): Promise<boolean> => {
+    if (!hasPermission('area_create')) {
+      toast.error('You do not have permission to create areas');
+      return false;
+    }
+    try {
+      const result = await resellerApi.createResellerArea(data);
+      if (!result.success) {
+        toast.error(result.error || 'Failed to create area');
+        return false;
+      }
+      toast.success('Area created successfully');
+      await fetchResellerData();
+      return true;
+    } catch (err: any) {
+      console.error('Error creating area:', err);
+      toast.error(err.message || 'Failed to create area');
+      return false;
+    }
+  };
+
+  const updateArea = async (id: string, data: Partial<AreaPayload>): Promise<boolean> => {
+    if (!hasPermission('area_edit')) {
+      toast.error('You do not have permission to edit areas');
+      return false;
+    }
+    try {
+      const result = await resellerApi.updateResellerArea(id, data);
+      if (!result.success) {
+        toast.error(result.error || 'Failed to update area');
+        return false;
+      }
+      toast.success('Area updated successfully');
+      await fetchResellerData();
+      return true;
+    } catch (err: any) {
+      console.error('Error updating area:', err);
+      toast.error(err.message || 'Failed to update area');
+      return false;
+    }
+  };
+
+  const deleteArea = async (id: string): Promise<boolean> => {
+    if (!hasPermission('area_delete')) {
+      toast.error('You do not have permission to delete areas');
+      return false;
+    }
+    try {
+      const result = await resellerApi.deleteResellerArea(id);
+      if (!result.success) {
+        toast.error(result.error || 'Failed to delete area');
+        return false;
+      }
+      toast.success('Area deleted successfully');
+      await fetchResellerData();
+      return true;
+    } catch (err: any) {
+      console.error('Error deleting area:', err);
+      toast.error(err.message || 'Failed to delete area');
+      return false;
+    }
+  };
+
   return {
     session,
     reseller,
@@ -433,6 +506,9 @@ export function useResellerPortal() {
     updateSubReseller,
     fundSubReseller,
     deductSubReseller,
+    createArea,
+    updateArea,
+    deleteArea,
     updateProfile,
     changePassword,
   };

@@ -167,3 +167,17 @@ export async function fetchResellerMikrotikRouters() {
 export async function fetchResellerOlts() {
   return apiRequest('/olts');
 }
+
+// ============= Areas (CRUD) =============
+
+export async function createResellerArea(data: any) {
+  return apiRequest('/areas', 'POST', data);
+}
+
+export async function updateResellerArea(areaId: string, data: any) {
+  return apiRequest(`/areas/${areaId}`, 'PUT', data);
+}
+
+export async function deleteResellerArea(areaId: string) {
+  return apiRequest(`/areas/${areaId}`, 'DELETE');
+}
