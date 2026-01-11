@@ -98,7 +98,77 @@ export default function CustomDomain() {
     fetchDomains();
   }, [fetchServerIP, fetchDomains]);
 
-  // Auto-verify domain by checking DNS via edge function
+  // Check DNS records using public DNS-over-HTTPS (Cloudflare)
+  const checkDNSRecords = async (domain: string, expectedIP: string, expectedTXT: string): Promise<{
+    aRecordValid: boolean;
+    txtRecordValid: boolean;
+    aRecordFound: string | null;
+    txtRecordFound: string | null;
+  }> => {
+    let aRecordValid = false;
+    let txtRecordValid = false;
+    let aRecordFound: string | null = null;
+    let txtRecordFound: string | null = null;
+
+    try {
+      // Check A record using Cloudflare DNS-over-HTTPS
+      const aResponse = await fetch(`https://cloudflare-dns.com/dns-query?name=${domain}&type=A`, {
+        headers: { 'Accept': 'application/dns-json' },
+      });
+      
+      if (aResponse.ok) {
+        const aData = await aResponse.json();
+        console.log('A record response:', aData);
+        
+        if (aData.Answer && aData.Answer.length > 0) {
+          for (const record of aData.Answer) {
+            if (record.type === 1) { // A record type
+              aRecordFound = record.data;
+              if (record.data === expectedIP) {
+                aRecordValid = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking A record:', err);
+    }
+
+    try {
+      // Check TXT record for _isppoint subdomain
+      const txtDomain = `_isppoint.${domain}`;
+      const txtResponse = await fetch(`https://cloudflare-dns.com/dns-query?name=${txtDomain}&type=TXT`, {
+        headers: { 'Accept': 'application/dns-json' },
+      });
+      
+      if (txtResponse.ok) {
+        const txtData = await txtResponse.json();
+        console.log('TXT record response:', txtData);
+        
+        if (txtData.Answer && txtData.Answer.length > 0) {
+          for (const record of txtData.Answer) {
+            if (record.type === 16) { // TXT record type
+              // TXT records come with quotes, remove them
+              const txtValue = record.data.replace(/"/g, '');
+              txtRecordFound = txtValue;
+              if (txtValue === expectedTXT) {
+                txtRecordValid = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking TXT record:', err);
+    }
+
+    return { aRecordValid, txtRecordValid, aRecordFound, txtRecordFound };
+  };
+
+  // Auto-verify domain by checking DNS via client-side DNS-over-HTTPS
   const handleVerifyDomain = async (domainData: CustomDomainType) => {
     setVerifying(domainData.id);
     try {
@@ -106,33 +176,61 @@ export default function CustomDomain() {
         ? `${domainData.subdomain}.${domainData.domain}` 
         : domainData.domain;
 
-      const { data, error } = await supabase.functions.invoke('verify-domain', {
-        body: {
-          domain_id: domainData.id,
-          domain: fullDomain,
-          tenant_id: tenantId,
-          expected_txt: domainData.dns_txt_record
-        }
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Verification failed');
+      if (!serverIP) {
+        toast.error('Server IP not configured. Please contact administrator.');
+        return;
       }
 
-      if (data.verified) {
+      const dnsResult = await checkDNSRecords(fullDomain, serverIP, domainData.dns_txt_record || '');
+      
+      console.log('DNS check result:', dnsResult);
+
+      const isVerified = dnsResult.aRecordValid && dnsResult.txtRecordValid;
+
+      if (isVerified) {
+        // Update domain as verified in database
+        const { error: updateError } = await supabase
+          .from('tenant_custom_domains')
+          .update({ 
+            is_verified: true,
+            ssl_status: 'active',
+            verified_at: new Date().toISOString()
+          } as any)
+          .eq('id', domainData.id);
+
+        if (updateError) {
+          throw new Error('Failed to update domain status');
+        }
+
         toast.success('Domain verified successfully! SSL is now active.');
-      } else if (data.issues && data.issues.length > 0) {
+      } else {
+        const issues: string[] = [];
+        
+        if (!dnsResult.aRecordValid) {
+          if (dnsResult.aRecordFound) {
+            issues.push(`A record points to ${dnsResult.aRecordFound} instead of ${serverIP}`);
+          } else {
+            issues.push(`A record not found. Please add: @ -> ${serverIP}`);
+          }
+        }
+        
+        if (!dnsResult.txtRecordValid) {
+          if (dnsResult.txtRecordFound) {
+            issues.push(`TXT record value is "${dnsResult.txtRecordFound}" instead of "${domainData.dns_txt_record}"`);
+          } else {
+            issues.push(`TXT record not found. Please add: _isppoint -> ${domainData.dns_txt_record}`);
+          }
+        }
+
         toast.error(
           <div className="space-y-1">
             <p className="font-medium">DNS not configured correctly:</p>
-            {data.issues.map((issue: string, i: number) => (
+            {issues.map((issue: string, i: number) => (
               <p key={i} className="text-sm">• {issue}</p>
             ))}
           </div>,
           { duration: 8000 }
         );
-      } else {
-        toast.info('DNS verification pending. Please wait for DNS propagation (may take up to 48 hours).');
       }
       
       fetchDomains();
