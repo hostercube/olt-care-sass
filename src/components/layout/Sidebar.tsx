@@ -67,7 +67,12 @@ const ispCoreItems: NavItem[] = [
   { title: 'Customer Types', href: '/isp/customer-types', icon: UserCheck },
   { title: 'Packages', href: '/isp/packages', icon: Package },
   { title: 'Areas', href: '/isp/areas', icon: MapPin },
-  { title: 'Resellers', href: '/isp/resellers', icon: UserCheck, requiredModule: 'isp_resellers' },
+];
+
+// Reseller Management - Multi-level reseller system
+const resellerItems: NavItem[] = [
+  { title: 'Resellers List', href: '/isp/resellers', icon: UserCheck, requiredModule: 'isp_resellers' },
+  { title: 'Reseller Billing', href: '/isp/reseller-billing', icon: Wallet, requiredModule: 'isp_resellers' },
 ];
 
 // Billing & Payments - Financial operations
@@ -91,7 +96,6 @@ const ispNetworkItems: NavItem[] = [
 const ispOperationsItems: NavItem[] = [
   { title: 'Staff & Salary', href: '/isp/staff', icon: Users },
   { title: 'Roles & Permissions', href: '/isp/roles', icon: Shield },
-  { title: 'Reseller Billing', href: '/isp/reseller-billing', icon: Wallet, requiredModule: 'isp_resellers' },
   { title: 'Inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
   { title: 'Reports', href: '/isp/reports', icon: FileText },
 ];
@@ -165,6 +169,7 @@ export function Sidebar() {
   const [billingExpanded, setBillingExpanded] = useState(false);
   const [networkExpanded, setNetworkExpanded] = useState(false);
   const [operationsExpanded, setOperationsExpanded] = useState(false);
+  const [resellerExpanded, setResellerExpanded] = useState(false);
   const [systemExpanded, setSystemExpanded] = useState(false);
   const [impersonation, setImpersonation] = useState<{ tenantId: string; tenantName?: string } | null>(null);
   
@@ -223,6 +228,7 @@ export function Sidebar() {
   const filteredBillingItems = useMemo(() => filterByModule(ispBillingItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredNetworkItems = useMemo(() => filterByModule(ispNetworkItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredOperationsItems = useMemo(() => filterByModule(ispOperationsItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredResellerItems = useMemo(() => filterByModule(resellerItems), [hasAccess, inTenantView, isSuperAdmin]);
 
   const renderNavItem = (item: NavItem) => {
     const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
@@ -363,6 +369,12 @@ export function Sidebar() {
               collapsible: true,
               expanded: networkExpanded,
               onToggle: () => setNetworkExpanded((v) => !v),
+            })}
+
+            {filteredResellerItems.length > 0 && renderSection('Reseller Management', filteredResellerItems, {
+              collapsible: true,
+              expanded: resellerExpanded,
+              onToggle: () => setResellerExpanded((v) => !v),
             })}
 
             {filteredOperationsItems.length > 0 && renderSection('Operations', filteredOperationsItems, {
