@@ -72,6 +72,7 @@ const ispCoreItems: NavItem[] = [
 // Reseller Management - Multi-level reseller system
 const resellerItems: NavItem[] = [
   { title: 'Resellers List', href: '/isp/resellers', icon: UserCheck, requiredModule: 'isp_resellers' },
+  { title: 'Reseller Roles', href: '/isp/reseller-roles', icon: Shield, requiredModule: 'isp_resellers' },
   { title: 'Reseller Billing', href: '/isp/reseller-billing', icon: Wallet, requiredModule: 'isp_resellers' },
 ];
 

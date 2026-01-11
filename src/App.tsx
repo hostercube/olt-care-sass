@@ -69,6 +69,7 @@ import BkashPayments from "./pages/ISP/BkashPayments";
 import POSInventory from "./pages/ISP/POSInventory";
 import Staff from "./pages/ISP/Staff";
 import RolesManagement from "./pages/ISP/RolesManagement";
+import ResellerRolesManagement from "./pages/ISP/ResellerRolesManagement";
 import Transactions from "./pages/ISP/Transactions";
 import Reports from "./pages/ISP/Reports";
 import CustomDomain from "./pages/ISP/CustomDomain";
@@ -397,6 +398,15 @@ const App = () => (
                   <TenantAccessGuard>
                     <ModuleAccessGuard module="isp_resellers" moduleName="Reseller Billing">
                       <ResellerBillingHistory />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/reseller-roles" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_resellers" moduleName="Reseller Roles">
+                      <ResellerRolesManagement />
                     </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
