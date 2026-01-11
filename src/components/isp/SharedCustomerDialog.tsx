@@ -255,13 +255,8 @@ export function SharedCustomerDialog({
         expiry_date: formData.expiry_date || null,
         monthly_bill: parseFloat(formData.monthly_bill) || 0,
         notes: formData.notes || null,
+        nid_number: formData.nid_number || null, // NID is always optional
       };
-
-      // NOTE: Some reseller backends don't have nid_number column yet.
-      // Keep it for tenant context only.
-      if (!resellerMode) {
-        customerData.nid_number = formData.nid_number || null;
-      }
 
       if (mode === 'add') {
         customerData.pppoe_password = formData.pppoe_password || null;

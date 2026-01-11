@@ -29,8 +29,9 @@ import { BulkActionsToolbar } from '@/components/isp/BulkActionsToolbar';
 import { 
   Users, UserPlus, Search, MoreHorizontal, Eye, Edit, Trash2, 
   RefreshCw, UserCheck, UserX, Clock, Ban, Download, Upload,
-  Filter, CreditCard, RotateCcw, X
+  Filter, CreditCard, RotateCcw, X, Store
 } from 'lucide-react';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Customer, CustomerStatus } from '@/types/isp';
 import { format, addDays, parseISO, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
@@ -561,17 +562,16 @@ export default function CustomerManagement() {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Area</Label>
-                  <Select value={filters.area} onValueChange={(v) => setFilters(f => ({ ...f, area: v }))}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="All Areas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Areas</SelectItem>
-                      {areas.map(area => (
-                        <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={filters.area === 'all' ? '' : filters.area}
+                    onValueChange={(v) => setFilters(f => ({ ...f, area: v || 'all' }))}
+                    options={areas.map(area => ({ value: area.id, label: `${area.name}${area.upazila ? ` (${area.upazila})` : ''}` }))}
+                    placeholder="All Areas"
+                    searchPlaceholder="Search areas..."
+                    allowClear
+                    clearLabel="All Areas"
+                    triggerClassName="h-9"
+                  />
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">MikroTik</Label>
@@ -589,17 +589,16 @@ export default function CustomerManagement() {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Reseller</Label>
-                  <Select value={filters.reseller} onValueChange={(v) => setFilters(f => ({ ...f, reseller: v }))}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="All Resellers" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Resellers</SelectItem>
-                      {resellers.map(reseller => (
-                        <SelectItem key={reseller.id} value={reseller.id}>{reseller.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={filters.reseller === 'all' ? '' : filters.reseller}
+                    onValueChange={(v) => setFilters(f => ({ ...f, reseller: v || 'all' }))}
+                    options={resellers.map(r => ({ value: r.id, label: `${r.name}${r.phone ? ` (${r.phone})` : ''}` }))}
+                    placeholder="All Resellers"
+                    searchPlaceholder="Search by name or phone..."
+                    allowClear
+                    clearLabel="All Resellers"
+                    triggerClassName="h-9"
+                  />
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Expiry Status</Label>
@@ -701,6 +700,7 @@ export default function CustomerManagement() {
                     <TableHead>Code</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Phone</TableHead>
+                    <TableHead className="hidden lg:table-cell">Reseller</TableHead>
                     <TableHead>PPPoE</TableHead>
                     <TableHead>Package</TableHead>
                     <TableHead>Expiry</TableHead>
@@ -712,7 +712,7 @@ export default function CustomerManagement() {
                 <TableBody>
                   {paginatedCustomers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                         No customers found
                       </TableCell>
                     </TableRow>
@@ -740,6 +740,16 @@ export default function CustomerManagement() {
                             </button>
                           </TableCell>
                           <TableCell>{customer.phone || '-'}</TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            {customer.reseller ? (
+                              <Badge variant="outline" className="gap-1">
+                                <Store className="h-3 w-3" />
+                                {customer.reseller.name}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">Direct</span>
+                            )}
+                          </TableCell>
                           <TableCell className="font-mono text-sm">
                             {customer.pppoe_username || '-'}
                           </TableCell>

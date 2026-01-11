@@ -1059,7 +1059,29 @@ export default function ResellersManagement() {
                 
                 {mikrotikRouters.length > 0 && (
                   <div className="space-y-2">
-                    <Label>Allowed MikroTik Routers</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>Allowed MikroTik Routers</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={() => setFormData(prev => ({ ...prev, allowed_mikrotik_ids: mikrotikRouters.map(r => r.id) }))}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={() => setFormData(prev => ({ ...prev, allowed_mikrotik_ids: [] }))}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded p-2">
                       {mikrotikRouters.map((router) => (
                         <div key={router.id} className="flex items-center gap-2">
@@ -1091,7 +1113,29 @@ export default function ResellersManagement() {
 
                 {olts.length > 0 && (
                   <div className="space-y-2">
-                    <Label>Allowed OLTs</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>Allowed OLTs</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={() => setFormData(prev => ({ ...prev, allowed_olt_ids: olts.map(o => o.id) }))}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={() => setFormData(prev => ({ ...prev, allowed_olt_ids: [] }))}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded p-2">
                       {olts.map((olt) => (
                         <div key={olt.id} className="flex items-center gap-2">

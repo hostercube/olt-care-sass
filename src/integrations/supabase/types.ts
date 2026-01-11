@@ -984,6 +984,8 @@ export type Database = {
         Row: {
           amount: number
           collected_by: string | null
+          collected_by_name: string | null
+          collected_by_type: string | null
           created_at: string
           customer_id: string
           discount: number | null
@@ -1002,6 +1004,8 @@ export type Database = {
         Insert: {
           amount?: number
           collected_by?: string | null
+          collected_by_name?: string | null
+          collected_by_type?: string | null
           created_at?: string
           customer_id: string
           discount?: number | null
@@ -1020,6 +1024,8 @@ export type Database = {
         Update: {
           amount?: number
           collected_by?: string | null
+          collected_by_name?: string | null
+          collected_by_type?: string | null
           created_at?: string
           customer_id?: string
           discount?: number | null
