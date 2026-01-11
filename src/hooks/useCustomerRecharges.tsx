@@ -65,7 +65,9 @@ export function useCustomerRecharges() {
     months: number,
     paymentMethod: string,
     discount = 0,
-    notes?: string
+    notes?: string,
+    collectedByType: string = 'tenant_admin',
+    collectedByName: string = 'Tenant Admin'
   ) => {
     if (!tenantId) {
       toast.error('No tenant context');
@@ -94,7 +96,7 @@ export function useCustomerRecharges() {
     baseDate.setDate(baseDate.getDate() + (validityDays * months));
     const newExpiry = baseDate.toISOString().split('T')[0];
 
-    // Create recharge record
+    // Create recharge record with tracking
     const { error: rechargeError } = await supabase.from('customer_recharges').insert({
       tenant_id: tenantId,
       customer_id: customerId,
@@ -106,6 +108,8 @@ export function useCustomerRecharges() {
       discount,
       notes,
       status: 'completed',
+      collected_by_type: collectedByType,
+      collected_by_name: collectedByName,
     });
 
     if (rechargeError) {

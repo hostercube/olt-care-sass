@@ -15,6 +15,7 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
+import { useAuth } from '@/hooks/useAuth';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { useMikroTikSync } from '@/hooks/useMikroTikSync';
 import { useISPPackages } from '@/hooks/useISPPackages';
@@ -26,7 +27,7 @@ import {
   Edit, Receipt, History, MessageSquare, Settings, Play,
   Ban, Check, Trash2, Link, Unlink, RotateCcw, Loader2,
   Eye, EyeOff, Copy, ChevronRight, Zap, Signal, AlertTriangle,
-  Thermometer, CalendarIcon
+  Thermometer, CalendarIcon, Store
 } from 'lucide-react';
 import type { Customer, CustomerProfile as CustomerProfileType, ISPPackage } from '@/types/isp';
 import { format, formatDistanceToNow, addDays } from 'date-fns';
@@ -57,6 +58,7 @@ export default function CustomerProfile() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { tenantId, isSuperAdmin } = useTenantContext();
+  const { user } = useAuth();
   const { hasAccess } = useModuleAccess();
   const { getCustomerNetworkStatus, togglePPPoEUser, saveCallerId, removeCallerId, updatePPPoEUser, disconnectSession, getLiveBandwidth, activateCustomer, switchToExpiredProfile } = useMikroTikSync();
   const { packages } = useISPPackages();
@@ -465,8 +467,8 @@ export default function CustomerProfile() {
         last_activated_at: new Date().toISOString(),
       }).eq('id', customer.id);
 
-      // Record recharge
-      await supabase.from('customer_recharges').insert({
+      // Record recharge with collected_by tracking
+      const rechargeData: any = {
         tenant_id: customer.tenant_id,
         customer_id: customer.id,
         amount: (pkg?.price || 0) * rechargeMonths,
@@ -475,7 +477,17 @@ export default function CustomerProfile() {
         new_expiry: newExpiry.toISOString().split('T')[0],
         payment_method: 'cash',
         status: 'completed',
-      });
+        collected_by: user?.id || null,
+        collected_by_type: 'tenant_admin',
+        collected_by_name: user?.email?.split('@')[0] || 'Tenant Admin',
+      };
+
+      // If customer has a reseller, track it
+      if (customer.reseller_id) {
+        rechargeData.reseller_id = customer.reseller_id;
+      }
+
+      await supabase.from('customer_recharges').insert(rechargeData);
 
       toast.success(`Recharged for ${rechargeMonths} month(s). New expiry: ${format(newExpiry, 'dd MMM yyyy')}`);
       setShowRechargeDialog(false);
@@ -668,6 +680,15 @@ export default function CustomerProfile() {
                   <div className="flex items-center gap-3">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
                     <span>{customer.area.name}, {customer.area.upazila}</span>
+                  </div>
+                )}
+                {customer.reseller && (
+                  <div className="flex items-center gap-3">
+                    <Store className="h-4 w-4 text-muted-foreground" />
+                    <Badge variant="outline" className="gap-1">
+                      <span className="text-xs">Reseller:</span>
+                      <span className="font-medium">{customer.reseller.name}</span>
+                    </Badge>
                   </div>
                 )}
               </div>
