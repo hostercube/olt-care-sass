@@ -484,25 +484,35 @@ export default function CustomerProfile() {
 
         if (reseller) {
           // Calculate commission based on reseller settings
+          // rate_type: 'discount' means reseller gets discount from package price
+          // commission_type: 'percentage' or 'flat'
           const rateType = reseller.rate_type || 'discount';
           const commissionType = reseller.commission_type || 'percentage';
           const commissionValue = reseller.commission_value || reseller.customer_rate || 0;
+          const totalPackagePrice = packagePrice * rechargeMonths;
 
           if (commissionValue > 0) {
             if (commissionType === 'percentage') {
-              commission = Math.round((packagePrice * commissionValue) / 100);
+              // Percentage commission: e.g., 25% of package price
+              commission = Math.round((totalPackagePrice * commissionValue) / 100);
             } else {
-              // Flat rate per month
+              // Flat rate per month: e.g., 2 taka per month
               commission = commissionValue * rechargeMonths;
             }
           }
 
-          // If rate_type is 'discount', reseller pays (packagePrice - commission)
-          if (rateType === 'discount') {
-            deductAmount = (packagePrice * rechargeMonths) - commission;
+          // Calculate what reseller should pay
+          // For rate_type 'discount': reseller pays (package price - commission)
+          // Example: Package = 100, Commission = 25% = 25, Reseller pays = 75
+          if (rateType === 'discount' || rateType === 'per_customer') {
+            deductAmount = totalPackagePrice - commission;
           } else {
-            deductAmount = packagePrice * rechargeMonths;
+            // For other rate types, reseller pays full amount (no discount)
+            deductAmount = totalPackagePrice;
           }
+
+          // Ensure deductAmount is not negative
+          deductAmount = Math.max(0, deductAmount);
 
           // Check if reseller has enough balance
           if (reseller.balance >= deductAmount) {
@@ -518,7 +528,7 @@ export default function CustomerProfile() {
               balance_before: reseller.balance,
               balance_after: newBalance,
               customer_id: customer.id,
-              description: `Customer recharge by ${user?.email?.split('@')[0] || 'Tenant Admin'} (${rechargeMonths} month${rechargeMonths > 1 ? 's' : ''}). Package: ৳${packagePrice * rechargeMonths}, Commission: ৳${commission}`,
+              description: `Customer recharge by ${user?.email?.split('@')[0] || 'Tenant Admin'} (${rechargeMonths} month${rechargeMonths > 1 ? 's' : ''}). Package: ৳${totalPackagePrice}, Commission: ৳${commission}, Deducted: ৳${deductAmount}`,
             } as any);
 
             // Update reseller balance
@@ -527,7 +537,9 @@ export default function CustomerProfile() {
               .update({ balance: newBalance })
               .eq('id', resellerId);
 
-            console.log(`Deducted ৳${deductAmount} from reseller ${reseller.name}. New balance: ৳${newBalance}`);
+            console.log(`Deducted ৳${deductAmount} from reseller ${reseller.name}. Commission: ৳${commission}. New balance: ৳${newBalance}`);
+          } else {
+            toast.info(`Reseller ${reseller.name} has insufficient balance (৳${reseller.balance}). Needed: ৳${deductAmount}`);
           }
         }
       }

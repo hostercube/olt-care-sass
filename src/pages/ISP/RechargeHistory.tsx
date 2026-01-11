@@ -1,0 +1,501 @@
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+} from '@/components/ui/table';
+import { 
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
+} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { supabase } from '@/integrations/supabase/client';
+import { useTenantContext } from '@/hooks/useSuperAdmin';
+import { useAreas } from '@/hooks/useAreas';
+import { useResellers } from '@/hooks/useResellers';
+import { 
+  Receipt, Search, RefreshCw, Download, User, Store, CreditCard,
+  Calendar, Filter, Users, TrendingUp, Wallet, ChevronLeft, ChevronRight
+} from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { format } from 'date-fns';
+import { TablePagination } from '@/components/ui/table-pagination';
+import { useNavigate } from 'react-router-dom';
+
+interface CustomerRecharge {
+  id: string;
+  customer_id: string;
+  amount: number;
+  months: number;
+  payment_method: string | null;
+  recharge_date: string;
+  old_expiry: string | null;
+  new_expiry: string | null;
+  discount: number | null;
+  status: string | null;
+  notes: string | null;
+  collected_by: string | null;
+  collected_by_type: string | null;
+  collected_by_name: string | null;
+  reseller_id: string | null;
+  customer?: { 
+    id: string; 
+    name: string; 
+    customer_code: string;
+    phone: string | null;
+    area_id: string | null;
+  };
+  reseller?: {
+    id: string;
+    name: string;
+    level: number;
+  };
+}
+
+const getCollectorTypeBadge = (type: string | null, name: string | null) => {
+  switch (type) {
+    case 'tenant_admin':
+      return <Badge variant="default" className="gap-1"><User className="h-3 w-3" />{name || 'Admin'}</Badge>;
+    case 'staff':
+      return <Badge variant="secondary" className="gap-1"><Users className="h-3 w-3" />{name || 'Staff'}</Badge>;
+    case 'reseller':
+    case 'sub_reseller':
+    case 'sub_sub_reseller':
+      return <Badge variant="outline" className="gap-1 border-purple-500 text-purple-500"><Store className="h-3 w-3" />{name || 'Reseller'}</Badge>;
+    case 'online_payment':
+    case 'auto':
+      return <Badge variant="secondary" className="gap-1 bg-green-500/10 text-green-600"><CreditCard className="h-3 w-3" />{name || 'Online'}</Badge>;
+    default:
+      return <Badge variant="outline">{name || 'Manual'}</Badge>;
+  }
+};
+
+const getLevelLabel = (level: number) => {
+  switch (level) {
+    case 1: return 'Master';
+    case 2: return 'Sub';
+    case 3: return 'Sub-Sub';
+    default: return `L${level}`;
+  }
+};
+
+export default function RechargeHistory() {
+  const navigate = useNavigate();
+  const { tenantId, loading: contextLoading } = useTenantContext();
+  const { areas } = useAreas();
+  const { resellers } = useResellers();
+  
+  const [recharges, setRecharges] = useState<CustomerRecharge[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Filters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [resellerFilter, setResellerFilter] = useState('');
+  const [areaFilter, setAreaFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  const fetchRecharges = useCallback(async () => {
+    if (!tenantId || contextLoading) return;
+    
+    setLoading(true);
+    try {
+      let query = supabase
+        .from('customer_recharges')
+        .select(`
+          *,
+          customer:customers(id, name, customer_code, phone, area_id),
+          reseller:resellers(id, name, level)
+        `)
+        .eq('tenant_id', tenantId)
+        .order('recharge_date', { ascending: false })
+        .limit(1000);
+
+      // Apply date filters
+      if (dateFrom) {
+        query = query.gte('recharge_date', `${dateFrom}T00:00:00`);
+      }
+      if (dateTo) {
+        query = query.lte('recharge_date', `${dateTo}T23:59:59`);
+      }
+
+      // Apply reseller filter
+      if (resellerFilter) {
+        query = query.eq('reseller_id', resellerFilter);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      setRecharges((data as CustomerRecharge[]) || []);
+    } catch (err) {
+      console.error('Error fetching recharges:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId, contextLoading, dateFrom, dateTo, resellerFilter]);
+
+  useEffect(() => {
+    if (tenantId && !contextLoading) {
+      fetchRecharges();
+    }
+  }, [fetchRecharges, tenantId, contextLoading]);
+
+  // Filter recharges
+  const filteredRecharges = useMemo(() => {
+    let result = [...recharges];
+
+    // Search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(r =>
+        r.customer?.name?.toLowerCase().includes(term) ||
+        r.customer?.customer_code?.toLowerCase().includes(term) ||
+        r.customer?.phone?.includes(term) ||
+        r.collected_by_name?.toLowerCase().includes(term)
+      );
+    }
+
+    // Source/collected_by_type filter
+    if (sourceFilter !== 'all') {
+      result = result.filter(r => r.collected_by_type === sourceFilter);
+    }
+
+    // Area filter
+    if (areaFilter) {
+      result = result.filter(r => r.customer?.area_id === areaFilter);
+    }
+
+    return result;
+  }, [recharges, searchTerm, sourceFilter, areaFilter]);
+
+  // Pagination
+  const paginatedRecharges = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredRecharges.slice(startIndex, startIndex + pageSize);
+  }, [filteredRecharges, currentPage, pageSize]);
+
+  // Stats
+  const stats = useMemo(() => {
+    const totalAmount = filteredRecharges.reduce((sum, r) => sum + r.amount, 0);
+    const totalDiscount = filteredRecharges.reduce((sum, r) => sum + (r.discount || 0), 0);
+    const byAdmin = filteredRecharges.filter(r => r.collected_by_type === 'tenant_admin').length;
+    const byStaff = filteredRecharges.filter(r => r.collected_by_type === 'staff').length;
+    const byReseller = filteredRecharges.filter(r => ['reseller', 'sub_reseller', 'sub_sub_reseller'].includes(r.collected_by_type || '')).length;
+    const byOnline = filteredRecharges.filter(r => ['online_payment', 'auto'].includes(r.collected_by_type || '')).length;
+    return { totalAmount, totalDiscount, byAdmin, byStaff, byReseller, byOnline, total: filteredRecharges.length };
+  }, [filteredRecharges]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sourceFilter, areaFilter, resellerFilter, dateFrom, dateTo]);
+
+  // Export CSV
+  const exportCSV = () => {
+    const headers = ['Date', 'Customer', 'Code', 'Amount', 'Months', 'Old Expiry', 'New Expiry', 'Discount', 'Source', 'Collector', 'Reseller'];
+    const rows = filteredRecharges.map(r => [
+      format(new Date(r.recharge_date), 'yyyy-MM-dd HH:mm'),
+      r.customer?.name || '',
+      r.customer?.customer_code || '',
+      r.amount.toString(),
+      r.months?.toString() || '1',
+      r.old_expiry || '',
+      r.new_expiry || '',
+      (r.discount || 0).toString(),
+      r.collected_by_type || 'manual',
+      r.collected_by_name || '',
+      r.reseller?.name || 'Direct',
+    ]);
+    
+    const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recharge-history-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+  };
+
+  // Reseller options for searchable select
+  const resellerOptions = resellers.map(r => ({
+    value: r.id,
+    label: `${r.name} (${getLevelLabel(r.level || 1)})`,
+    searchTerms: [r.name, r.phone || '']
+  }));
+
+  // Area options for searchable select
+  const areaOptions = areas.map(a => ({
+    value: a.id,
+    label: a.name,
+    searchTerms: [a.name]
+  }));
+
+  return (
+    <DashboardLayout
+      title="Recharge History"
+      subtitle="View all customer recharges with detailed tracking"
+    >
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-6 mb-6">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Receipt className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Recharges</p>
+                <p className="text-2xl font-bold">{stats.total}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <TrendingUp className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Amount</p>
+                <p className="text-2xl font-bold text-green-600">৳{stats.totalAmount.toLocaleString()}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <User className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">By Admin</p>
+                <p className="text-2xl font-bold">{stats.byAdmin}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <Users className="h-5 w-5 text-orange-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">By Staff</p>
+                <p className="text-2xl font-bold">{stats.byStaff}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-500/10">
+                <Store className="h-5 w-5 text-purple-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">By Reseller</p>
+                <p className="text-2xl font-bold">{stats.byReseller}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10">
+                <CreditCard className="h-5 w-5 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Online</p>
+                <p className="text-2xl font-bold">{stats.byOnline}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <CardTitle>All Customer Recharges</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={exportCSV}>
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => fetchRecharges()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
+            <div className="lg:col-span-2 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by customer name, code, phone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger>
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Sources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                <SelectItem value="tenant_admin">Admin</SelectItem>
+                <SelectItem value="staff">Staff</SelectItem>
+                <SelectItem value="reseller">Reseller</SelectItem>
+                <SelectItem value="sub_reseller">Sub-Reseller</SelectItem>
+                <SelectItem value="online_payment">Online Payment</SelectItem>
+                <SelectItem value="auto">Auto Payment</SelectItem>
+              </SelectContent>
+            </Select>
+            <SearchableSelect
+              options={resellerOptions}
+              value={resellerFilter}
+              onValueChange={setResellerFilter}
+              placeholder="All Resellers"
+              allowClear
+            />
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              placeholder="From Date"
+            />
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              placeholder="To Date"
+            />
+          </div>
+
+          {/* Additional filters row */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <SearchableSelect
+              options={areaOptions}
+              value={areaFilter}
+              onValueChange={setAreaFilter}
+              placeholder="All Areas"
+              allowClear
+            />
+          </div>
+
+          {/* Table */}
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Months</TableHead>
+                      <TableHead>Old Expiry</TableHead>
+                      <TableHead>New Expiry</TableHead>
+                      <TableHead>Discount</TableHead>
+                      <TableHead>Collected By</TableHead>
+                      <TableHead>Reseller</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedRecharges.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                          No recharges found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedRecharges.map((recharge) => (
+                        <TableRow 
+                          key={recharge.id} 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => navigate(`/isp/customers/${recharge.customer_id}`)}
+                        >
+                          <TableCell className="whitespace-nowrap">
+                            <div>
+                              <p className="font-medium">{format(new Date(recharge.recharge_date), 'dd MMM yyyy')}</p>
+                              <p className="text-xs text-muted-foreground">{format(new Date(recharge.recharge_date), 'hh:mm a')}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{recharge.customer?.name || '-'}</p>
+                              <p className="text-sm text-muted-foreground">{recharge.customer?.customer_code || ''}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-green-600">
+                            ৳{recharge.amount.toLocaleString()}
+                          </TableCell>
+                          <TableCell>{recharge.months || 1}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {recharge.old_expiry ? format(new Date(recharge.old_expiry), 'dd MMM yyyy') : '-'}
+                          </TableCell>
+                          <TableCell className="text-sm text-green-600">
+                            {recharge.new_expiry ? format(new Date(recharge.new_expiry), 'dd MMM yyyy') : '-'}
+                          </TableCell>
+                          <TableCell className={recharge.discount && recharge.discount > 0 ? 'text-red-600' : ''}>
+                            {recharge.discount && recharge.discount > 0 ? `৳${recharge.discount}` : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {getCollectorTypeBadge(recharge.collected_by_type, recharge.collected_by_name)}
+                          </TableCell>
+                          <TableCell>
+                            {recharge.reseller ? (
+                              <Badge variant="outline" className="gap-1">
+                                <Store className="h-3 w-3" />
+                                {recharge.reseller.name}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">Direct</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              <div className="mt-4">
+                <TablePagination
+                  currentPage={currentPage}
+                  pageSize={pageSize}
+                  totalItems={filteredRecharges.length}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                />
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </DashboardLayout>
+  );
+}

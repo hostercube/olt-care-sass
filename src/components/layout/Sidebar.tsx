@@ -79,6 +79,7 @@ const resellerItems: NavItem[] = [
 // Billing & Payments - Financial operations
 const ispBillingItems: NavItem[] = [
   { title: 'Billing', href: '/isp/billing', icon: Receipt, requiredModule: 'isp_billing' },
+  { title: 'Recharge History', href: '/isp/recharge-history', icon: ClipboardList, requiredModule: 'isp_billing' },
   { title: 'Automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
   { title: 'bKash Payments', href: '/isp/bkash', icon: Wallet },
   { title: 'Payment Gateways', href: '/isp/gateways', icon: CreditCard },
