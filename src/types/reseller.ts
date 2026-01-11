@@ -43,6 +43,12 @@ export interface Reseller {
   can_add_customers: boolean;
   can_edit_customers: boolean;
   can_delete_customers: boolean;
+  can_transfer_balance: boolean;
+  can_view_reports: boolean;
+  
+  // Device restrictions
+  allowed_mikrotik_ids: string[];
+  allowed_olt_ids: string[];
   
   is_active: boolean;
   last_login: string | null;
