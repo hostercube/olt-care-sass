@@ -78,7 +78,6 @@ const resellerItems: NavItem[] = [
 
 // Billing & Payments - Financial operations
 const ispBillingItems: NavItem[] = [
-  { title: 'Billing', href: '/isp/billing', icon: Receipt, requiredModule: 'isp_billing' },
   { title: 'Recharge History', href: '/isp/recharge-history', icon: ClipboardList, requiredModule: 'isp_billing' },
   { title: 'Automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
   { title: 'bKash Payments', href: '/isp/bkash', icon: Wallet },
@@ -96,7 +95,7 @@ const ispNetworkItems: NavItem[] = [
 
 // Operations - Staff & Inventory
 const ispOperationsItems: NavItem[] = [
-  { title: 'Staff & Salary', href: '/isp/staff', icon: Users },
+  { title: 'Payroll & HR', href: '/isp/staff', icon: Users, requiredModule: 'isp_salary_payroll' },
   { title: 'Roles & Permissions', href: '/isp/roles', icon: Shield },
   { title: 'Inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
   { title: 'Reports', href: '/isp/reports', icon: FileText },
