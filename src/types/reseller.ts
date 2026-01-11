@@ -13,7 +13,30 @@ export type ResellerTransactionType =
   | 'transfer_out' 
   | 'customer_payment'
   | 'deposit'
-  | 'withdrawal';
+  | 'withdrawal'
+  | 'auto_recharge_commission';
+
+// Recharge source types - who initiated the recharge
+export type RechargeSourceType = 
+  | 'online_payment'      // Customer paid online via gateway
+  | 'staff'               // ISP Staff recharge
+  | 'admin'               // Tenant Admin recharge
+  | 'reseller'            // Reseller recharge
+  | 'sub_reseller'        // Sub-reseller recharge
+  | 'sub_sub_reseller'    // Sub-sub-reseller recharge
+  | 'system'              // Auto-recharge by system
+  | 'manual';             // Manual/unknown
+
+export const RECHARGE_SOURCE_LABELS: Record<RechargeSourceType, string> = {
+  online_payment: 'Online Payment',
+  staff: 'Staff',
+  admin: 'Admin',
+  reseller: 'Reseller',
+  sub_reseller: 'Sub-Reseller',
+  sub_sub_reseller: 'Sub-Sub-Reseller',
+  system: 'Auto (System)',
+  manual: 'Manual',
+};
 
 export type ResellerRateType = 'per_customer' | 'percentage' | 'flat';
 
@@ -29,6 +52,7 @@ export type ResellerPermissionKey =
   | 'customer_view_profile'
   | 'customer_view_balance'
   | 'customer_send_sms'
+  | 'customer_export'
   // Sub-Reseller Customer Access
   | 'sub_customer_view'
   | 'sub_customer_edit'
@@ -47,6 +71,7 @@ export type ResellerPermissionKey =
   | 'sub_reseller_balance_add'
   | 'sub_reseller_balance_deduct'
   | 'sub_reseller_view_customers'
+  | 'sub_reseller_view_transactions'
   // Network & Devices
   | 'onu_view'
   | 'onu_manage'
@@ -61,6 +86,8 @@ export type ResellerPermissionKey =
   | 'billing_view'
   | 'billing_create'
   | 'transaction_view'
+  | 'transaction_export'
+  | 'recharge_history_view'
   | 'wallet_view'
   | 'balance_transfer'
   // Reports
@@ -69,7 +96,10 @@ export type ResellerPermissionKey =
   | 'analytics_view'
   // Settings
   | 'profile_edit'
-  | 'password_change';
+  | 'password_change'
+  // Auto Recharge
+  | 'auto_recharge_view'
+  | 'auto_recharge_manage';
 
 // Role definition for new role-based permission system
 export interface ResellerRoleDefinition {
@@ -112,6 +142,7 @@ export const RESELLER_PERMISSION_GROUPS: ResellerPermissionGroup[] = [
       { key: 'customer_view_profile', label: 'View Full Profile', description: 'View complete customer profile details' },
       { key: 'customer_view_balance', label: 'View Balance/Due', description: 'View customer balance and dues' },
       { key: 'customer_send_sms', label: 'Send SMS', description: 'Send SMS to customers' },
+      { key: 'customer_export', label: 'Export Customers', description: 'Export customer data to CSV' },
     ],
   },
   {
@@ -145,6 +176,7 @@ export const RESELLER_PERMISSION_GROUPS: ResellerPermissionGroup[] = [
       { key: 'sub_reseller_balance_add', label: 'Add Balance', description: 'Transfer balance to sub-resellers' },
       { key: 'sub_reseller_balance_deduct', label: 'Deduct Balance', description: 'Deduct balance from sub-resellers' },
       { key: 'sub_reseller_view_customers', label: 'View Their Customers', description: 'View sub-reseller customer list' },
+      { key: 'sub_reseller_view_transactions', label: 'View Their Transactions', description: 'View sub-reseller transaction history' },
     ],
   },
   {
@@ -169,8 +201,18 @@ export const RESELLER_PERMISSION_GROUPS: ResellerPermissionGroup[] = [
       { key: 'billing_view', label: 'View Billing', description: 'View billing history and invoices' },
       { key: 'billing_create', label: 'Create Bills', description: 'Generate customer bills' },
       { key: 'transaction_view', label: 'View Transactions', description: 'View wallet transaction history' },
+      { key: 'transaction_export', label: 'Export Transactions', description: 'Export transaction history to CSV' },
+      { key: 'recharge_history_view', label: 'View Recharge History', description: 'View customer recharge history' },
       { key: 'wallet_view', label: 'View Wallet', description: 'View wallet balance and details' },
       { key: 'balance_transfer', label: 'Transfer Balance', description: 'Transfer balance to other resellers' },
+    ],
+  },
+  {
+    name: 'Auto Recharge',
+    icon: '🔄',
+    permissions: [
+      { key: 'auto_recharge_view', label: 'View Auto Recharge', description: 'View auto recharge settings' },
+      { key: 'auto_recharge_manage', label: 'Manage Auto Recharge', description: 'Configure auto recharge settings' },
     ],
   },
   {
@@ -428,13 +470,14 @@ export const RESELLER_ROLE_LABELS: Record<ResellerRoleType, string> = {
 };
 
 export const TRANSACTION_TYPE_LABELS: Record<ResellerTransactionType, string> = {
-  recharge: 'Recharge',
+  recharge: 'Balance Added',
   deduction: 'Deduction',
-  commission: 'Commission',
+  commission: 'Commission Earned',
   refund: 'Refund',
-  transfer_in: 'Transfer In',
-  transfer_out: 'Transfer Out',
-  customer_payment: 'Customer Payment',
+  transfer_in: 'Balance Received',
+  transfer_out: 'Balance Sent',
+  customer_payment: 'Customer Recharge',
   deposit: 'Deposit',
   withdrawal: 'Withdrawal',
+  auto_recharge_commission: 'Auto Recharge Commission',
 };
