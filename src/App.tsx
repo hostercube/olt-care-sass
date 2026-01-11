@@ -83,6 +83,12 @@ import CustomerPayBill from "./pages/CustomerPortal/CustomerPayBill";
 // Reseller Portal Pages
 import ResellerLogin from "./pages/ResellerPortal/ResellerLogin";
 import ResellerDashboard from "./pages/ResellerPortal/ResellerDashboard";
+import ResellerBilling from "./pages/ResellerPortal/ResellerBilling";
+import ResellerCustomers from "./pages/ResellerPortal/ResellerCustomers";
+import ResellerTransactions from "./pages/ResellerPortal/ResellerTransactions";
+import ResellerSubResellers from "./pages/ResellerPortal/ResellerSubResellers";
+import ResellerProfile from "./pages/ResellerPortal/ResellerProfile";
+import ResellerReports from "./pages/ResellerPortal/ResellerReports";
 
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
@@ -497,6 +503,12 @@ const App = () => (
               {/* Reseller Portal Routes */}
               <Route path="/reseller/login" element={<ResellerLogin />} />
               <Route path="/reseller/dashboard" element={<ResellerDashboard />} />
+              <Route path="/reseller/billing" element={<ResellerBilling />} />
+              <Route path="/reseller/customers" element={<ResellerCustomers />} />
+              <Route path="/reseller/transactions" element={<ResellerTransactions />} />
+              <Route path="/reseller/sub-resellers" element={<ResellerSubResellers />} />
+              <Route path="/reseller/profile" element={<ResellerProfile />} />
+              <Route path="/reseller/reports" element={<ResellerReports />} />
 
               {/* Staff Portal Routes */}
               <Route path="/staff/login" element={
