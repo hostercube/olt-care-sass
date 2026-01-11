@@ -120,10 +120,15 @@ export function useResellerSystem() {
   const createReseller = async (data: Partial<Reseller>) => {
     try {
       const resellerData: any = { ...data };
-      
+
+      // Ensure active by default (DB may allow null, but UI filters by is_active)
+      if (resellerData.is_active === undefined || resellerData.is_active === null) {
+        resellerData.is_active = true;
+      }
+
       // Get tenant_id - wait for context if needed
       let effectiveTenantId = tenantId;
-      
+
       if (!effectiveTenantId && !isSuperAdmin) {
         // Try to get tenant_id from current user's tenant
         const { data: { user } } = await supabase.auth.getUser();
@@ -133,20 +138,20 @@ export function useResellerSystem() {
             .select('tenant_id')
             .eq('user_id', user.id)
             .maybeSingle();
-          
+
           if (tenantUser?.tenant_id) {
             effectiveTenantId = tenantUser.tenant_id;
           }
         }
       }
-      
+
       if (!effectiveTenantId && !isSuperAdmin) {
         throw new Error('No tenant context available. Please try again.');
       }
-      
+
       if (effectiveTenantId) {
         resellerData.tenant_id = effectiveTenantId;
-        
+
         // Check package limit before adding new reseller
         if (!isSuperAdmin) {
           const { checkPackageLimit } = await import('@/hooks/usePackageLimits');
@@ -157,7 +162,7 @@ export function useResellerSystem() {
           }
         }
       }
-      
+
       // Set level based on parent
       if (data.parent_id) {
         const parent = resellers.find(r => r.id === data.parent_id);
@@ -169,9 +174,9 @@ export function useResellerSystem() {
         resellerData.level = 1;
         resellerData.role = 'reseller';
       }
-      
+
       console.log('Creating reseller with data:', resellerData);
-      
+
       const { data: newReseller, error } = await supabase
         .from('resellers')
         .insert(resellerData)
@@ -182,7 +187,7 @@ export function useResellerSystem() {
         console.error('Insert error:', error);
         throw error;
       }
-      
+
       console.log('Created reseller:', newReseller);
       toast.success('Reseller created successfully');
       await fetchResellers();

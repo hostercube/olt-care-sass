@@ -94,15 +94,16 @@ export default function ResellersManagement() {
 
   // Filter resellers by level
   const filteredResellers = useMemo(() => {
-    if (filterLevel === 'all') return resellers.filter(r => r.is_active);
-    return resellers.filter(r => r.is_active && r.level === parseInt(filterLevel));
+    const active = resellers.filter(r => r.is_active !== false);
+    if (filterLevel === 'all') return active;
+    return active.filter(r => r.level === parseInt(filterLevel));
   }, [resellers, filterLevel]);
 
   // Get level 1 resellers for parent selection
   const parentOptions = useMemo(() => {
     const level = editingReseller?.level || 1;
     // Can only select resellers with level < current (or level < 3 for new)
-    return resellers.filter(r => r.is_active && r.level < 3 && (!editingReseller || r.level < level));
+    return resellers.filter(r => r.is_active !== false && r.level < 3 && (!editingReseller || r.level < level));
   }, [resellers, editingReseller]);
 
   // Build area options for reseller (must reference legacy Areas table due to FK)

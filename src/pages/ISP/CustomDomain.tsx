@@ -99,32 +99,39 @@ export default function CustomDomain() {
   }, [fetchServerIP, fetchDomains]);
 
   // Check DNS records using public DNS-over-HTTPS (Cloudflare)
-  const checkDNSRecords = async (domain: string, expectedIP: string, expectedTXT: string): Promise<{
+  const checkDNSRecords = async (
+    fullDomain: string,
+    rootDomain: string,
+    expectedIP: string,
+    expectedTXT: string
+  ): Promise<{
     aRecordValid: boolean;
     txtRecordValid: boolean;
     aRecordFound: string | null;
     txtRecordFound: string | null;
+    txtCheckedName: string;
   }> => {
+    const normalizedIP = (expectedIP || '').trim();
+    const normalizedTXT = (expectedTXT || '').trim();
+
     let aRecordValid = false;
     let txtRecordValid = false;
     let aRecordFound: string | null = null;
     let txtRecordFound: string | null = null;
 
+    // A record check (full domain)
     try {
-      // Check A record using Cloudflare DNS-over-HTTPS
-      const aResponse = await fetch(`https://cloudflare-dns.com/dns-query?name=${domain}&type=A`, {
+      const aResponse = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(fullDomain)}&type=A`, {
         headers: { 'Accept': 'application/dns-json' },
       });
-      
+
       if (aResponse.ok) {
         const aData = await aResponse.json();
-        console.log('A record response:', aData);
-        
         if (aData.Answer && aData.Answer.length > 0) {
           for (const record of aData.Answer) {
-            if (record.type === 1) { // A record type
+            if (record.type === 1) {
               aRecordFound = record.data;
-              if (record.data === expectedIP) {
+              if (record.data === normalizedIP) {
                 aRecordValid = true;
                 break;
               }
@@ -136,36 +143,44 @@ export default function CustomDomain() {
       console.error('Error checking A record:', err);
     }
 
-    try {
-      // Check TXT record for _isppoint subdomain
-      const txtDomain = `_isppoint.${domain}`;
-      const txtResponse = await fetch(`https://cloudflare-dns.com/dns-query?name=${txtDomain}&type=TXT`, {
-        headers: { 'Accept': 'application/dns-json' },
-      });
-      
-      if (txtResponse.ok) {
+    // TXT record check: always on root domain (_isppoint.rootDomain)
+    // Note: many DNS panels also accept "isppoint" (without underscore). We check both to reduce false negatives.
+    const candidates = [`_isppoint.${rootDomain}`, `isppoint.${rootDomain}`];
+    let txtCheckedName = candidates[0];
+
+    for (const candidateName of candidates) {
+      try {
+        txtCheckedName = candidateName;
+        const txtResponse = await fetch(
+          `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(candidateName)}&type=TXT`,
+          { headers: { 'Accept': 'application/dns-json' } }
+        );
+
+        if (!txtResponse.ok) continue;
+
         const txtData = await txtResponse.json();
-        console.log('TXT record response:', txtData);
-        
-        if (txtData.Answer && txtData.Answer.length > 0) {
-          for (const record of txtData.Answer) {
-            if (record.type === 16) { // TXT record type
-              // TXT records come with quotes, remove them
-              const txtValue = record.data.replace(/"/g, '');
-              txtRecordFound = txtValue;
-              if (txtValue === expectedTXT) {
-                txtRecordValid = true;
-                break;
-              }
-            }
+        if (!txtData.Answer || txtData.Answer.length === 0) continue;
+
+        for (const record of txtData.Answer) {
+          if (record.type !== 16) continue;
+
+          // TXT records come with quotes, remove them; some providers split strings.
+          const txtValue = String(record.data).replace(/"/g, '').trim();
+          txtRecordFound = txtValue;
+
+          if (txtValue === normalizedTXT) {
+            txtRecordValid = true;
+            break;
           }
         }
+
+        if (txtRecordValid) break;
+      } catch (err) {
+        console.error('Error checking TXT record:', err);
       }
-    } catch (err) {
-      console.error('Error checking TXT record:', err);
     }
 
-    return { aRecordValid, txtRecordValid, aRecordFound, txtRecordFound };
+    return { aRecordValid, txtRecordValid, aRecordFound, txtRecordFound, txtCheckedName };
   };
 
   // Auto-verify domain by checking DNS via client-side DNS-over-HTTPS
