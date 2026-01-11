@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, ArrowRightLeft, Search, Filter, TrendingUp, TrendingDown, Wallet, Download, RefreshCcw } from 'lucide-react';
+import { Loader2, ArrowRightLeft, Search, Filter, TrendingUp, TrendingDown, Wallet, Download, RefreshCcw, Calendar } from 'lucide-react';
 import { useResellerPortal } from '@/hooks/useResellerPortal';
 import { ResellerPortalLayout } from '@/components/reseller/ResellerPortalLayout';
 import { TablePagination } from '@/components/ui/table-pagination';
