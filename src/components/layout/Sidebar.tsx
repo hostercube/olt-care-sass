@@ -91,6 +91,7 @@ const ispNetworkItems: NavItem[] = [
 const ispOperationsItems: NavItem[] = [
   { title: 'Staff & Salary', href: '/isp/staff', icon: Users },
   { title: 'Roles & Permissions', href: '/isp/roles', icon: Shield },
+  { title: 'Reseller Billing', href: '/isp/reseller-billing', icon: Wallet, requiredModule: 'isp_resellers' },
   { title: 'Inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
   { title: 'Reports', href: '/isp/reports', icon: FileText },
 ];

@@ -121,30 +121,40 @@ export function useResellerSystem() {
     try {
       const resellerData: any = { ...data };
       
-      // Set tenant_id - required for insert
-      if (tenantId) {
-        resellerData.tenant_id = tenantId;
+      // Get tenant_id - wait for context if needed
+      let effectiveTenantId = tenantId;
+      
+      if (!effectiveTenantId && !isSuperAdmin) {
+        // Try to get tenant_id from current user's tenant
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: tenantUser } = await supabase
+            .from('tenant_users')
+            .select('tenant_id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          
+          if (tenantUser?.tenant_id) {
+            effectiveTenantId = tenantUser.tenant_id;
+          }
+        }
+      }
+      
+      if (!effectiveTenantId && !isSuperAdmin) {
+        throw new Error('No tenant context available. Please try again.');
+      }
+      
+      if (effectiveTenantId) {
+        resellerData.tenant_id = effectiveTenantId;
         
         // Check package limit before adding new reseller
         if (!isSuperAdmin) {
           const { checkPackageLimit } = await import('@/hooks/usePackageLimits');
-          const limitCheck = await checkPackageLimit(tenantId, 'resellers', 1);
+          const limitCheck = await checkPackageLimit(effectiveTenantId, 'resellers', 1);
           if (!limitCheck.allowed) {
             toast.error(limitCheck.message || 'Reseller limit reached. Please upgrade your package.');
             throw new Error(limitCheck.message);
           }
-        }
-      } else {
-        // Try to get tenant_id from current user's tenant
-        const { data: tenantUser } = await supabase
-          .from('tenant_users')
-          .select('tenant_id')
-          .single();
-        
-        if (tenantUser?.tenant_id) {
-          resellerData.tenant_id = tenantUser.tenant_id;
-        } else {
-          throw new Error('No tenant context available');
         }
       }
       
@@ -220,11 +230,14 @@ export function useResellerSystem() {
     }
   };
 
-  // Recharge balance (ISP -> Reseller)
+  // Recharge balance (ISP/Tenant -> Reseller)
   const rechargeBalance = async (resellerId: string, amount: number, description: string) => {
     try {
       const reseller = resellers.find(r => r.id === resellerId);
       if (!reseller) throw new Error('Reseller not found');
+
+      // Get effective tenant_id
+      let effectiveTenantId = tenantId || reseller.tenant_id;
 
       const newBalance = reseller.balance + amount;
 
@@ -232,13 +245,13 @@ export function useResellerSystem() {
       const { error: txError } = await supabase
         .from('reseller_transactions')
         .insert({
-          tenant_id: tenantId,
+          tenant_id: effectiveTenantId,
           reseller_id: resellerId,
           type: 'recharge',
           amount,
           balance_before: reseller.balance,
           balance_after: newBalance,
-          description,
+          description: description || 'Balance recharge from ISP',
         } as any);
 
       if (txError) throw txError;
@@ -251,11 +264,90 @@ export function useResellerSystem() {
 
       if (updateError) throw updateError;
 
-      toast.success('Balance recharged successfully');
+      toast.success(`৳${amount.toLocaleString()} recharged successfully`);
       fetchResellers();
     } catch (err) {
       console.error('Error recharging balance:', err);
       toast.error('Failed to recharge balance');
+      throw err;
+    }
+  };
+
+  // Transfer balance from parent reseller to child reseller
+  const fundSubReseller = async (fromResellerId: string, toResellerId: string, amount: number, description: string) => {
+    try {
+      const fromReseller = resellers.find(r => r.id === fromResellerId);
+      const toReseller = resellers.find(r => r.id === toResellerId);
+      
+      if (!fromReseller || !toReseller) {
+        throw new Error('Reseller not found');
+      }
+
+      // Validate hierarchy - from must be parent of to
+      if (toReseller.parent_id !== fromResellerId) {
+        throw new Error('Can only fund direct sub-resellers');
+      }
+
+      if (fromReseller.balance < amount) {
+        throw new Error(`Insufficient balance. Available: ৳${fromReseller.balance.toLocaleString()}`);
+      }
+
+      const effectiveTenantId = tenantId || fromReseller.tenant_id;
+      const fromNewBalance = fromReseller.balance - amount;
+      const toNewBalance = toReseller.balance + amount;
+
+      // Create debit transaction for sender
+      const { error: debitError } = await supabase
+        .from('reseller_transactions')
+        .insert({
+          tenant_id: effectiveTenantId,
+          reseller_id: fromResellerId,
+          type: 'transfer_out',
+          amount: -amount,
+          balance_before: fromReseller.balance,
+          balance_after: fromNewBalance,
+          to_reseller_id: toResellerId,
+          description: description || `Fund transfer to ${toReseller.name}`,
+        } as any);
+
+      if (debitError) throw debitError;
+
+      // Create credit transaction for receiver
+      const { error: creditError } = await supabase
+        .from('reseller_transactions')
+        .insert({
+          tenant_id: effectiveTenantId,
+          reseller_id: toResellerId,
+          type: 'transfer_in',
+          amount,
+          balance_before: toReseller.balance,
+          balance_after: toNewBalance,
+          from_reseller_id: fromResellerId,
+          description: description || `Fund received from ${fromReseller.name}`,
+        } as any);
+
+      if (creditError) throw creditError;
+
+      // Update balances
+      const { error: updateFromError } = await supabase
+        .from('resellers')
+        .update({ balance: fromNewBalance })
+        .eq('id', fromResellerId);
+
+      if (updateFromError) throw updateFromError;
+
+      const { error: updateToError } = await supabase
+        .from('resellers')
+        .update({ balance: toNewBalance })
+        .eq('id', toResellerId);
+
+      if (updateToError) throw updateToError;
+
+      toast.success(`৳${amount.toLocaleString()} transferred to ${toReseller.name}`);
+      fetchResellers();
+    } catch (err: any) {
+      console.error('Error funding sub-reseller:', err);
+      toast.error(err.message || 'Failed to transfer funds');
       throw err;
     }
   };
@@ -451,6 +543,7 @@ export function useResellerSystem() {
     branches,
     customRoles,
     loading,
+    tenantId,
     refetch: fetchResellers,
     refetchBranches: fetchBranches,
     refetchRoles: fetchCustomRoles,
@@ -458,6 +551,7 @@ export function useResellerSystem() {
     updateReseller,
     deleteReseller,
     rechargeBalance,
+    fundSubReseller,
     transferBalance,
     payCustomer,
     getTransactions,
