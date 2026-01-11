@@ -99,7 +99,12 @@ export type ResellerPermissionKey =
   | 'password_change'
   // Auto Recharge
   | 'auto_recharge_view'
-  | 'auto_recharge_manage';
+  | 'auto_recharge_manage'
+  // Area Management
+  | 'area_view'
+  | 'area_create'
+  | 'area_edit'
+  | 'area_delete';
 
 // Role definition for new role-based permission system
 export interface ResellerRoleDefinition {

@@ -26,6 +26,7 @@ import { updateUserPassword, isUserAdmin } from './admin/user-admin.js';
 import { getNotificationSettings, notifyAlert, testSmtpConnection, sendTestEmail, sendTestTelegram, sendTestWhatsApp } from './notifications/notifier.js';
 import { processPendingSMS, getSMSGatewaySettings, sendSMS } from './notifications/sms-sender.js';
 import { processPendingEmails, getEmailGatewaySettings } from './notifications/email-sender.js';
+import { setupResellerRoutes } from './reseller/reseller-api.js';
 import { initiatePayment, handlePaymentCallback } from './payments/payment-handler.js';
 
 const app = express();
@@ -3274,6 +3275,9 @@ app.post('/payments/bkash/checkout-redirect', (req, res) => {
   req.url = '/api/payments/bkash/checkout-redirect';
   app.handle(req, res);
 });
+
+// Setup Reseller Portal API routes
+setupResellerRoutes(app, supabase);
 
 // Start server
 const PORT = process.env.PORT || 3001;

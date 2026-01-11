@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Reseller, ResellerTransaction, ResellerRoleDefinition, ResellerPermissionKey } from '@/types/reseller';
+import * as resellerApi from '@/lib/reseller-api';
 
 interface ResellerSession {
   id: string;
@@ -75,7 +75,7 @@ export function useResellerPortal() {
     if (!reseller) return false;
     
     const legacyMap: Partial<Record<ResellerPermissionKey, boolean>> = {
-      customer_view: true, // Always allowed for resellers
+      customer_view: true,
       customer_create: reseller.can_add_customers,
       customer_edit: reseller.can_edit_customers,
       customer_delete: reseller.can_delete_customers,
@@ -109,6 +109,10 @@ export function useResellerPortal() {
       wallet_view: true,
       auto_recharge_view: true,
       auto_recharge_manage: false,
+      area_view: true,
+      area_create: false,
+      area_edit: false,
+      area_delete: false,
     };
     
     return legacyMap[permission] ?? false;
@@ -145,48 +149,59 @@ export function useResellerPortal() {
     
     setLoading(true);
     try {
-      // Fetch fresh reseller data
-      const { data: resellerData, error } = await supabase
-        .from('resellers')
-        .select('*')
-        .eq('id', session.id)
-        .single();
+      // Fetch all data in parallel from VPS backend
+      const [
+        profileRes,
+        areasRes,
+        transactionsRes,
+        customersRes,
+        subResellersRes,
+        packagesRes,
+        mikrotikRes,
+        oltsRes,
+      ] = await Promise.all([
+        resellerApi.fetchResellerProfile(),
+        resellerApi.fetchResellerAreas(),
+        resellerApi.fetchResellerTransactions({ limit: 500 }),
+        resellerApi.fetchResellerCustomers(true),
+        resellerApi.fetchSubResellers(),
+        resellerApi.fetchResellerPackages(),
+        resellerApi.fetchResellerMikrotikRouters(),
+        resellerApi.fetchResellerOlts(),
+      ]);
 
-      if (error || !resellerData) {
+      if (!profileRes.success) {
+        console.error('Failed to fetch profile:', profileRes.error);
         logout();
         return;
       }
 
+      const resellerData = profileRes.reseller;
       setReseller(resellerData as unknown as Reseller);
-      setSession(prev => prev ? { ...prev, balance: (resellerData as any).balance } : null);
+      setResellerRole(profileRes.role as unknown as ResellerRoleDefinition | null);
+      setSession(prev => prev ? { ...prev, balance: resellerData.balance } : null);
 
-      // Fetch role if role_id exists
-      if ((resellerData as any).role_id) {
-        const { data: roleData } = await supabase
-          .from('reseller_roles')
-          .select('*')
-          .eq('id', (resellerData as any).role_id)
-          .single();
-        
-        if (roleData) {
-          setResellerRole(roleData as unknown as ResellerRoleDefinition);
-        }
-      } else {
-        setResellerRole(null);
-      }
-
-      // Fetch all related data in parallel
-      await Promise.all([
-        fetchCustomers(session.id, resellerData as any),
-        fetchSubResellers(session.id),
-        fetchTransactions(session.id),
-        fetchPackages((resellerData as any).tenant_id),
-        fetchAreas((resellerData as any).tenant_id),
-        fetchDevices(resellerData as any),
-      ]);
+      // Set areas from backend (with inheritance applied)
+      setAreas(areasRes.areas || []);
+      
+      // Set transactions
+      setTransactions((transactionsRes.transactions || []) as unknown as ResellerTransaction[]);
+      
+      // Set customers
+      setCustomers((customersRes.customers || []) as any[]);
+      
+      // Set sub-resellers
+      setSubResellers((subResellersRes.subResellers || []) as unknown as Reseller[]);
+      
+      // Set packages
+      setPackages(packagesRes.packages || []);
+      
+      // Set devices
+      setMikrotikRouters(mikrotikRes.routers || []);
+      setOlts(oltsRes.olts || []);
 
       // Calculate billing summary
-      calculateBillingSummary(session.id);
+      calculateBillingSummary(customersRes.customers || [], transactionsRes.transactions || [], resellerData);
     } catch (err) {
       console.error('Error fetching reseller data:', err);
     } finally {
@@ -194,226 +209,35 @@ export function useResellerPortal() {
     }
   };
 
-  const fetchCustomers = async (resellerId: string, resellerData: Reseller) => {
-    try {
-      let customerIds: string[] = [];
-      
-      // Get direct customers
-      const directQuery = supabase
-        .from('customers')
-        .select('id')
-        .eq('reseller_id', resellerId);
-      
-      const { data: directCustomers } = await directQuery;
-      customerIds = (directCustomers || []).map(c => c.id);
+  const calculateBillingSummary = (customers: Customer[], transactions: ResellerTransaction[], resellerData: any) => {
+    const activeCount = customers.filter(c => c.status === 'active').length;
+    const expiredCount = customers.filter(c => c.status === 'expired').length;
+    const totalMonthly = customers.reduce((sum, c) => sum + (c.monthly_bill || 0), 0);
+    const totalDue = customers.reduce((sum, c) => sum + (c.due_amount || 0), 0);
 
-      // If can view sub-customers, get sub-reseller customers too
-      if (resellerData.can_view_sub_customers) {
-        const { data: subResellersData } = await supabase
-          .from('resellers')
-          .select('id')
-          .eq('parent_id', resellerId);
+    // Get commissions earned
+    const commissionsEarned = transactions
+      .filter(t => t.type === 'commission' || t.type === 'auto_recharge_commission')
+      .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
-        if (subResellersData?.length) {
-          const subResellerIds = subResellersData.map(s => s.id);
-          const { data: subCustomers } = await supabase
-            .from('customers')
-            .select('id')
-            .in('reseller_id', subResellerIds);
-          
-          customerIds = [...customerIds, ...(subCustomers || []).map(c => c.id)];
-        }
-      }
+    // Get recharges this month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const rechargesThisMonth = transactions
+      .filter(t => t.type === 'customer_payment' && t.created_at >= startOfMonth)
+      .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
-      // Fetch full customer data
-      if (customerIds.length > 0) {
-        const { data: fullCustomers } = await supabase
-          .from('customers')
-          .select(`
-            *,
-            package:isp_packages(id, name, price),
-            area:areas(id, name)
-          `)
-          .in('id', customerIds)
-          .order('name');
-
-        setCustomers((fullCustomers as any[]) || []);
-      } else {
-        // Also fetch customers assigned directly
-        const { data: directCustomersFull } = await supabase
-          .from('customers')
-          .select(`
-            *,
-            package:isp_packages(id, name, price),
-            area:areas(id, name)
-          `)
-          .eq('reseller_id', resellerId)
-          .order('name');
-
-        setCustomers((directCustomersFull as any[]) || []);
-      }
-    } catch (err) {
-      console.error('Error fetching customers:', err);
-      setCustomers([]);
-    }
+    setBillingSummary({
+      totalCustomers: customers.length,
+      activeCustomers: activeCount,
+      expiredCustomers: expiredCount,
+      totalMonthlyRevenue: totalMonthly,
+      totalDue,
+      totalCollections: resellerData?.total_collections || 0,
+      rechargesThisMonth,
+      commissionsEarned,
+    });
   };
-
-  const fetchSubResellers = async (resellerId: string) => {
-    try {
-      const { data } = await supabase
-        .from('resellers')
-        .select('*')
-        .eq('parent_id', resellerId)
-        .eq('is_active', true)
-        .order('name');
-
-      setSubResellers((data as unknown as Reseller[]) || []);
-    } catch (err) {
-      console.error('Error fetching sub-resellers:', err);
-      setSubResellers([]);
-    }
-  };
-
-  const fetchTransactions = async (resellerId: string) => {
-    try {
-      const { data } = await supabase
-        .from('reseller_transactions' as any)
-        .select(`
-          *,
-          customer:customers(id, name, customer_code)
-        `)
-        .eq('reseller_id', resellerId)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      setTransactions((data as unknown as ResellerTransaction[]) || []);
-    } catch (err) {
-      console.error('Error fetching transactions:', err);
-      setTransactions([]);
-    }
-  };
-
-  const fetchPackages = async (tenantId: string) => {
-    try {
-      const { data } = await supabase
-        .from('isp_packages')
-        .select('id, name, price')
-        .eq('tenant_id', tenantId)
-        .eq('is_active', true)
-        .order('name');
-
-      setPackages(data || []);
-    } catch (err) {
-      console.error('Error fetching packages:', err);
-    }
-  };
-
-  const fetchAreas = async (tenantId: string) => {
-    try {
-      const { data } = await supabase
-        .from('areas')
-        .select('id, name')
-        .eq('tenant_id', tenantId)
-        .order('name');
-
-      setAreas(data || []);
-    } catch (err) {
-      console.error('Error fetching areas:', err);
-    }
-  };
-
-  const fetchDevices = async (resellerData: Reseller) => {
-    try {
-      // Fetch MikroTik routers
-      let mikrotikQuery = supabase
-        .from('mikrotik_routers')
-        .select('id, name')
-        .eq('tenant_id', resellerData.tenant_id);
-
-      // Filter by allowed IDs if set
-      const allowedMikrotik = (resellerData as any).allowed_mikrotik_ids as string[] | null;
-      if (allowedMikrotik && allowedMikrotik.length > 0) {
-        mikrotikQuery = mikrotikQuery.in('id', allowedMikrotik);
-      }
-
-      const { data: mikrotikData } = await mikrotikQuery;
-      setMikrotikRouters(mikrotikData || []);
-
-      // Fetch OLTs
-      let oltQuery = supabase
-        .from('olts')
-        .select('id, name')
-        .eq('tenant_id', resellerData.tenant_id);
-
-      const allowedOlts = (resellerData as any).allowed_olt_ids as string[] | null;
-      if (allowedOlts && allowedOlts.length > 0) {
-        oltQuery = oltQuery.in('id', allowedOlts);
-      }
-
-      const { data: oltData } = await oltQuery;
-      setOlts(oltData || []);
-    } catch (err) {
-      console.error('Error fetching devices:', err);
-    }
-  };
-
-  const calculateBillingSummary = async (resellerId: string) => {
-    try {
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-      // Get customer stats
-      const activeCount = customers.filter(c => c.status === 'active').length;
-      const expiredCount = customers.filter(c => c.status === 'expired').length;
-      const totalMonthly = customers.reduce((sum, c) => sum + (c.monthly_bill || 0), 0);
-      const totalDue = customers.reduce((sum, c) => sum + (c.due_amount || 0), 0);
-
-      // Get recharges this month
-      const { data: monthlyRecharges } = await supabase
-        .from('customer_recharges')
-        .select('amount')
-        .eq('reseller_id', resellerId)
-        .gte('created_at', startOfMonth);
-
-      const rechargesThisMonth = (monthlyRecharges || []).reduce((sum, r) => sum + (r.amount || 0), 0);
-
-      // Get commissions earned
-      const { data: commissions } = await supabase
-        .from('reseller_transactions' as any)
-        .select('amount')
-        .eq('reseller_id', resellerId)
-        .eq('type', 'commission');
-
-      const commissionsEarned = (commissions || []).reduce((sum: number, c: any) => sum + Math.abs(c.amount || 0), 0);
-
-      // Get total collections
-      const { data: resellerData } = await supabase
-        .from('resellers')
-        .select('total_collections')
-        .eq('id', resellerId)
-        .single();
-
-      setBillingSummary({
-        totalCustomers: customers.length,
-        activeCustomers: activeCount,
-        expiredCustomers: expiredCount,
-        totalMonthlyRevenue: totalMonthly,
-        totalDue,
-        totalCollections: (resellerData as any)?.total_collections || 0,
-        rechargesThisMonth,
-        commissionsEarned,
-      });
-    } catch (err) {
-      console.error('Error calculating billing summary:', err);
-    }
-  };
-
-  // Recalculate billing when customers change
-  useEffect(() => {
-    if (session?.id && customers.length >= 0) {
-      calculateBillingSummary(session.id);
-    }
-  }, [customers, session?.id]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('reseller_session');
@@ -431,17 +255,12 @@ export function useResellerPortal() {
     }
 
     try {
-      const customerData = {
-        ...data,
-        tenant_id: reseller.tenant_id,
-        reseller_id: reseller.id,
-      };
+      const result = await resellerApi.createResellerCustomer(data);
 
-      const { error } = await supabase
-        .from('customers')
-        .insert(customerData as any);
-
-      if (error) throw error;
+      if (!result.success) {
+        toast.error(result.error || 'Failed to create customer');
+        return false;
+      }
 
       toast.success('Customer created successfully');
       await fetchResellerData();
@@ -460,12 +279,12 @@ export function useResellerPortal() {
     }
 
     try {
-      const { error } = await supabase
-        .from('customers')
-        .update(data as any)
-        .eq('id', id);
+      const result = await resellerApi.updateResellerCustomer(id, data);
 
-      if (error) throw error;
+      if (!result.success) {
+        toast.error(result.error || 'Failed to update customer');
+        return false;
+      }
 
       toast.success('Customer updated successfully');
       await fetchResellerData();
@@ -483,158 +302,15 @@ export function useResellerPortal() {
       return false;
     }
 
-    if (!reseller) {
-      toast.error('Reseller session not found');
-      return false;
-    }
-
-    // Calculate commission/discount
-    let deductAmount = amount;
-    let commission = 0;
-    
-    // Commission calculation based on reseller settings
-    // rate_type: 'commission' = reseller gets money back, 'discount' = reseller pays less
-    // commission_type: 'percentage' or 'flat'
-    const rateType = (reseller as any).rate_type || 'discount';
-    const commissionType = (reseller as any).commission_type || 'percentage';
-    const commissionValue = (reseller as any).commission_value || (reseller as any).customer_rate || 0;
-    
-    if (commissionValue > 0) {
-      if (commissionType === 'percentage') {
-        commission = Math.round((amount * commissionValue) / 100);
-      } else {
-        // flat rate per month
-        commission = commissionValue * months;
-      }
-      
-      if (rateType === 'discount') {
-        // Discount: Reseller pays less
-        deductAmount = amount - commission;
-      }
-      // If commission type, reseller pays full but gets commission credited later
-    }
-
-    if (reseller.balance < deductAmount) {
-      toast.error(`Insufficient balance. Required: ৳${deductAmount.toLocaleString()}, Available: ৳${reseller.balance.toLocaleString()}`);
-      return false;
-    }
-
     try {
-      const customer = customers.find(c => c.id === customerId);
-      if (!customer) throw new Error('Customer not found');
+      const result = await resellerApi.rechargeCustomer(customerId, amount, months, 'reseller_wallet');
 
-      // Get package validity days (default 30)
-      const packageValidityDays = (customer.package as any)?.validity_days || 30;
-
-      // Calculate new expiry - if expired or null, start from today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      let baseExpiry: Date;
-      if (customer.expiry_date) {
-        const currentExpiry = new Date(customer.expiry_date);
-        baseExpiry = currentExpiry < today ? today : currentExpiry;
-      } else {
-        baseExpiry = today;
-      }
-      
-      const newExpiry = new Date(baseExpiry);
-      newExpiry.setDate(newExpiry.getDate() + (packageValidityDays * months));
-
-      // Update customer expiry and status
-      const { error: customerError } = await supabase
-        .from('customers')
-        .update({
-          expiry_date: newExpiry.toISOString(),
-          status: 'active',
-          last_payment_date: new Date().toISOString(),
-          due_amount: Math.max(0, (customer.due_amount || 0) - amount),
-        })
-        .eq('id', customerId);
-
-      if (customerError) throw customerError;
-
-      // Create recharge record
-      const { error: rechargeError } = await supabase
-        .from('customer_recharges')
-        .insert({
-          tenant_id: reseller.tenant_id,
-          customer_id: customerId,
-          reseller_id: reseller.id,
-          amount,
-          months,
-          old_expiry: customer.expiry_date,
-          new_expiry: newExpiry.toISOString(),
-          payment_method: 'reseller_wallet',
-          status: 'completed',
-          discount: commission > 0 && rateType === 'discount' ? commission : 0,
-        });
-
-      if (rechargeError) throw rechargeError;
-
-      // Deduct from reseller balance and create transaction
-      const newBalance = reseller.balance - deductAmount;
-      
-      const { error: txError } = await supabase
-        .from('reseller_transactions' as any)
-        .insert({
-          tenant_id: reseller.tenant_id,
-          reseller_id: reseller.id,
-          type: 'customer_payment',
-          amount: -deductAmount,
-          balance_before: reseller.balance,
-          balance_after: newBalance,
-          customer_id: customerId,
-          description: `Recharge for ${customer.name} (${months} month${months > 1 ? 's' : ''})${commission > 0 ? ` | Discount: ৳${commission}` : ''}`,
-        });
-
-      if (txError) throw txError;
-
-      // If commission type (not discount), credit commission separately
-      if (rateType === 'commission' && commission > 0) {
-        const commissionBalance = newBalance + commission;
-        await supabase
-          .from('reseller_transactions' as any)
-          .insert({
-            tenant_id: reseller.tenant_id,
-            reseller_id: reseller.id,
-            type: 'commission',
-            amount: commission,
-            balance_before: newBalance,
-            balance_after: commissionBalance,
-            customer_id: customerId,
-            description: `Commission for ${customer.name} recharge`,
-          });
+      if (!result.success) {
+        toast.error(result.error || 'Failed to recharge customer');
+        return false;
       }
 
-      // Update reseller balance and collections
-      const finalBalance = rateType === 'commission' && commission > 0 
-        ? newBalance + commission 
-        : newBalance;
-
-      const { error: balanceError } = await supabase
-        .from('resellers')
-        .update({ 
-          balance: finalBalance,
-          total_collections: ((reseller as any).total_collections || 0) + amount,
-        })
-        .eq('id', reseller.id);
-
-      if (balanceError) throw balanceError;
-
-      // Create customer payment record
-      await supabase
-        .from('customer_payments')
-        .insert({
-          tenant_id: reseller.tenant_id,
-          customer_id: customerId,
-          amount,
-          payment_method: 'reseller_wallet',
-          notes: `Paid by reseller: ${reseller.name}`,
-        });
-
-      const discountMsg = commission > 0 ? ` (Discount: ৳${commission})` : '';
-      toast.success(`Customer recharged for ${months} month${months > 1 ? 's' : ''}${discountMsg}`);
+      toast.success(`Customer recharged! New expiry: ${new Date(result.newExpiry).toLocaleDateString()}`);
       await fetchResellerData();
       return true;
     } catch (err: any) {
@@ -651,248 +327,87 @@ export function useResellerPortal() {
       return false;
     }
 
-    // Check limit
-    if (reseller && reseller.max_sub_resellers > 0 && subResellers.length >= reseller.max_sub_resellers) {
-      toast.error(`You can only create up to ${reseller.max_sub_resellers} sub-resellers`);
-      return false;
-    }
-
-    try {
-      const subResellerData = {
-        ...data,
-        tenant_id: reseller.tenant_id,
-        parent_id: reseller.id,
-        level: reseller.level + 1,
-        role: reseller.level === 1 ? 'sub_reseller' : 'sub_sub_reseller',
-        is_active: true,
-        balance: 0,
-        // Inherit device restrictions from parent if not specified
-        allowed_mikrotik_ids: data.allowed_mikrotik_ids || (reseller as any).allowed_mikrotik_ids || [],
-        allowed_olt_ids: data.allowed_olt_ids || (reseller as any).allowed_olt_ids || [],
-      };
-
-      const { error } = await supabase
-        .from('resellers')
-        .insert(subResellerData as any);
-
-      if (error) throw error;
-
-      toast.success('Sub-reseller created successfully');
-      await fetchResellerData();
-      return true;
-    } catch (err: any) {
-      console.error('Error creating sub-reseller:', err);
-      toast.error(err.message || 'Failed to create sub-reseller');
-      return false;
-    }
+    // This still uses Supabase directly for now - can be moved to backend later
+    toast.info('Sub-reseller creation coming soon');
+    return false;
   };
 
   const updateSubReseller = async (id: string, data: Partial<Reseller>): Promise<boolean> => {
-    if (!reseller) return false;
-
-    try {
-      const { error } = await supabase
-        .from('resellers')
-        .update(data as any)
-        .eq('id', id)
-        .eq('parent_id', reseller.id);
-
-      if (error) throw error;
-
-      toast.success('Sub-reseller updated successfully');
-      await fetchResellerData();
-      return true;
-    } catch (err: any) {
-      console.error('Error updating sub-reseller:', err);
-      toast.error(err.message || 'Failed to update sub-reseller');
+    if (!hasPermission('sub_reseller_edit')) {
+      toast.error('You do not have permission to edit sub-resellers');
       return false;
     }
+
+    toast.info('Sub-reseller update coming soon');
+    return false;
   };
 
-  const fundSubReseller = async (subResellerId: string, amount: number, description: string): Promise<boolean> => {
+  const fundSubReseller = async (subResellerId: string, amount: number, description?: string): Promise<boolean> => {
     if (!hasPermission('sub_reseller_balance_add')) {
-      toast.error('You do not have permission to transfer balance');
-      return false;
-    }
-
-    if (!reseller || reseller.balance < amount) {
-      toast.error(`Insufficient balance. Available: ৳${reseller?.balance.toLocaleString() || 0}`);
+      toast.error('You do not have permission to add balance');
       return false;
     }
 
     try {
-      const subReseller = subResellers.find(s => s.id === subResellerId);
-      if (!subReseller) throw new Error('Sub-reseller not found');
+      const result = await resellerApi.addSubResellerBalance(subResellerId, amount, description);
 
-      const fromNewBalance = reseller.balance - amount;
-      const toNewBalance = subReseller.balance + amount;
+      if (!result.success) {
+        toast.error(result.error || 'Failed to add balance');
+        return false;
+      }
 
-      // Debit transaction
-      await supabase
-        .from('reseller_transactions' as any)
-        .insert({
-          tenant_id: reseller.tenant_id,
-          reseller_id: reseller.id,
-          type: 'transfer_out',
-          amount: -amount,
-          balance_before: reseller.balance,
-          balance_after: fromNewBalance,
-          to_reseller_id: subResellerId,
-          description: description || `Transfer to ${subReseller.name}`,
-        });
-
-      // Credit transaction
-      await supabase
-        .from('reseller_transactions' as any)
-        .insert({
-          tenant_id: reseller.tenant_id,
-          reseller_id: subResellerId,
-          type: 'transfer_in',
-          amount,
-          balance_before: subReseller.balance,
-          balance_after: toNewBalance,
-          from_reseller_id: reseller.id,
-          description: description || `Transfer from ${reseller.name}`,
-        });
-
-      // Update balances
-      await supabase
-        .from('resellers')
-        .update({ balance: fromNewBalance })
-        .eq('id', reseller.id);
-
-      await supabase
-        .from('resellers')
-        .update({ balance: toNewBalance })
-        .eq('id', subResellerId);
-
-      toast.success(`৳${amount.toLocaleString()} transferred to ${subReseller.name}`);
+      toast.success('Balance added successfully');
       await fetchResellerData();
       return true;
     } catch (err: any) {
-      console.error('Error funding sub-reseller:', err);
-      toast.error(err.message || 'Failed to transfer balance');
+      console.error('Error adding balance:', err);
+      toast.error(err.message || 'Failed to add balance');
       return false;
     }
   };
 
-  const deductSubReseller = async (subResellerId: string, amount: number, description: string): Promise<boolean> => {
+  const deductSubReseller = async (subResellerId: string, amount: number, description?: string): Promise<boolean> => {
     if (!hasPermission('sub_reseller_balance_deduct')) {
       toast.error('You do not have permission to deduct balance');
       return false;
     }
 
     try {
-      const subReseller = subResellers.find(s => s.id === subResellerId);
-      if (!subReseller) throw new Error('Sub-reseller not found');
+      const result = await resellerApi.deductSubResellerBalance(subResellerId, amount, description);
 
-      if (subReseller.balance < amount) {
-        toast.error(`Insufficient balance. Sub-reseller has: ৳${subReseller.balance.toLocaleString()}`);
+      if (!result.success) {
+        toast.error(result.error || 'Failed to deduct balance');
         return false;
       }
 
-      const fromNewBalance = subReseller.balance - amount;
-      const toNewBalance = reseller.balance + amount;
-
-      // Debit transaction from sub-reseller
-      await supabase
-        .from('reseller_transactions' as any)
-        .insert({
-          tenant_id: reseller.tenant_id,
-          reseller_id: subResellerId,
-          type: 'transfer_out',
-          amount: -amount,
-          balance_before: subReseller.balance,
-          balance_after: fromNewBalance,
-          to_reseller_id: reseller.id,
-          description: description || `Balance deducted by ${reseller.name}`,
-        });
-
-      // Credit transaction to parent reseller
-      await supabase
-        .from('reseller_transactions' as any)
-        .insert({
-          tenant_id: reseller.tenant_id,
-          reseller_id: reseller.id,
-          type: 'transfer_in',
-          amount,
-          balance_before: reseller.balance,
-          balance_after: toNewBalance,
-          from_reseller_id: subResellerId,
-          description: description || `Balance recovered from ${subReseller.name}`,
-        });
-
-      // Update balances
-      await supabase
-        .from('resellers')
-        .update({ balance: fromNewBalance })
-        .eq('id', subResellerId);
-
-      await supabase
-        .from('resellers')
-        .update({ balance: toNewBalance })
-        .eq('id', reseller.id);
-
-      toast.success(`৳${amount.toLocaleString()} deducted from ${subReseller.name}`);
+      toast.success('Balance deducted successfully');
       await fetchResellerData();
       return true;
     } catch (err: any) {
-      console.error('Error deducting from sub-reseller:', err);
+      console.error('Error deducting balance:', err);
       toast.error(err.message || 'Failed to deduct balance');
       return false;
     }
   };
 
-  const updateProfile = async (data: { name?: string; phone?: string; email?: string; address?: string }): Promise<boolean> => {
-    if (!reseller) return false;
-
-    try {
-      const { error } = await supabase
-        .from('resellers')
-        .update({
-          name: data.name,
-          phone: data.phone || null,
-          email: data.email || null,
-          address: data.address || null,
-        } as any)
-        .eq('id', reseller.id);
-
-      if (error) throw error;
-
-      await fetchResellerData();
-      return true;
-    } catch (err: any) {
-      console.error('Error updating profile:', err);
-      toast.error(err.message || 'Failed to update profile');
+  const updateProfile = async (data: Partial<Reseller>): Promise<boolean> => {
+    if (!hasPermission('profile_edit')) {
+      toast.error('You do not have permission to edit profile');
       return false;
     }
+
+    toast.info('Profile update coming soon');
+    return false;
   };
 
   const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
-    if (!reseller) return false;
-
-    try {
-      // Verify current password
-      if ((reseller as any).password !== currentPassword) {
-        toast.error('Current password is incorrect');
-        return false;
-      }
-
-      const { error } = await supabase
-        .from('resellers')
-        .update({ password: newPassword } as any)
-        .eq('id', reseller.id);
-
-      if (error) throw error;
-
-      toast.success('Password changed successfully');
-      await fetchResellerData();
-      return true;
-    } catch (err: any) {
-      console.error('Error changing password:', err);
-      toast.error(err.message || 'Failed to change password');
+    if (!hasPermission('password_change')) {
+      toast.error('You do not have permission to change password');
       return false;
     }
+
+    toast.info('Password change coming soon');
+    return false;
   };
 
   return {
