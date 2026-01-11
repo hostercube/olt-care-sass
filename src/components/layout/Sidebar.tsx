@@ -15,6 +15,7 @@ import {
   Database,
   DollarSign,
   FileText,
+  Gauge,
   LayoutDashboard,
   Mail,
   MapPin,
@@ -95,7 +96,8 @@ const ispNetworkItems: NavItem[] = [
 
 // Operations - Staff & Inventory
 const ispOperationsItems: NavItem[] = [
-  { title: 'Payroll & HR', href: '/isp/staff', icon: Users, requiredModule: 'isp_salary_payroll' },
+  { title: 'Payroll & HR', href: '/isp/staff', icon: Users, requiredModule: 'isp_hr_payroll' },
+  { title: 'Bandwidth Mgmt', href: '/isp/bandwidth', icon: Gauge, requiredModule: 'isp_bandwidth_management' },
   { title: 'Roles & Permissions', href: '/isp/roles', icon: Shield },
   { title: 'Inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
   { title: 'Reports', href: '/isp/reports', icon: FileText },
