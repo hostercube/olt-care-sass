@@ -113,33 +113,43 @@ export function useCustomerRecharges() {
 
       if (reseller) {
         // Calculate commission based on reseller settings
+        // rate_type: 'discount' means reseller gets discount from package price
+        // commission_type: 'percentage' or 'flat'
         const rateType = reseller.rate_type || 'discount';
         const commissionType = reseller.commission_type || 'percentage';
         const commissionValue = reseller.commission_value || reseller.customer_rate || 0;
+        const totalPackagePrice = packagePrice * months;
 
         if (commissionValue > 0) {
           if (commissionType === 'percentage') {
-            commission = Math.round((packagePrice * commissionValue) / 100);
+            // Percentage commission: e.g., 25% of package price
+            commission = Math.round((totalPackagePrice * commissionValue) / 100);
           } else {
-            // Flat rate per month
+            // Flat rate per month: e.g., 2 taka per month
             commission = commissionValue * months;
           }
         }
 
-        // If rate_type is 'discount', reseller pays (packagePrice - commission)
-        // If rate_type is not 'discount', reseller pays full package price
-        if (rateType === 'discount') {
-          deductAmount = (packagePrice * months) - commission;
+        // Calculate what reseller should pay
+        // For rate_type 'discount': reseller pays (package price - commission)
+        // Example: Package = 100, Commission = 25% = 25, Reseller pays = 75
+        if (rateType === 'discount' || rateType === 'per_customer') {
+          deductAmount = totalPackagePrice - commission;
         } else {
-          deductAmount = packagePrice * months;
+          // For other rate types, reseller pays full amount (no discount)
+          deductAmount = totalPackagePrice;
         }
+
+        // Ensure deductAmount is not negative
+        deductAmount = Math.max(0, deductAmount);
 
         // Check if reseller has enough balance
         if (reseller.balance >= deductAmount) {
           deductFromReseller = true;
         } else {
-          // Not enough balance, just log it but continue with recharge
-          console.log(`Reseller ${reseller.name} has insufficient balance: ${reseller.balance}, needed: ${deductAmount}`);
+          // Not enough balance - still continue with recharge but log it
+          console.log(`Reseller ${reseller.name} has insufficient balance: ৳${reseller.balance}, needed: ৳${deductAmount}`);
+          toast.info(`Reseller ${reseller.name} has insufficient balance. Recharge recorded but balance not deducted.`);
         }
       }
     }

@@ -75,6 +75,7 @@ import Reports from "./pages/ISP/Reports";
 import CustomDomain from "./pages/ISP/CustomDomain";
 import ISPCampaignManagement from "./pages/ISP/CampaignManagement";
 import CustomerTypes from "./pages/ISP/CustomerTypes";
+import RechargeHistory from "./pages/ISP/RechargeHistory";
 
 // Customer Portal Pages
 import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
@@ -358,6 +359,15 @@ const App = () => (
                   <TenantAccessGuard>
                     <ModuleAccessGuard module="isp_billing" moduleName="ISP Billing">
                       <ISPBilling />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/recharge-history" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_billing" moduleName="Recharge History">
+                      <RechargeHistory />
                     </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
