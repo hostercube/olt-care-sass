@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,12 +20,12 @@ import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/s
 import { useResellerSystem } from '@/hooks/useResellerSystem';
 import { useResellerRoles } from '@/hooks/useResellerRoles';
 import { useAreas } from '@/hooks/useAreas';
-import { useEmployees } from '@/hooks/useEmployees';
 import { useLocationHierarchy } from '@/hooks/useLocationHierarchy';
 import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
 import { useOLTs } from '@/hooks/useOLTData';
 import { supabase } from '@/integrations/supabase/client';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { 
   Users, Plus, Edit, Trash2, Loader2, Wallet, ArrowRightLeft, 
   Building2, Shield, ChevronRight, Eye, UserPlus, MinusCircle, KeyRound, LogIn
@@ -40,7 +40,17 @@ import {
 import ResellerTransactionsDialog from '@/components/reseller/ResellerTransactionsDialog';
 import ResellerDetailsSheet from '@/components/reseller/ResellerDetailsSheet';
 
+interface StaffMember {
+  id: string;
+  name: string;
+  phone: string | null;
+  role: string;
+  designation: string | null;
+  is_active: boolean;
+}
+
 export default function ResellersManagement() {
+  const { tenantId } = useTenantContext();
   const { 
     resellers, branches, loading, createReseller, updateReseller, 
     deleteReseller, rechargeBalance, deductBalance, createBranch, updateBranch,
@@ -48,10 +58,26 @@ export default function ResellersManagement() {
   } = useResellerSystem();
   const { roles: resellerRoles } = useResellerRoles();
   const { areas, refetch: refetchAreas } = useAreas();
-  const { employees } = useEmployees();
   const { villages, unions, upazilas, districts } = useLocationHierarchy();
   const { routers: mikrotikRouters } = useMikroTikRouters();
   const { olts } = useOLTs();
+  
+  // Fetch staff from staff table (not employees)
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  
+  useEffect(() => {
+    const fetchStaff = async () => {
+      if (!tenantId) return;
+      const { data } = await supabase
+        .from('staff')
+        .select('id, name, phone, role, designation, is_active')
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true)
+        .order('name');
+      setStaffList((data as StaffMember[]) || []);
+    };
+    fetchStaff();
+  }, [tenantId]);
   
   const [activeTab, setActiveTab] = useState('resellers');
   const [showDialog, setShowDialog] = useState(false);
@@ -167,15 +193,13 @@ export default function ResellersManagement() {
     });
   }, [areas, villages, unions, upazilas, districts]);
 
-  // Build employee/staff options for branch manager
+  // Build staff options for branch manager (from staff table)
   const staffOptions = useMemo<SearchableSelectOption[]>(() => {
-    return employees
-      .filter(e => e.status === 'active')
-      .map(e => ({
-        value: e.id,
-        label: `${e.name}${e.designation ? ` (${e.designation})` : ''}${e.phone ? ` - ${e.phone}` : ''}`,
-      }));
-  }, [employees]);
+    return staffList.map(s => ({
+      value: s.id,
+      label: `${s.name}${s.designation ? ` (${s.designation})` : ''}${s.phone ? ` - ${s.phone}` : ''}`,
+    }));
+  }, [staffList]);
 
   const resetForm = () => {
     setFormData({

@@ -74,10 +74,10 @@ export function useCustomerRecharges() {
       return false;
     }
 
-    // Get customer's current expiry
+    // Get customer's current expiry and reseller info
     const { data: customer } = await supabase
       .from('customers')
-      .select('expiry_date, package_id, isp_packages(validity_days)')
+      .select('expiry_date, package_id, reseller_id, monthly_bill, isp_packages(validity_days, price)')
       .eq('id', customerId)
       .single();
 
@@ -87,6 +87,7 @@ export function useCustomerRecharges() {
     }
 
     const validityDays = (customer.isp_packages as any)?.validity_days || 30;
+    const packagePrice = (customer.isp_packages as any)?.price || customer.monthly_bill || amount;
     const oldExpiry = customer.expiry_date;
     
     // Calculate new expiry
@@ -96,8 +97,55 @@ export function useCustomerRecharges() {
     baseDate.setDate(baseDate.getDate() + (validityDays * months));
     const newExpiry = baseDate.toISOString().split('T')[0];
 
+    // Handle reseller commission if customer belongs to a reseller
+    let resellerId = customer.reseller_id;
+    let deductFromReseller = false;
+    let deductAmount = 0;
+    let commission = 0;
+
+    if (resellerId) {
+      // Get reseller details
+      const { data: reseller } = await supabase
+        .from('resellers')
+        .select('id, name, balance, commission_type, commission_value, rate_type, customer_rate')
+        .eq('id', resellerId)
+        .single();
+
+      if (reseller) {
+        // Calculate commission based on reseller settings
+        const rateType = reseller.rate_type || 'discount';
+        const commissionType = reseller.commission_type || 'percentage';
+        const commissionValue = reseller.commission_value || reseller.customer_rate || 0;
+
+        if (commissionValue > 0) {
+          if (commissionType === 'percentage') {
+            commission = Math.round((packagePrice * commissionValue) / 100);
+          } else {
+            // Flat rate per month
+            commission = commissionValue * months;
+          }
+        }
+
+        // If rate_type is 'discount', reseller pays (packagePrice - commission)
+        // If rate_type is not 'discount', reseller pays full package price
+        if (rateType === 'discount') {
+          deductAmount = (packagePrice * months) - commission;
+        } else {
+          deductAmount = packagePrice * months;
+        }
+
+        // Check if reseller has enough balance
+        if (reseller.balance >= deductAmount) {
+          deductFromReseller = true;
+        } else {
+          // Not enough balance, just log it but continue with recharge
+          console.log(`Reseller ${reseller.name} has insufficient balance: ${reseller.balance}, needed: ${deductAmount}`);
+        }
+      }
+    }
+
     // Create recharge record with tracking
-    const { error: rechargeError } = await supabase.from('customer_recharges').insert({
+    const rechargeData: any = {
       tenant_id: tenantId,
       customer_id: customerId,
       amount,
@@ -110,7 +158,13 @@ export function useCustomerRecharges() {
       status: 'completed',
       collected_by_type: collectedByType,
       collected_by_name: collectedByName,
-    });
+    };
+
+    if (resellerId) {
+      rechargeData.reseller_id = resellerId;
+    }
+
+    const { error: rechargeError } = await supabase.from('customer_recharges').insert(rechargeData);
 
     if (rechargeError) {
       toast.error('Failed to record recharge');
@@ -129,6 +183,43 @@ export function useCustomerRecharges() {
     if (customerError) {
       toast.error('Failed to update customer');
       return false;
+    }
+
+    // Deduct from reseller balance if applicable
+    if (deductFromReseller && resellerId && deductAmount > 0) {
+      // Get current reseller balance again to avoid race conditions
+      const { data: currentReseller } = await supabase
+        .from('resellers')
+        .select('balance, name')
+        .eq('id', resellerId)
+        .single();
+
+      if (currentReseller && currentReseller.balance >= deductAmount) {
+        const newBalance = currentReseller.balance - deductAmount;
+
+        // Create reseller transaction
+        await supabase.from('reseller_transactions').insert({
+          tenant_id: tenantId,
+          reseller_id: resellerId,
+          type: 'customer_recharge',
+          amount: -deductAmount,
+          balance_before: currentReseller.balance,
+          balance_after: newBalance,
+          customer_id: customerId,
+          description: `Customer recharge by ${collectedByName} (${months} month${months > 1 ? 's' : ''}). Package: ৳${packagePrice * months}, Commission: ৳${commission}`,
+        } as any);
+
+        // Update reseller balance
+        await supabase
+          .from('resellers')
+          .update({ 
+            balance: newBalance,
+            total_collections: (currentReseller as any).total_collections ? (currentReseller as any).total_collections + amount : amount,
+          })
+          .eq('id', resellerId);
+
+        console.log(`Deducted ৳${deductAmount} from reseller ${currentReseller.name}. New balance: ৳${newBalance}`);
+      }
     }
 
     // Create payment record

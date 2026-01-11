@@ -437,6 +437,7 @@ export default function CustomerProfile() {
     try {
       const pkg = packages.find(p => p.id === customer.package_id);
       const validityDays = pkg?.validity_days || 30;
+      const packagePrice = pkg?.price || customer.monthly_bill || 0;
       
       // Determine if customer was offline/disabled - affects expiry calculation
       const wasOffline = customer.status === 'suspended' || customer.status === 'expired';
@@ -467,11 +468,75 @@ export default function CustomerProfile() {
         last_activated_at: new Date().toISOString(),
       }).eq('id', customer.id);
 
+      // Handle reseller commission calculation and balance deduction
+      let deductFromReseller = false;
+      let deductAmount = 0;
+      let commission = 0;
+      const resellerId = customer.reseller_id;
+
+      if (resellerId) {
+        // Get reseller details
+        const { data: reseller } = await supabase
+          .from('resellers')
+          .select('id, name, balance, commission_type, commission_value, rate_type, customer_rate')
+          .eq('id', resellerId)
+          .single();
+
+        if (reseller) {
+          // Calculate commission based on reseller settings
+          const rateType = reseller.rate_type || 'discount';
+          const commissionType = reseller.commission_type || 'percentage';
+          const commissionValue = reseller.commission_value || reseller.customer_rate || 0;
+
+          if (commissionValue > 0) {
+            if (commissionType === 'percentage') {
+              commission = Math.round((packagePrice * commissionValue) / 100);
+            } else {
+              // Flat rate per month
+              commission = commissionValue * rechargeMonths;
+            }
+          }
+
+          // If rate_type is 'discount', reseller pays (packagePrice - commission)
+          if (rateType === 'discount') {
+            deductAmount = (packagePrice * rechargeMonths) - commission;
+          } else {
+            deductAmount = packagePrice * rechargeMonths;
+          }
+
+          // Check if reseller has enough balance
+          if (reseller.balance >= deductAmount) {
+            deductFromReseller = true;
+            const newBalance = reseller.balance - deductAmount;
+
+            // Create reseller transaction
+            await supabase.from('reseller_transactions').insert({
+              tenant_id: customer.tenant_id,
+              reseller_id: resellerId,
+              type: 'customer_recharge',
+              amount: -deductAmount,
+              balance_before: reseller.balance,
+              balance_after: newBalance,
+              customer_id: customer.id,
+              description: `Customer recharge by ${user?.email?.split('@')[0] || 'Tenant Admin'} (${rechargeMonths} month${rechargeMonths > 1 ? 's' : ''}). Package: ৳${packagePrice * rechargeMonths}, Commission: ৳${commission}`,
+            } as any);
+
+            // Update reseller balance
+            await supabase
+              .from('resellers')
+              .update({ balance: newBalance })
+              .eq('id', resellerId);
+
+            console.log(`Deducted ৳${deductAmount} from reseller ${reseller.name}. New balance: ৳${newBalance}`);
+          }
+        }
+      }
+
       // Record recharge with collected_by tracking
       const rechargeData: any = {
         tenant_id: customer.tenant_id,
         customer_id: customer.id,
-        amount: (pkg?.price || 0) * rechargeMonths,
+        amount: packagePrice * rechargeMonths,
         months: rechargeMonths,
         old_expiry: customer.expiry_date,
         new_expiry: newExpiry.toISOString().split('T')[0],
@@ -489,7 +554,7 @@ export default function CustomerProfile() {
 
       await supabase.from('customer_recharges').insert(rechargeData);
 
-      toast.success(`Recharged for ${rechargeMonths} month(s). New expiry: ${format(newExpiry, 'dd MMM yyyy')}`);
+      toast.success(`Recharged for ${rechargeMonths} month(s). New expiry: ${format(newExpiry, 'dd MMM yyyy')}${deductFromReseller ? `. Deducted ৳${deductAmount} from reseller (Commission: ৳${commission})` : ''}`);
       setShowRechargeDialog(false);
       await fetchCustomer();
     } catch (err) {
