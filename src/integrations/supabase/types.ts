@@ -2435,6 +2435,184 @@ export type Database = {
           },
         ]
       }
+      leave_balances: {
+        Row: {
+          created_at: string
+          id: string
+          leave_type_id: string | null
+          remaining_days: number | null
+          staff_id: string
+          tenant_id: string
+          total_days: number | null
+          updated_at: string
+          used_days: number | null
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          leave_type_id?: string | null
+          remaining_days?: number | null
+          staff_id: string
+          tenant_id: string
+          total_days?: number | null
+          updated_at?: string
+          used_days?: number | null
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          leave_type_id?: string | null
+          remaining_days?: number | null
+          staff_id?: string
+          tenant_id?: string
+          total_days?: number | null
+          updated_at?: string
+          used_days?: number | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_balances_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_balances_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_balances_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_requests: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          end_date: string
+          id: string
+          leave_type_id: string | null
+          reason: string | null
+          rejection_reason: string | null
+          staff_id: string
+          start_date: string
+          status: string
+          tenant_id: string
+          total_days: number
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          end_date: string
+          id?: string
+          leave_type_id?: string | null
+          reason?: string | null
+          rejection_reason?: string | null
+          staff_id: string
+          start_date: string
+          status?: string
+          tenant_id: string
+          total_days?: number
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          end_date?: string
+          id?: string
+          leave_type_id?: string | null
+          reason?: string | null
+          rejection_reason?: string | null
+          staff_id?: string
+          start_date?: string
+          status?: string
+          tenant_id?: string
+          total_days?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_types: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          is_paid: boolean | null
+          max_days_per_year: number | null
+          name: string
+          short_name: string | null
+          tenant_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          is_paid?: boolean | null
+          max_days_per_year?: number | null
+          name: string
+          short_name?: string | null
+          tenant_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          is_paid?: boolean | null
+          max_days_per_year?: number | null
+          name?: string
+          short_name?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_types_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mikrotik_routers: {
         Row: {
           allow_customer_delete: boolean | null
@@ -3322,6 +3500,78 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "payroll_runs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      performance_reviews: {
+        Row: {
+          acknowledged_at: string | null
+          areas_for_improvement: string | null
+          comments: string | null
+          created_at: string
+          goals: string | null
+          id: string
+          overall_rating: number | null
+          ratings: Json | null
+          review_date: string
+          review_period: string
+          reviewer_id: string | null
+          staff_id: string
+          status: string
+          strengths: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          areas_for_improvement?: string | null
+          comments?: string | null
+          created_at?: string
+          goals?: string | null
+          id?: string
+          overall_rating?: number | null
+          ratings?: Json | null
+          review_date?: string
+          review_period: string
+          reviewer_id?: string | null
+          staff_id: string
+          status?: string
+          strengths?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          areas_for_improvement?: string | null
+          comments?: string | null
+          created_at?: string
+          goals?: string | null
+          id?: string
+          overall_rating?: number | null
+          ratings?: Json | null
+          review_date?: string
+          review_period?: string
+          reviewer_id?: string | null
+          staff_id?: string
+          status?: string
+          strengths?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_reviews_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_reviews_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -4478,12 +4728,17 @@ export type Database = {
           commission: number | null
           created_at: string
           deductions: number | null
+          gross_salary: number | null
+          house_rent: number | null
           id: string
           late_days: number | null
           late_deduction: number | null
+          loan_deduction: number | null
+          medical_allowance: number | null
           month: string
           net_salary: number | null
           notes: string | null
+          other_allowances: number | null
           overtime_pay: number | null
           payment_date: string | null
           payment_method: string | null
@@ -4491,8 +4746,10 @@ export type Database = {
           present_days: number | null
           staff_id: string
           status: string | null
+          tax_deduction: number | null
           tenant_id: string
           transaction_ref: string | null
+          transport_allowance: number | null
         }
         Insert: {
           absent_days?: number | null
@@ -4503,12 +4760,17 @@ export type Database = {
           commission?: number | null
           created_at?: string
           deductions?: number | null
+          gross_salary?: number | null
+          house_rent?: number | null
           id?: string
           late_days?: number | null
           late_deduction?: number | null
+          loan_deduction?: number | null
+          medical_allowance?: number | null
           month: string
           net_salary?: number | null
           notes?: string | null
+          other_allowances?: number | null
           overtime_pay?: number | null
           payment_date?: string | null
           payment_method?: string | null
@@ -4516,8 +4778,10 @@ export type Database = {
           present_days?: number | null
           staff_id: string
           status?: string | null
+          tax_deduction?: number | null
           tenant_id: string
           transaction_ref?: string | null
+          transport_allowance?: number | null
         }
         Update: {
           absent_days?: number | null
@@ -4528,12 +4792,17 @@ export type Database = {
           commission?: number | null
           created_at?: string
           deductions?: number | null
+          gross_salary?: number | null
+          house_rent?: number | null
           id?: string
           late_days?: number | null
           late_deduction?: number | null
+          loan_deduction?: number | null
+          medical_allowance?: number | null
           month?: string
           net_salary?: number | null
           notes?: string | null
+          other_allowances?: number | null
           overtime_pay?: number | null
           payment_date?: string | null
           payment_method?: string | null
@@ -4541,8 +4810,10 @@ export type Database = {
           present_days?: number | null
           staff_id?: string
           status?: string | null
+          tax_deduction?: number | null
           tenant_id?: string
           transaction_ref?: string | null
+          transport_allowance?: number | null
         }
         Relationships: [
           {
@@ -4988,6 +5259,7 @@ export type Database = {
       }
       staff_attendance: {
         Row: {
+          break_minutes: number | null
           check_in: string | null
           check_out: string | null
           created_at: string
@@ -4995,7 +5267,9 @@ export type Database = {
           id: string
           late_minutes: number | null
           notes: string | null
+          overtime_hours: number | null
           overtime_minutes: number | null
+          shift_id: string | null
           source: string | null
           staff_id: string
           status: string
@@ -5003,6 +5277,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          break_minutes?: number | null
           check_in?: string | null
           check_out?: string | null
           created_at?: string
@@ -5010,7 +5285,9 @@ export type Database = {
           id?: string
           late_minutes?: number | null
           notes?: string | null
+          overtime_hours?: number | null
           overtime_minutes?: number | null
+          shift_id?: string | null
           source?: string | null
           staff_id: string
           status?: string
@@ -5018,6 +5295,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          break_minutes?: number | null
           check_in?: string | null
           check_out?: string | null
           created_at?: string
@@ -5025,7 +5303,9 @@ export type Database = {
           id?: string
           late_minutes?: number | null
           notes?: string | null
+          overtime_hours?: number | null
           overtime_minutes?: number | null
+          shift_id?: string | null
           source?: string | null
           staff_id?: string
           status?: string
@@ -5033,6 +5313,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "staff_attendance_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "staff_shifts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "staff_attendance_staff_id_fkey"
             columns: ["staff_id"]
@@ -5042,6 +5329,133 @@ export type Database = {
           },
           {
             foreignKeyName: "staff_attendance_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_loan_repayments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          loan_id: string
+          notes: string | null
+          payment_date: string
+          payment_method: string | null
+          reference: string | null
+          staff_id: string
+          tenant_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          loan_id: string
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string | null
+          reference?: string | null
+          staff_id: string
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          loan_id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string | null
+          reference?: string | null
+          staff_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_loan_repayments_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "staff_loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_loan_repayments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_loan_repayments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_loans: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          disbursed_at: string | null
+          id: string
+          loan_type: string
+          monthly_deduction: number | null
+          reason: string | null
+          remaining_amount: number
+          staff_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          disbursed_at?: string | null
+          id?: string
+          loan_type?: string
+          monthly_deduction?: number | null
+          reason?: string | null
+          remaining_amount: number
+          staff_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          disbursed_at?: string | null
+          id?: string
+          loan_type?: string
+          monthly_deduction?: number | null
+          reason?: string | null
+          remaining_amount?: number
+          staff_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_loans_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_loans_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -5080,6 +5494,102 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "staff_permissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_shift_assignments: {
+        Row: {
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          id: string
+          is_active: boolean | null
+          shift_id: string
+          staff_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          is_active?: boolean | null
+          shift_id: string
+          staff_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          is_active?: boolean | null
+          shift_id?: string
+          staff_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_shift_assignments_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "staff_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_shift_assignments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_shift_assignments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_shifts: {
+        Row: {
+          created_at: string
+          end_time: string
+          id: string
+          is_active: boolean | null
+          late_tolerance_minutes: number | null
+          name: string
+          start_time: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_time: string
+          id?: string
+          is_active?: boolean | null
+          late_tolerance_minutes?: number | null
+          name: string
+          start_time: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          end_time?: string
+          id?: string
+          is_active?: boolean | null
+          late_tolerance_minutes?: number | null
+          name?: string
+          start_time?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_shifts_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
