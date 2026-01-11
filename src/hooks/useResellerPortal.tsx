@@ -542,6 +542,28 @@ export function useResellerPortal() {
     }
   };
 
+  const updateSubReseller = async (id: string, data: Partial<Reseller>): Promise<boolean> => {
+    if (!reseller) return false;
+
+    try {
+      const { error } = await supabase
+        .from('resellers')
+        .update(data as any)
+        .eq('id', id)
+        .eq('parent_id', reseller.id);
+
+      if (error) throw error;
+
+      toast.success('Sub-reseller updated successfully');
+      await fetchResellerData();
+      return true;
+    } catch (err: any) {
+      console.error('Error updating sub-reseller:', err);
+      toast.error(err.message || 'Failed to update sub-reseller');
+      return false;
+    }
+  };
+
   const fundSubReseller = async (subResellerId: string, amount: number, description: string): Promise<boolean> => {
     if (!reseller?.can_transfer_balance) {
       toast.error('You do not have permission to transfer balance');
@@ -605,6 +627,73 @@ export function useResellerPortal() {
     } catch (err: any) {
       console.error('Error funding sub-reseller:', err);
       toast.error(err.message || 'Failed to transfer balance');
+      return false;
+    }
+  };
+
+  const deductSubReseller = async (subResellerId: string, amount: number, description: string): Promise<boolean> => {
+    if (!reseller?.can_transfer_balance) {
+      toast.error('You do not have permission to transfer balance');
+      return false;
+    }
+
+    try {
+      const subReseller = subResellers.find(s => s.id === subResellerId);
+      if (!subReseller) throw new Error('Sub-reseller not found');
+
+      if (subReseller.balance < amount) {
+        toast.error(`Insufficient balance. Sub-reseller has: ৳${subReseller.balance.toLocaleString()}`);
+        return false;
+      }
+
+      const fromNewBalance = subReseller.balance - amount;
+      const toNewBalance = reseller.balance + amount;
+
+      // Debit transaction from sub-reseller
+      await supabase
+        .from('reseller_transactions' as any)
+        .insert({
+          tenant_id: reseller.tenant_id,
+          reseller_id: subResellerId,
+          type: 'transfer_out',
+          amount: -amount,
+          balance_before: subReseller.balance,
+          balance_after: fromNewBalance,
+          to_reseller_id: reseller.id,
+          description: description || `Balance deducted by ${reseller.name}`,
+        });
+
+      // Credit transaction to parent reseller
+      await supabase
+        .from('reseller_transactions' as any)
+        .insert({
+          tenant_id: reseller.tenant_id,
+          reseller_id: reseller.id,
+          type: 'transfer_in',
+          amount,
+          balance_before: reseller.balance,
+          balance_after: toNewBalance,
+          from_reseller_id: subResellerId,
+          description: description || `Balance recovered from ${subReseller.name}`,
+        });
+
+      // Update balances
+      await supabase
+        .from('resellers')
+        .update({ balance: fromNewBalance })
+        .eq('id', subResellerId);
+
+      await supabase
+        .from('resellers')
+        .update({ balance: toNewBalance })
+        .eq('id', reseller.id);
+
+      toast.success(`৳${amount.toLocaleString()} deducted from ${subReseller.name}`);
+      await fetchResellerData();
+      return true;
+    } catch (err: any) {
+      console.error('Error deducting from sub-reseller:', err);
+      toast.error(err.message || 'Failed to deduct balance');
       return false;
     }
   };
@@ -679,7 +768,9 @@ export function useResellerPortal() {
     updateCustomer,
     rechargeCustomer,
     createSubReseller,
+    updateSubReseller,
     fundSubReseller,
+    deductSubReseller,
     updateProfile,
     changePassword,
   };
