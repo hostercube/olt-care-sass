@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,102 +12,43 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { supabase } from '@/integrations/supabase/client';
-import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useTenantRoles } from '@/hooks/useTenantRoles';
+import { usePayrollSystem } from '@/hooks/usePayrollSystem';
+import { LeaveManagement } from '@/components/payroll/LeaveManagement';
+import { PerformanceManagement } from '@/components/payroll/PerformanceManagement';
+import { LoanManagement } from '@/components/payroll/LoanManagement';
+import { ShiftManagement } from '@/components/payroll/ShiftManagement';
 import { 
-  Users, Plus, Edit, Loader2, DollarSign, Calendar as CalendarIcon, Key, 
-  Clock, CheckCircle, XCircle, AlertCircle, Search, RefreshCw, 
-  UserCheck, Receipt, History, Download, Banknote, Timer
+  Users, Plus, Edit, Loader2, DollarSign, Calendar as CalendarIcon, 
+  Clock, CheckCircle, XCircle, Search, RefreshCw, 
+  UserCheck, Receipt, History, Banknote, Timer, TreePalm, Star, CreditCard, Settings2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-interface Staff {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  role: string;
-  role_id: string | null;
-  department: string | null;
-  designation: string | null;
-  salary: number;
-  salary_type: string;
-  is_active: boolean;
-  join_date: string | null;
-  username: string | null;
-  password: string | null;
-  can_login: boolean;
-}
-
-interface Attendance {
-  id: string;
-  staff_id: string;
-  date: string;
-  check_in: string | null;
-  check_out: string | null;
-  status: 'present' | 'absent' | 'late' | 'half_day' | 'leave';
-  late_minutes: number;
-  overtime_minutes: number;
-  notes: string | null;
-  source: string;
-}
-
-interface SalaryPayment {
-  id: string;
-  staff_id: string;
-  month: string;
-  basic_salary: number;
-  bonus: number;
-  deductions: number;
-  overtime_pay: number;
-  late_deduction: number;
-  absent_deduction: number;
-  net_salary: number;
-  present_days: number;
-  absent_days: number;
-  late_days: number;
-  status: string;
-  payment_date: string | null;
-  payment_method: string;
-  transaction_ref: string | null;
-  staff?: Staff;
-}
-
-interface PayrollRun {
-  id: string;
-  month: string;
-  status: string;
-  total_staff: number;
-  total_gross: number;
-  total_deductions: number;
-  total_net: number;
-  processed_at: string | null;
-  notes: string | null;
-}
-
 export default function StaffPayroll() {
-  const { tenantId } = useTenantContext();
   const { roles } = useTenantRoles();
+  const {
+    staff, activeStaff, attendance, leaveTypes, leaveRequests, leaveBalances,
+    performanceReviews, loans, shifts, payments, payrollRuns, loading,
+    fetchData, saveStaff, markAttendance, checkOut,
+    saveLeaveType, submitLeaveRequest, handleLeaveRequest, initializeLeaveBalances,
+    savePerformanceReview, createLoan, approveLoan, saveShift,
+    calculatePayroll, processPayroll, paySalary, tenantId
+  } = usePayrollSystem();
+
   const [activeTab, setActiveTab] = useState('staff');
-  const [staff, setStaff] = useState<Staff[]>([]);
-  const [attendance, setAttendance] = useState<Attendance[]>([]);
-  const [payments, setPayments] = useState<SalaryPayment[]>([]);
-  const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Dialogs
   const [showStaffDialog, setShowStaffDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [showAttendanceDialog, setShowAttendanceDialog] = useState(false);
   const [showProcessPayrollDialog, setShowProcessPayrollDialog] = useState(false);
 
   // Selected items
-  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
-  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
+  const [editingStaff, setEditingStaff] = useState<any>(null);
+  const [selectedStaff, setSelectedStaff] = useState<any>(null);
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [attendanceDate, setAttendanceDate] = useState<Date>(new Date());
   const [searchTerm, setSearchTerm] = useState('');
@@ -126,44 +67,20 @@ export default function StaffPayroll() {
     transaction_ref: '', present_days: '0', absent_days: '0', late_days: '0',
   });
 
-  const fetchData = useCallback(async () => {
-    if (!tenantId) return;
-    setLoading(true);
-    try {
-      const [staffRes, attRes, payRes, runRes] = await Promise.all([
-        supabase.from('staff').select('*').eq('tenant_id', tenantId).order('name'),
-        supabase.from('staff_attendance').select('*').eq('tenant_id', tenantId)
-          .gte('date', format(startOfMonth(new Date()), 'yyyy-MM-dd'))
-          .lte('date', format(endOfMonth(new Date()), 'yyyy-MM-dd')),
-        supabase.from('salary_payments').select('*').eq('tenant_id', tenantId)
-          .order('month', { ascending: false }).limit(200),
-        supabase.from('payroll_runs').select('*').eq('tenant_id', tenantId)
-          .order('month', { ascending: false }).limit(24),
-      ]);
-      setStaff((staffRes.data as any[]) || []);
-      setAttendance((attRes.data as any[]) || []);
-      setPayments((payRes.data as any[]) || []);
-      setPayrollRuns((runRes.data as any[]) || []);
-    } catch (err) {
-      console.error('Error fetching payroll data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
   // Stats
-  const activeStaff = staff.filter(s => s.is_active);
   const totalSalary = activeStaff.reduce((sum, s) => sum + s.salary, 0);
   const thisMonthPayments = payments.filter(p => p.month === format(new Date(), 'yyyy-MM'));
   const paidThisMonth = thisMonthPayments.reduce((sum, p) => sum + p.net_salary, 0);
-  const pendingPayments = activeStaff.length - thisMonthPayments.length;
+  const pendingPayments = activeStaff.length - thisMonthPayments.filter(p => p.status === 'paid').length;
 
   // Attendance stats for today
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayAttendance = attendance.filter(a => a.date === todayStr);
   const presentToday = todayAttendance.filter(a => a.status === 'present' || a.status === 'late').length;
+
+  // Pending items count
+  const pendingLeaves = leaveRequests.filter(r => r.status === 'pending').length;
+  const pendingLoans = loans.filter(l => l.status === 'pending').length;
 
   // ============= STAFF MANAGEMENT =============
   const resetStaffForm = () => {
@@ -174,7 +91,7 @@ export default function StaffPayroll() {
     });
   };
 
-  const handleEditStaff = (s: Staff) => {
+  const handleEditStaff = (s: any) => {
     setEditingStaff(s);
     setStaffForm({
       name: s.name, email: s.email || '', phone: s.phone || '',
@@ -191,7 +108,7 @@ export default function StaffPayroll() {
     setSaving(true);
     try {
       const data: any = {
-        tenant_id: tenantId, name: staffForm.name, email: staffForm.email || null,
+        name: staffForm.name, email: staffForm.email || null,
         phone: staffForm.phone || null, role: staffForm.role, role_id: staffForm.role_id || null,
         department: staffForm.department || null, designation: staffForm.designation || null,
         salary: parseFloat(staffForm.salary) || 0, salary_type: staffForm.salary_type,
@@ -201,17 +118,10 @@ export default function StaffPayroll() {
         if (staffForm.username) data.username = staffForm.username;
         if (staffForm.password) data.password = staffForm.password;
       }
-      if (editingStaff) {
-        await supabase.from('staff').update(data).eq('id', editingStaff.id);
-        toast.success('Staff updated');
-      } else {
-        await supabase.from('staff').insert(data);
-        toast.success('Staff added');
-      }
+      await saveStaff(data, editingStaff?.id);
       setShowStaffDialog(false);
       setEditingStaff(null);
       resetStaffForm();
-      fetchData();
     } catch (err: any) {
       toast.error(err.message || 'Failed to save staff');
     } finally {
@@ -220,33 +130,14 @@ export default function StaffPayroll() {
   };
 
   // ============= ATTENDANCE =============
-  const handleMarkAttendance = async (staffMember: Staff, status: string) => {
-    if (!tenantId) return;
+  const handleMarkAttendance = async (staffMember: any, status: string) => {
     const dateStr = format(attendanceDate, 'yyyy-MM-dd');
     const now = new Date();
-    const checkIn = status === 'present' || status === 'late' ? format(now, 'HH:mm:ss') : null;
+    const checkIn = status === 'present' || status === 'late' ? format(now, 'HH:mm:ss') : undefined;
     
     try {
-      // Check if record exists
-      const { data: existing } = await supabase
-        .from('staff_attendance')
-        .select('id')
-        .eq('staff_id', staffMember.id)
-        .eq('date', dateStr)
-        .single();
-
-      if (existing) {
-        await supabase.from('staff_attendance')
-          .update({ status, check_in: checkIn, updated_at: new Date().toISOString() })
-          .eq('id', existing.id);
-      } else {
-        await supabase.from('staff_attendance').insert({
-          tenant_id: tenantId, staff_id: staffMember.id, date: dateStr,
-          status, check_in: checkIn, source: 'manual',
-        });
-      }
+      await markAttendance(staffMember.id, dateStr, status, checkIn);
       toast.success(`${staffMember.name} marked as ${status}`);
-      fetchData();
     } catch (err: any) {
       toast.error(err.message || 'Failed to mark attendance');
     }
@@ -257,86 +148,11 @@ export default function StaffPayroll() {
   };
 
   // ============= PAYROLL PROCESSING =============
-  const calculatePayrollForStaff = (staffMember: Staff, month: string) => {
-    const monthStart = startOfMonth(parseISO(`${month}-01`));
-    const monthEnd = endOfMonth(monthStart);
-    const workingDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
-      .filter(d => !isWeekend(d)).length;
-
-    const staffAttendance = attendance.filter(a => 
-      a.staff_id === staffMember.id && a.date.startsWith(month)
-    );
-    
-    const presentDays = staffAttendance.filter(a => a.status === 'present').length;
-    const lateDays = staffAttendance.filter(a => a.status === 'late').length;
-    const absentDays = workingDays - presentDays - lateDays;
-    
-    const dailyRate = staffMember.salary / workingDays;
-    const absentDeduction = Math.round(absentDays * dailyRate);
-    const lateDeduction = Math.round(lateDays * (dailyRate * 0.25)); // 25% deduction for late
-    const overtimeMinutes = staffAttendance.reduce((sum, a) => sum + (a.overtime_minutes || 0), 0);
-    const overtimePay = Math.round((overtimeMinutes / 60) * (dailyRate / 8) * 1.5);
-
-    return {
-      basic_salary: staffMember.salary,
-      present_days: presentDays + lateDays,
-      absent_days: absentDays,
-      late_days: lateDays,
-      absent_deduction: absentDeduction,
-      late_deduction: lateDeduction,
-      overtime_pay: overtimePay,
-      net_salary: staffMember.salary - absentDeduction - lateDeduction + overtimePay,
-    };
-  };
-
   const handleProcessPayroll = async () => {
-    if (!tenantId) return;
     setSaving(true);
     try {
-      const month = paymentForm.month;
-      
-      // Create payroll run
-      const { data: run, error: runErr } = await supabase
-        .from('payroll_runs')
-        .upsert({
-          tenant_id: tenantId, month, status: 'processing',
-          total_staff: activeStaff.length, processed_at: new Date().toISOString(),
-        }, { onConflict: 'tenant_id,month' })
-        .select()
-        .single();
-
-      if (runErr) throw runErr;
-
-      // Calculate and insert payments for each active staff
-      let totalGross = 0, totalDeductions = 0, totalNet = 0;
-      
-      for (const s of activeStaff) {
-        const calc = calculatePayrollForStaff(s, month);
-        
-        await supabase.from('salary_payments').upsert({
-          tenant_id: tenantId, staff_id: s.id, month,
-          basic_salary: calc.basic_salary, bonus: 0, deductions: 0,
-          overtime_pay: calc.overtime_pay, late_deduction: calc.late_deduction,
-          absent_deduction: calc.absent_deduction, net_salary: calc.net_salary,
-          present_days: calc.present_days, absent_days: calc.absent_days,
-          late_days: calc.late_days, status: 'pending',
-          payroll_run_id: run.id,
-        }, { onConflict: 'tenant_id,staff_id,month', ignoreDuplicates: false });
-
-        totalGross += calc.basic_salary;
-        totalDeductions += calc.absent_deduction + calc.late_deduction;
-        totalNet += calc.net_salary;
-      }
-
-      // Update payroll run totals
-      await supabase.from('payroll_runs').update({
-        status: 'completed', total_gross: totalGross,
-        total_deductions: totalDeductions, total_net: totalNet,
-      }).eq('id', run.id);
-
-      toast.success(`Payroll processed for ${activeStaff.length} staff`);
+      await processPayroll(paymentForm.month);
       setShowProcessPayrollDialog(false);
-      fetchData();
     } catch (err: any) {
       toast.error(err.message || 'Failed to process payroll');
     } finally {
@@ -345,33 +161,12 @@ export default function StaffPayroll() {
   };
 
   const handlePaySalary = async () => {
-    if (!tenantId || !selectedStaff) return;
+    if (!selectedStaff) return;
     setSaving(true);
     try {
-      const netSalary = parseFloat(paymentForm.basic_salary) + parseFloat(paymentForm.bonus) 
-        + parseFloat(paymentForm.overtime_pay) - parseFloat(paymentForm.deductions) 
-        - parseFloat(paymentForm.late_deduction) - parseFloat(paymentForm.absent_deduction);
-
-      await supabase.from('salary_payments').upsert({
-        tenant_id: tenantId, staff_id: selectedStaff.id, month: paymentForm.month,
-        basic_salary: parseFloat(paymentForm.basic_salary),
-        bonus: parseFloat(paymentForm.bonus), deductions: parseFloat(paymentForm.deductions),
-        overtime_pay: parseFloat(paymentForm.overtime_pay),
-        late_deduction: parseFloat(paymentForm.late_deduction),
-        absent_deduction: parseFloat(paymentForm.absent_deduction),
-        net_salary: netSalary, status: 'paid',
-        payment_date: new Date().toISOString().split('T')[0],
-        payment_method: paymentForm.payment_method,
-        transaction_ref: paymentForm.transaction_ref || null,
-        present_days: parseInt(paymentForm.present_days) || 0,
-        absent_days: parseInt(paymentForm.absent_days) || 0,
-        late_days: parseInt(paymentForm.late_days) || 0,
-      }, { onConflict: 'tenant_id,staff_id,month' });
-
-      toast.success('Salary paid');
+      await paySalary(selectedStaff.id, paymentForm.month, paymentForm.payment_method, paymentForm.transaction_ref);
       setShowPaymentDialog(false);
       setSelectedStaff(null);
-      fetchData();
     } catch (err: any) {
       toast.error(err.message || 'Failed to pay salary');
     } finally {
@@ -379,9 +174,10 @@ export default function StaffPayroll() {
     }
   };
 
-  const openPaymentDialog = (s: Staff) => {
+  const openPaymentDialog = (s: any) => {
     setSelectedStaff(s);
-    const calc = calculatePayrollForStaff(s, format(new Date(), 'yyyy-MM'));
+    const staffAtt = attendance.filter(a => a.staff_id === s.id);
+    const calc = calculatePayroll(s, format(new Date(), 'yyyy-MM'), staffAtt);
     setPaymentForm({
       month: format(new Date(), 'yyyy-MM'),
       basic_salary: s.salary.toString(),
@@ -415,11 +211,11 @@ export default function StaffPayroll() {
 
   return (
     <DashboardLayout
-      title="Payroll & HR Management"
-      subtitle="Staff, attendance, and salary management"
+      title="HR & Payroll Management"
+      subtitle="Staff, attendance, leave, performance, and salary management"
     >
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -447,7 +243,7 @@ export default function StaffPayroll() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Monthly Payroll</p>
-                <p className="text-xl font-bold">৳{totalSalary.toLocaleString()}</p>
+                <p className="text-lg font-bold">৳{totalSalary.toLocaleString()}</p>
               </div>
               <Banknote className="h-8 w-8 text-blue-500" />
             </div>
@@ -458,7 +254,7 @@ export default function StaffPayroll() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Paid This Month</p>
-                <p className="text-xl font-bold text-green-600">৳{paidThisMonth.toLocaleString()}</p>
+                <p className="text-lg font-bold text-green-600">৳{paidThisMonth.toLocaleString()}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500" />
             </div>
@@ -468,10 +264,21 @@ export default function StaffPayroll() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold text-orange-600">{pendingPayments}</p>
+                <p className="text-sm text-muted-foreground">Pending Leaves</p>
+                <p className="text-2xl font-bold text-orange-600">{pendingLeaves}</p>
               </div>
-              <Timer className="h-8 w-8 text-orange-500" />
+              <TreePalm className="h-8 w-8 text-orange-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Pending Loans</p>
+                <p className="text-2xl font-bold text-purple-600">{pendingLoans}</p>
+              </div>
+              <CreditCard className="h-8 w-8 text-purple-500" />
             </div>
           </CardContent>
         </Card>
@@ -480,15 +287,29 @@ export default function StaffPayroll() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <TabsList>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="staff" className="gap-2">
               <Users className="h-4 w-4" /> Staff
             </TabsTrigger>
             <TabsTrigger value="attendance" className="gap-2">
               <UserCheck className="h-4 w-4" /> Attendance
             </TabsTrigger>
+            <TabsTrigger value="leave" className="gap-2">
+              <TreePalm className="h-4 w-4" /> Leave
+              {pendingLeaves > 0 && <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 text-xs flex items-center justify-center">{pendingLeaves}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="payroll" className="gap-2">
               <Receipt className="h-4 w-4" /> Payroll
+            </TabsTrigger>
+            <TabsTrigger value="performance" className="gap-2">
+              <Star className="h-4 w-4" /> Performance
+            </TabsTrigger>
+            <TabsTrigger value="loans" className="gap-2">
+              <CreditCard className="h-4 w-4" /> Loans
+              {pendingLoans > 0 && <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 text-xs flex items-center justify-center">{pendingLoans}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="shifts" className="gap-2">
+              <Clock className="h-4 w-4" /> Shifts
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               <History className="h-4 w-4" /> History
@@ -603,6 +424,7 @@ export default function StaffPayroll() {
                       <TableHead>Staff</TableHead>
                       <TableHead>Department</TableHead>
                       <TableHead>Check-In</TableHead>
+                      <TableHead>Check-Out</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Mark Attendance</TableHead>
                     </TableRow>
@@ -615,9 +437,14 @@ export default function StaffPayroll() {
                           <TableCell className="font-medium">{s.name}</TableCell>
                           <TableCell>{s.department || '-'}</TableCell>
                           <TableCell>{att?.check_in || '-'}</TableCell>
+                          <TableCell>{att?.check_out || '-'}</TableCell>
                           <TableCell>
                             {att ? (
-                              <Badge variant={att.status === 'present' ? 'default' : att.status === 'late' ? 'secondary' : 'destructive'}>
+                              <Badge variant={
+                                att.status === 'present' ? 'default' : 
+                                att.status === 'late' ? 'secondary' : 
+                                att.status === 'leave' ? 'outline' : 'destructive'
+                              }>
                                 {att.status}
                               </Badge>
                             ) : <Badge variant="outline">Not Marked</Badge>}
@@ -628,6 +455,9 @@ export default function StaffPayroll() {
                             </Button>
                             <Button size="sm" variant={att?.status === 'late' ? 'secondary' : 'outline'} onClick={() => handleMarkAttendance(s, 'late')}>
                               <Clock className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant={att?.status === 'half_day' ? 'secondary' : 'outline'} onClick={() => handleMarkAttendance(s, 'half_day')}>
+                              ½
                             </Button>
                             <Button size="sm" variant={att?.status === 'absent' ? 'destructive' : 'outline'} onClick={() => handleMarkAttendance(s, 'absent')}>
                               <XCircle className="h-4 w-4" />
@@ -641,6 +471,21 @@ export default function StaffPayroll() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Leave Management Tab */}
+        <TabsContent value="leave">
+          <LeaveManagement
+            staff={staff}
+            leaveTypes={leaveTypes}
+            leaveRequests={leaveRequests}
+            leaveBalances={leaveBalances}
+            loading={loading}
+            onSaveLeaveType={saveLeaveType}
+            onSubmitLeave={submitLeaveRequest}
+            onHandleRequest={handleLeaveRequest}
+            onInitializeBalances={initializeLeaveBalances}
+          />
         </TabsContent>
 
         {/* Payroll Processing Tab */}
@@ -672,11 +517,12 @@ export default function StaffPayroll() {
                       <TableHead>Overtime</TableHead>
                       <TableHead>Net Salary</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredPayments.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No payroll data for this month</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No payroll data for this month. Click "Process Payroll" to generate.</TableCell></TableRow>
                     ) : filteredPayments.map((p) => {
                       const staffMember = staff.find(s => s.id === p.staff_id);
                       return (
@@ -685,13 +531,20 @@ export default function StaffPayroll() {
                           <TableCell>৳{p.basic_salary.toLocaleString()}</TableCell>
                           <TableCell className="text-green-600">{p.present_days} days</TableCell>
                           <TableCell className="text-red-600">{p.absent_days}/{p.late_days}</TableCell>
-                          <TableCell className="text-red-600">৳{((p.absent_deduction || 0) + (p.late_deduction || 0)).toLocaleString()}</TableCell>
+                          <TableCell className="text-red-600">৳{((p.absent_deduction || 0) + (p.late_deduction || 0) + (p.loan_deduction || 0)).toLocaleString()}</TableCell>
                           <TableCell className="text-blue-600">৳{(p.overtime_pay || 0).toLocaleString()}</TableCell>
                           <TableCell className="font-bold">৳{p.net_salary.toLocaleString()}</TableCell>
                           <TableCell>
                             <Badge variant={p.status === 'paid' ? 'default' : 'secondary'}>
                               {p.status}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {p.status !== 'paid' && staffMember && (
+                              <Button size="sm" variant="outline" onClick={() => openPaymentDialog(staffMember)}>
+                                Pay
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -701,6 +554,36 @@ export default function StaffPayroll() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Performance Management Tab */}
+        <TabsContent value="performance">
+          <PerformanceManagement
+            staff={staff}
+            reviews={performanceReviews}
+            loading={loading}
+            onSaveReview={savePerformanceReview}
+          />
+        </TabsContent>
+
+        {/* Loans Tab */}
+        <TabsContent value="loans">
+          <LoanManagement
+            staff={staff}
+            loans={loans}
+            loading={loading}
+            onCreateLoan={createLoan}
+            onApproveLoan={approveLoan}
+          />
+        </TabsContent>
+
+        {/* Shifts Tab */}
+        <TabsContent value="shifts">
+          <ShiftManagement
+            shifts={shifts}
+            loading={loading}
+            onSaveShift={saveShift}
+          />
         </TabsContent>
 
         {/* History Tab */}
@@ -809,52 +692,54 @@ export default function StaffPayroll() {
               <Input value={staffForm.designation} onChange={(e) => setStaffForm(p => ({ ...p, designation: e.target.value }))} placeholder="Senior Technician" />
             </div>
             <div className="border rounded-lg p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Salary (৳)</Label>
+                  <Input type="number" value={staffForm.salary} onChange={(e) => setStaffForm(p => ({ ...p, salary: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Salary Type</Label>
+                  <Select value={staffForm.salary_type} onValueChange={(v) => setStaffForm(p => ({ ...p, salary_type: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="hourly">Hourly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Joining Date</Label>
+                <Input type="date" value={staffForm.join_date} onChange={(e) => setStaffForm(p => ({ ...p, join_date: e.target.value }))} />
+              </div>
+            </div>
+            <div className="border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="text-base font-medium flex items-center gap-2"><Key className="h-4 w-4" /> Login Access</Label>
-                  <p className="text-sm text-muted-foreground">Enable login credentials for staff portal</p>
+                  <Label>Enable Login Access</Label>
+                  <p className="text-xs text-muted-foreground">Allow this staff to log into the system</p>
                 </div>
-                <Switch checked={staffForm.can_login} onCheckedChange={(checked) => setStaffForm(p => ({ ...p, can_login: checked }))} />
+                <Switch checked={staffForm.can_login} onCheckedChange={(c) => setStaffForm(p => ({ ...p, can_login: c }))} />
               </div>
               {staffForm.can_login && (
-                <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Username *</Label>
-                    <Input value={staffForm.username} onChange={(e) => setStaffForm(p => ({ ...p, username: e.target.value }))} placeholder="staff_username" />
+                    <Label>Username</Label>
+                    <Input value={staffForm.username} onChange={(e) => setStaffForm(p => ({ ...p, username: e.target.value }))} placeholder="staff123" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Password {editingStaff ? '(leave empty to keep)' : '*'}</Label>
-                    <Input type="password" value={staffForm.password} onChange={(e) => setStaffForm(p => ({ ...p, password: e.target.value }))} placeholder="••••••••" />
+                    <Label>Password</Label>
+                    <Input type="password" value={staffForm.password} onChange={(e) => setStaffForm(p => ({ ...p, password: e.target.value }))} placeholder="••••••" />
                   </div>
                 </div>
               )}
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Salary (৳)</Label>
-                <Input type="number" value={staffForm.salary} onChange={(e) => setStaffForm(p => ({ ...p, salary: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Salary Type</Label>
-                <Select value={staffForm.salary_type} onValueChange={(v) => setStaffForm(p => ({ ...p, salary_type: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="hourly">Hourly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Join Date</Label>
-                <Input type="date" value={staffForm.join_date} onChange={(e) => setStaffForm(p => ({ ...p, join_date: e.target.value }))} />
-              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowStaffDialog(false)}>Cancel</Button>
             <Button onClick={handleSaveStaff} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingStaff ? 'Update' : 'Add'}
+              {editingStaff ? 'Update' : 'Add'} Staff
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -862,7 +747,7 @@ export default function StaffPayroll() {
 
       {/* Pay Salary Dialog */}
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Pay Salary - {selectedStaff?.name}</DialogTitle>
           </DialogHeader>
@@ -873,47 +758,47 @@ export default function StaffPayroll() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Basic Salary (৳)</Label>
-                <Input type="number" value={paymentForm.basic_salary} onChange={(e) => setPaymentForm(p => ({ ...p, basic_salary: e.target.value }))} />
+                <Label>Basic Salary</Label>
+                <Input type="number" value={paymentForm.basic_salary} disabled />
               </div>
               <div className="space-y-2">
-                <Label>Bonus (৳)</Label>
-                <Input type="number" value={paymentForm.bonus} onChange={(e) => setPaymentForm(p => ({ ...p, bonus: e.target.value }))} />
+                <Label>Overtime</Label>
+                <Input type="number" value={paymentForm.overtime_pay} disabled />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Present Days</Label>
+                <Input type="number" value={paymentForm.present_days} disabled />
+              </div>
+              <div className="space-y-2">
+                <Label>Absent Days</Label>
+                <Input type="number" value={paymentForm.absent_days} disabled />
+              </div>
+              <div className="space-y-2">
+                <Label>Late Days</Label>
+                <Input type="number" value={paymentForm.late_days} disabled />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Overtime Pay (৳)</Label>
-                <Input type="number" value={paymentForm.overtime_pay} onChange={(e) => setPaymentForm(p => ({ ...p, overtime_pay: e.target.value }))} />
+                <Label>Absent Deduction</Label>
+                <Input type="number" value={paymentForm.absent_deduction} disabled className="text-red-600" />
               </div>
               <div className="space-y-2">
-                <Label>Other Deductions (৳)</Label>
-                <Input type="number" value={paymentForm.deductions} onChange={(e) => setPaymentForm(p => ({ ...p, deductions: e.target.value }))} />
+                <Label>Late Deduction</Label>
+                <Input type="number" value={paymentForm.late_deduction} disabled className="text-red-600" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Late Deduction (৳)</Label>
-                <Input type="number" value={paymentForm.late_deduction} onChange={(e) => setPaymentForm(p => ({ ...p, late_deduction: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Absent Deduction (৳)</Label>
-                <Input type="number" value={paymentForm.absent_deduction} onChange={(e) => setPaymentForm(p => ({ ...p, absent_deduction: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <div className="p-2 bg-muted rounded text-center">
-                <p className="text-muted-foreground">Present</p>
-                <p className="font-bold text-green-600">{paymentForm.present_days} days</p>
-              </div>
-              <div className="p-2 bg-muted rounded text-center">
-                <p className="text-muted-foreground">Absent</p>
-                <p className="font-bold text-red-600">{paymentForm.absent_days} days</p>
-              </div>
-              <div className="p-2 bg-muted rounded text-center">
-                <p className="text-muted-foreground">Late</p>
-                <p className="font-bold text-orange-600">{paymentForm.late_days} days</p>
-              </div>
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-lg font-bold">
+                Net Salary: ৳{(
+                  parseFloat(paymentForm.basic_salary) + 
+                  parseFloat(paymentForm.overtime_pay) - 
+                  parseFloat(paymentForm.absent_deduction) - 
+                  parseFloat(paymentForm.late_deduction)
+                ).toLocaleString()}
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -922,9 +807,10 @@ export default function StaffPayroll() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bank">Bank Transfer</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                     <SelectItem value="bkash">bKash</SelectItem>
                     <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -932,13 +818,6 @@ export default function StaffPayroll() {
                 <Label>Transaction Ref</Label>
                 <Input value={paymentForm.transaction_ref} onChange={(e) => setPaymentForm(p => ({ ...p, transaction_ref: e.target.value }))} placeholder="Optional" />
               </div>
-            </div>
-            <div className="p-3 bg-primary/10 rounded-lg">
-              <p className="text-sm text-muted-foreground">Net Salary</p>
-              <p className="text-2xl font-bold text-primary">
-                ৳{(parseFloat(paymentForm.basic_salary) + parseFloat(paymentForm.bonus) + parseFloat(paymentForm.overtime_pay) 
-                  - parseFloat(paymentForm.deductions) - parseFloat(paymentForm.late_deduction) - parseFloat(paymentForm.absent_deduction)).toLocaleString()}
-              </p>
             </div>
           </div>
           <DialogFooter>
@@ -955,19 +834,22 @@ export default function StaffPayroll() {
       <Dialog open={showProcessPayrollDialog} onOpenChange={setShowProcessPayrollDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Process Payroll</DialogTitle>
+            <DialogTitle>Process Monthly Payroll</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Select Month</Label>
               <Input type="month" value={paymentForm.month} onChange={(e) => setPaymentForm(p => ({ ...p, month: e.target.value }))} />
             </div>
-            <div className="p-4 bg-muted rounded-lg space-y-2">
-              <p className="text-sm">This will calculate salaries for all <strong>{activeStaff.length}</strong> active staff members based on their attendance records.</p>
+            <div className="p-4 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground mb-2">This will calculate salary for:</p>
+              <p className="font-medium">{activeStaff.length} active staff members</p>
+              <p className="text-sm text-muted-foreground mt-2">Based on attendance records, it will calculate:</p>
               <ul className="text-sm text-muted-foreground list-disc list-inside">
-                <li>Absent days will be deducted at daily rate</li>
-                <li>Late arrivals will have 25% daily rate deduction</li>
-                <li>Overtime will be paid at 1.5x hourly rate</li>
+                <li>Deductions for absent days</li>
+                <li>Deductions for late arrivals</li>
+                <li>Overtime payments</li>
+                <li>Loan/advance deductions</li>
               </ul>
             </div>
           </div>
