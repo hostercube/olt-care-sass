@@ -8,9 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { Plus, Loader2, Check, X, Banknote, CreditCard } from 'lucide-react';
+import { Plus, Loader2, Check, X, Banknote, CreditCard, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Staff, StaffLoan } from '@/hooks/usePayrollSystem';
 
@@ -20,10 +21,12 @@ interface LoanManagementProps {
   loading: boolean;
   onCreateLoan: (data: any) => Promise<void>;
   onApproveLoan: (id: string, approve: boolean) => Promise<void>;
+  onDeleteLoan?: (id: string) => Promise<void>;
 }
 
-export function LoanManagement({ staff, loans, loading, onCreateLoan, onApproveLoan }: LoanManagementProps) {
+export function LoanManagement({ staff, loans, loading, onCreateLoan, onApproveLoan, onDeleteLoan }: LoanManagementProps) {
   const [showDialog, setShowDialog] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<StaffLoan | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
@@ -54,6 +57,12 @@ export function LoanManagement({ staff, loans, loading, onCreateLoan, onApproveL
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm || !onDeleteLoan) return;
+    await onDeleteLoan(deleteConfirm.id);
+    setDeleteConfirm(null);
   };
 
   const getStaffName = (id: string) => staff.find(s => s.id === id)?.name || 'Unknown';
@@ -167,6 +176,11 @@ export function LoanManagement({ staff, loans, loading, onCreateLoan, onApproveL
                           <Button size="sm" variant="outline" className="text-red-600" onClick={() => onApproveLoan(loan.id, false)}>
                             <X className="h-4 w-4 mr-1" /> Reject
                           </Button>
+                          {onDeleteLoan && (
+                            <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(loan)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -228,12 +242,13 @@ export function LoanManagement({ staff, loans, loading, onCreateLoan, onApproveL
                       <TableHead>Amount</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {completedLoans.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                           No history
                         </TableCell>
                       </TableRow>
@@ -252,6 +267,13 @@ export function LoanManagement({ staff, loans, loading, onCreateLoan, onApproveL
                           </Badge>
                         </TableCell>
                         <TableCell>{format(new Date(loan.created_at), 'MMM d, yyyy')}</TableCell>
+                        <TableCell>
+                          {onDeleteLoan && (
+                            <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(loan)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -333,6 +355,24 @@ export function LoanManagement({ staff, loans, loading, onCreateLoan, onApproveL
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Loan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this loan record for {deleteConfirm && getStaffName(deleteConfirm.staff_id)}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

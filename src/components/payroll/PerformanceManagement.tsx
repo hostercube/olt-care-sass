@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Plus, Star, Loader2, Eye, Edit } from 'lucide-react';
+import { Plus, Star, Loader2, Eye, Edit, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Staff, PerformanceReview } from '@/hooks/usePayrollSystem';
 
@@ -18,6 +19,7 @@ interface PerformanceManagementProps {
   reviews: PerformanceReview[];
   loading: boolean;
   onSaveReview: (data: Partial<PerformanceReview>, id?: string) => Promise<void>;
+  onDeleteReview?: (id: string) => Promise<void>;
 }
 
 const RATING_CRITERIA = [
@@ -29,11 +31,12 @@ const RATING_CRITERIA = [
   { key: 'initiative', label: 'Initiative', description: 'Proactive behavior and problem solving' },
 ];
 
-export function PerformanceManagement({ staff, reviews, loading, onSaveReview }: PerformanceManagementProps) {
+export function PerformanceManagement({ staff, reviews, loading, onSaveReview, onDeleteReview }: PerformanceManagementProps) {
   const [showDialog, setShowDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [editingReview, setEditingReview] = useState<PerformanceReview | null>(null);
   const [viewingReview, setViewingReview] = useState<PerformanceReview | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<PerformanceReview | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
@@ -106,6 +109,12 @@ export function PerformanceManagement({ staff, reviews, loading, onSaveReview }:
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm || !onDeleteReview) return;
+    await onDeleteReview(deleteConfirm.id);
+    setDeleteConfirm(null);
   };
 
   const getStaffName = (id: string) => staff.find(s => s.id === id)?.name || 'Unknown';
@@ -223,6 +232,11 @@ export function PerformanceManagement({ staff, reviews, loading, onSaveReview }:
                       <Button variant="ghost" size="sm" onClick={() => handleEdit(review)}>
                         <Edit className="h-4 w-4" />
                       </Button>
+                      {onDeleteReview && (
+                        <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(review)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -422,6 +436,24 @@ export function PerformanceManagement({ staff, reviews, loading, onSaveReview }:
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Review?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this performance review for {deleteConfirm && getStaffName(deleteConfirm.staff_id)}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

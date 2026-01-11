@@ -35,9 +35,9 @@ function StaffPayrollContent() {
   const {
     staff, activeStaff, attendance, leaveTypes, leaveRequests, leaveBalances,
     performanceReviews, loans, shifts, payments, payrollRuns, loading,
-    fetchData, saveStaff, markAttendance, checkOut,
-    saveLeaveType, submitLeaveRequest, handleLeaveRequest, initializeLeaveBalances,
-    savePerformanceReview, createLoan, approveLoan, saveShift,
+    fetchData, saveStaff, deleteStaff, markAttendance, checkOut,
+    saveLeaveType, deleteLeaveType, submitLeaveRequest, handleLeaveRequest, initializeLeaveBalances,
+    savePerformanceReview, deletePerformanceReview, createLoan, approveLoan, deleteLoan, saveShift, deleteShift,
     calculatePayroll, processPayroll, paySalary, tenantId
   } = usePayrollSystem();
 
@@ -586,6 +586,7 @@ function StaffPayrollContent() {
             leaveBalances={leaveBalances}
             loading={loading}
             onSaveLeaveType={saveLeaveType}
+            onDeleteLeaveType={deleteLeaveType}
             onSubmitLeave={submitLeaveRequest}
             onHandleRequest={handleLeaveRequest}
             onInitializeBalances={initializeLeaveBalances}
@@ -667,6 +668,7 @@ function StaffPayrollContent() {
             reviews={performanceReviews}
             loading={loading}
             onSaveReview={savePerformanceReview}
+            onDeleteReview={deletePerformanceReview}
           />
         </TabsContent>
 
@@ -678,6 +680,7 @@ function StaffPayrollContent() {
             loading={loading}
             onCreateLoan={createLoan}
             onApproveLoan={approveLoan}
+            onDeleteLoan={deleteLoan}
           />
         </TabsContent>
 
@@ -687,6 +690,7 @@ function StaffPayrollContent() {
             shifts={shifts}
             loading={loading}
             onSaveShift={saveShift}
+            onDeleteShift={deleteShift}
           />
         </TabsContent>
 

@@ -9,9 +9,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
-  Plus, Edit, Check, X, Loader2, Calendar, TreePalm, Settings
+  Plus, Edit, Check, X, Loader2, Calendar, TreePalm, Settings, Trash2
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import type { Staff, LeaveType, LeaveRequest, LeaveBalance } from '@/hooks/usePayrollSystem';
@@ -23,14 +24,16 @@ interface LeaveManagementProps {
   leaveBalances: LeaveBalance[];
   loading: boolean;
   onSaveLeaveType: (data: Partial<LeaveType>, id?: string) => Promise<void>;
+  onDeleteLeaveType?: (id: string) => Promise<void>;
   onSubmitLeave: (data: any) => Promise<void>;
+  onDeleteLeaveRequest?: (id: string) => Promise<void>;
   onHandleRequest: (id: string, action: 'approved' | 'rejected', reason?: string) => Promise<void>;
   onInitializeBalances: (staffId: string) => Promise<void>;
 }
 
 export function LeaveManagement({
   staff, leaveTypes, leaveRequests, leaveBalances, loading,
-  onSaveLeaveType, onSubmitLeave, onHandleRequest, onInitializeBalances
+  onSaveLeaveType, onDeleteLeaveType, onSubmitLeave, onDeleteLeaveRequest, onHandleRequest, onInitializeBalances
 }: LeaveManagementProps) {
   const [activeTab, setActiveTab] = useState('requests');
   const [showTypeDialog, setShowTypeDialog] = useState(false);
@@ -38,6 +41,7 @@ export function LeaveManagement({
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [editingType, setEditingType] = useState<LeaveType | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
+  const [deleteTypeConfirm, setDeleteTypeConfirm] = useState<LeaveType | null>(null);
   const [saving, setSaving] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
 

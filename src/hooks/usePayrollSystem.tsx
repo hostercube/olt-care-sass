@@ -410,6 +410,43 @@ export function usePayrollSystem() {
     fetchData();
   };
 
+  const deleteShift = async (id: string) => {
+    await supabase.from('staff_shifts').update({ is_active: false }).eq('id', id);
+    toast.success('Shift deleted');
+    fetchData();
+  };
+
+  // Delete functions
+  const deleteLeaveType = async (id: string) => {
+    await supabase.from('leave_types').update({ is_active: false }).eq('id', id);
+    toast.success('Leave type deleted');
+    fetchData();
+  };
+
+  const deleteLeaveRequest = async (id: string) => {
+    await supabase.from('leave_requests').update({ status: 'cancelled' }).eq('id', id);
+    toast.success('Leave request cancelled');
+    fetchData();
+  };
+
+  const deletePerformanceReview = async (id: string) => {
+    await supabase.from('performance_reviews').delete().eq('id', id);
+    toast.success('Review deleted');
+    fetchData();
+  };
+
+  const deleteLoan = async (id: string) => {
+    await supabase.from('staff_loans').delete().eq('id', id);
+    toast.success('Loan deleted');
+    fetchData();
+  };
+
+  const deleteStaff = async (id: string) => {
+    await supabase.from('staff').update({ is_active: false }).eq('id', id);
+    toast.success('Staff deactivated');
+    fetchData();
+  };
+
   // Payroll
   const calculatePayroll = (staffMember: Staff, month: string, staffAttendance: Attendance[]) => {
     const monthStart = startOfMonth(parseISO(`${month}-01`));
@@ -534,9 +571,9 @@ export function usePayrollSystem() {
     staff, activeStaff, attendance, leaveTypes, leaveRequests, leaveBalances,
     performanceReviews, loans, shifts, payments, payrollRuns, loading,
     // Actions
-    fetchData, saveStaff, markAttendance, checkOut,
-    saveLeaveType, submitLeaveRequest, handleLeaveRequest, initializeLeaveBalances,
-    savePerformanceReview, createLoan, approveLoan, saveShift,
+    fetchData, saveStaff, deleteStaff, markAttendance, checkOut,
+    saveLeaveType, deleteLeaveType, submitLeaveRequest, deleteLeaveRequest, handleLeaveRequest, initializeLeaveBalances,
+    savePerformanceReview, deletePerformanceReview, createLoan, approveLoan, deleteLoan, saveShift, deleteShift,
     calculatePayroll, processPayroll, paySalary,
     tenantId
   };

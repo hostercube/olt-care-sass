@@ -5,18 +5,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, Edit, Loader2, Clock, Sun, Moon, Sunrise } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Plus, Edit, Loader2, Clock, Sun, Moon, Sunrise, Trash2 } from 'lucide-react';
 import type { StaffShift } from '@/hooks/usePayrollSystem';
 
 interface ShiftManagementProps {
   shifts: StaffShift[];
   loading: boolean;
   onSaveShift: (data: Partial<StaffShift>, id?: string) => Promise<void>;
+  onDeleteShift?: (id: string) => Promise<void>;
 }
 
-export function ShiftManagement({ shifts, loading, onSaveShift }: ShiftManagementProps) {
+export function ShiftManagement({ shifts, loading, onSaveShift, onDeleteShift }: ShiftManagementProps) {
   const [showDialog, setShowDialog] = useState(false);
   const [editingShift, setEditingShift] = useState<StaffShift | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<StaffShift | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
@@ -57,6 +60,12 @@ export function ShiftManagement({ shifts, loading, onSaveShift }: ShiftManagemen
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm || !onDeleteShift) return;
+    await onDeleteShift(deleteConfirm.id);
+    setDeleteConfirm(null);
   };
 
   const getShiftIcon = (startTime: string) => {
@@ -107,9 +116,16 @@ export function ShiftManagement({ shifts, loading, onSaveShift }: ShiftManagemen
                       {getShiftIcon(shift.start_time)}
                       <span className="font-medium">{shift.name}</span>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(shift)}>
-                      <Edit className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(shift)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      {onDeleteShift && (
+                        <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(shift)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -223,6 +239,24 @@ export function ShiftManagement({ shifts, loading, onSaveShift }: ShiftManagemen
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Shift?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deleteConfirm?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
