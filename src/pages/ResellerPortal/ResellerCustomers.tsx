@@ -14,13 +14,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { 
   Loader2, Users, Plus, Edit, RefreshCcw, Search, Filter, X, Eye, 
   MoreHorizontal, UserCheck, Clock, Ban, UserX, RotateCcw, CreditCard,
-  Download, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wifi, WifiOff
+  Download, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wifi, WifiOff,
+  AlertCircle
 } from 'lucide-react';
 import { useResellerPortal } from '@/hooks/useResellerPortal';
 import { ResellerPortalLayout } from '@/components/reseller/ResellerPortalLayout';
 import { SharedCustomerDialog, type SharedCustomerDialogData } from '@/components/isp/SharedCustomerDialog';
 import { toast } from 'sonner';
 import { format, parseISO, isBefore, isAfter, startOfDay, endOfDay, addDays } from 'date-fns';
+import type { Reseller } from '@/types/reseller';
 
 type CustomerStatus = 'active' | 'expired' | 'suspended' | 'pending' | 'cancelled' | 'inactive';
 
@@ -31,6 +33,49 @@ const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' |
   pending: { label: 'Pending', variant: 'secondary', icon: Clock },
   cancelled: { label: 'Cancelled', variant: 'outline', icon: UserX },
   inactive: { label: 'Inactive', variant: 'secondary', icon: UserX },
+};
+
+// Recharge calculation component
+const RechargeCalculation = ({ amount, months, reseller }: { amount: number; months: number; reseller: Reseller }) => {
+  const rateType = (reseller as any).rate_type || 'discount';
+  const commissionType = (reseller as any).commission_type || 'percentage';
+  const commissionValue = (reseller as any).commission_value || (reseller as any).customer_rate || 0;
+  
+  let deductAmount = amount;
+  let commission = 0;
+  
+  if (commissionValue > 0) {
+    if (commissionType === 'percentage') {
+      commission = Math.round((amount * commissionValue) / 100);
+    } else {
+      commission = commissionValue * months;
+    }
+    
+    if (rateType === 'discount') {
+      deductAmount = amount - commission;
+    }
+  }
+  
+  const hasEnoughBalance = reseller.balance >= deductAmount;
+  
+  return (
+    <div className={`text-sm p-2 rounded border ${hasEnoughBalance ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'}`}>
+      {commission > 0 && (
+        <p className="text-muted-foreground">
+          {rateType === 'discount' ? 'Discount' : 'Commission'}: <span className="text-green-600 font-medium">৳{commission.toLocaleString()}</span>
+        </p>
+      )}
+      <p className={hasEnoughBalance ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
+        Amount to deduct: <span className="font-semibold">৳{deductAmount.toLocaleString()}</span>
+      </p>
+      {!hasEnoughBalance && (
+        <p className="text-red-600 flex items-center gap-1 mt-1">
+          <AlertCircle className="h-3 w-3" />
+          Insufficient balance (need ৳{(deductAmount - reseller.balance).toLocaleString()} more)
+        </p>
+      )}
+    </div>
+  );
 };
 
 interface FilterState {
@@ -799,16 +844,31 @@ export default function ResellerCustomers() {
 
       {/* Recharge Dialog */}
       <Dialog open={showRechargeDialog} onOpenChange={(open) => { setShowRechargeDialog(open); if (!open) setSelectedCustomer(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Recharge Customer</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleRecharge} className="space-y-4">
-            <div className="p-3 bg-muted/50 rounded-lg text-sm">
+            <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1">
               <p><strong>Customer:</strong> {selectedCustomer?.name}</p>
               <p><strong>Package:</strong> {selectedCustomer?.package?.name || 'N/A'}</p>
-              <p><strong>Your Balance:</strong> ৳{(reseller?.balance || 0).toLocaleString()}</p>
+              <p><strong>Package Price:</strong> ৳{(selectedCustomer?.package?.price || selectedCustomer?.monthly_bill || 0).toLocaleString()}</p>
+              <p><strong>Your Balance:</strong> <span className="text-green-600 font-semibold">৳{(reseller?.balance || 0).toLocaleString()}</span></p>
+              
+              {/* Show commission/discount info */}
+              {reseller && ((reseller as any).commission_value > 0 || (reseller as any).customer_rate > 0) && (
+                <div className="mt-2 pt-2 border-t">
+                  <p className="text-muted-foreground">
+                    {(reseller as any).rate_type === 'commission' ? 'Commission' : 'Discount'}: {' '}
+                    {(reseller as any).commission_type === 'percentage' 
+                      ? `${(reseller as any).commission_value || (reseller as any).customer_rate}%`
+                      : `৳${((reseller as any).commission_value || (reseller as any).customer_rate).toLocaleString()} per month`
+                    }
+                  </p>
+                </div>
+              )}
             </div>
+            
             <div className="space-y-2">
               <Label>Amount (৳)</Label>
               <Input
@@ -817,7 +877,15 @@ export default function ResellerCustomers() {
                 onChange={(e) => setRechargeData({ ...rechargeData, amount: e.target.value })}
                 placeholder="Enter amount"
                 required
+                min="1"
               />
+              {rechargeData.amount && reseller && (
+                <RechargeCalculation 
+                  amount={parseFloat(rechargeData.amount) || 0}
+                  months={parseInt(rechargeData.months) || 1}
+                  reseller={reseller}
+                />
+              )}
             </div>
             <div className="space-y-2">
               <Label>Months</Label>
@@ -832,10 +900,15 @@ export default function ResellerCustomers() {
                 </SelectContent>
               </Select>
             </div>
+            
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowRechargeDialog(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>
+              <Button 
+                type="submit" 
+                disabled={saving || !rechargeData.amount || parseFloat(rechargeData.amount) <= 0}
+              >
                 {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <CreditCard className="h-4 w-4 mr-2" />
                 Recharge
               </Button>
             </DialogFooter>

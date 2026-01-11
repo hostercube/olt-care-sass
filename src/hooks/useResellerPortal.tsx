@@ -477,8 +477,39 @@ export function useResellerPortal() {
       return false;
     }
 
-    if (reseller.balance < amount) {
-      toast.error(`Insufficient balance. Available: ৳${reseller.balance.toLocaleString()}`);
+    if (!reseller) {
+      toast.error('Reseller session not found');
+      return false;
+    }
+
+    // Calculate commission/discount
+    let deductAmount = amount;
+    let commission = 0;
+    
+    // Commission calculation based on reseller settings
+    // rate_type: 'commission' = reseller gets money back, 'discount' = reseller pays less
+    // commission_type: 'percentage' or 'flat'
+    const rateType = (reseller as any).rate_type || 'discount';
+    const commissionType = (reseller as any).commission_type || 'percentage';
+    const commissionValue = (reseller as any).commission_value || (reseller as any).customer_rate || 0;
+    
+    if (commissionValue > 0) {
+      if (commissionType === 'percentage') {
+        commission = Math.round((amount * commissionValue) / 100);
+      } else {
+        // flat rate per month
+        commission = commissionValue * months;
+      }
+      
+      if (rateType === 'discount') {
+        // Discount: Reseller pays less
+        deductAmount = amount - commission;
+      }
+      // If commission type, reseller pays full but gets commission credited later
+    }
+
+    if (reseller.balance < deductAmount) {
+      toast.error(`Insufficient balance. Required: ৳${deductAmount.toLocaleString()}, Available: ৳${reseller.balance.toLocaleString()}`);
       return false;
     }
 
@@ -486,10 +517,23 @@ export function useResellerPortal() {
       const customer = customers.find(c => c.id === customerId);
       if (!customer) throw new Error('Customer not found');
 
-      // Calculate new expiry
-      const currentExpiry = customer.expiry_date ? new Date(customer.expiry_date) : new Date();
-      const newExpiry = new Date(currentExpiry);
-      newExpiry.setMonth(newExpiry.getMonth() + months);
+      // Get package validity days (default 30)
+      const packageValidityDays = (customer.package as any)?.validity_days || 30;
+
+      // Calculate new expiry - if expired or null, start from today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      let baseExpiry: Date;
+      if (customer.expiry_date) {
+        const currentExpiry = new Date(customer.expiry_date);
+        baseExpiry = currentExpiry < today ? today : currentExpiry;
+      } else {
+        baseExpiry = today;
+      }
+      
+      const newExpiry = new Date(baseExpiry);
+      newExpiry.setDate(newExpiry.getDate() + (packageValidityDays * months));
 
       // Update customer expiry and status
       const { error: customerError } = await supabase
@@ -498,6 +542,7 @@ export function useResellerPortal() {
           expiry_date: newExpiry.toISOString(),
           status: 'active',
           last_payment_date: new Date().toISOString(),
+          due_amount: Math.max(0, (customer.due_amount || 0) - amount),
         })
         .eq('id', customerId);
 
@@ -516,12 +561,13 @@ export function useResellerPortal() {
           new_expiry: newExpiry.toISOString(),
           payment_method: 'reseller_wallet',
           status: 'completed',
+          discount: commission > 0 && rateType === 'discount' ? commission : 0,
         });
 
       if (rechargeError) throw rechargeError;
 
       // Deduct from reseller balance and create transaction
-      const newBalance = reseller.balance - amount;
+      const newBalance = reseller.balance - deductAmount;
       
       const { error: txError } = await supabase
         .from('reseller_transactions' as any)
@@ -529,27 +575,60 @@ export function useResellerPortal() {
           tenant_id: reseller.tenant_id,
           reseller_id: reseller.id,
           type: 'customer_payment',
-          amount: -amount,
+          amount: -deductAmount,
           balance_before: reseller.balance,
           balance_after: newBalance,
           customer_id: customerId,
-          description: `Recharge for ${customer.name} (${months} month${months > 1 ? 's' : ''})`,
+          description: `Recharge for ${customer.name} (${months} month${months > 1 ? 's' : ''})${commission > 0 ? ` | Discount: ৳${commission}` : ''}`,
         });
 
       if (txError) throw txError;
 
-      // Update reseller balance
+      // If commission type (not discount), credit commission separately
+      if (rateType === 'commission' && commission > 0) {
+        const commissionBalance = newBalance + commission;
+        await supabase
+          .from('reseller_transactions' as any)
+          .insert({
+            tenant_id: reseller.tenant_id,
+            reseller_id: reseller.id,
+            type: 'commission',
+            amount: commission,
+            balance_before: newBalance,
+            balance_after: commissionBalance,
+            customer_id: customerId,
+            description: `Commission for ${customer.name} recharge`,
+          });
+      }
+
+      // Update reseller balance and collections
+      const finalBalance = rateType === 'commission' && commission > 0 
+        ? newBalance + commission 
+        : newBalance;
+
       const { error: balanceError } = await supabase
         .from('resellers')
         .update({ 
-          balance: newBalance,
-          total_collections: (reseller.total_collections || 0) + amount,
+          balance: finalBalance,
+          total_collections: ((reseller as any).total_collections || 0) + amount,
         })
         .eq('id', reseller.id);
 
       if (balanceError) throw balanceError;
 
-      toast.success(`Customer recharged successfully for ${months} month${months > 1 ? 's' : ''}`);
+      // Create customer payment record
+      await supabase
+        .from('customer_payments')
+        .insert({
+          tenant_id: reseller.tenant_id,
+          customer_id: customerId,
+          amount,
+          payment_method: 'reseller_wallet',
+          notes: `Paid by reseller: ${reseller.name}`,
+        });
+
+      const discountMsg = commission > 0 ? ` (Discount: ৳${commission})` : '';
+      toast.success(`Customer recharged for ${months} month${months > 1 ? 's' : ''}${discountMsg}`);
       await fetchResellerData();
       return true;
     } catch (err: any) {
