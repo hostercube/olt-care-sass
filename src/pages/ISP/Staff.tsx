@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { ModuleAccessGuard } from '@/components/layout/ModuleAccessGuard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,25 +10,27 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useTenantRoles } from '@/hooks/useTenantRoles';
-import { usePayrollSystem } from '@/hooks/usePayrollSystem';
+import { useTenantRoles, TenantRole } from '@/hooks/useTenantRoles';
+import { usePayrollSystem, Staff } from '@/hooks/usePayrollSystem';
 import { LeaveManagement } from '@/components/payroll/LeaveManagement';
 import { PerformanceManagement } from '@/components/payroll/PerformanceManagement';
 import { LoanManagement } from '@/components/payroll/LoanManagement';
 import { ShiftManagement } from '@/components/payroll/ShiftManagement';
 import { 
   Users, Plus, Edit, Loader2, DollarSign, Calendar as CalendarIcon, 
-  Clock, CheckCircle, XCircle, Search, RefreshCw, 
-  UserCheck, Receipt, History, Banknote, Timer, TreePalm, Star, CreditCard, Settings2
+  Clock, CheckCircle, XCircle, Search, RefreshCw, Trash2,
+  UserCheck, Receipt, History, Banknote, TreePalm, Star, CreditCard, FileText, Download, Printer
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, parseISO, subMonths } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
-export default function StaffPayroll() {
+function StaffPayrollContent() {
   const { roles } = useTenantRoles();
   const {
     staff, activeStaff, attendance, leaveTypes, leaveRequests, leaveBalances,
@@ -45,6 +48,7 @@ export default function StaffPayroll() {
   const [showStaffDialog, setShowStaffDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showProcessPayrollDialog, setShowProcessPayrollDialog] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<Staff | null>(null);
 
   // Selected items
   const [editingStaff, setEditingStaff] = useState<any>(null);
@@ -52,6 +56,7 @@ export default function StaffPayroll() {
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [attendanceDate, setAttendanceDate] = useState<Date>(new Date());
   const [searchTerm, setSearchTerm] = useState('');
+  const [reportMonth, setReportMonth] = useState(format(new Date(), 'yyyy-MM'));
 
   // Forms
   const [staffForm, setStaffForm] = useState({
@@ -70,7 +75,7 @@ export default function StaffPayroll() {
   // Stats
   const totalSalary = activeStaff.reduce((sum, s) => sum + s.salary, 0);
   const thisMonthPayments = payments.filter(p => p.month === format(new Date(), 'yyyy-MM'));
-  const paidThisMonth = thisMonthPayments.reduce((sum, p) => sum + p.net_salary, 0);
+  const paidThisMonth = thisMonthPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.net_salary, 0);
   const pendingPayments = activeStaff.length - thisMonthPayments.filter(p => p.status === 'paid').length;
 
   // Attendance stats for today
@@ -126,6 +131,19 @@ export default function StaffPayroll() {
       toast.error(err.message || 'Failed to save staff');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteStaff = async () => {
+    if (!deleteConfirm) return;
+    try {
+      const { error } = await supabase.from('staff').update({ is_active: false }).eq('id', deleteConfirm.id);
+      if (error) throw error;
+      toast.success('Staff deactivated');
+      setDeleteConfirm(null);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete staff');
     }
   };
 
@@ -208,6 +226,84 @@ export default function StaffPayroll() {
   const filteredPayments = useMemo(() => {
     return payments.filter(p => p.month === selectedMonth);
   }, [payments, selectedMonth]);
+
+  // ============= REPORTS DATA =============
+  const reportData = useMemo(() => {
+    const monthPayments = payments.filter(p => p.month === reportMonth);
+    const monthRun = payrollRuns.find(r => r.month === reportMonth);
+    
+    // Attendance summary for report month
+    const monthAttendance = attendance.filter(a => a.date.startsWith(reportMonth));
+    
+    // Calculate totals
+    const totalBasic = monthPayments.reduce((sum, p) => sum + p.basic_salary, 0);
+    const totalDeductions = monthPayments.reduce((sum, p) => sum + (p.absent_deduction || 0) + (p.late_deduction || 0) + (p.loan_deduction || 0), 0);
+    const totalOvertime = monthPayments.reduce((sum, p) => sum + (p.overtime_pay || 0), 0);
+    const totalNet = monthPayments.reduce((sum, p) => sum + p.net_salary, 0);
+    const totalPaid = monthPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.net_salary, 0);
+    const totalPending = monthPayments.filter(p => p.status !== 'paid').reduce((sum, p) => sum + p.net_salary, 0);
+
+    // Attendance stats
+    const presentCount = monthAttendance.filter(a => a.status === 'present').length;
+    const lateCount = monthAttendance.filter(a => a.status === 'late').length;
+    const absentCount = monthAttendance.filter(a => a.status === 'absent').length;
+    const leaveCount = monthAttendance.filter(a => a.status === 'leave').length;
+
+    return {
+      payments: monthPayments,
+      run: monthRun,
+      totalBasic,
+      totalDeductions,
+      totalOvertime,
+      totalNet,
+      totalPaid,
+      totalPending,
+      presentCount,
+      lateCount,
+      absentCount,
+      leaveCount,
+    };
+  }, [payments, payrollRuns, attendance, reportMonth]);
+
+  const exportReport = () => {
+    const rows = [
+      ['HR & Payroll Report', reportMonth],
+      [],
+      ['Staff Name', 'Basic', 'Present Days', 'Absent', 'Late', 'Deductions', 'Overtime', 'Net Salary', 'Status'],
+      ...reportData.payments.map(p => {
+        const s = staff.find(st => st.id === p.staff_id);
+        return [
+          s?.name || 'Unknown',
+          p.basic_salary,
+          p.present_days,
+          p.absent_days,
+          p.late_days,
+          (p.absent_deduction || 0) + (p.late_deduction || 0) + (p.loan_deduction || 0),
+          p.overtime_pay || 0,
+          p.net_salary,
+          p.status
+        ];
+      }),
+      [],
+      ['Summary'],
+      ['Total Basic', reportData.totalBasic],
+      ['Total Deductions', reportData.totalDeductions],
+      ['Total Overtime', reportData.totalOvertime],
+      ['Total Net', reportData.totalNet],
+      ['Total Paid', reportData.totalPaid],
+      ['Total Pending', reportData.totalPending],
+    ];
+
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `payroll-report-${reportMonth}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    toast.success('Report exported');
+  };
 
   return (
     <DashboardLayout
@@ -311,6 +407,9 @@ export default function StaffPayroll() {
             <TabsTrigger value="shifts" className="gap-2">
               <Clock className="h-4 w-4" /> Shifts
             </TabsTrigger>
+            <TabsTrigger value="reports" className="gap-2">
+              <FileText className="h-4 w-4" /> Reports
+            </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               <History className="h-4 w-4" /> History
             </TabsTrigger>
@@ -386,6 +485,11 @@ export default function StaffPayroll() {
                           <Button variant="outline" size="sm" onClick={() => openPaymentDialog(s)}>
                             <DollarSign className="h-4 w-4 mr-1" /> Pay
                           </Button>
+                          {s.is_active && (
+                            <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(s)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -586,6 +690,134 @@ export default function StaffPayroll() {
           />
         </TabsContent>
 
+        {/* Reports Tab */}
+        <TabsContent value="reports">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Payroll & HR Reports</CardTitle>
+                  <CardDescription>View and export monthly reports</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    type="month" 
+                    value={reportMonth} 
+                    onChange={(e) => setReportMonth(e.target.value)} 
+                    className="w-40" 
+                  />
+                  <Button variant="outline" onClick={exportReport}>
+                    <Download className="h-4 w-4 mr-2" /> Export CSV
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {/* Summary Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Total Basic</p>
+                    <p className="text-xl font-bold">৳{reportData.totalBasic.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-red-50 dark:bg-red-950/20 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Total Deductions</p>
+                    <p className="text-xl font-bold text-red-600">৳{reportData.totalDeductions.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Total Overtime</p>
+                    <p className="text-xl font-bold text-blue-600">৳{reportData.totalOvertime.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Net Payable</p>
+                    <p className="text-xl font-bold text-green-600">৳{reportData.totalNet.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* Payment Status */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-green-100 dark:bg-green-950/30 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Total Paid</p>
+                    <p className="text-2xl font-bold text-green-700">৳{reportData.totalPaid.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">{reportData.payments.filter(p => p.status === 'paid').length} employees</p>
+                  </div>
+                  <div className="bg-orange-100 dark:bg-orange-950/30 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Pending Payment</p>
+                    <p className="text-2xl font-bold text-orange-700">৳{reportData.totalPending.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">{reportData.payments.filter(p => p.status !== 'paid').length} employees</p>
+                  </div>
+                </div>
+
+                {/* Attendance Summary */}
+                <div className="border rounded-lg p-4 mb-6">
+                  <h4 className="font-medium mb-3">Attendance Summary - {reportMonth}</h4>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-green-600">{reportData.presentCount}</p>
+                      <p className="text-sm text-muted-foreground">Present</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-yellow-600">{reportData.lateCount}</p>
+                      <p className="text-sm text-muted-foreground">Late</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-red-600">{reportData.absentCount}</p>
+                      <p className="text-sm text-muted-foreground">Absent</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-600">{reportData.leaveCount}</p>
+                      <p className="text-sm text-muted-foreground">On Leave</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Staff-wise Details */}
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Staff</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>Basic</TableHead>
+                        <TableHead>Present</TableHead>
+                        <TableHead>Deductions</TableHead>
+                        <TableHead>Net</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {reportData.payments.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                            No payroll data for {reportMonth}
+                          </TableCell>
+                        </TableRow>
+                      ) : reportData.payments.map((p) => {
+                        const s = staff.find(st => st.id === p.staff_id);
+                        return (
+                          <TableRow key={p.id}>
+                            <TableCell className="font-medium">{s?.name || 'Unknown'}</TableCell>
+                            <TableCell>{s?.department || '-'}</TableCell>
+                            <TableCell>৳{p.basic_salary.toLocaleString()}</TableCell>
+                            <TableCell>{p.present_days} days</TableCell>
+                            <TableCell className="text-red-600">
+                              ৳{((p.absent_deduction || 0) + (p.late_deduction || 0) + (p.loan_deduction || 0)).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="font-bold">৳{p.net_salary.toLocaleString()}</TableCell>
+                            <TableCell>
+                              <Badge variant={p.status === 'paid' ? 'default' : 'secondary'}>
+                                {p.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         {/* History Tab */}
         <TabsContent value="history">
           <Card>
@@ -772,51 +1004,48 @@ export default function StaffPayroll() {
                 <Input type="number" value={paymentForm.present_days} disabled />
               </div>
               <div className="space-y-2">
-                <Label>Absent Days</Label>
+                <Label>Absent</Label>
                 <Input type="number" value={paymentForm.absent_days} disabled />
               </div>
               <div className="space-y-2">
-                <Label>Late Days</Label>
+                <Label>Late</Label>
                 <Input type="number" value={paymentForm.late_days} disabled />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Absent Deduction</Label>
-                <Input type="number" value={paymentForm.absent_deduction} disabled className="text-red-600" />
-              </div>
-              <div className="space-y-2">
                 <Label>Late Deduction</Label>
                 <Input type="number" value={paymentForm.late_deduction} disabled className="text-red-600" />
               </div>
-            </div>
-            <div className="p-3 bg-muted rounded-lg">
-              <p className="text-lg font-bold">
-                Net Salary: ৳{(
-                  parseFloat(paymentForm.basic_salary) + 
-                  parseFloat(paymentForm.overtime_pay) - 
-                  parseFloat(paymentForm.absent_deduction) - 
-                  parseFloat(paymentForm.late_deduction)
-                ).toLocaleString()}
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Payment Method</Label>
-                <Select value={paymentForm.payment_method} onValueChange={(v) => setPaymentForm(p => ({ ...p, payment_method: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="bkash">bKash</SelectItem>
-                    <SelectItem value="nagad">Nagad</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Absent Deduction</Label>
+                <Input type="number" value={paymentForm.absent_deduction} disabled className="text-red-600" />
               </div>
-              <div className="space-y-2">
-                <Label>Transaction Ref</Label>
-                <Input value={paymentForm.transaction_ref} onChange={(e) => setPaymentForm(p => ({ ...p, transaction_ref: e.target.value }))} placeholder="Optional" />
+            </div>
+            <div className="border-t pt-4">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-lg font-medium">Net Salary:</span>
+                <span className="text-2xl font-bold text-green-600">
+                  ৳{(parseFloat(paymentForm.basic_salary) - parseFloat(paymentForm.late_deduction) - parseFloat(paymentForm.absent_deduction) + parseFloat(paymentForm.overtime_pay)).toLocaleString()}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Payment Method</Label>
+                  <Select value={paymentForm.payment_method} onValueChange={(v) => setPaymentForm(p => ({ ...p, payment_method: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bank">Bank Transfer</SelectItem>
+                      <SelectItem value="bkash">bKash</SelectItem>
+                      <SelectItem value="nagad">Nagad</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Transaction Ref (Optional)</Label>
+                  <Input value={paymentForm.transaction_ref} onChange={(e) => setPaymentForm(p => ({ ...p, transaction_ref: e.target.value }))} placeholder="TRX12345" />
+                </div>
               </div>
             </div>
           </div>
@@ -837,20 +1066,22 @@ export default function StaffPayroll() {
             <DialogTitle>Process Monthly Payroll</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <p className="text-muted-foreground">
+              This will calculate salaries for all {activeStaff.length} active staff members based on their attendance records.
+            </p>
             <div className="space-y-2">
-              <Label>Select Month</Label>
+              <Label>Payroll Month</Label>
               <Input type="month" value={paymentForm.month} onChange={(e) => setPaymentForm(p => ({ ...p, month: e.target.value }))} />
             </div>
-            <div className="p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground mb-2">This will calculate salary for:</p>
-              <p className="font-medium">{activeStaff.length} active staff members</p>
-              <p className="text-sm text-muted-foreground mt-2">Based on attendance records, it will calculate:</p>
-              <ul className="text-sm text-muted-foreground list-disc list-inside">
-                <li>Deductions for absent days</li>
-                <li>Deductions for late arrivals</li>
-                <li>Overtime payments</li>
-                <li>Loan/advance deductions</li>
-              </ul>
+            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+              <div className="flex justify-between">
+                <span>Active Staff:</span>
+                <span className="font-medium">{activeStaff.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Basic Salary:</span>
+                <span className="font-medium">৳{totalSalary.toLocaleString()}</span>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -862,6 +1093,32 @@ export default function StaffPayroll() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Staff Confirmation */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate Staff?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to deactivate "{deleteConfirm?.name}"? They will no longer appear in active staff lists but their records will be preserved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteStaff} className="bg-destructive text-destructive-foreground">
+              Deactivate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
+  );
+}
+
+export default function StaffPayroll() {
+  return (
+    <ModuleAccessGuard module="isp_hr_payroll" moduleName="HR & Payroll">
+      <StaffPayrollContent />
+    </ModuleAccessGuard>
   );
 }
