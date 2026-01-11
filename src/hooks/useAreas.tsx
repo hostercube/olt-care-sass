@@ -5,13 +5,19 @@ import type { Area } from '@/types/isp';
 import { toast } from 'sonner';
 
 export function useAreas() {
-  const { tenantId, isSuperAdmin } = useTenantContext();
+  const { tenantId, isSuperAdmin, loading: contextLoading } = useTenantContext();
   const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAreas = useCallback(async () => {
+    // Wait for context to load first
+    if (contextLoading) {
+      return;
+    }
+    
     // Always require tenant context for ISP users
     if (!isSuperAdmin && !tenantId) {
+      console.log('No tenant context available for areas fetch');
       setAreas([]);
       setLoading(false);
       return;
@@ -38,7 +44,7 @@ export function useAreas() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, isSuperAdmin]);
+  }, [tenantId, isSuperAdmin, contextLoading]);
 
   useEffect(() => {
     fetchAreas();

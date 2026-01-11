@@ -1,1 +1,4 @@
 project_id = "kpcmlbztpztrxdwlfhfw"
+
+[functions.verify-domain]
+verify_jwt = false

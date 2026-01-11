@@ -60,6 +60,7 @@ import ISPDashboard from "./pages/ISP/Dashboard";
 import ISPPackages from "./pages/ISP/Packages";
 import AreasManagement from "./pages/ISP/AreasManagement";
 import ResellersManagement from "./pages/ISP/ResellersManagement";
+import ResellerBillingHistory from "./pages/ISP/ResellerBillingHistory";
 import MikroTikManagement from "./pages/ISP/MikroTikManagement";
 import BillingAutomation from "./pages/ISP/BillingAutomation";
 import ISPGatewaySettings from "./pages/ISP/GatewaySettings";
@@ -377,6 +378,15 @@ const App = () => (
                   <TenantAccessGuard>
                     <ModuleAccessGuard module="isp_resellers" moduleName="Reseller Management">
                       <ResellersManagement />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/reseller-billing" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_resellers" moduleName="Reseller Billing">
+                      <ResellerBillingHistory />
                     </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>

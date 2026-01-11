@@ -98,26 +98,48 @@ export default function CustomDomain() {
     fetchDomains();
   }, [fetchServerIP, fetchDomains]);
 
-  // Auto-verify domain by checking DNS
+  // Auto-verify domain by checking DNS via edge function
   const handleVerifyDomain = async (domainData: CustomDomainType) => {
     setVerifying(domainData.id);
     try {
-      // For auto-verification, we'll check if the DNS TXT record exists
-      // In production, this would use a DNS lookup API
-      // For now, we simulate a check that can be manually triggered
+      const fullDomain = domainData.subdomain 
+        ? `${domainData.subdomain}.${domainData.domain}` 
+        : domainData.domain;
+
+      const { data, error } = await supabase.functions.invoke('verify-domain', {
+        body: {
+          domain_id: domainData.id,
+          domain: fullDomain,
+          tenant_id: tenantId,
+          expected_txt: domainData.dns_txt_record
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Verification failed');
+      }
+
+      if (data.verified) {
+        toast.success('Domain verified successfully! SSL is now active.');
+      } else if (data.issues && data.issues.length > 0) {
+        toast.error(
+          <div className="space-y-1">
+            <p className="font-medium">DNS not configured correctly:</p>
+            {data.issues.map((issue: string, i: number) => (
+              <p key={i} className="text-sm">• {issue}</p>
+            ))}
+          </div>,
+          { duration: 8000 }
+        );
+      } else {
+        toast.info('DNS verification pending. Please wait for DNS propagation (may take up to 48 hours).');
+      }
       
-      // Simulate DNS check delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Here you would typically call an edge function to verify DNS
-      // For now, show a message that verification is pending
-      toast.info('DNS verification initiated. This may take a few minutes to propagate.');
-      
+      fetchDomains();
     } catch (err: any) {
       toast.error(err.message || 'Verification failed');
     } finally {
       setVerifying(null);
-      fetchDomains();
     }
   };
 
