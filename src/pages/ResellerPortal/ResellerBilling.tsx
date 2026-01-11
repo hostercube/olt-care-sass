@@ -15,6 +15,7 @@ export default function ResellerBilling() {
     customers,
     transactions,
     logout,
+    hasPermission,
   } = useResellerPortal();
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function ResellerBilling() {
   const recentMonths = Object.entries(monthlyData).slice(0, 6);
 
   return (
-    <ResellerPortalLayout reseller={reseller} onLogout={logout}>
+    <ResellerPortalLayout reseller={reseller} onLogout={logout} hasPermission={hasPermission}>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Billing Summary</h1>

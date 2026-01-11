@@ -20,6 +20,7 @@ export default function ResellerReports() {
     transactions,
     subResellers,
     logout,
+    hasPermission,
   } = useResellerPortal();
 
   const [reportType, setReportType] = useState<string>('collections');
@@ -109,7 +110,7 @@ export default function ResellerReports() {
   const canViewReports = (reseller as any)?.can_view_reports !== false;
 
   return (
-    <ResellerPortalLayout reseller={reseller} onLogout={logout}>
+    <ResellerPortalLayout reseller={reseller} onLogout={logout} hasPermission={hasPermission}>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>

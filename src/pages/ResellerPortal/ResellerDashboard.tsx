@@ -23,6 +23,7 @@ export default function ResellerDashboard() {
     billingSummary,
     logout,
     refetch,
+    hasPermission,
   } = useResellerPortal();
 
   // Handle impersonation token on mount
@@ -104,7 +105,7 @@ export default function ResellerDashboard() {
   const recentTransactions = transactions.slice(0, 5);
 
   return (
-    <ResellerPortalLayout reseller={reseller} onLogout={logout}>
+    <ResellerPortalLayout reseller={reseller} onLogout={logout} hasPermission={hasPermission}>
       <div className="space-y-6">
         {/* Welcome Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

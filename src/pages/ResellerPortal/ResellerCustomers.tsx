@@ -372,7 +372,7 @@ export default function ResellerCustomers() {
   }
 
   return (
-    <ResellerPortalLayout reseller={reseller} onLogout={logout}>
+    <ResellerPortalLayout reseller={reseller} onLogout={logout} hasPermission={hasPermission}>
       <div className="space-y-6">
         {/* Stats Cards */}
         <div className="grid gap-4 grid-cols-2 md:grid-cols-5">

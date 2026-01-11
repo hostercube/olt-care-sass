@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, ArrowRightLeft, Search, Filter, TrendingUp, TrendingDown, Wallet, Download, Calendar, RefreshCcw } from 'lucide-react';
+import { Loader2, ArrowRightLeft, Search, Filter, TrendingUp, TrendingDown, Wallet, Download, RefreshCcw } from 'lucide-react';
 import { useResellerPortal } from '@/hooks/useResellerPortal';
 import { ResellerPortalLayout } from '@/components/reseller/ResellerPortalLayout';
 import { TablePagination } from '@/components/ui/table-pagination';
@@ -85,13 +85,36 @@ export default function ResellerTransactions() {
     return { totalCredit, totalDebit, commissionEarned, customerPayments };
   }, [transactions]);
 
+  // Date parsing helpers (backend data sometimes has null/invalid timestamps)
+  const safeParse = (value: string | null | undefined) => {
+    if (!value) return null;
+    try {
+      const d = parseISO(value);
+      // parseISO can return Invalid Date without throwing in some cases
+      if (Number.isNaN(d.getTime())) return null;
+      return d;
+    } catch {
+      return null;
+    }
+  };
+
+  const safeFormat = (value: string | null | undefined, fmt: string) => {
+    const d = safeParse(value);
+    if (!d) return '-';
+    try {
+      return format(d, fmt);
+    } catch {
+      return '-';
+    }
+  };
+
   // Filter transactions
   const filteredTransactions = useMemo(() => {
     let result = [...transactions];
-    
+
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      result = result.filter(tx => 
+      result = result.filter((tx) =>
         tx.description?.toLowerCase().includes(term) ||
         tx.type.toLowerCase().includes(term) ||
         tx.customer?.name?.toLowerCase().includes(term) ||
@@ -100,15 +123,19 @@ export default function ResellerTransactions() {
     }
 
     if (typeFilter !== 'all') {
-      result = result.filter(tx => tx.type === typeFilter);
+      result = result.filter((tx) => tx.type === typeFilter);
     }
 
     // Date filter
     if (dateFrom || dateTo) {
-      result = result.filter(tx => {
-        const txDate = parseISO(tx.created_at);
-        if (dateFrom && txDate < parseISO(dateFrom)) return false;
-        if (dateTo && txDate > parseISO(dateTo + 'T23:59:59')) return false;
+      const from = safeParse(dateFrom);
+      const to = dateTo ? safeParse(dateTo + 'T23:59:59') : null;
+
+      result = result.filter((tx) => {
+        const txDate = safeParse(tx.created_at);
+        if (!txDate) return false;
+        if (from && txDate < from) return false;
+        if (to && txDate > to) return false;
         return true;
       });
     }
@@ -122,23 +149,28 @@ export default function ResellerTransactions() {
 
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      result = result.filter(r =>
-        r.customer?.name?.toLowerCase().includes(term) ||
-        r.customer?.customer_code?.toLowerCase().includes(term) ||
-        r.payment_method?.toLowerCase().includes(term)
+      result = result.filter(
+        (r) =>
+          r.customer?.name?.toLowerCase().includes(term) ||
+          r.customer?.customer_code?.toLowerCase().includes(term) ||
+          r.payment_method?.toLowerCase().includes(term)
       );
     }
 
     if (sourceFilter !== 'all') {
-      result = result.filter(r => r.payment_method === sourceFilter);
+      result = result.filter((r) => r.payment_method === sourceFilter);
     }
 
     // Date filter
     if (dateFrom || dateTo) {
-      result = result.filter(r => {
-        const rDate = parseISO(r.recharge_date);
-        if (dateFrom && rDate < parseISO(dateFrom)) return false;
-        if (dateTo && rDate > parseISO(dateTo + 'T23:59:59')) return false;
+      const from = safeParse(dateFrom);
+      const to = dateTo ? safeParse(dateTo + 'T23:59:59') : null;
+
+      result = result.filter((r) => {
+        const rDate = safeParse(r.recharge_date);
+        if (!rDate) return false;
+        if (from && rDate < from) return false;
+        if (to && rDate > to) return false;
         return true;
       });
     }
@@ -192,29 +224,29 @@ export default function ResellerTransactions() {
   const exportCSV = () => {
     if (activeTab === 'transactions') {
       const headers = ['Date', 'Type', 'Amount', 'Balance After', 'Customer', 'Description'];
-      const rows = filteredTransactions.map(tx => [
-        format(new Date(tx.created_at), 'yyyy-MM-dd HH:mm'),
+      const rows = filteredTransactions.map((tx) => [
+        safeFormat(tx.created_at, 'yyyy-MM-dd HH:mm'),
         TRANSACTION_TYPE_LABELS[tx.type as keyof typeof TRANSACTION_TYPE_LABELS] || tx.type,
-        tx.amount.toString(),
+        (tx.amount ?? '').toString(),
         tx.balance_after?.toString() || '',
         tx.customer?.name || '',
         tx.description || '',
       ]);
-      const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+      const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
       downloadCSV(csv, 'transactions');
     } else {
       const headers = ['Date', 'Customer', 'Amount', 'Months', 'Source', 'Old Expiry', 'New Expiry', 'Status'];
-      const rows = filteredRecharges.map(r => [
-        format(new Date(r.recharge_date), 'yyyy-MM-dd HH:mm'),
+      const rows = filteredRecharges.map((r) => [
+        safeFormat(r.recharge_date, 'yyyy-MM-dd HH:mm'),
         r.customer?.name || '',
-        r.amount.toString(),
+        (r.amount ?? '').toString(),
         r.months?.toString() || '1',
         getRechargeSourceLabel(r.payment_method),
         r.old_expiry || '',
         r.new_expiry || '',
         r.status || 'completed',
       ]);
-      const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+      const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
       downloadCSV(csv, 'recharge-history');
     }
   };
@@ -250,7 +282,7 @@ export default function ResellerTransactions() {
   ];
 
   return (
-    <ResellerPortalLayout reseller={reseller} onLogout={logout}>
+    <ResellerPortalLayout reseller={reseller} onLogout={logout} hasPermission={refetch ? undefined : undefined}>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Transactions & History</h1>
@@ -401,11 +433,9 @@ export default function ResellerTransactions() {
                       ) : (paginatedData as any[]).map((tx) => (
                         <TableRow key={tx.id}>
                           <TableCell className="text-sm whitespace-nowrap">
-                            {format(new Date(tx.created_at), 'dd MMM yyyy')}
+                            {safeFormat(tx.created_at, 'dd MMM yyyy')}
                             <br />
-                            <span className="text-xs text-muted-foreground">
-                              {format(new Date(tx.created_at), 'hh:mm a')}
-                            </span>
+                            <span className="text-xs text-muted-foreground">{safeFormat(tx.created_at, 'hh:mm a')}</span>
                           </TableCell>
                           <TableCell>
                             <Badge 

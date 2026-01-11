@@ -12,11 +12,11 @@ import { logger } from '../utils/logger.js';
 export async function verifyResellerSession(supabase, req) {
   const resellerId = req.headers['x-reseller-id'];
   const sessionToken = req.headers['x-reseller-session'];
-  
+
   if (!resellerId) {
     return { valid: false, error: 'Missing reseller ID' };
   }
-  
+
   // Fetch reseller to verify they exist and are active
   const { data: reseller, error } = await supabase
     .from('resellers')
@@ -24,22 +24,44 @@ export async function verifyResellerSession(supabase, req) {
     .eq('id', resellerId)
     .eq('is_active', true)
     .single();
-  
+
   if (error || !reseller) {
     return { valid: false, error: 'Invalid or inactive reseller' };
   }
-  
+
   return { valid: true, reseller };
 }
 
 /**
- * Get allowed areas for a reseller with inheritance from parent
+ * Get role permissions for reseller (if role_id set).
  */
-async function getAllowedAreas(supabase, reseller) {
-  const tenantId = reseller.tenant_id;
+async function getResellerRolePermissions(supabase, reseller) {
+  if (!reseller?.role_id) return null;
+  const { data, error } = await supabase
+    .from('reseller_roles')
+    .select('permissions')
+    .eq('id', reseller.role_id)
+    .single();
+
+  if (error) return null;
+  return data?.permissions || null;
+}
+
+/**
+ * Permission checker (defaults to false)
+ */
+async function hasPermission(supabase, reseller, key) {
+  const perms = await getResellerRolePermissions(supabase, reseller);
+  if (!perms) return false;
+  return !!perms[key];
+}
+
+/**
+ * Get effective allowed area ids for a reseller (inherit from parent if empty)
+ */
+async function getEffectiveAllowedAreaIds(supabase, reseller) {
   let allowedAreaIds = reseller.allowed_area_ids;
-  
-  // If no area restriction, inherit from parent
+
   if (!allowedAreaIds || allowedAreaIds.length === 0) {
     if (reseller.parent_id) {
       const { data: parent } = await supabase
@@ -47,42 +69,51 @@ async function getAllowedAreas(supabase, reseller) {
         .select('allowed_area_ids, parent_id')
         .eq('id', reseller.parent_id)
         .single();
-      
+
       if (parent?.allowed_area_ids?.length > 0) {
         allowedAreaIds = parent.allowed_area_ids;
       } else if (parent?.parent_id) {
-        // Check grandparent
         const { data: grandparent } = await supabase
           .from('resellers')
           .select('allowed_area_ids')
           .eq('id', parent.parent_id)
           .single();
-        
+
         if (grandparent?.allowed_area_ids?.length > 0) {
           allowedAreaIds = grandparent.allowed_area_ids;
         }
       }
     }
   }
-  
+
+  return allowedAreaIds || [];
+}
+
+/**
+ * Get allowed areas for a reseller with inheritance from parent
+ */
+async function getAllowedAreas(supabase, reseller) {
+  const tenantId = reseller.tenant_id;
+  const effectiveIds = await getEffectiveAllowedAreaIds(supabase, reseller);
+
   // Fetch areas
   let query = supabase
     .from('areas')
     .select('id, name, description, district, upazila, union_name, village')
     .eq('tenant_id', tenantId)
     .order('name');
-  
-  if (allowedAreaIds && allowedAreaIds.length > 0) {
-    query = query.in('id', allowedAreaIds);
+
+  if (effectiveIds && effectiveIds.length > 0) {
+    query = query.in('id', effectiveIds);
   }
-  
+
   const { data: areas, error } = await query;
-  
+
   if (error) {
     logger.error('Error fetching areas:', error);
     return [];
   }
-  
+
   return areas || [];
 }
 
@@ -662,6 +693,11 @@ export function setupResellerRoutes(app, supabase) {
   // Get allowed areas (with inheritance)
   app.get('/api/reseller/areas', authMiddleware, async (req, res) => {
     try {
+      const canView = await hasPermission(supabase, req.reseller, 'area_view');
+      if (!canView) {
+        return res.status(403).json({ success: false, error: 'No permission to view areas' });
+      }
+
       const areas = await getAllowedAreas(supabase, req.reseller);
       res.json({ success: true, areas });
     } catch (error) {
@@ -670,6 +706,146 @@ export function setupResellerRoutes(app, supabase) {
     }
   });
   
+  // Create area
+  app.post('/api/reseller/areas', authMiddleware, async (req, res) => {
+    try {
+      const canCreate = await hasPermission(supabase, req.reseller, 'area_create');
+      if (!canCreate) {
+        return res.status(403).json({ success: false, error: 'No permission to create areas' });
+      }
+
+      const { name, description, district, upazila, union_name, village } = req.body || {};
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({ success: false, error: 'Area name is required' });
+      }
+
+      const { data: inserted, error: insertErr } = await supabase
+        .from('areas')
+        .insert({
+          tenant_id: req.reseller.tenant_id,
+          name: String(name).trim(),
+          description: description ?? null,
+          district: district ?? null,
+          upazila: upazila ?? null,
+          union_name: union_name ?? null,
+          village: village ?? null,
+        })
+        .select('id')
+        .single();
+
+      if (insertErr) {
+        logger.error('Error creating area:', insertErr);
+        return res.status(500).json({ success: false, error: insertErr.message });
+      }
+
+      // Ensure new area becomes visible for this reseller: update allowed_area_ids.
+      const effectiveIds = await getEffectiveAllowedAreaIds(supabase, req.reseller);
+      const nextIds = Array.from(new Set([...(effectiveIds || []), inserted.id]));
+
+      await supabase
+        .from('resellers')
+        .update({ allowed_area_ids: nextIds })
+        .eq('id', req.reseller.id);
+
+      res.json({ success: true, areaId: inserted.id });
+    } catch (error) {
+      logger.error('Error creating area:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Update area
+  app.put('/api/reseller/areas/:areaId', authMiddleware, async (req, res) => {
+    try {
+      const canEdit = await hasPermission(supabase, req.reseller, 'area_edit');
+      if (!canEdit) {
+        return res.status(403).json({ success: false, error: 'No permission to edit areas' });
+      }
+
+      const { areaId } = req.params;
+      const effectiveIds = await getEffectiveAllowedAreaIds(supabase, req.reseller);
+      if (effectiveIds.length > 0 && !effectiveIds.includes(areaId)) {
+        return res.status(403).json({ success: false, error: 'Not authorized for this area' });
+      }
+
+      const patch = {};
+      ['name', 'description', 'district', 'upazila', 'union_name', 'village'].forEach((k) => {
+        if (req.body?.[k] !== undefined) patch[k] = req.body[k];
+      });
+
+      if (patch.name !== undefined && !String(patch.name).trim()) {
+        return res.status(400).json({ success: false, error: 'Area name is required' });
+      }
+
+      const { error: updErr } = await supabase
+        .from('areas')
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('id', areaId)
+        .eq('tenant_id', req.reseller.tenant_id);
+
+      if (updErr) {
+        logger.error('Error updating area:', updErr);
+        return res.status(500).json({ success: false, error: updErr.message });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('Error updating area:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Delete area
+  app.delete('/api/reseller/areas/:areaId', authMiddleware, async (req, res) => {
+    try {
+      const canDelete = await hasPermission(supabase, req.reseller, 'area_delete');
+      if (!canDelete) {
+        return res.status(403).json({ success: false, error: 'No permission to delete areas' });
+      }
+
+      const { areaId } = req.params;
+      const effectiveIds = await getEffectiveAllowedAreaIds(supabase, req.reseller);
+      if (effectiveIds.length > 0 && !effectiveIds.includes(areaId)) {
+        return res.status(403).json({ success: false, error: 'Not authorized for this area' });
+      }
+
+      // Prevent delete if any customers exist in this area for this tenant
+      const { data: anyCustomer } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('tenant_id', req.reseller.tenant_id)
+        .eq('area_id', areaId)
+        .limit(1);
+
+      if (anyCustomer?.length) {
+        return res.status(400).json({ success: false, error: 'Cannot delete area: customers are assigned to it' });
+      }
+
+      const { error: delErr } = await supabase
+        .from('areas')
+        .delete()
+        .eq('id', areaId)
+        .eq('tenant_id', req.reseller.tenant_id);
+
+      if (delErr) {
+        logger.error('Error deleting area:', delErr);
+        return res.status(500).json({ success: false, error: delErr.message });
+      }
+
+      // Remove from reseller allowed_area_ids if present
+      const nextIds = (req.reseller.allowed_area_ids || []).filter((id) => id !== areaId);
+      await supabase
+        .from('resellers')
+        .update({ allowed_area_ids: nextIds.length ? nextIds : null })
+        .eq('id', req.reseller.id);
+
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('Error deleting area:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Get transactions
   app.get('/api/reseller/transactions', authMiddleware, async (req, res) => {
     try {
@@ -875,20 +1051,74 @@ export function setupResellerRoutes(app, supabase) {
   });
   
   // Also add routes without /api prefix for nginx proxy
-  app.get('/reseller/profile', (req, res) => { req.url = '/api/reseller/profile'; app.handle(req, res); });
-  app.get('/reseller/areas', (req, res) => { req.url = '/api/reseller/areas'; app.handle(req, res); });
-  app.get('/reseller/transactions', (req, res) => { req.url = '/api/reseller/transactions'; app.handle(req, res); });
-  app.get('/reseller/recharges', (req, res) => { req.url = '/api/reseller/recharges'; app.handle(req, res); });
-  app.get('/reseller/customers', (req, res) => { req.url = '/api/reseller/customers'; app.handle(req, res); });
-  app.get('/reseller/sub-resellers', (req, res) => { req.url = '/api/reseller/sub-resellers'; app.handle(req, res); });
-  app.get('/reseller/packages', (req, res) => { req.url = '/api/reseller/packages'; app.handle(req, res); });
-  app.get('/reseller/mikrotik-routers', (req, res) => { req.url = '/api/reseller/mikrotik-routers'; app.handle(req, res); });
-  app.get('/reseller/olts', (req, res) => { req.url = '/api/reseller/olts'; app.handle(req, res); });
-  app.post('/reseller/customer-recharge', (req, res) => { req.url = '/api/reseller/customer-recharge'; app.handle(req, res); });
-  app.post('/reseller/customers', (req, res) => { req.url = '/api/reseller/customers'; app.handle(req, res); });
-  app.put('/reseller/customers/:customerId', (req, res) => { req.url = `/api/reseller/customers/${req.params.customerId}`; app.handle(req, res); });
-  app.post('/reseller/sub-reseller/add-balance', (req, res) => { req.url = '/api/reseller/sub-reseller/add-balance'; app.handle(req, res); });
-  app.post('/reseller/sub-reseller/deduct-balance', (req, res) => { req.url = '/api/reseller/sub-reseller/deduct-balance'; app.handle(req, res); });
+  app.get('/reseller/profile', (req, res) => {
+    req.url = '/api/reseller/profile';
+    app.handle(req, res);
+  });
+  app.get('/reseller/areas', (req, res) => {
+    req.url = '/api/reseller/areas';
+    app.handle(req, res);
+  });
+  app.post('/reseller/areas', (req, res) => {
+    req.url = '/api/reseller/areas';
+    app.handle(req, res);
+  });
+  app.put('/reseller/areas/:areaId', (req, res) => {
+    req.url = `/api/reseller/areas/${req.params.areaId}`;
+    app.handle(req, res);
+  });
+  app.delete('/reseller/areas/:areaId', (req, res) => {
+    req.url = `/api/reseller/areas/${req.params.areaId}`;
+    app.handle(req, res);
+  });
+  app.get('/reseller/transactions', (req, res) => {
+    req.url = '/api/reseller/transactions';
+    app.handle(req, res);
+  });
+  app.get('/reseller/recharges', (req, res) => {
+    req.url = '/api/reseller/recharges';
+    app.handle(req, res);
+  });
+  app.get('/reseller/customers', (req, res) => {
+    req.url = '/api/reseller/customers';
+    app.handle(req, res);
+  });
+  app.get('/reseller/sub-resellers', (req, res) => {
+    req.url = '/api/reseller/sub-resellers';
+    app.handle(req, res);
+  });
+  app.get('/reseller/packages', (req, res) => {
+    req.url = '/api/reseller/packages';
+    app.handle(req, res);
+  });
+  app.get('/reseller/mikrotik-routers', (req, res) => {
+    req.url = '/api/reseller/mikrotik-routers';
+    app.handle(req, res);
+  });
+  app.get('/reseller/olts', (req, res) => {
+    req.url = '/api/reseller/olts';
+    app.handle(req, res);
+  });
+  app.post('/reseller/customer-recharge', (req, res) => {
+    req.url = '/api/reseller/customer-recharge';
+    app.handle(req, res);
+  });
+  app.post('/reseller/customers', (req, res) => {
+    req.url = '/api/reseller/customers';
+    app.handle(req, res);
+  });
+  app.put('/reseller/customers/:customerId', (req, res) => {
+    req.url = `/api/reseller/customers/${req.params.customerId}`;
+    app.handle(req, res);
+  });
+  app.post('/reseller/sub-reseller/add-balance', (req, res) => {
+    req.url = '/api/reseller/sub-reseller/add-balance';
+    app.handle(req, res);
+  });
+  app.post('/reseller/sub-reseller/deduct-balance', (req, res) => {
+    req.url = '/api/reseller/sub-reseller/deduct-balance';
+    app.handle(req, res);
+  });
   
   logger.info('✓ Reseller Portal API routes registered');
 }

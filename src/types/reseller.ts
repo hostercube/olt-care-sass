@@ -213,6 +213,16 @@ export const RESELLER_PERMISSION_GROUPS: ResellerPermissionGroup[] = [
     ],
   },
   {
+    name: 'Area Management',
+    icon: '📍',
+    permissions: [
+      { key: 'area_view', label: 'View Areas', description: 'View allowed areas list' },
+      { key: 'area_create', label: 'Create Areas', description: 'Create new areas' },
+      { key: 'area_edit', label: 'Edit Areas', description: 'Edit existing areas' },
+      { key: 'area_delete', label: 'Delete Areas', description: 'Delete areas' },
+    ],
+  },
+  {
     name: 'Auto Recharge',
     icon: '🔄',
     permissions: [
@@ -284,6 +294,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<ResellerRoleType, Partial<Record<R
     analytics_view: true,
     profile_edit: true,
     password_change: true,
+
+    // Area Management (default: view only)
+    area_view: true,
+    area_create: false,
+    area_edit: false,
+    area_delete: false,
   },
   sub_reseller: {
     customer_view: true,
@@ -307,6 +323,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<ResellerRoleType, Partial<Record<R
     report_view: true,
     profile_edit: true,
     password_change: true,
+
+    // Area Management (default: view only)
+    area_view: true,
+    area_create: false,
+    area_edit: false,
+    area_delete: false,
   },
   sub_sub_reseller: {
     customer_view: true,
@@ -321,6 +343,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<ResellerRoleType, Partial<Record<R
     wallet_view: true,
     profile_edit: true,
     password_change: true,
+
+    // Area Management (default: view only)
+    area_view: true,
+    area_create: false,
+    area_edit: false,
+    area_delete: false,
   },
   custom: {},
 };

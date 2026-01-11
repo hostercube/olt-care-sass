@@ -267,7 +267,7 @@ export default function ResellerSubResellers() {
   const canCreate = reseller?.can_create_sub_reseller && (reseller.max_sub_resellers === 0 || subResellers.length < reseller.max_sub_resellers);
 
   return (
-    <ResellerPortalLayout reseller={reseller} onLogout={logout}>
+    <ResellerPortalLayout reseller={reseller} onLogout={logout} hasPermission={hasPermission}>
       <div className="space-y-6">
         {/* Stats Cards */}
         <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
