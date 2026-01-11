@@ -4188,6 +4188,8 @@ export type Database = {
       resellers: {
         Row: {
           address: string | null
+          allowed_mikrotik_ids: string[] | null
+          allowed_olt_ids: string[] | null
           area_id: string | null
           balance: number | null
           branch_id: string | null
@@ -4198,6 +4200,8 @@ export type Database = {
           can_delete_customers: boolean | null
           can_edit_customers: boolean | null
           can_recharge_customers: boolean | null
+          can_transfer_balance: boolean | null
+          can_view_reports: boolean | null
           can_view_sub_customers: boolean | null
           commission_type: string | null
           commission_value: number | null
@@ -4228,6 +4232,8 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          allowed_mikrotik_ids?: string[] | null
+          allowed_olt_ids?: string[] | null
           area_id?: string | null
           balance?: number | null
           branch_id?: string | null
@@ -4238,6 +4244,8 @@ export type Database = {
           can_delete_customers?: boolean | null
           can_edit_customers?: boolean | null
           can_recharge_customers?: boolean | null
+          can_transfer_balance?: boolean | null
+          can_view_reports?: boolean | null
           can_view_sub_customers?: boolean | null
           commission_type?: string | null
           commission_value?: number | null
@@ -4268,6 +4276,8 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          allowed_mikrotik_ids?: string[] | null
+          allowed_olt_ids?: string[] | null
           area_id?: string | null
           balance?: number | null
           branch_id?: string | null
@@ -4278,6 +4288,8 @@ export type Database = {
           can_delete_customers?: boolean | null
           can_edit_customers?: boolean | null
           can_recharge_customers?: boolean | null
+          can_transfer_balance?: boolean | null
+          can_view_reports?: boolean | null
           can_view_sub_customers?: boolean | null
           commission_type?: string | null
           commission_value?: number | null
