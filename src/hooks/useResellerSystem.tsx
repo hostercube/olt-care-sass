@@ -5,13 +5,26 @@ import type { Reseller, ResellerTransaction, ResellerBranch, ResellerCustomRole 
 import { toast } from 'sonner';
 
 export function useResellerSystem() {
-  const { tenantId, isSuperAdmin } = useTenantContext();
+  const { tenantId, isSuperAdmin, loading: contextLoading } = useTenantContext();
   const [resellers, setResellers] = useState<Reseller[]>([]);
   const [branches, setBranches] = useState<ResellerBranch[]>([]);
   const [customRoles, setCustomRoles] = useState<ResellerCustomRole[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchResellers = useCallback(async () => {
+    // Don't fetch until context is loaded
+    if (contextLoading) {
+      return;
+    }
+    
+    // For non-super-admins, we need tenantId
+    if (!isSuperAdmin && !tenantId) {
+      console.log('No tenant context available for resellers fetch');
+      setResellers([]);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       let query = supabase
@@ -34,7 +47,7 @@ export function useResellerSystem() {
         console.error('Error fetching resellers:', error);
         throw error;
       }
-      console.log('Fetched resellers:', data?.length || 0, 'items');
+      console.log('Fetched resellers:', data?.length || 0, 'items for tenant:', tenantId);
       setResellers((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching resellers:', err);
@@ -42,9 +55,15 @@ export function useResellerSystem() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, isSuperAdmin]);
+  }, [tenantId, isSuperAdmin, contextLoading]);
 
   const fetchBranches = useCallback(async () => {
+    if (contextLoading) return;
+    if (!isSuperAdmin && !tenantId) {
+      setBranches([]);
+      return;
+    }
+    
     try {
       let query = supabase
         .from('reseller_branches')
@@ -64,9 +83,15 @@ export function useResellerSystem() {
     } catch (err) {
       console.error('Error fetching branches:', err);
     }
-  }, [tenantId, isSuperAdmin]);
+  }, [tenantId, isSuperAdmin, contextLoading]);
 
   const fetchCustomRoles = useCallback(async () => {
+    if (contextLoading) return;
+    if (!isSuperAdmin && !tenantId) {
+      setCustomRoles([]);
+      return;
+    }
+    
     try {
       let query = supabase
         .from('reseller_custom_roles')
@@ -83,7 +108,7 @@ export function useResellerSystem() {
     } catch (err) {
       console.error('Error fetching custom roles:', err);
     }
-  }, [tenantId, isSuperAdmin]);
+  }, [tenantId, isSuperAdmin, contextLoading]);
 
   useEffect(() => {
     fetchResellers();

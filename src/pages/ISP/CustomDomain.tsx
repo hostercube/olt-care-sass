@@ -53,11 +53,22 @@ export default function CustomDomain() {
         .eq('key', 'customDomainServerIP')
         .maybeSingle();
       
-      if (!error && data?.value) {
-        const val = typeof data.value === 'object' && 'value' in data.value 
-          ? (data.value as { value: string }).value 
-          : data.value;
-        setServerIP(val as string || '');
+      if (error) {
+        console.error('Error fetching server IP setting:', error);
+        return;
+      }
+      
+      if (data?.value) {
+        // Handle both formats: direct string or {value: string}
+        let ipValue: string = '';
+        if (typeof data.value === 'string') {
+          ipValue = data.value;
+        } else if (typeof data.value === 'object' && data.value !== null) {
+          const valueObj = data.value as Record<string, any>;
+          ipValue = valueObj.value || valueObj.ip || '';
+        }
+        console.log('Fetched server IP:', ipValue);
+        setServerIP(ipValue);
       }
     } catch (err) {
       console.error('Error fetching server IP:', err);
