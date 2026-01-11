@@ -35,7 +35,7 @@ interface CustomerRecharge {
 
 export default function ResellerTransactions() {
   const navigate = useNavigate();
-  const { session, reseller, loading, transactions, logout, refetch } = useResellerPortal();
+  const { session, reseller, loading, transactions, logout, refetch, hasPermission } = useResellerPortal();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -282,7 +282,7 @@ export default function ResellerTransactions() {
   ];
 
   return (
-    <ResellerPortalLayout reseller={reseller} onLogout={logout}>
+    <ResellerPortalLayout reseller={reseller} onLogout={logout} hasPermission={hasPermission}>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Transactions & History</h1>
@@ -567,10 +567,10 @@ export default function ResellerTransactions() {
                       ) : (paginatedData as CustomerRecharge[]).map((r) => (
                         <TableRow key={r.id}>
                           <TableCell className="text-sm whitespace-nowrap">
-                            {format(new Date(r.recharge_date), 'dd MMM yyyy')}
+                            {safeFormat(r.recharge_date, 'dd MMM yyyy')}
                             <br />
                             <span className="text-xs text-muted-foreground">
-                              {format(new Date(r.recharge_date), 'hh:mm a')}
+                              {safeFormat(r.recharge_date, 'hh:mm a')}
                             </span>
                           </TableCell>
                           <TableCell>
@@ -593,10 +593,10 @@ export default function ResellerTransactions() {
                             </Badge>
                           </TableCell>
                           <TableCell className="hidden md:table-cell text-sm">
-                            {r.old_expiry ? format(new Date(r.old_expiry), 'dd MMM yyyy') : '-'}
+                            {safeFormat(r.old_expiry, 'dd MMM yyyy')}
                           </TableCell>
                           <TableCell className="hidden md:table-cell text-sm">
-                            {r.new_expiry ? format(new Date(r.new_expiry), 'dd MMM yyyy') : '-'}
+                            {safeFormat(r.new_expiry, 'dd MMM yyyy')}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell text-sm text-green-600">
                             {r.discount && r.discount > 0 ? `৳${r.discount.toLocaleString()}` : '-'}
