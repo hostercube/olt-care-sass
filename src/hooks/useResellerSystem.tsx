@@ -35,8 +35,8 @@ export function useResellerSystem() {
         .order('level', { ascending: true })
         .order('created_at', { ascending: false });
 
-      // Filter by tenant_id for non-super-admins
-      if (!isSuperAdmin && tenantId) {
+      // Scope by tenant when tenantId is available (including super admin tenant/impersonation views)
+      if (tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
 
@@ -98,7 +98,7 @@ export function useResellerSystem() {
         `)
         .order('name');
 
-      if (!isSuperAdmin && tenantId) {
+      if (tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
 
@@ -123,7 +123,7 @@ export function useResellerSystem() {
         .select('*')
         .order('name');
 
-      if (!isSuperAdmin && tenantId) {
+      if (tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
 
