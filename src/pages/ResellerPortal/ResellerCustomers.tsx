@@ -284,11 +284,16 @@ export default function ResellerCustomers() {
   // Context data for SharedCustomerDialog
   const dialogContextData = useMemo<SharedCustomerDialogData>(() => ({
     packages: packages.map(p => ({ ...p, validity_days: 30 })),
-    areas: areas.map(a => ({ id: a.id, name: a.name })),
+    areas: (hasPermission('area_view') ? areas : []).map(a => ({
+      id: a.id,
+      name: a.name,
+      upazila: (a as any).upazila || undefined,
+      district: (a as any).district || undefined,
+    })),
     mikrotikRouters,
     tenantId: reseller?.tenant_id || '',
     resellerId: reseller?.id,
-  }), [packages, areas, mikrotikRouters, reseller]);
+  }), [packages, areas, mikrotikRouters, reseller, hasPermission]);
 
   const handleCreateCustomer = async (data: any): Promise<boolean> => {
     return await createCustomer(data);

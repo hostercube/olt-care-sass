@@ -60,7 +60,7 @@ export function useResellerPortal() {
   const [transactions, setTransactions] = useState<ResellerTransaction[]>([]);
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
   const [packages, setPackages] = useState<{ id: string; name: string; price: number }[]>([]);
-  const [areas, setAreas] = useState<{ id: string; name: string }[]>([]);
+  const [areas, setAreas] = useState<{ id: string; name: string; upazila?: string | null; district?: string | null }[]>([]);
   const [mikrotikRouters, setMikrotikRouters] = useState<{ id: string; name: string }[]>([]);
   const [olts, setOlts] = useState<{ id: string; name: string }[]>([]);
 

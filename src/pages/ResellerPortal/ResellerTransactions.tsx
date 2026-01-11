@@ -13,8 +13,8 @@ import { useResellerPortal } from '@/hooks/useResellerPortal';
 import { ResellerPortalLayout } from '@/components/reseller/ResellerPortalLayout';
 import { TablePagination } from '@/components/ui/table-pagination';
 import { TRANSACTION_TYPE_LABELS, ResellerTransactionType } from '@/types/reseller';
-import { format, subDays, startOfMonth, endOfMonth, parseISO, isWithinInterval } from 'date-fns';
-import { supabase } from '@/integrations/supabase/client';
+import { format, parseISO } from 'date-fns';
+import * as resellerApi from '@/lib/reseller-api';
 
 interface CustomerRecharge {
   id: string;
@@ -62,18 +62,9 @@ export default function ResellerTransactions() {
     if (!reseller?.id) return;
     setLoadingRecharges(true);
     try {
-      const { data, error } = await supabase
-        .from('customer_recharges')
-        .select(`
-          *,
-          customer:customers(id, name, customer_code)
-        `)
-        .eq('reseller_id', reseller.id)
-        .order('recharge_date', { ascending: false })
-        .limit(200);
-
-      if (error) throw error;
-      setRechargeHistory((data as CustomerRecharge[]) || []);
+      const res = await resellerApi.fetchResellerRecharges({ limit: 500 });
+      if (!res.success) throw new Error(res.error || 'Failed to fetch recharge history');
+      setRechargeHistory((res.recharges as CustomerRecharge[]) || []);
     } catch (err) {
       console.error('Error fetching recharge history:', err);
     } finally {
@@ -184,18 +175,18 @@ export default function ResellerTransactions() {
   };
 
   const getRechargeSourceColor = (method: string | null) => {
-    if (!method) return 'bg-gray-500';
-    const colors: Record<string, string> = {
-      'reseller_wallet': 'bg-purple-500',
-      'online': 'bg-green-500',
-      'cash': 'bg-blue-500',
-      'bkash': 'bg-pink-500',
-      'nagad': 'bg-orange-500',
-      'bank': 'bg-indigo-500',
-      'staff': 'bg-cyan-500',
-      'admin': 'bg-amber-500',
+    // NOTE: keep to semantic tokens (badge variants) – avoid hard-coded colors.
+    const variants: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
+      reseller_wallet: 'default',
+      online: 'default',
+      cash: 'secondary',
+      bkash: 'secondary',
+      nagad: 'secondary',
+      bank: 'secondary',
+      staff: 'outline',
+      admin: 'outline',
     };
-    return colors[method] || 'bg-gray-500';
+    return variants[method || ''] || 'secondary';
   };
 
   const exportCSV = () => {
@@ -567,7 +558,7 @@ export default function ResellerTransactions() {
                             {r.months || 1}
                           </TableCell>
                           <TableCell>
-                            <Badge className={getRechargeSourceColor(r.payment_method)}>
+                            <Badge variant={getRechargeSourceColor(r.payment_method)}>
                               {getRechargeSourceLabel(r.payment_method)}
                             </Badge>
                           </TableCell>
