@@ -308,6 +308,171 @@ async function getSubResellers(supabase, resellerId) {
 }
 
 /**
+ * Check if reseller can create sub-reseller (permission + limits)
+ */
+function canCreateSubReseller(reseller) {
+  // Check permission flag
+  if (!reseller.can_create_sub_reseller) {
+    return { allowed: false, reason: 'You do not have permission to create sub-resellers' };
+  }
+  return { allowed: true };
+}
+
+/**
+ * Create sub-reseller
+ */
+async function createSubReseller(supabase, parentReseller, subResellerData) {
+  logger.info(`Reseller ${parentReseller.id} creating sub-reseller: ${subResellerData.name}`);
+  
+  // Check permission
+  const canCreate = canCreateSubReseller(parentReseller);
+  if (!canCreate.allowed) {
+    return { success: false, error: canCreate.reason };
+  }
+  
+  // Check max_sub_resellers limit
+  if (parentReseller.max_sub_resellers && parentReseller.max_sub_resellers > 0) {
+    const { count } = await supabase
+      .from('resellers')
+      .select('id', { count: 'exact', head: true })
+      .eq('parent_id', parentReseller.id)
+      .eq('is_active', true);
+    
+    if (count >= parentReseller.max_sub_resellers) {
+      return { success: false, error: `Maximum sub-reseller limit (${parentReseller.max_sub_resellers}) reached` };
+    }
+  }
+  
+  // Check if username already exists
+  const { data: existingUser } = await supabase
+    .from('resellers')
+    .select('id')
+    .eq('tenant_id', parentReseller.tenant_id)
+    .eq('username', subResellerData.username)
+    .single();
+  
+  if (existingUser) {
+    return { success: false, error: 'Username already exists' };
+  }
+  
+  // Determine level (parent level + 1)
+  const newLevel = (parentReseller.level || 1) + 1;
+  
+  // Determine role based on level
+  let role = 'sub_reseller';
+  if (newLevel === 3) role = 'sub_sub_reseller';
+  if (newLevel > 3) role = 'agent';
+  
+  // Create sub-reseller
+  const { data: newSubReseller, error } = await supabase
+    .from('resellers')
+    .insert({
+      tenant_id: parentReseller.tenant_id,
+      parent_id: parentReseller.id,
+      name: subResellerData.name,
+      username: subResellerData.username,
+      password: subResellerData.password,
+      phone: subResellerData.phone || null,
+      email: subResellerData.email || null,
+      address: subResellerData.address || null,
+      level: newLevel,
+      role,
+      balance: 0,
+      is_active: true,
+      // Inherit commission settings from parent if not specified
+      commission_type: subResellerData.commission_type || parentReseller.commission_type || 'percentage',
+      commission_value: subResellerData.commission_value !== undefined ? subResellerData.commission_value : (parentReseller.commission_value || 0),
+      rate_type: subResellerData.rate_type || parentReseller.rate_type || 'discount',
+      // Permissions
+      can_add_customers: subResellerData.can_add_customers ?? true,
+      can_edit_customers: subResellerData.can_edit_customers ?? true,
+      can_delete_customers: subResellerData.can_delete_customers ?? false,
+      can_recharge_customers: subResellerData.can_recharge_customers ?? true,
+      can_create_sub_reseller: subResellerData.can_create_sub_reseller ?? false,
+      can_view_sub_customers: subResellerData.can_view_sub_customers ?? false,
+      can_control_sub_customers: subResellerData.can_control_sub_customers ?? false,
+      can_transfer_balance: subResellerData.can_transfer_balance ?? true,
+      can_view_reports: subResellerData.can_view_reports ?? false,
+      // Limits
+      max_customers: subResellerData.max_customers || 0,
+      max_sub_resellers: subResellerData.max_sub_resellers || 0,
+      // Inherit allowed areas from parent
+      allowed_area_ids: parentReseller.allowed_area_ids || null,
+      allowed_mikrotik_ids: parentReseller.allowed_mikrotik_ids || null,
+      allowed_olt_ids: parentReseller.allowed_olt_ids || null,
+    })
+    .select()
+    .single();
+  
+  if (error) {
+    logger.error('Error creating sub-reseller:', error);
+    return { success: false, error: error.message };
+  }
+  
+  logger.info(`Sub-reseller created successfully: ${newSubReseller.id}`);
+  return { success: true, subReseller: newSubReseller };
+}
+
+/**
+ * Update sub-reseller
+ */
+async function updateSubReseller(supabase, parentReseller, subResellerId, updateData) {
+  logger.info(`Reseller ${parentReseller.id} updating sub-reseller: ${subResellerId}`);
+  
+  // Verify sub-reseller belongs to this parent
+  const { data: subReseller, error: fetchError } = await supabase
+    .from('resellers')
+    .select('*')
+    .eq('id', subResellerId)
+    .eq('parent_id', parentReseller.id)
+    .single();
+  
+  if (fetchError || !subReseller) {
+    return { success: false, error: 'Sub-reseller not found or not authorized' };
+  }
+  
+  // Build update object (only include allowed fields)
+  const allowedFields = [
+    'name', 'phone', 'email', 'address',
+    'commission_type', 'commission_value', 'rate_type',
+    'can_add_customers', 'can_edit_customers', 'can_delete_customers',
+    'can_recharge_customers', 'can_create_sub_reseller', 'can_view_sub_customers',
+    'can_control_sub_customers', 'can_transfer_balance', 'can_view_reports',
+    'max_customers', 'max_sub_resellers', 'is_active',
+    'allowed_area_ids', 'allowed_mikrotik_ids', 'allowed_olt_ids',
+  ];
+  
+  const updatePayload = {};
+  for (const field of allowedFields) {
+    if (updateData[field] !== undefined) {
+      updatePayload[field] = updateData[field];
+    }
+  }
+  
+  // If password provided, update it
+  if (updateData.password && updateData.password.trim()) {
+    updatePayload.password = updateData.password.trim();
+  }
+  
+  if (Object.keys(updatePayload).length === 0) {
+    return { success: false, error: 'No valid fields to update' };
+  }
+  
+  const { error } = await supabase
+    .from('resellers')
+    .update(updatePayload)
+    .eq('id', subResellerId);
+  
+  if (error) {
+    logger.error('Error updating sub-reseller:', error);
+    return { success: false, error: error.message };
+  }
+  
+  logger.info(`Sub-reseller ${subResellerId} updated successfully`);
+  return { success: true };
+}
+
+/**
  * Recharge customer from reseller wallet
  */
 async function rechargeCustomerFromWallet(supabase, reseller, customerId, amount, months, paymentMethod = 'reseller_wallet') {
@@ -582,6 +747,66 @@ async function deductSubResellerBalance(supabase, reseller, subResellerId, amoun
 }
 
 /**
+ * Update reseller profile
+ */
+async function updateResellerProfile(supabase, reseller, updateData) {
+  logger.info(`Reseller ${reseller.id} updating profile`);
+  
+  const allowedFields = ['name', 'phone', 'email', 'address'];
+  const updatePayload = {};
+  
+  for (const field of allowedFields) {
+    if (updateData[field] !== undefined) {
+      updatePayload[field] = updateData[field] || null;
+    }
+  }
+  
+  if (Object.keys(updatePayload).length === 0) {
+    return { success: false, error: 'No valid fields to update' };
+  }
+  
+  const { error } = await supabase
+    .from('resellers')
+    .update(updatePayload)
+    .eq('id', reseller.id);
+  
+  if (error) {
+    logger.error('Error updating profile:', error);
+    return { success: false, error: error.message };
+  }
+  
+  return { success: true };
+}
+
+/**
+ * Change reseller password
+ */
+async function changeResellerPassword(supabase, reseller, currentPassword, newPassword) {
+  logger.info(`Reseller ${reseller.id} changing password`);
+  
+  // Verify current password
+  if (reseller.password !== currentPassword) {
+    return { success: false, error: 'Current password is incorrect' };
+  }
+  
+  if (!newPassword || newPassword.length < 4) {
+    return { success: false, error: 'New password must be at least 4 characters' };
+  }
+  
+  const { error } = await supabase
+    .from('resellers')
+    .update({ password: newPassword })
+    .eq('id', reseller.id);
+  
+  if (error) {
+    logger.error('Error changing password:', error);
+    return { success: false, error: error.message };
+  }
+  
+  return { success: true };
+}
+
+/**
  * Get packages for tenant
  */
 async function getPackages(supabase, tenantId) {
@@ -735,6 +960,34 @@ export function setupResellerRoutes(app, supabase) {
       });
     } catch (error) {
       logger.error('Error fetching reseller profile:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // Update reseller profile
+  app.put('/api/reseller/profile', authMiddleware, async (req, res) => {
+    try {
+      const result = await updateResellerProfile(supabase, req.reseller, req.body);
+      res.json(result);
+    } catch (error) {
+      logger.error('Error updating profile:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // Change password
+  app.post('/api/reseller/change-password', authMiddleware, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ success: false, error: 'Current and new password required' });
+      }
+      
+      const result = await changeResellerPassword(supabase, req.reseller, currentPassword, newPassword);
+      res.json(result);
+    } catch (error) {
+      logger.error('Error changing password:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -952,6 +1205,28 @@ export function setupResellerRoutes(app, supabase) {
     }
   });
   
+  // Create sub-reseller
+  app.post('/api/reseller/sub-resellers', authMiddleware, async (req, res) => {
+    try {
+      const result = await createSubReseller(supabase, req.reseller, req.body);
+      res.json(result);
+    } catch (error) {
+      logger.error('Error creating sub-reseller:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // Update sub-reseller
+  app.put('/api/reseller/sub-resellers/:subId', authMiddleware, async (req, res) => {
+    try {
+      const result = await updateSubReseller(supabase, req.reseller, req.params.subId, req.body);
+      res.json(result);
+    } catch (error) {
+      logger.error('Error updating sub-reseller:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
   // Get sub-reseller transactions
   app.get('/api/reseller/sub-reseller/:subId/transactions', authMiddleware, async (req, res) => {
     try {
@@ -1110,6 +1385,14 @@ export function setupResellerRoutes(app, supabase) {
     req.url = '/api/reseller/profile';
     app.handle(req, res);
   });
+  app.put('/reseller/profile', (req, res) => {
+    req.url = '/api/reseller/profile';
+    app.handle(req, res);
+  });
+  app.post('/reseller/change-password', (req, res) => {
+    req.url = '/api/reseller/change-password';
+    app.handle(req, res);
+  });
   app.get('/reseller/areas', (req, res) => {
     req.url = '/api/reseller/areas';
     app.handle(req, res);
@@ -1140,6 +1423,14 @@ export function setupResellerRoutes(app, supabase) {
   });
   app.get('/reseller/sub-resellers', (req, res) => {
     req.url = '/api/reseller/sub-resellers';
+    app.handle(req, res);
+  });
+  app.post('/reseller/sub-resellers', (req, res) => {
+    req.url = '/api/reseller/sub-resellers';
+    app.handle(req, res);
+  });
+  app.put('/reseller/sub-resellers/:subId', (req, res) => {
+    req.url = `/api/reseller/sub-resellers/${req.params.subId}`;
     app.handle(req, res);
   });
   app.get('/reseller/packages', (req, res) => {

@@ -336,9 +336,22 @@ export function useResellerPortal() {
       return false;
     }
 
-    // This still uses Supabase directly for now - can be moved to backend later
-    toast.info('Sub-reseller creation coming soon');
-    return false;
+    try {
+      const result = await resellerApi.createSubReseller(data);
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to create sub-reseller');
+        return false;
+      }
+
+      toast.success('Sub-reseller created successfully');
+      await fetchResellerData();
+      return true;
+    } catch (err: any) {
+      console.error('Error creating sub-reseller:', err);
+      toast.error(err.message || 'Failed to create sub-reseller');
+      return false;
+    }
   };
 
   const updateSubReseller = async (id: string, data: Partial<Reseller>): Promise<boolean> => {
@@ -347,8 +360,22 @@ export function useResellerPortal() {
       return false;
     }
 
-    toast.info('Sub-reseller update coming soon');
-    return false;
+    try {
+      const result = await resellerApi.updateSubReseller(id, data);
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to update sub-reseller');
+        return false;
+      }
+
+      toast.success('Sub-reseller updated successfully');
+      await fetchResellerData();
+      return true;
+    } catch (err: any) {
+      console.error('Error updating sub-reseller:', err);
+      toast.error(err.message || 'Failed to update sub-reseller');
+      return false;
+    }
   };
 
   const fundSubReseller = async (subResellerId: string, amount: number, description?: string): Promise<boolean> => {
@@ -405,8 +432,22 @@ export function useResellerPortal() {
       return false;
     }
 
-    toast.info('Profile update coming soon');
-    return false;
+    try {
+      const result = await resellerApi.updateResellerProfile(data);
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to update profile');
+        return false;
+      }
+
+      toast.success('Profile updated successfully');
+      await fetchResellerData();
+      return true;
+    } catch (err: any) {
+      console.error('Error updating profile:', err);
+      toast.error(err.message || 'Failed to update profile');
+      return false;
+    }
   };
 
   const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
@@ -415,8 +456,21 @@ export function useResellerPortal() {
       return false;
     }
 
-    toast.info('Password change coming soon');
-    return false;
+    try {
+      const result = await resellerApi.changeResellerPassword(currentPassword, newPassword);
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to change password');
+        return false;
+      }
+
+      toast.success('Password changed successfully');
+      return true;
+    } catch (err: any) {
+      console.error('Error changing password:', err);
+      toast.error(err.message || 'Failed to change password');
+      return false;
+    }
   };
 
   // Area operations
