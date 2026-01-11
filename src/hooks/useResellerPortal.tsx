@@ -609,6 +609,31 @@ export function useResellerPortal() {
     }
   };
 
+  const updateProfile = async (data: { name?: string; phone?: string; email?: string; address?: string }): Promise<boolean> => {
+    if (!reseller) return false;
+
+    try {
+      const { error } = await supabase
+        .from('resellers')
+        .update({
+          name: data.name,
+          phone: data.phone || null,
+          email: data.email || null,
+          address: data.address || null,
+        } as any)
+        .eq('id', reseller.id);
+
+      if (error) throw error;
+
+      await fetchResellerData();
+      return true;
+    } catch (err: any) {
+      console.error('Error updating profile:', err);
+      toast.error(err.message || 'Failed to update profile');
+      return false;
+    }
+  };
+
   const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
     if (!reseller) return false;
 
@@ -655,6 +680,7 @@ export function useResellerPortal() {
     rechargeCustomer,
     createSubReseller,
     fundSubReseller,
+    updateProfile,
     changePassword,
   };
 }

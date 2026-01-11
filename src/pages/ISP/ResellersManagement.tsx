@@ -21,7 +21,10 @@ import { useResellerSystem } from '@/hooks/useResellerSystem';
 import { useAreas } from '@/hooks/useAreas';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useLocationHierarchy } from '@/hooks/useLocationHierarchy';
+import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
+import { useOLTs } from '@/hooks/useOLTData';
 import { supabase } from '@/integrations/supabase/client';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Users, Plus, Edit, Trash2, Loader2, Wallet, ArrowRightLeft, 
   Building2, Shield, ChevronRight, Eye, UserPlus, MinusCircle, KeyRound, LogIn
@@ -45,6 +48,8 @@ export default function ResellersManagement() {
   const { areas, refetch: refetchAreas } = useAreas();
   const { employees } = useEmployees();
   const { villages, unions, upazilas, districts } = useLocationHierarchy();
+  const { routers: mikrotikRouters } = useMikroTikRouters();
+  const { olts } = useOLTs();
   
   const [activeTab, setActiveTab] = useState('resellers');
   const [showDialog, setShowDialog] = useState(false);
@@ -88,9 +93,13 @@ export default function ResellersManagement() {
     can_add_customers: true,
     can_edit_customers: false,
     can_delete_customers: false,
+    can_transfer_balance: false,
+    can_view_reports: false,
     nid_number: '',
     username: '',
     password: '',
+    allowed_mikrotik_ids: [] as string[],
+    allowed_olt_ids: [] as string[],
   });
 
   const [branchFormData, setBranchFormData] = useState({
@@ -187,9 +196,13 @@ export default function ResellersManagement() {
       can_add_customers: true,
       can_edit_customers: false,
       can_delete_customers: false,
+      can_transfer_balance: false,
+      can_view_reports: false,
       nid_number: '',
       username: '',
       password: '',
+      allowed_mikrotik_ids: [],
+      allowed_olt_ids: [],
     });
     setEditingReseller(null);
   };
@@ -217,9 +230,13 @@ export default function ResellersManagement() {
       can_add_customers: reseller.can_add_customers,
       can_edit_customers: reseller.can_edit_customers,
       can_delete_customers: reseller.can_delete_customers,
+      can_transfer_balance: reseller.can_transfer_balance,
+      can_view_reports: reseller.can_view_reports,
       nid_number: reseller.nid_number || '',
       username: reseller.username || '',
       password: '',
+      allowed_mikrotik_ids: reseller.allowed_mikrotik_ids || [],
+      allowed_olt_ids: reseller.allowed_olt_ids || [],
     });
     setShowDialog(true);
   };
@@ -308,8 +325,12 @@ export default function ResellersManagement() {
         can_add_customers: formData.can_add_customers,
         can_edit_customers: formData.can_edit_customers,
         can_delete_customers: formData.can_delete_customers,
+        can_transfer_balance: formData.can_transfer_balance,
+        can_view_reports: formData.can_view_reports,
         nid_number: formData.nid_number || null,
         username: formData.username || null,
+        allowed_mikrotik_ids: formData.allowed_mikrotik_ids.length > 0 ? formData.allowed_mikrotik_ids : null,
+        allowed_olt_ids: formData.allowed_olt_ids.length > 0 ? formData.allowed_olt_ids : null,
       };
 
       // Only update password if provided
@@ -949,8 +970,98 @@ export default function ResellersManagement() {
                     onCheckedChange={(checked) => setFormData(prev => ({ ...prev, can_delete_customers: checked }))}
                   />
                 </div>
+                <div className="flex items-center justify-between">
+                  <Label>Can Transfer Balance</Label>
+                  <Switch
+                    checked={formData.can_transfer_balance}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, can_transfer_balance: checked }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label>Can View Reports</Label>
+                  <Switch
+                    checked={formData.can_view_reports}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, can_view_reports: checked }))}
+                  />
+                </div>
               </div>
             </div>
+
+            {/* Device Restrictions */}
+            {(mikrotikRouters.length > 0 || olts.length > 0) && (
+              <div className="border rounded-lg p-4 space-y-4">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Shield className="h-4 w-4" /> Device Access (for Customer Creation)
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Select which devices this reseller can use when creating customers. If none selected, all devices are allowed.
+                </p>
+                
+                {mikrotikRouters.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Allowed MikroTik Routers</Label>
+                    <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded p-2">
+                      {mikrotikRouters.map((router) => (
+                        <div key={router.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`mikrotik-${router.id}`}
+                            checked={formData.allowed_mikrotik_ids.includes(router.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  allowed_mikrotik_ids: [...prev.allowed_mikrotik_ids, router.id]
+                                }));
+                              } else {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  allowed_mikrotik_ids: prev.allowed_mikrotik_ids.filter(id => id !== router.id)
+                                }));
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`mikrotik-${router.id}`} className="text-sm font-normal cursor-pointer">
+                            {router.name}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {olts.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Allowed OLTs</Label>
+                    <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border rounded p-2">
+                      {olts.map((olt) => (
+                        <div key={olt.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`olt-${olt.id}`}
+                            checked={formData.allowed_olt_ids.includes(olt.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  allowed_olt_ids: [...prev.allowed_olt_ids, olt.id]
+                                }));
+                              } else {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  allowed_olt_ids: prev.allowed_olt_ids.filter(id => id !== olt.id)
+                                }));
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`olt-${olt.id}`} className="text-sm font-normal cursor-pointer">
+                            {olt.name}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Address</Label>

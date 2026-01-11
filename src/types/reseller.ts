@@ -11,8 +11,10 @@ export interface Reseller {
   parent_id: string | null;
   level: number;
   role: ResellerRole;
+  reseller_code: string | null;
   name: string;
   username: string | null;
+  password?: string; // Only for verification, not exposed normally
   phone: string | null;
   email: string | null;
   address: string | null;
