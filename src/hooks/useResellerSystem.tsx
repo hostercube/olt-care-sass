@@ -568,6 +568,118 @@ export function useResellerSystem() {
     }
   };
 
+  // Deduct (minus) balance with mandatory reason. Rejects if it would cause negative balance.
+  const deductBalance = async (resellerId: string, amount: number, reason: string) => {
+    try {
+      if (!reason || reason.trim().length === 0) {
+        throw new Error('A reason is required for balance deduction');
+      }
+      if (amount <= 0) {
+        throw new Error('Amount must be positive');
+      }
+      const reseller = resellers.find(r => r.id === resellerId);
+      if (!reseller) throw new Error('Reseller not found');
+
+      const newBalance = reseller.balance - amount;
+      if (newBalance < 0) {
+        throw new Error(`Insufficient balance. Available: ৳${reseller.balance.toLocaleString()}`);
+      }
+
+      const effectiveTenantId = tenantId || reseller.tenant_id;
+
+      // Insert deduction transaction
+      const { error: txError } = await supabase
+        .from('reseller_transactions')
+        .insert({
+          tenant_id: effectiveTenantId,
+          reseller_id: resellerId,
+          type: 'deduction',
+          amount: -amount,
+          balance_before: reseller.balance,
+          balance_after: newBalance,
+          description: reason.trim(),
+        } as any);
+
+      if (txError) throw txError;
+
+      // Update reseller balance
+      const { error: updateError } = await supabase
+        .from('resellers')
+        .update({ balance: newBalance })
+        .eq('id', resellerId);
+
+      if (updateError) throw updateError;
+
+      toast.success(`৳${amount.toLocaleString()} deducted from ${reseller.name}`);
+      fetchResellers();
+    } catch (err: any) {
+      console.error('Error deducting balance:', err);
+      toast.error(err.message || 'Failed to deduct balance');
+      throw err;
+    }
+  };
+
+  // Admin reset reseller password (plain text stored—matching existing create-reseller behaviour)
+  const resetPassword = async (resellerId: string, newPassword: string) => {
+    try {
+      if (!newPassword || newPassword.length < 4) {
+        throw new Error('Password must be at least 4 characters');
+      }
+      const reseller = resellers.find(r => r.id === resellerId);
+      if (!reseller) throw new Error('Reseller not found');
+
+      const { error } = await supabase
+        .from('resellers')
+        .update({ password: newPassword } as any)
+        .eq('id', resellerId);
+
+      if (error) throw error;
+
+      toast.success(`Password reset for ${reseller.name}`);
+    } catch (err: any) {
+      console.error('Error resetting password:', err);
+      toast.error(err.message || 'Failed to reset password');
+      throw err;
+    }
+  };
+
+  // Generate short-lived token for admin impersonation (auto-login)
+  // The token is stored in reseller_login_tokens table and verified on reseller portal side.
+  const generateImpersonationToken = async (resellerId: string): Promise<string | null> => {
+    try {
+      const reseller = resellers.find(r => r.id === resellerId);
+      if (!reseller) throw new Error('Reseller not found');
+
+      const effectiveTenantId = tenantId || reseller.tenant_id;
+
+      // Generate random token
+      const token = crypto.randomUUID() + '-' + Date.now().toString(36);
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+      // Store token in DB (create table if RLS allows upsert)
+      const { error } = await supabase
+        .from('reseller_login_tokens')
+        .insert({
+          token,
+          reseller_id: resellerId,
+          tenant_id: effectiveTenantId,
+          expires_at: expiresAt.toISOString(),
+          used: false,
+        } as any);
+
+      if (error) {
+        console.error('Error storing impersonation token:', error);
+        throw error;
+      }
+
+      return token;
+    } catch (err: any) {
+      console.error('Error generating impersonation token:', err);
+      toast.error(err.message || 'Failed to generate login link');
+      return null;
+    }
+  };
+
   return {
     resellers,
     branches,
@@ -581,6 +693,7 @@ export function useResellerSystem() {
     updateReseller,
     deleteReseller,
     rechargeBalance,
+    deductBalance,
     fundSubReseller,
     transferBalance,
     payCustomer,
@@ -591,5 +704,8 @@ export function useResellerSystem() {
     updateBranch,
     createCustomRole,
     updateCustomRole,
+    resetPassword,
+    generateImpersonationToken,
   };
 }
+
