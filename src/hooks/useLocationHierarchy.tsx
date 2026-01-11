@@ -287,8 +287,8 @@ export function useLocationHierarchy() {
   };
 
   const createVillage = async (
-    name: string, 
-    unionId: string, 
+    name: string,
+    unionId: string,
     sectionBlock?: string,
     roadNo?: string,
     houseNo?: string,
@@ -297,12 +297,12 @@ export function useLocationHierarchy() {
     if (!tenantId && !isSuperAdmin) return null;
     const tid = tenantId || '';
     try {
-      const { data, error } = await supabase
+      const { data: village, error } = await supabase
         .from('villages')
-        .insert({ 
-          name, 
-          union_id: unionId, 
-          tenant_id: tid, 
+        .insert({
+          name,
+          union_id: unionId,
+          tenant_id: tid,
           section_block: sectionBlock || null,
           road_no: roadNo || null,
           house_no: houseNo || null,
@@ -311,9 +311,58 @@ export function useLocationHierarchy() {
         .select()
         .single();
       if (error) throw error;
+
+      // Also create a matching legacy `areas` row so reseller/customer dropdowns work.
+      // Idempotent: only insert if not already present.
+      try {
+        const { data: existingArea } = await supabase
+          .from('areas')
+          .select('id')
+          .eq('tenant_id', tid)
+          .eq('village_id', (village as any).id)
+          .maybeSingle();
+
+        if (!existingArea?.id) {
+          // Resolve hierarchy names
+          const { data: unionRow } = await supabase
+            .from('unions')
+            .select('id, name, upazila_id')
+            .eq('id', unionId)
+            .maybeSingle();
+
+          const upazilaId = (unionRow as any)?.upazila_id as string | undefined;
+          const { data: upazilaRow } = upazilaId
+            ? await supabase.from('upazilas').select('id, name, district_id').eq('id', upazilaId).maybeSingle()
+            : { data: null } as any;
+
+          const districtId = (upazilaRow as any)?.district_id as string | undefined;
+          const { data: districtRow } = districtId
+            ? await supabase.from('districts').select('id, name').eq('id', districtId).maybeSingle()
+            : { data: null } as any;
+
+          await supabase.from('areas').insert({
+            tenant_id: tid,
+            name,
+            village: name,
+            village_id: (village as any).id,
+            union_id: (unionRow as any)?.id ?? null,
+            union_name: (unionRow as any)?.name ?? null,
+            upazila_id: (upazilaRow as any)?.id ?? null,
+            upazila: (upazilaRow as any)?.name ?? null,
+            district_id: (districtRow as any)?.id ?? null,
+            district: (districtRow as any)?.name ?? null,
+            section_block: sectionBlock || null,
+            road_no: roadNo || null,
+            house_no: houseNo || null,
+          } as any);
+        }
+      } catch (syncErr) {
+        console.warn('Legacy area auto-create failed:', syncErr);
+      }
+
       toast.success('Village/Market created');
       await fetchVillages();
-      return data;
+      return village;
     } catch (err: any) {
       toast.error(err.message || 'Failed to create village');
       return null;
