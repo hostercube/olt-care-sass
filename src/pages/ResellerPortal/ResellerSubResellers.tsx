@@ -154,6 +154,10 @@ export default function ResellerSubResellers() {
       can_recharge_customers: formData.can_recharge_customers,
       can_create_sub_reseller: formData.can_create_sub_reseller,
       can_view_sub_customers: formData.can_view_sub_customers,
+      can_transfer_balance: true,
+      commission_type: formData.commission_type,
+      commission_value: parseFloat(formData.commission_value) || 0,
+      rate_type: formData.rate_type,
       max_customers: parseInt(formData.max_customers) || 0,
       max_sub_resellers: parseInt(formData.max_sub_resellers) || 0,
     } as any);
@@ -169,7 +173,7 @@ export default function ResellerSubResellers() {
     if (!selectedSub || !formData.name) return;
     
     setSaving(true);
-    const success = await updateSubReseller(selectedSub.id, {
+    const updateData: any = {
       name: formData.name,
       phone: formData.phone || null,
       email: formData.email || null,
@@ -179,9 +183,20 @@ export default function ResellerSubResellers() {
       can_recharge_customers: formData.can_recharge_customers,
       can_create_sub_reseller: formData.can_create_sub_reseller,
       can_view_sub_customers: formData.can_view_sub_customers,
+      can_transfer_balance: true,
+      commission_type: formData.commission_type,
+      commission_value: parseFloat(formData.commission_value) || 0,
+      rate_type: formData.rate_type,
       max_customers: parseInt(formData.max_customers) || 0,
       max_sub_resellers: parseInt(formData.max_sub_resellers) || 0,
-    } as any);
+    };
+    
+    // Include password only if provided
+    if (formData.password && formData.password.trim()) {
+      updateData.password = formData.password.trim();
+    }
+    
+    const success = await updateSubReseller(selectedSub.id, updateData);
     setSaving(false);
     if (success) {
       setShowEditDialog(false);

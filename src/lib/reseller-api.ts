@@ -73,6 +73,14 @@ export async function fetchResellerProfile() {
   return apiRequest('/profile');
 }
 
+export async function updateResellerProfile(data: any) {
+  return apiRequest('/profile', 'PUT', data);
+}
+
+export async function changeResellerPassword(currentPassword: string, newPassword: string) {
+  return apiRequest('/change-password', 'POST', { currentPassword, newPassword });
+}
+
 // ============= Areas =============
 
 export async function fetchResellerAreas() {
@@ -132,6 +140,14 @@ export async function rechargeCustomer(customerId: string, amount: number, month
 
 export async function fetchSubResellers() {
   return apiRequest('/sub-resellers');
+}
+
+export async function createSubReseller(data: any) {
+  return apiRequest('/sub-resellers', 'POST', data);
+}
+
+export async function updateSubReseller(subResellerId: string, data: any) {
+  return apiRequest(`/sub-resellers/${subResellerId}`, 'PUT', data);
 }
 
 export async function fetchSubResellerTransactions(subResellerId: string) {
