@@ -11,10 +11,10 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { 
   Loader2, UserPlus, Plus, Wallet, Search, RefreshCcw, 
   MoreHorizontal, Edit, Eye, History, Minus,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   ArrowUpRight, ArrowDownLeft
 } from 'lucide-react';
 import { useResellerPortal } from '@/hooks/useResellerPortal';
@@ -438,45 +438,14 @@ export default function ResellerSubResellers() {
 
                 {/* Pagination */}
                 {filteredSubResellers.length > 0 && (
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <span>Show</span>
-                      <Select
-                        value={pageSize.toString()}
-                        onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}
-                      >
-                        <SelectTrigger className="h-8 w-[70px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[10, 25, 50].map((size) => (
-                            <SelectItem key={size} value={size.toString()}>
-                              {size}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <span>
-                        Showing {startIndex + 1} to {endIndex} of {filteredSubResellers.length}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
-                        <ChevronsLeft className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="mx-2">Page {currentPage} of {totalPages || 1}</span>
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages}>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(totalPages)} disabled={currentPage >= totalPages}>
-                        <ChevronsRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+                  <TablePagination
+                    totalItems={filteredSubResellers.length}
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                    pageSizeOptions={[10, 25, 50, 100]}
+                  />
                 )}
               </CardContent>
             </Card>

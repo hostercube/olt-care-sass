@@ -6,6 +6,176 @@
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
 
+/**
+ * Process auto-recharge for customer online payment with reseller commission chain
+ * When a customer pays online, this:
+ * 1. Extends customer's expiry date
+ * 2. Credits commission to the entire reseller chain (reseller -> sub-reseller -> sub-sub-reseller)
+ */
+async function processCustomerAutoRecharge(supabase, customerId, amount, tenantId, paymentId) {
+  logger.info(`Processing auto-recharge for customer ${customerId}, amount: ${amount}`);
+
+  // Get customer with package info
+  const { data: customer, error: customerError } = await supabase
+    .from('customers')
+    .select(`
+      *,
+      package:isp_packages(id, name, price, validity_days)
+    `)
+    .eq('id', customerId)
+    .single();
+
+  if (customerError || !customer) {
+    logger.error('Customer not found for auto-recharge:', customerError);
+    throw new Error('Customer not found');
+  }
+
+  const validityDays = customer.package?.validity_days || 30;
+  const packagePrice = customer.package?.price || customer.monthly_bill || amount;
+  const months = Math.max(1, Math.round(amount / packagePrice));
+
+  // Calculate new expiry date
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  let baseExpiry;
+  if (customer.expiry_date) {
+    const currentExpiry = new Date(customer.expiry_date);
+    baseExpiry = currentExpiry < today ? today : currentExpiry;
+  } else {
+    baseExpiry = today;
+  }
+  
+  const newExpiry = new Date(baseExpiry);
+  newExpiry.setDate(newExpiry.getDate() + (validityDays * months));
+
+  // Update customer
+  const { error: updateError } = await supabase
+    .from('customers')
+    .update({
+      expiry_date: newExpiry.toISOString(),
+      status: 'active',
+      last_payment_date: new Date().toISOString(),
+      due_amount: Math.max(0, (customer.due_amount || 0) - amount),
+    })
+    .eq('id', customerId);
+
+  if (updateError) {
+    logger.error('Failed to update customer expiry:', updateError);
+    throw updateError;
+  }
+
+  // Create recharge record
+  await supabase.from('customer_recharges').insert({
+    tenant_id: tenantId,
+    customer_id: customerId,
+    reseller_id: customer.reseller_id,
+    amount,
+    months,
+    old_expiry: customer.expiry_date,
+    new_expiry: newExpiry.toISOString(),
+    payment_method: 'online_payment',
+    status: 'completed',
+    notes: `Auto-recharge via online payment (Payment ID: ${paymentId})`,
+  });
+
+  // Create customer payment record
+  await supabase.from('customer_payments').insert({
+    tenant_id: tenantId,
+    customer_id: customerId,
+    amount,
+    payment_method: 'online_payment',
+    notes: `Online payment - auto recharged for ${months} month(s)`,
+  });
+
+  logger.info(`Customer ${customerId} recharged successfully. New expiry: ${newExpiry.toISOString()}`);
+
+  // Process reseller commission chain if customer has a reseller
+  if (customer.reseller_id) {
+    await processResellerCommissionChain(supabase, customer.reseller_id, customerId, amount, months, tenantId);
+  }
+
+  return { success: true, newExpiry: newExpiry.toISOString() };
+}
+
+/**
+ * Process commission for entire reseller chain
+ * Credits commission to reseller, sub-reseller, and sub-sub-reseller
+ */
+async function processResellerCommissionChain(supabase, resellerId, customerId, amount, months, tenantId) {
+  logger.info(`Processing commission chain for reseller ${resellerId}`);
+
+  // Get the full reseller chain (up to 3 levels: reseller -> parent -> grandparent)
+  const resellerChain = [];
+  let currentResellerId = resellerId;
+
+  while (currentResellerId && resellerChain.length < 3) {
+    const { data: reseller, error } = await supabase
+      .from('resellers')
+      .select('*')
+      .eq('id', currentResellerId)
+      .single();
+
+    if (error || !reseller) break;
+
+    resellerChain.push(reseller);
+    currentResellerId = reseller.parent_id;
+  }
+
+  logger.info(`Found ${resellerChain.length} resellers in chain`);
+
+  // Process commission for each reseller in the chain
+  for (let i = 0; i < resellerChain.length; i++) {
+    const reseller = resellerChain[i];
+    
+    // Calculate commission based on reseller settings
+    let commission = 0;
+    const rateType = reseller.rate_type || 'discount';
+    const commissionType = reseller.commission_type || 'percentage';
+    const commissionValue = reseller.commission_value || reseller.customer_rate || 0;
+
+    if (commissionValue > 0) {
+      if (commissionType === 'percentage') {
+        commission = Math.round((amount * commissionValue) / 100);
+      } else {
+        // Flat rate per month
+        commission = commissionValue * months;
+      }
+    }
+
+    if (commission <= 0) {
+      logger.info(`No commission for reseller ${reseller.id} (${reseller.name})`);
+      continue;
+    }
+
+    // Credit commission to reseller
+    const newBalance = (reseller.balance || 0) + commission;
+
+    // Create commission transaction
+    await supabase.from('reseller_transactions').insert({
+      tenant_id: tenantId,
+      reseller_id: reseller.id,
+      type: 'commission',
+      amount: commission,
+      balance_before: reseller.balance || 0,
+      balance_after: newBalance,
+      customer_id: customerId,
+      description: `Commission from customer online payment (${months} month${months > 1 ? 's' : ''}) - Level ${i + 1}`,
+    });
+
+    // Update reseller balance
+    await supabase
+      .from('resellers')
+      .update({
+        balance: newBalance,
+        total_collections: (reseller.total_collections || 0) + (i === 0 ? amount : 0), // Only first reseller gets collection credit
+      })
+      .eq('id', reseller.id);
+
+    logger.info(`Credited ৳${commission} commission to ${reseller.name} (Level ${i + 1}). New balance: ৳${newBalance}`);
+  }
+}
+
 // Gateway configurations
 const GATEWAY_CONFIGS = {
   sslcommerz: {
@@ -900,6 +1070,16 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
   if (updateError) {
     logger.error('Failed to update payment:', updateError);
     return { success: false, error: 'Failed to update payment' };
+  }
+
+  // Handle customer bill payment - AUTO RECHARGE with reseller commission
+  if (isSuccess && paymentFor === 'customer_bill' && customerId) {
+    try {
+      await processCustomerAutoRecharge(supabase, customerId, payment.amount, payment.tenant_id, payment.id);
+    } catch (rechargeError) {
+      logger.error('Auto recharge failed:', rechargeError);
+      // Don't fail the callback, just log the error
+    }
   }
 
   // If successful payment for subscription
