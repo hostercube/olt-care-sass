@@ -3276,6 +3276,59 @@ export type Database = {
           },
         ]
       }
+      payroll_runs: {
+        Row: {
+          created_at: string
+          id: string
+          month: string
+          notes: string | null
+          processed_at: string | null
+          processed_by: string | null
+          status: string
+          tenant_id: string
+          total_deductions: number | null
+          total_gross: number | null
+          total_net: number | null
+          total_staff: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month: string
+          notes?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: string
+          tenant_id: string
+          total_deductions?: number | null
+          total_gross?: number | null
+          total_net?: number | null
+          total_staff?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: string
+          notes?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: string
+          tenant_id?: string
+          total_deductions?: number | null
+          total_gross?: number | null
+          total_net?: number | null
+          total_staff?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_runs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_notification_settings: {
         Row: {
           created_at: string
@@ -4417,54 +4470,88 @@ export type Database = {
       }
       salary_payments: {
         Row: {
+          absent_days: number | null
+          absent_deduction: number | null
+          bank_account: string | null
           basic_salary: number | null
           bonus: number | null
           commission: number | null
           created_at: string
           deductions: number | null
           id: string
+          late_days: number | null
+          late_deduction: number | null
           month: string
           net_salary: number | null
           notes: string | null
+          overtime_pay: number | null
           payment_date: string | null
           payment_method: string | null
+          payroll_run_id: string | null
+          present_days: number | null
           staff_id: string
           status: string | null
           tenant_id: string
+          transaction_ref: string | null
         }
         Insert: {
+          absent_days?: number | null
+          absent_deduction?: number | null
+          bank_account?: string | null
           basic_salary?: number | null
           bonus?: number | null
           commission?: number | null
           created_at?: string
           deductions?: number | null
           id?: string
+          late_days?: number | null
+          late_deduction?: number | null
           month: string
           net_salary?: number | null
           notes?: string | null
+          overtime_pay?: number | null
           payment_date?: string | null
           payment_method?: string | null
+          payroll_run_id?: string | null
+          present_days?: number | null
           staff_id: string
           status?: string | null
           tenant_id: string
+          transaction_ref?: string | null
         }
         Update: {
+          absent_days?: number | null
+          absent_deduction?: number | null
+          bank_account?: string | null
           basic_salary?: number | null
           bonus?: number | null
           commission?: number | null
           created_at?: string
           deductions?: number | null
           id?: string
+          late_days?: number | null
+          late_deduction?: number | null
           month?: string
           net_salary?: number | null
           notes?: string | null
+          overtime_pay?: number | null
           payment_date?: string | null
           payment_method?: string | null
+          payroll_run_id?: string | null
+          present_days?: number | null
           staff_id?: string
           status?: string | null
           tenant_id?: string
+          transaction_ref?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "salary_payments_payroll_run_id_fkey"
+            columns: ["payroll_run_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_runs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "salary_payments_staff_id_fkey"
             columns: ["staff_id"]
@@ -4892,6 +4979,69 @@ export type Database = {
           },
           {
             foreignKeyName: "staff_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_attendance: {
+        Row: {
+          check_in: string | null
+          check_out: string | null
+          created_at: string
+          date: string
+          id: string
+          late_minutes: number | null
+          notes: string | null
+          overtime_minutes: number | null
+          source: string | null
+          staff_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          check_in?: string | null
+          check_out?: string | null
+          created_at?: string
+          date: string
+          id?: string
+          late_minutes?: number | null
+          notes?: string | null
+          overtime_minutes?: number | null
+          source?: string | null
+          staff_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          check_in?: string | null
+          check_out?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          late_minutes?: number | null
+          notes?: string | null
+          overtime_minutes?: number | null
+          source?: string | null
+          staff_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_attendance_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_attendance_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
