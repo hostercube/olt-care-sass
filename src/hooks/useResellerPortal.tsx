@@ -83,6 +83,7 @@ export function useResellerPortal() {
       customer_status_change: reseller.can_edit_customers,
       customer_view_profile: true,
       customer_view_balance: true,
+      customer_export: true,
       sub_customer_view: reseller.can_view_sub_customers,
       sub_customer_edit: reseller.can_control_sub_customers,
       sub_customer_recharge: reseller.can_control_sub_customers,
@@ -94,6 +95,7 @@ export function useResellerPortal() {
       sub_reseller_balance_add: reseller.can_transfer_balance,
       sub_reseller_balance_deduct: reseller.can_transfer_balance,
       sub_reseller_view_customers: reseller.can_view_sub_customers,
+      sub_reseller_view_transactions: reseller.can_view_sub_customers,
       balance_transfer: reseller.can_transfer_balance,
       report_view: reseller.can_view_reports,
       report_export: reseller.can_view_reports,
@@ -102,7 +104,11 @@ export function useResellerPortal() {
       password_change: true,
       billing_view: true,
       transaction_view: true,
+      transaction_export: true,
+      recharge_history_view: true,
       wallet_view: true,
+      auto_recharge_view: true,
+      auto_recharge_manage: false,
     };
     
     return legacyMap[permission] ?? false;

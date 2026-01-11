@@ -381,8 +381,8 @@ export default function ResellerBillingHistory() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+        <CardContent className="space-y-4">
+          <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -471,6 +471,13 @@ export default function ResellerBillingHistory() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Pagination */}
+          {filteredTransactions.length > 50 && (
+            <p className="text-sm text-muted-foreground text-center">
+              Showing first 500 transactions. Apply filters to narrow down results.
+            </p>
+          )}
         </CardContent>
       </Card>
     </DashboardLayout>
