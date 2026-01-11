@@ -10,16 +10,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { 
   Loader2, Users, Plus, Edit, RefreshCcw, Search, Filter, X, Eye, 
   MoreHorizontal, UserCheck, Clock, Ban, UserX, RotateCcw, CreditCard,
-  Download, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  Download, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wifi, WifiOff
 } from 'lucide-react';
 import { useResellerPortal } from '@/hooks/useResellerPortal';
 import { ResellerPortalLayout } from '@/components/reseller/ResellerPortalLayout';
+import { SharedCustomerDialog, type SharedCustomerDialogData } from '@/components/isp/SharedCustomerDialog';
 import { toast } from 'sonner';
 import { format, parseISO, isBefore, isAfter, startOfDay, endOfDay, addDays } from 'date-fns';
 
@@ -61,6 +60,7 @@ export default function ResellerCustomers() {
     updateCustomer,
     rechargeCustomer,
     refetch,
+    hasPermission,
   } = useResellerPortal();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -86,21 +86,6 @@ export default function ResellerCustomers() {
     expiryDateTo: undefined,
   });
 
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    address: '',
-    package_id: '',
-    area_id: '',
-    mikrotik_id: '',
-    pppoe_username: '',
-    pppoe_password: '',
-    monthly_bill: '',
-    expiry_date: '',
-    notes: '',
-  });
-
   const [rechargeData, setRechargeData] = useState({
     amount: '',
     months: '1',
@@ -113,10 +98,10 @@ export default function ResellerCustomers() {
   }, [loading, session, navigate]);
 
   useEffect(() => {
-    if (searchParams.get('action') === 'add' && reseller?.can_add_customers) {
+    if (searchParams.get('action') === 'add' && hasPermission('customer_create')) {
       setShowAddDialog(true);
     }
-  }, [searchParams, reseller]);
+  }, [searchParams, hasPermission]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -251,83 +236,21 @@ export default function ResellerCustomers() {
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      phone: '',
-      email: '',
-      address: '',
-      package_id: '',
-      area_id: '',
-      mikrotik_id: '',
-      pppoe_username: '',
-      pppoe_password: '',
-      monthly_bill: '',
-      expiry_date: '',
-      notes: '',
-    });
+  // Context data for SharedCustomerDialog
+  const dialogContextData = useMemo<SharedCustomerDialogData>(() => ({
+    packages: packages.map(p => ({ ...p, validity_days: 30 })),
+    areas: areas.map(a => ({ id: a.id, name: a.name })),
+    mikrotikRouters,
+    tenantId: reseller?.tenant_id || '',
+    resellerId: reseller?.id,
+  }), [packages, areas, mikrotikRouters, reseller]);
+
+  const handleCreateCustomer = async (data: any): Promise<boolean> => {
+    return await createCustomer(data);
   };
 
-  const handleAddCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name) {
-      toast.error('Customer name is required');
-      return;
-    }
-
-    setSaving(true);
-    const pkg = packages.find(p => p.id === formData.package_id);
-    
-    const success = await createCustomer({
-      name: formData.name,
-      phone: formData.phone || null,
-      email: formData.email || null,
-      address: formData.address || null,
-      package_id: formData.package_id || null,
-      area_id: formData.area_id || null,
-      mikrotik_id: formData.mikrotik_id || null,
-      pppoe_username: formData.pppoe_username || null,
-      pppoe_password: formData.pppoe_password || null,
-      monthly_bill: formData.monthly_bill ? parseFloat(formData.monthly_bill) : (pkg?.price || null),
-      expiry_date: formData.expiry_date || null,
-      notes: formData.notes || null,
-      status: 'pending',
-    } as any);
-
-    setSaving(false);
-    if (success) {
-      setShowAddDialog(false);
-      resetForm();
-    }
-  };
-
-  const handleEditCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCustomer) return;
-
-    setSaving(true);
-    const pkg = packages.find(p => p.id === formData.package_id);
-
-    const success = await updateCustomer(selectedCustomer.id, {
-      name: formData.name,
-      phone: formData.phone || null,
-      email: formData.email || null,
-      address: formData.address || null,
-      package_id: formData.package_id || null,
-      area_id: formData.area_id || null,
-      mikrotik_id: formData.mikrotik_id || null,
-      pppoe_username: formData.pppoe_username || null,
-      monthly_bill: formData.monthly_bill ? parseFloat(formData.monthly_bill) : (pkg?.price || null),
-      expiry_date: formData.expiry_date || null,
-      notes: formData.notes || null,
-    } as any);
-
-    setSaving(false);
-    if (success) {
-      setShowEditDialog(false);
-      setSelectedCustomer(null);
-      resetForm();
-    }
+  const handleUpdateCustomer = async (id: string, data: any): Promise<boolean> => {
+    return await updateCustomer(id, data);
   };
 
   const handleRecharge = async (e: React.FormEvent) => {
@@ -351,20 +274,6 @@ export default function ResellerCustomers() {
 
   const openEditDialog = (customer: any) => {
     setSelectedCustomer(customer);
-    setFormData({
-      name: customer.name,
-      phone: customer.phone || '',
-      email: customer.email || '',
-      address: customer.address || '',
-      package_id: customer.package_id || '',
-      area_id: customer.area?.id || '',
-      mikrotik_id: customer.mikrotik_id || '',
-      pppoe_username: customer.pppoe_username || '',
-      pppoe_password: '',
-      monthly_bill: customer.monthly_bill?.toString() || '',
-      expiry_date: customer.expiry_date || '',
-      notes: customer.notes || '',
-    });
     setShowEditDialog(true);
   };
 
@@ -494,7 +403,8 @@ export default function ResellerCustomers() {
               <TabsTrigger value="suspended">Suspended ({stats.suspended})</TabsTrigger>
               <TabsTrigger value="pending">Pending ({stats.pending})</TabsTrigger>
             </TabsList>
-            <div className="flex items-center gap-2 flex-wrap">
+
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={exportCSV}>
                 <Download className="h-4 w-4 mr-2" />
                 Export
@@ -503,7 +413,7 @@ export default function ResellerCustomers() {
                 <RefreshCcw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
-              {reseller?.can_add_customers && (
+              {hasPermission('customer_create') && (
                 <Button size="sm" onClick={() => setShowAddDialog(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Customer
@@ -705,16 +615,18 @@ export default function ResellerCustomers() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center justify-end gap-1">
-                                  <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="h-8 w-8"
-                                    onClick={() => openViewDialog(customer)}
-                                    title="View"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  {reseller?.can_recharge_customers && (
+                                  {hasPermission('customer_view_profile') && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8"
+                                      onClick={() => openViewDialog(customer)}
+                                      title="View"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {hasPermission('customer_recharge') && (
                                     <Button 
                                       variant="ghost" 
                                       size="icon" 
@@ -732,20 +644,34 @@ export default function ResellerCustomers() {
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="bg-popover border border-border">
-                                      <DropdownMenuItem onClick={() => openViewDialog(customer)}>
-                                        <Eye className="h-4 w-4 mr-2" />
-                                        View Details
-                                      </DropdownMenuItem>
-                                      {reseller?.can_edit_customers && (
+                                      {hasPermission('customer_view_profile') && (
+                                        <DropdownMenuItem onClick={() => openViewDialog(customer)}>
+                                          <Eye className="h-4 w-4 mr-2" />
+                                          View Details
+                                        </DropdownMenuItem>
+                                      )}
+                                      {hasPermission('customer_edit') && (
                                         <DropdownMenuItem onClick={() => openEditDialog(customer)}>
                                           <Edit className="h-4 w-4 mr-2" />
                                           Edit
                                         </DropdownMenuItem>
                                       )}
-                                      {reseller?.can_recharge_customers && (
+                                      {hasPermission('customer_recharge') && (
                                         <DropdownMenuItem onClick={() => openRechargeDialog(customer)}>
                                           <RotateCcw className="h-4 w-4 mr-2" />
                                           Recharge
+                                        </DropdownMenuItem>
+                                      )}
+                                      {hasPermission('network_enable') && customer.status === 'suspended' && (
+                                        <DropdownMenuItem onClick={() => updateCustomer(customer.id, { status: 'active' })}>
+                                          <Wifi className="h-4 w-4 mr-2" />
+                                          Enable Network
+                                        </DropdownMenuItem>
+                                      )}
+                                      {hasPermission('network_disable') && customer.status === 'active' && (
+                                        <DropdownMenuItem onClick={() => updateCustomer(customer.id, { status: 'suspended' })}>
+                                          <WifiOff className="h-4 w-4 mr-2" />
+                                          Disable Network
                                         </DropdownMenuItem>
                                       )}
                                     </DropdownMenuContent>
@@ -834,232 +760,42 @@ export default function ResellerCustomers() {
         </Tabs>
       </div>
 
-      {/* Add Customer Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={(open) => { setShowAddDialog(open); if (!open) resetForm(); }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add New Customer</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleAddCustomer} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Name *</Label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Customer name"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="01XXXXXXXXX"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="email@example.com"
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Address</Label>
-                <Input
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="Full address"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Package</Label>
-                <Select value={formData.package_id} onValueChange={(v) => {
-                  const pkg = packages.find(p => p.id === v);
-                  setFormData({ ...formData, package_id: v, monthly_bill: pkg?.price?.toString() || '' });
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select package" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {packages.map((pkg) => (
-                      <SelectItem key={pkg.id} value={pkg.id}>
-                        {pkg.name} - ৳{pkg.price}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Monthly Bill (৳)</Label>
-                <Input
-                  type="number"
-                  value={formData.monthly_bill}
-                  onChange={(e) => setFormData({ ...formData, monthly_bill: e.target.value })}
-                  placeholder="0"
-                />
-              </div>
-              {areas.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Area</Label>
-                  <Select value={formData.area_id} onValueChange={(v) => setFormData({ ...formData, area_id: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select area" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {areas.map((area) => (
-                        <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {mikrotikRouters.length > 0 && (
-                <div className="space-y-2">
-                  <Label>MikroTik Router</Label>
-                  <Select value={formData.mikrotik_id} onValueChange={(v) => setFormData({ ...formData, mikrotik_id: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select router" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mikrotikRouters.map((router) => (
-                        <SelectItem key={router.id} value={router.id}>{router.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label>PPPoE Username</Label>
-                <Input
-                  value={formData.pppoe_username}
-                  onChange={(e) => setFormData({ ...formData, pppoe_username: e.target.value })}
-                  placeholder="pppoe_user"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>PPPoE Password</Label>
-                <Input
-                  type="password"
-                  value={formData.pppoe_password}
-                  onChange={(e) => setFormData({ ...formData, pppoe_password: e.target.value })}
-                  placeholder="••••••••"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Expiry Date</Label>
-                <Input
-                  type="date"
-                  value={formData.expiry_date}
-                  onChange={(e) => setFormData({ ...formData, expiry_date: e.target.value })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Create Customer
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Add Customer Dialog - Using SharedCustomerDialog */}
+      <SharedCustomerDialog
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        onSuccess={() => refetch()}
+        contextData={dialogContextData}
+        onCreateCustomer={handleCreateCustomer}
+        mode="add"
+        permissions={{
+          canEditStatus: hasPermission('customer_status_change'),
+          canEditMikroTik: hasPermission('mikrotik_view'),
+          canEditPPPoE: true,
+          showReseller: false,
+        }}
+      />
 
-      {/* Edit Customer Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={(open) => { setShowEditDialog(open); if (!open) { setSelectedCustomer(null); resetForm(); } }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Customer</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleEditCustomer} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Name *</Label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Address</Label>
-                <Input
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Package</Label>
-                <Select value={formData.package_id} onValueChange={(v) => {
-                  const pkg = packages.find(p => p.id === v);
-                  setFormData({ ...formData, package_id: v, monthly_bill: pkg?.price?.toString() || formData.monthly_bill });
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select package" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {packages.map((pkg) => (
-                      <SelectItem key={pkg.id} value={pkg.id}>
-                        {pkg.name} - ৳{pkg.price}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Monthly Bill (৳)</Label>
-                <Input
-                  type="number"
-                  value={formData.monthly_bill}
-                  onChange={(e) => setFormData({ ...formData, monthly_bill: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>PPPoE Username</Label>
-                <Input
-                  value={formData.pppoe_username}
-                  onChange={(e) => setFormData({ ...formData, pppoe_username: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Expiry Date</Label>
-                <Input
-                  type="date"
-                  value={formData.expiry_date}
-                  onChange={(e) => setFormData({ ...formData, expiry_date: e.target.value })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Update Customer
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Edit Customer Dialog - Using SharedCustomerDialog */}
+      <SharedCustomerDialog
+        open={showEditDialog}
+        onOpenChange={(open) => { 
+          setShowEditDialog(open); 
+          if (!open) setSelectedCustomer(null); 
+        }}
+        onSuccess={() => refetch()}
+        contextData={dialogContextData}
+        onCreateCustomer={handleCreateCustomer}
+        onUpdateCustomer={handleUpdateCustomer}
+        mode="edit"
+        customer={selectedCustomer}
+        permissions={{
+          canEditStatus: hasPermission('customer_status_change'),
+          canEditMikroTik: hasPermission('mikrotik_view'),
+          canEditPPPoE: hasPermission('customer_edit'),
+          showReseller: false,
+        }}
+      />
 
       {/* Recharge Dialog */}
       <Dialog open={showRechargeDialog} onOpenChange={(open) => { setShowRechargeDialog(open); if (!open) setSelectedCustomer(null); }}>
@@ -1146,18 +882,22 @@ export default function ResellerCustomers() {
                   <p className="text-muted-foreground">Package</p>
                   <p className="font-medium">{selectedCustomer.package?.name || 'N/A'}</p>
                 </div>
-                <div>
-                  <p className="text-muted-foreground">Monthly Bill</p>
-                  <p className="font-medium">৳{(selectedCustomer.monthly_bill || 0).toLocaleString()}</p>
-                </div>
+                {hasPermission('customer_view_balance') && (
+                  <div>
+                    <p className="text-muted-foreground">Monthly Bill</p>
+                    <p className="font-medium">৳{(selectedCustomer.monthly_bill || 0).toLocaleString()}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-muted-foreground">PPPoE Username</p>
                   <p className="font-medium font-mono">{selectedCustomer.pppoe_username || 'N/A'}</p>
                 </div>
-                <div>
-                  <p className="text-muted-foreground">Due Amount</p>
-                  <p className="font-medium text-red-600">৳{(selectedCustomer.due_amount || 0).toLocaleString()}</p>
-                </div>
+                {hasPermission('customer_view_balance') && (
+                  <div>
+                    <p className="text-muted-foreground">Due Amount</p>
+                    <p className="font-medium text-red-600">৳{(selectedCustomer.due_amount || 0).toLocaleString()}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-muted-foreground">Connection Date</p>
                   <p className="font-medium">
@@ -1174,15 +914,33 @@ export default function ResellerCustomers() {
                       : 'N/A'}
                   </p>
                 </div>
+                {hasPermission('onu_view_mac') && selectedCustomer.onu_mac && (
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground">ONU MAC</p>
+                    <p className="font-medium font-mono">{selectedCustomer.onu_mac}</p>
+                  </div>
+                )}
               </div>
-              <DialogFooter>
-                {reseller?.can_recharge_customers && (
+              <DialogFooter className="flex-wrap gap-2">
+                {hasPermission('network_enable') && selectedCustomer.status === 'suspended' && (
+                  <Button variant="outline" onClick={() => { updateCustomer(selectedCustomer.id, { status: 'active' }); setShowViewDialog(false); }}>
+                    <Wifi className="h-4 w-4 mr-2" />
+                    Enable
+                  </Button>
+                )}
+                {hasPermission('network_disable') && selectedCustomer.status === 'active' && (
+                  <Button variant="outline" onClick={() => { updateCustomer(selectedCustomer.id, { status: 'suspended' }); setShowViewDialog(false); }}>
+                    <WifiOff className="h-4 w-4 mr-2" />
+                    Disable
+                  </Button>
+                )}
+                {hasPermission('customer_recharge') && (
                   <Button onClick={() => { setShowViewDialog(false); openRechargeDialog(selectedCustomer); }}>
                     <RotateCcw className="h-4 w-4 mr-2" />
                     Recharge
                   </Button>
                 )}
-                {reseller?.can_edit_customers && (
+                {hasPermission('customer_edit') && (
                   <Button variant="outline" onClick={() => { setShowViewDialog(false); openEditDialog(selectedCustomer); }}>
                     <Edit className="h-4 w-4 mr-2" />
                     Edit
