@@ -76,6 +76,7 @@ import CustomDomain from "./pages/ISP/CustomDomain";
 import ISPCampaignManagement from "./pages/ISP/CampaignManagement";
 import CustomerTypes from "./pages/ISP/CustomerTypes";
 import RechargeHistory from "./pages/ISP/RechargeHistory";
+import BandwidthManagement from "./pages/ISP/BandwidthManagement";
 
 // Customer Portal Pages
 import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
@@ -490,6 +491,15 @@ const App = () => (
                 <ProtectedRoute>
                   <TenantAccessGuard>
                     <Transactions />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/bandwidth" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_bandwidth_management" moduleName="Bandwidth Management">
+                      <BandwidthManagement />
+                    </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
