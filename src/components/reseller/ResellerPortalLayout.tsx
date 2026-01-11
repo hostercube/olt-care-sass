@@ -8,13 +8,14 @@ import {
   LayoutDashboard, Users, UserPlus, Wallet, ArrowRightLeft, 
   Settings, LogOut, Menu, ChevronRight, ReceiptText, UserCog
 } from 'lucide-react';
-import type { Reseller } from '@/types/reseller';
+import type { Reseller, ResellerPermissionKey } from '@/types/reseller';
 import { RESELLER_ROLE_LABELS } from '@/types/reseller';
 
 interface ResellerPortalLayoutProps {
   children: React.ReactNode;
   reseller: Reseller | null;
   onLogout: () => void;
+  hasPermission?: (permission: ResellerPermissionKey) => boolean;
 }
 
 interface NavItem {
