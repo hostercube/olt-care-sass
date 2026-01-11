@@ -30,8 +30,8 @@ export function useAreas() {
         .select('*')
         .order('name', { ascending: true });
 
-      // CRITICAL: Always filter by tenant_id for non-super-admins
-      if (!isSuperAdmin && tenantId) {
+      // Always scope by tenant when tenantId is known (including super admin tenant/impersonation views).
+      if (tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
 

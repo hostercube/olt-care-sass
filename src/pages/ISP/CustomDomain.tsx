@@ -429,6 +429,38 @@ export default function CustomDomain() {
                       </div>
                     </div>
 
+                    {d.is_verified && (
+                      <div className="mt-3 rounded-lg border bg-muted/40 p-4">
+                        <p className="text-sm font-medium">After verification (very important)</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          If you visit <span className="font-medium">{d.subdomain ? `${d.subdomain}.` : ''}{d.domain}</span> and see
+                          <span className="font-medium"> “404 Not Found (nginx)”</span>, that means DNS is OK but your server is not serving
+                          this domain yet. You must add the domain to your web server (Nginx/Apache) as a <span className="font-medium">server_name</span>
+                          and point it to your <span className="font-medium">dist</span> folder.
+                        </p>
+
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-muted-foreground">Example Nginx server block (copy & edit):</p>
+                          <pre className="overflow-x-auto rounded-md bg-background p-3 text-[11px] leading-5">
+{`server {
+  listen 80;
+  server_name ${d.subdomain ? `${d.subdomain}.` : ''}${d.domain};
+
+  root /var/www/oltapp.isppoint.com/dist;
+  index index.html;
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
+`}</pre>
+                          <p className="text-xs text-muted-foreground">
+                            After updating your server config: reload Nginx, then try opening the domain again.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     {!d.is_verified && (
                       <div className="p-4 bg-muted rounded-lg space-y-3">
                         <div>
