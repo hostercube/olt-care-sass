@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { Reseller, ResellerTransaction } from '@/types/reseller';
+import type { Reseller, ResellerTransaction, ResellerRoleDefinition, ResellerPermissionKey } from '@/types/reseller';
 
 interface ResellerSession {
   id: string;
@@ -53,6 +53,7 @@ export function useResellerPortal() {
   const navigate = useNavigate();
   const [session, setSession] = useState<ResellerSession | null>(null);
   const [reseller, setReseller] = useState<Reseller | null>(null);
+  const [resellerRole, setResellerRole] = useState<ResellerRoleDefinition | null>(null);
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [subResellers, setSubResellers] = useState<Reseller[]>([]);
@@ -62,6 +63,50 @@ export function useResellerPortal() {
   const [areas, setAreas] = useState<{ id: string; name: string }[]>([]);
   const [mikrotikRouters, setMikrotikRouters] = useState<{ id: string; name: string }[]>([]);
   const [olts, setOlts] = useState<{ id: string; name: string }[]>([]);
+
+  // Helper function to check permission from role or fallback to legacy flags
+  const hasPermission = useCallback((permission: ResellerPermissionKey): boolean => {
+    // First check role-based permissions if role exists
+    if (resellerRole?.permissions && resellerRole.permissions[permission] !== undefined) {
+      return !!resellerRole.permissions[permission];
+    }
+    
+    // Fallback to legacy permission flags on reseller object
+    if (!reseller) return false;
+    
+    const legacyMap: Partial<Record<ResellerPermissionKey, boolean>> = {
+      customer_view: true, // Always allowed for resellers
+      customer_create: reseller.can_add_customers,
+      customer_edit: reseller.can_edit_customers,
+      customer_delete: reseller.can_delete_customers,
+      customer_recharge: reseller.can_recharge_customers,
+      customer_status_change: reseller.can_edit_customers,
+      customer_view_profile: true,
+      customer_view_balance: true,
+      sub_customer_view: reseller.can_view_sub_customers,
+      sub_customer_edit: reseller.can_control_sub_customers,
+      sub_customer_recharge: reseller.can_control_sub_customers,
+      sub_customer_status_change: reseller.can_control_sub_customers,
+      sub_reseller_view: true,
+      sub_reseller_create: reseller.can_create_sub_reseller,
+      sub_reseller_edit: reseller.can_create_sub_reseller,
+      sub_reseller_delete: reseller.can_create_sub_reseller,
+      sub_reseller_balance_add: reseller.can_transfer_balance,
+      sub_reseller_balance_deduct: reseller.can_transfer_balance,
+      sub_reseller_view_customers: reseller.can_view_sub_customers,
+      balance_transfer: reseller.can_transfer_balance,
+      report_view: reseller.can_view_reports,
+      report_export: reseller.can_view_reports,
+      analytics_view: reseller.can_view_reports,
+      profile_edit: true,
+      password_change: true,
+      billing_view: true,
+      transaction_view: true,
+      wallet_view: true,
+    };
+    
+    return legacyMap[permission] ?? false;
+  }, [resellerRole, reseller]);
 
   // Check session on mount
   useEffect(() => {
@@ -108,6 +153,21 @@ export function useResellerPortal() {
 
       setReseller(resellerData as unknown as Reseller);
       setSession(prev => prev ? { ...prev, balance: (resellerData as any).balance } : null);
+
+      // Fetch role if role_id exists
+      if ((resellerData as any).role_id) {
+        const { data: roleData } = await supabase
+          .from('reseller_roles')
+          .select('*')
+          .eq('id', (resellerData as any).role_id)
+          .single();
+        
+        if (roleData) {
+          setResellerRole(roleData as unknown as ResellerRoleDefinition);
+        }
+      } else {
+        setResellerRole(null);
+      }
 
       // Fetch all related data in parallel
       await Promise.all([
@@ -359,7 +419,7 @@ export function useResellerPortal() {
 
   // Customer operations
   const createCustomer = async (data: Partial<Customer>): Promise<boolean> => {
-    if (!reseller?.can_add_customers) {
+    if (!hasPermission('customer_create')) {
       toast.error('You do not have permission to add customers');
       return false;
     }
@@ -388,7 +448,7 @@ export function useResellerPortal() {
   };
 
   const updateCustomer = async (id: string, data: Partial<Customer>): Promise<boolean> => {
-    if (!reseller?.can_edit_customers) {
+    if (!hasPermission('customer_edit')) {
       toast.error('You do not have permission to edit customers');
       return false;
     }
@@ -412,7 +472,7 @@ export function useResellerPortal() {
   };
 
   const rechargeCustomer = async (customerId: string, amount: number, months: number = 1): Promise<boolean> => {
-    if (!reseller?.can_recharge_customers) {
+    if (!hasPermission('customer_recharge')) {
       toast.error('You do not have permission to recharge customers');
       return false;
     }
@@ -501,13 +561,13 @@ export function useResellerPortal() {
 
   // Sub-reseller operations
   const createSubReseller = async (data: Partial<Reseller>): Promise<boolean> => {
-    if (!reseller?.can_create_sub_reseller) {
+    if (!hasPermission('sub_reseller_create')) {
       toast.error('You do not have permission to create sub-resellers');
       return false;
     }
 
     // Check limit
-    if (reseller.max_sub_resellers > 0 && subResellers.length >= reseller.max_sub_resellers) {
+    if (reseller && reseller.max_sub_resellers > 0 && subResellers.length >= reseller.max_sub_resellers) {
       toast.error(`You can only create up to ${reseller.max_sub_resellers} sub-resellers`);
       return false;
     }
@@ -565,13 +625,13 @@ export function useResellerPortal() {
   };
 
   const fundSubReseller = async (subResellerId: string, amount: number, description: string): Promise<boolean> => {
-    if (!reseller?.can_transfer_balance) {
+    if (!hasPermission('sub_reseller_balance_add')) {
       toast.error('You do not have permission to transfer balance');
       return false;
     }
 
-    if (reseller.balance < amount) {
-      toast.error(`Insufficient balance. Available: ৳${reseller.balance.toLocaleString()}`);
+    if (!reseller || reseller.balance < amount) {
+      toast.error(`Insufficient balance. Available: ৳${reseller?.balance.toLocaleString() || 0}`);
       return false;
     }
 
@@ -632,8 +692,8 @@ export function useResellerPortal() {
   };
 
   const deductSubReseller = async (subResellerId: string, amount: number, description: string): Promise<boolean> => {
-    if (!reseller?.can_transfer_balance) {
-      toast.error('You do not have permission to transfer balance');
+    if (!hasPermission('sub_reseller_balance_deduct')) {
+      toast.error('You do not have permission to deduct balance');
       return false;
     }
 
@@ -753,6 +813,7 @@ export function useResellerPortal() {
   return {
     session,
     reseller,
+    resellerRole,
     loading,
     customers,
     subResellers,
@@ -764,6 +825,7 @@ export function useResellerPortal() {
     olts,
     logout,
     refetch: fetchResellerData,
+    hasPermission,
     createCustomer,
     updateCustomer,
     rechargeCustomer,

@@ -18,6 +18,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import { useResellerSystem } from '@/hooks/useResellerSystem';
+import { useResellerRoles } from '@/hooks/useResellerRoles';
 import { useAreas } from '@/hooks/useAreas';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useLocationHierarchy } from '@/hooks/useLocationHierarchy';
@@ -45,6 +46,7 @@ export default function ResellersManagement() {
     deleteReseller, rechargeBalance, deductBalance, createBranch, updateBranch,
     getSubResellers, resetPassword, generateImpersonationToken
   } = useResellerSystem();
+  const { roles: resellerRoles } = useResellerRoles();
   const { areas, refetch: refetchAreas } = useAreas();
   const { employees } = useEmployees();
   const { villages, unions, upazilas, districts } = useLocationHierarchy();
@@ -80,6 +82,7 @@ export default function ResellersManagement() {
     area_id: '',
     branch_id: '',
     parent_id: '',
+    role_id: '',
     commission_type: 'percentage' as 'percentage' | 'flat',
     commission_value: '',
     customer_rate: '',
@@ -183,6 +186,7 @@ export default function ResellersManagement() {
       area_id: '',
       branch_id: '',
       parent_id: '',
+      role_id: '',
       commission_type: 'percentage',
       commission_value: '',
       customer_rate: '',
@@ -217,6 +221,7 @@ export default function ResellersManagement() {
       area_id: reseller.area_id || '',
       branch_id: reseller.branch_id || '',
       parent_id: reseller.parent_id || '',
+      role_id: (reseller as any).role_id || '',
       commission_type: reseller.commission_type,
       commission_value: reseller.commission_value?.toString() || '',
       customer_rate: reseller.customer_rate?.toString() || '',
@@ -312,6 +317,7 @@ export default function ResellersManagement() {
         area_id: resolvedAreaId,
         branch_id: formData.branch_id || null,
         parent_id: formData.parent_id || null,
+        role_id: formData.role_id || null,
         commission_type: formData.commission_type,
         commission_value: parseFloat(formData.commission_value) || 0,
         customer_rate: parseFloat(formData.customer_rate) || 0,
@@ -786,7 +792,7 @@ export default function ResellersManagement() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Parent Reseller</Label>
                 <Select
@@ -801,6 +807,25 @@ export default function ResellersManagement() {
                     {parentOptions.map((reseller) => (
                       <SelectItem key={reseller.id} value={reseller.id}>
                         {reseller.name} ({RESELLER_ROLE_LABELS[reseller.role]})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select
+                  value={formData.role_id}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, role_id: value === 'none' ? '' : value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Role (Use Legacy Permissions)</SelectItem>
+                    {resellerRoles.filter(r => r.is_active).map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name} ({role.role_type})
                       </SelectItem>
                     ))}
                   </SelectContent>
