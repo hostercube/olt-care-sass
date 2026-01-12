@@ -78,19 +78,19 @@ interface AutomationLog {
 }
 
 const RULE_TYPES = [
-  { value: 'expiry_warning', label: 'Expiry Warning', description: 'Notify before expiry' },
-  { value: 'auto_disable', label: 'Auto Disable', description: 'Disable expired customers' },
-  { value: 'auto_enable', label: 'Auto Enable', description: 'Enable on payment' },
-  { value: 'due_reminder', label: 'Due Reminder', description: 'Send payment reminder' },
-  { value: 'overdue_block', label: 'Overdue Block', description: 'Block overdue customers' },
+  { value: 'auto_disable', label: 'অটো ডিজেবল', description: 'মেয়াদ উত্তীর্ণ কাস্টমার ডিজেবল' },
+  { value: 'auto_enable', label: 'অটো এনাবল', description: 'পেমেন্টে কাস্টমার এনাবল' },
+  { value: 'auto_bill', label: 'অটো বিল', description: 'স্বয়ংক্রিয় বিল তৈরি' },
+  { value: 'reminder', label: 'রিমাইন্ডার', description: 'SMS/Email রিমাইন্ডার পাঠান' },
 ];
 
 const ACTIONS = [
-  { value: 'disable_pppoe', label: 'Disable PPPoE', description: 'Disconnect user from MikroTik' },
-  { value: 'enable_pppoe', label: 'Enable PPPoE', description: 'Enable user on MikroTik' },
-  { value: 'send_sms', label: 'Send SMS', description: 'Send SMS notification' },
-  { value: 'send_email', label: 'Send Email', description: 'Send email notification' },
-  { value: 'update_status', label: 'Update Status', description: 'Change customer status' },
+  { value: 'disable_pppoe', label: 'PPPoE ডিজেবল', description: 'MikroTik থেকে সংযোগ বিচ্ছিন্ন' },
+  { value: 'enable_pppoe', label: 'PPPoE এনাবল', description: 'MikroTik এ সংযোগ চালু' },
+  { value: 'send_sms', label: 'SMS পাঠান', description: 'SMS নোটিফিকেশন পাঠান' },
+  { value: 'send_email', label: 'Email পাঠান', description: 'Email নোটিফিকেশন পাঠান' },
+  { value: 'update_status', label: 'স্ট্যাটাস আপডেট', description: 'কাস্টমার স্ট্যাটাস পরিবর্তন' },
+  { value: 'generate_bill', label: 'বিল তৈরি', description: 'কাস্টমারের বিল তৈরি করুন' },
 ];
 
 export default function BillingAutomation() {
