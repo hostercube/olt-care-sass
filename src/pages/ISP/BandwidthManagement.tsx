@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { DatePicker, CompactDatePicker } from '@/components/ui/date-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -115,6 +116,20 @@ function BandwidthManagementContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState({ from: format(startOfMonth(new Date()), 'yyyy-MM-dd'), to: format(endOfMonth(new Date()), 'yyyy-MM-dd') });
+  
+  // Pagination states
+  const [purchasePage, setPurchasePage] = useState(1);
+  const [purchasePageSize, setPurchasePageSize] = useState(20);
+  const [salesPage, setSalesPage] = useState(1);
+  const [salesPageSize, setSalesPageSize] = useState(20);
+  const [collectionsPage, setCollectionsPage] = useState(1);
+  const [collectionsPageSize, setCollectionsPageSize] = useState(20);
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const [paymentsPageSize, setPaymentsPageSize] = useState(20);
+  const [providersPage, setProvidersPage] = useState(1);
+  const [providersPageSize, setProvidersPageSize] = useState(20);
+  const [clientsPage, setClientsPage] = useState(1);
+  const [clientsPageSize, setClientsPageSize] = useState(20);
   
   // Dialog states
   const [categoryDialog, setCategoryDialog] = useState(false);
@@ -256,6 +271,37 @@ function BandwidthManagementContent() {
     [salesInvoices, search, dateFilter]
   );
 
+  // Paginated data
+  const paginatedProviders = useMemo(() => 
+    filteredProviders.slice((providersPage - 1) * providersPageSize, providersPage * providersPageSize),
+    [filteredProviders, providersPage, providersPageSize]
+  );
+  
+  const paginatedClients = useMemo(() => 
+    filteredClients.slice((clientsPage - 1) * clientsPageSize, clientsPage * clientsPageSize),
+    [filteredClients, clientsPage, clientsPageSize]
+  );
+  
+  const paginatedPurchaseBills = useMemo(() => 
+    filteredPurchaseBills.slice((purchasePage - 1) * purchasePageSize, purchasePage * purchasePageSize),
+    [filteredPurchaseBills, purchasePage, purchasePageSize]
+  );
+  
+  const paginatedSalesInvoices = useMemo(() => 
+    filteredSalesInvoices.slice((salesPage - 1) * salesPageSize, salesPage * salesPageSize),
+    [filteredSalesInvoices, salesPage, salesPageSize]
+  );
+  
+  const paginatedCollections = useMemo(() => 
+    billCollections.slice((collectionsPage - 1) * collectionsPageSize, collectionsPage * collectionsPageSize),
+    [billCollections, collectionsPage, collectionsPageSize]
+  );
+  
+  const paginatedPayments = useMemo(() => 
+    providerPayments.slice((paymentsPage - 1) * paymentsPageSize, paymentsPage * paymentsPageSize),
+    [providerPayments, paymentsPage, paymentsPageSize]
+  );
+
   // Calculate profit/loss stats
   const profitLossStats = useMemo(() => {
     const totalPurchases = purchaseBills.reduce((sum, b) => sum + b.total_amount, 0);
@@ -354,6 +400,7 @@ function BandwidthManagementContent() {
     const subtotal = salesInvoiceItems.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
     const vatAmount = salesInvoiceItems.reduce((sum, item) => sum + item.vat_amount, 0);
     const totalAmount = subtotal + vatAmount - salesInvoiceForm.discount;
+    const dueAmount = totalAmount - salesInvoiceForm.paid_amount;
     
     await createSalesInvoice({
       client_id: salesInvoiceForm.client_id || null,
@@ -363,9 +410,9 @@ function BandwidthManagementContent() {
       vat_amount: vatAmount,
       discount: salesInvoiceForm.discount,
       total_amount: totalAmount,
-      paid_amount: 0,
-      due_amount: totalAmount,
-      payment_status: 'due',
+      paid_amount: salesInvoiceForm.paid_amount,
+      due_amount: dueAmount,
+      payment_status: dueAmount <= 0 ? 'paid' : salesInvoiceForm.paid_amount > 0 ? 'partial' : 'due',
       remarks: salesInvoiceForm.remarks || null,
     }, salesInvoiceItems);
     
@@ -1115,7 +1162,7 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProviders.map((provider) => (
+                  {paginatedProviders.map((provider) => (
                     <TableRow key={provider.id}>
                       <TableCell className="font-medium">{provider.name}</TableCell>
                       <TableCell>{provider.company_name || '-'}</TableCell>
@@ -1146,6 +1193,13 @@ function BandwidthManagementContent() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={filteredProviders.length}
+                currentPage={providersPage}
+                pageSize={providersPageSize}
+                onPageChange={setProvidersPage}
+                onPageSizeChange={setProvidersPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1211,7 +1265,7 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPurchaseBills.map((bill) => (
+                  {paginatedPurchaseBills.map((bill) => (
                     <TableRow key={bill.id}>
                       <TableCell className="font-medium">{bill.invoice_number}</TableCell>
                       <TableCell>{bill.provider?.name || '-'}</TableCell>
@@ -1247,6 +1301,13 @@ function BandwidthManagementContent() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={filteredPurchaseBills.length}
+                currentPage={purchasePage}
+                pageSize={purchasePageSize}
+                onPageChange={setPurchasePage}
+                onPageSizeChange={setPurchasePageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1285,7 +1346,7 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredClients.map((client) => (
+                  {paginatedClients.map((client) => (
                     <TableRow key={client.id}>
                       <TableCell className="font-medium">{client.name}</TableCell>
                       <TableCell>{client.company_name || '-'}</TableCell>
@@ -1316,6 +1377,13 @@ function BandwidthManagementContent() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={filteredClients.length}
+                currentPage={clientsPage}
+                pageSize={clientsPageSize}
+                onPageChange={setClientsPage}
+                onPageSizeChange={setClientsPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1382,7 +1450,7 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSalesInvoices.map((invoice) => (
+                  {paginatedSalesInvoices.map((invoice) => (
                     <TableRow key={invoice.id}>
                       <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                       <TableCell>{invoice.client?.name || '-'}</TableCell>
@@ -1419,6 +1487,13 @@ function BandwidthManagementContent() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={filteredSalesInvoices.length}
+                currentPage={salesPage}
+                pageSize={salesPageSize}
+                onPageChange={setSalesPage}
+                onPageSizeChange={setSalesPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1449,7 +1524,7 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {billCollections.map((collection) => (
+                  {paginatedCollections.map((collection) => (
                     <TableRow key={collection.id}>
                       <TableCell className="font-medium">{collection.receipt_number}</TableCell>
                       <TableCell>{collection.client?.name || '-'}</TableCell>
@@ -1471,6 +1546,13 @@ function BandwidthManagementContent() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={billCollections.length}
+                currentPage={collectionsPage}
+                pageSize={collectionsPageSize}
+                onPageChange={setCollectionsPage}
+                onPageSizeChange={setCollectionsPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1501,7 +1583,7 @@ function BandwidthManagementContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {providerPayments.map((payment) => (
+                  {paginatedPayments.map((payment) => (
                     <TableRow key={payment.id}>
                       <TableCell className="font-medium">{payment.payment_number}</TableCell>
                       <TableCell>{payment.provider?.name || '-'}</TableCell>
@@ -1523,6 +1605,13 @@ function BandwidthManagementContent() {
                   )}
                 </TableBody>
               </Table>
+              <TablePagination
+                totalItems={providerPayments.length}
+                currentPage={paymentsPage}
+                pageSize={paymentsPageSize}
+                onPageChange={setPaymentsPage}
+                onPageSizeChange={setPaymentsPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1926,7 +2015,7 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-[140px_50px_40px_70px_40px_82px_82px_35px_80px_28px] gap-1.5 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
+              <div className="hidden lg:grid lg:grid-cols-[minmax(120px,1fr)_60px_50px_80px_50px_90px_90px_45px_90px_36px] gap-2 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
                 <div>Item</div>
                 <div className="text-center">Unit</div>
                 <div className="text-center">Qty</div>
@@ -1943,7 +2032,7 @@ function BandwidthManagementContent() {
                 {purchaseBillItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-[140px_50px_40px_70px_40px_82px_82px_35px_80px_28px] gap-1.5 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[minmax(120px,1fr)_60px_50px_80px_50px_90px_90px_45px_90px_36px] gap-2 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -2240,7 +2329,7 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-[140px_50px_40px_70px_40px_82px_82px_35px_80px_28px] gap-1.5 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
+              <div className="hidden lg:grid lg:grid-cols-[minmax(120px,1fr)_60px_50px_80px_50px_90px_90px_45px_90px_36px] gap-2 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
                 <div>Item</div>
                 <div className="text-center">Unit</div>
                 <div className="text-center">Qty</div>
@@ -2257,7 +2346,7 @@ function BandwidthManagementContent() {
                 {salesInvoiceItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-[140px_50px_40px_70px_40px_82px_82px_35px_80px_28px] gap-1.5 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[minmax(120px,1fr)_60px_50px_80px_50px_90px_90px_45px_90px_36px] gap-2 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
