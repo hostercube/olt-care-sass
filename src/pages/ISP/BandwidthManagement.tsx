@@ -175,12 +175,21 @@ function BandwidthManagementContent() {
   const [editingItem, setEditingItem] = useState<BandwidthItem | null>(null);
   const [editingProvider, setEditingProvider] = useState<BandwidthProvider | null>(null);
   const [editingClient, setEditingClient] = useState<BandwidthClient | null>(null);
+  const [editingCollection, setEditingCollection] = useState<any>(null);
+  const [editingPayment, setEditingPayment] = useState<any>(null);
+  const [viewClientDetails, setViewClientDetails] = useState<BandwidthClient | null>(null);
   
   // Form data
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '', is_active: true });
   const [itemForm, setItemForm] = useState({ name: '', description: '', category_id: '', unit: 'Mbps', unit_price: 0, is_active: true });
   const [providerForm, setProviderForm] = useState({ name: '', company_name: '', email: '', phone: '', address: '', contact_person: '', account_number: '', bank_details: '', notes: '' });
-  const [clientForm, setClientForm] = useState({ name: '', company_name: '', email: '', phone: '', address: '', contact_person: '', account_number: '', bank_details: '', notes: '' });
+  const [clientForm, setClientForm] = useState({ 
+    name: '', company_name: '', email: '', phone: '', mobile: '', address: '', 
+    contact_person: '', account_number: '', bank_details: '', notes: '', 
+    status: 'active', reference_by: '', nttn_info: '', vlan_name: '', vlan_ip: '', 
+    scr_link_id: '', activation_date: '', ip_address: '', pop_name: '',
+    username: '', password: ''
+  });
   
   // Purchase Bill form
   const [purchaseBillForm, setPurchaseBillForm] = useState({
@@ -422,8 +431,70 @@ function BandwidthManagementContent() {
       await createClient(clientForm);
     }
     setClientDialog(false);
-    setClientForm({ name: '', company_name: '', email: '', phone: '', address: '', contact_person: '', account_number: '', bank_details: '', notes: '' });
+    setClientForm({ 
+      name: '', company_name: '', email: '', phone: '', mobile: '', address: '', 
+      contact_person: '', account_number: '', bank_details: '', notes: '', 
+      status: 'active', reference_by: '', nttn_info: '', vlan_name: '', vlan_ip: '', 
+      scr_link_id: '', activation_date: '', ip_address: '', pop_name: '',
+      username: '', password: ''
+    });
     setEditingClient(null);
+  };
+
+  const openEditClient = (client: BandwidthClient) => {
+    setEditingClient(client);
+    setClientForm({ 
+      name: client.name, 
+      company_name: client.company_name || '', 
+      email: client.email || '', 
+      phone: client.phone || '', 
+      mobile: (client as any).mobile || '',
+      address: client.address || '', 
+      contact_person: client.contact_person || '', 
+      account_number: client.account_number || '', 
+      bank_details: client.bank_details || '', 
+      notes: client.notes || '',
+      status: (client as any).status || 'active',
+      reference_by: (client as any).reference_by || '',
+      nttn_info: (client as any).nttn_info || '',
+      vlan_name: (client as any).vlan_name || '',
+      vlan_ip: (client as any).vlan_ip || '',
+      scr_link_id: (client as any).scr_link_id || '',
+      activation_date: (client as any).activation_date || '',
+      ip_address: (client as any).ip_address || '',
+      pop_name: (client as any).pop_name || '',
+      username: (client as any).username || '',
+      password: ''
+    });
+    setClientDialog(true);
+  };
+
+  const openEditCollection = (collection: any) => {
+    setEditingCollection(collection);
+    setCollectionForm({
+      client_id: collection.client_id,
+      invoice_id: collection.invoice_id || '',
+      collection_date: collection.collection_date,
+      amount: collection.amount,
+      payment_method: collection.payment_method || 'cash',
+      received_by: collection.received_by || '',
+      remarks: collection.remarks || '',
+    });
+    setCollectionDialog(true);
+  };
+
+  const openEditPayment = (payment: any) => {
+    setEditingPayment(payment);
+    setProviderPaymentForm({
+      provider_id: payment.provider_id,
+      bill_id: payment.bill_id || '',
+      payment_date: payment.payment_date,
+      amount: payment.amount,
+      payment_method: payment.payment_method || 'bank_transfer',
+      paid_by: payment.paid_by || '',
+      remarks: payment.remarks || '',
+    });
+    setProviderPaymentDialog(true);
   };
 
   const handleSavePurchaseBill = async () => {
@@ -1384,7 +1455,7 @@ function BandwidthManagementContent() {
                 <Button variant="outline" onClick={() => exportCSV('clients')}>
                   <Download className="mr-2 h-4 w-4" /> Export
                 </Button>
-                <Button onClick={() => { setEditingClient(null); setClientForm({ name: '', company_name: '', email: '', phone: '', address: '', contact_person: '', account_number: '', bank_details: '', notes: '' }); setClientDialog(true); }}>
+                <Button onClick={() => { setEditingClient(null); setClientForm({ name: '', company_name: '', email: '', phone: '', mobile: '', address: '', contact_person: '', account_number: '', bank_details: '', notes: '', status: 'active', reference_by: '', nttn_info: '', vlan_name: '', vlan_ip: '', scr_link_id: '', activation_date: '', ip_address: '', pop_name: '', username: '', password: '' }); setClientDialog(true); }}>
                   <Plus className="mr-2 h-4 w-4" /> Add Client
                 </Button>
               </div>
@@ -1413,11 +1484,14 @@ function BandwidthManagementContent() {
                           ৳{(client.total_receivable || 0).toLocaleString()}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => setViewClientLedger(client)} title="View Ledger">
+                      <TableCell className="text-right space-x-1">
+                        <Button variant="ghost" size="icon" onClick={() => setViewClientDetails(client)} title="View Details">
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingClient(client); setClientForm({ name: client.name, company_name: client.company_name || '', email: client.email || '', phone: client.phone || '', address: client.address || '', contact_person: client.contact_person || '', account_number: client.account_number || '', bank_details: client.bank_details || '', notes: client.notes || '' }); setClientDialog(true); }}>
+                        <Button variant="ghost" size="icon" onClick={() => setViewClientLedger(client)} title="View Ledger">
+                          <Wallet className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => openEditClient(client)} title="Edit">
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, type: 'client', id: client.id, name: client.name })}>
@@ -1656,7 +1730,10 @@ function BandwidthManagementContent() {
                       <TableCell>৳{collection.amount.toLocaleString()}</TableCell>
                       <TableCell className="capitalize">{collection.payment_method?.replace('_', ' ') || '-'}</TableCell>
                       <TableCell>{collection.received_by || '-'}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-1">
+                        <Button variant="ghost" size="icon" onClick={() => openEditCollection(collection)} title="Edit">
+                          <Edit className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, type: 'collection', id: collection.id, name: collection.receipt_number })}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -1783,7 +1860,10 @@ function BandwidthManagementContent() {
                       <TableCell>৳{payment.amount.toLocaleString()}</TableCell>
                       <TableCell className="capitalize">{payment.payment_method?.replace('_', ' ') || '-'}</TableCell>
                       <TableCell>{payment.paid_by || '-'}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-1">
+                        <Button variant="ghost" size="icon" onClick={() => openEditPayment(payment)} title="Edit">
+                          <Edit className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, type: 'providerPayment', id: payment.id, name: payment.payment_number })}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -2102,63 +2182,234 @@ function BandwidthManagementContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Client Dialog */}
+      {/* Client Dialog - Multi-Step */}
       <Dialog open={clientDialog} onOpenChange={setClientDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>{editingClient ? 'Edit Client' : 'Add Client'}</DialogTitle>
-            <DialogDescription>Manage bandwidth clients</DialogDescription>
+            <DialogDescription>Manage bandwidth client information</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Name *</Label>
-                <Input value={clientForm.name} onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })} placeholder="Contact name" />
+          <ScrollArea className="max-h-[70vh] pr-4">
+            <div className="space-y-6 py-4">
+              {/* Customer Information Section */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-sm flex items-center gap-2 text-primary border-b pb-2">
+                  <Users className="h-4 w-4" /> Customer Information
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Customer Name *</Label>
+                    <Input value={clientForm.name} onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })} placeholder="Customer name" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Company Name</Label>
+                    <Input value={clientForm.company_name} onChange={(e) => setClientForm({ ...clientForm, company_name: e.target.value })} placeholder="Company name" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Contact Person *</Label>
+                    <Input value={clientForm.contact_person} onChange={(e) => setClientForm({ ...clientForm, contact_person: e.target.value })} placeholder="Contact person" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Email</Label>
+                    <Input type="email" value={clientForm.email} onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })} placeholder="Email address" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Mobile Number *</Label>
+                    <Input value={clientForm.mobile} onChange={(e) => setClientForm({ ...clientForm, mobile: e.target.value })} placeholder="Mobile number" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Phone Number</Label>
+                    <Input value={clientForm.phone} onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })} placeholder="Phone number" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Status *</Label>
+                    <Select value={clientForm.status} onValueChange={(v) => setClientForm({ ...clientForm, status: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                        <SelectItem value="suspended">Suspended</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Reference By</Label>
+                    <Input value={clientForm.reference_by} onChange={(e) => setClientForm({ ...clientForm, reference_by: e.target.value })} placeholder="Reference by" />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Address</Label>
+                  <Textarea value={clientForm.address} onChange={(e) => setClientForm({ ...clientForm, address: e.target.value })} placeholder="Full address" rows={2} />
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label>Company Name</Label>
-                <Input value={clientForm.company_name} onChange={(e) => setClientForm({ ...clientForm, company_name: e.target.value })} placeholder="Company name" />
+
+              {/* Transmission Information Section */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-sm flex items-center gap-2 text-primary border-b pb-2">
+                  <RefreshCw className="h-4 w-4" /> Transmission Information
+                </h4>
+                <div className="grid gap-2">
+                  <Label>NTTN Info</Label>
+                  <Input value={clientForm.nttn_info} onChange={(e) => setClientForm({ ...clientForm, nttn_info: e.target.value })} placeholder="NTTN information" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>VLAN Name</Label>
+                    <Input value={clientForm.vlan_name} onChange={(e) => setClientForm({ ...clientForm, vlan_name: e.target.value })} placeholder="VLAN name" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>VLAN IP</Label>
+                    <Input value={clientForm.vlan_ip} onChange={(e) => setClientForm({ ...clientForm, vlan_ip: e.target.value })} placeholder="VLAN IP address" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>SCR or Link ID</Label>
+                    <Input value={clientForm.scr_link_id} onChange={(e) => setClientForm({ ...clientForm, scr_link_id: e.target.value })} placeholder="SCR or Link ID" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Activation Date</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-10", !clientForm.activation_date && "text-muted-foreground")}>
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {clientForm.activation_date ? format(new Date(clientForm.activation_date), "dd MMM yyyy") : "Select date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={clientForm.activation_date ? new Date(clientForm.activation_date) : undefined} onSelect={(date) => setClientForm({ ...clientForm, activation_date: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>IP Address</Label>
+                    <Input value={clientForm.ip_address} onChange={(e) => setClientForm({ ...clientForm, ip_address: e.target.value })} placeholder="IP Address" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>POP Name (Last Mile)</Label>
+                    <Input value={clientForm.pop_name} onChange={(e) => setClientForm({ ...clientForm, pop_name: e.target.value })} placeholder="POP name" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Login Information Section */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-sm flex items-center gap-2 text-primary border-b pb-2">
+                  <CreditCard className="h-4 w-4" /> Login & Payment Information
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>User Name</Label>
+                    <Input value={clientForm.username} onChange={(e) => setClientForm({ ...clientForm, username: e.target.value })} placeholder="Login username" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Password {!editingClient && '*'}</Label>
+                    <Input type="password" value={clientForm.password} onChange={(e) => setClientForm({ ...clientForm, password: e.target.value })} placeholder={editingClient ? "Leave blank to keep existing" : "Password"} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Account Number</Label>
+                    <Input value={clientForm.account_number} onChange={(e) => setClientForm({ ...clientForm, account_number: e.target.value })} placeholder="Account number" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Bank Details</Label>
+                    <Input value={clientForm.bank_details} onChange={(e) => setClientForm({ ...clientForm, bank_details: e.target.value })} placeholder="Bank details" />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Notes</Label>
+                  <Textarea value={clientForm.notes} onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })} placeholder="Additional notes" rows={2} />
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Phone</Label>
-                <Input value={clientForm.phone} onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })} placeholder="Phone number" />
-              </div>
-              <div className="grid gap-2">
-                <Label>Email</Label>
-                <Input value={clientForm.email} onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })} placeholder="Email" />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Address</Label>
-              <Textarea value={clientForm.address} onChange={(e) => setClientForm({ ...clientForm, address: e.target.value })} placeholder="Address" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Contact Person</Label>
-                <Input value={clientForm.contact_person} onChange={(e) => setClientForm({ ...clientForm, contact_person: e.target.value })} placeholder="Contact person" />
-              </div>
-              <div className="grid gap-2">
-                <Label>Account Number</Label>
-                <Input value={clientForm.account_number} onChange={(e) => setClientForm({ ...clientForm, account_number: e.target.value })} placeholder="Account number" />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Bank Details</Label>
-              <Textarea value={clientForm.bank_details} onChange={(e) => setClientForm({ ...clientForm, bank_details: e.target.value })} placeholder="Bank details" />
-            </div>
-            <div className="grid gap-2">
-              <Label>Notes</Label>
-              <Textarea value={clientForm.notes} onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })} placeholder="Notes" />
-            </div>
-          </div>
+          </ScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setClientDialog(false)}>Cancel</Button>
-            <Button onClick={handleSaveClient} disabled={!clientForm.name}>Save</Button>
+            <Button onClick={handleSaveClient} disabled={!clientForm.name}>Save Client</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Client Details Sheet */}
+      <Sheet open={!!viewClientDetails} onOpenChange={() => setViewClientDetails(null)}>
+        <SheetContent className="w-[600px] sm:max-w-[600px]">
+          <SheetHeader>
+            <SheetTitle>Client Details</SheetTitle>
+            <SheetDescription>{viewClientDetails?.name} - {viewClientDetails?.company_name}</SheetDescription>
+          </SheetHeader>
+          {viewClientDetails && (
+            <ScrollArea className="h-[calc(100vh-120px)] pr-4">
+              <div className="mt-6 space-y-6">
+                {/* Customer Info */}
+                <Card>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm flex items-center gap-2"><Users className="h-4 w-4" /> Customer Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-3 text-sm">
+                    <div><span className="text-muted-foreground">Name:</span> <strong>{viewClientDetails.name}</strong></div>
+                    <div><span className="text-muted-foreground">Company:</span> <strong>{viewClientDetails.company_name || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Contact Person:</span> <strong>{viewClientDetails.contact_person || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Email:</span> <strong>{viewClientDetails.email || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Mobile:</span> <strong>{(viewClientDetails as any).mobile || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Phone:</span> <strong>{viewClientDetails.phone || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Status:</span> <Badge variant={(viewClientDetails as any).status === 'active' ? 'default' : 'secondary'}>{(viewClientDetails as any).status || 'active'}</Badge></div>
+                    <div><span className="text-muted-foreground">Reference By:</span> <strong>{(viewClientDetails as any).reference_by || '-'}</strong></div>
+                    <div className="col-span-2"><span className="text-muted-foreground">Address:</span> <strong>{viewClientDetails.address || '-'}</strong></div>
+                  </CardContent>
+                </Card>
+
+                {/* Transmission Info */}
+                <Card>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm flex items-center gap-2"><RefreshCw className="h-4 w-4" /> Transmission Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-3 text-sm">
+                    <div><span className="text-muted-foreground">NTTN Info:</span> <strong>{(viewClientDetails as any).nttn_info || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">VLAN Name:</span> <strong>{(viewClientDetails as any).vlan_name || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">VLAN IP:</span> <strong>{(viewClientDetails as any).vlan_ip || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">SCR/Link ID:</span> <strong>{(viewClientDetails as any).scr_link_id || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Activation Date:</span> <strong>{(viewClientDetails as any).activation_date ? format(new Date((viewClientDetails as any).activation_date), 'dd/MM/yyyy') : '-'}</strong></div>
+                    <div><span className="text-muted-foreground">IP Address:</span> <strong>{(viewClientDetails as any).ip_address || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">POP Name:</span> <strong>{(viewClientDetails as any).pop_name || '-'}</strong></div>
+                  </CardContent>
+                </Card>
+
+                {/* Financial Summary */}
+                <Card>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm flex items-center gap-2"><Wallet className="h-4 w-4" /> Financial Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-3 text-sm">
+                    <div><span className="text-muted-foreground">Total Receivable:</span> <strong className="text-orange-600">৳{(viewClientDetails.total_receivable || 0).toLocaleString()}</strong></div>
+                    <div><span className="text-muted-foreground">Account Number:</span> <strong>{viewClientDetails.account_number || '-'}</strong></div>
+                    <div className="col-span-2"><span className="text-muted-foreground">Bank Details:</span> <strong>{viewClientDetails.bank_details || '-'}</strong></div>
+                    <div className="col-span-2"><span className="text-muted-foreground">Notes:</span> <strong>{viewClientDetails.notes || '-'}</strong></div>
+                  </CardContent>
+                </Card>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => { setViewClientDetails(null); setViewClientLedger(viewClientDetails); }}>
+                    <Wallet className="mr-2 h-4 w-4" /> View Ledger
+                  </Button>
+                  <Button className="flex-1" onClick={() => { setViewClientDetails(null); openEditClient(viewClientDetails); }}>
+                    <Edit className="mr-2 h-4 w-4" /> Edit Client
+                  </Button>
+                </div>
+              </div>
+            </ScrollArea>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Purchase Bill Dialog - Responsive */}
       <Dialog open={purchaseBillDialog} onOpenChange={setPurchaseBillDialog}>
