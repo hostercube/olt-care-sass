@@ -57,7 +57,7 @@ export function usePayments(tenantId?: string) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // First get the payment to find invoice_number
+      // First get the payment to find invoice_number and tenant_id
       const { data: payment, error: fetchError } = await supabase
         .from('payments')
         .select('*')
@@ -80,11 +80,31 @@ export function usePayments(tenantId?: string) {
 
       if (error) throw error;
 
+      // CRITICAL: Update tenant status from 'pending' to 'active' when payment is verified
+      if (payment.tenant_id) {
+        const { data: tenantData } = await supabase
+          .from('tenants')
+          .select('status')
+          .eq('id', payment.tenant_id)
+          .single();
+        
+        // If tenant is pending or trial expired, activate them
+        if (tenantData && (tenantData.status === 'pending' || tenantData.status === 'trial')) {
+          await supabase
+            .from('tenants')
+            .update({ 
+              status: 'active',
+              trial_ends_at: null, // Clear trial since they paid
+            })
+            .eq('id', payment.tenant_id);
+        }
+      }
+
       // If payment has invoice_number, update invoice and subscription
       if (payment.invoice_number) {
         const { data: invoice } = await supabase
           .from('invoices')
-          .select('id, subscription_id')
+          .select('id, subscription_id, tenant_id')
           .eq('invoice_number', payment.invoice_number)
           .single();
 
@@ -130,6 +150,25 @@ export function usePayments(tenantId?: string) {
                   ends_at: newEndDate.toISOString(),
                 })
                 .eq('id', invoice.subscription_id);
+              
+              // Also update tenant status via invoice's tenant_id if not already done
+              if (invoice.tenant_id && invoice.tenant_id !== payment.tenant_id) {
+                const { data: tenantData } = await supabase
+                  .from('tenants')
+                  .select('status')
+                  .eq('id', invoice.tenant_id)
+                  .single();
+                
+                if (tenantData && (tenantData.status === 'pending' || tenantData.status === 'trial')) {
+                  await supabase
+                    .from('tenants')
+                    .update({ 
+                      status: 'active',
+                      trial_ends_at: null,
+                    })
+                    .eq('id', invoice.tenant_id);
+                }
+              }
             }
           }
         }

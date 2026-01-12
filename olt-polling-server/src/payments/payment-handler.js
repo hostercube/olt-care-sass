@@ -1082,7 +1082,28 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
     }
   }
 
-  // If successful payment for subscription
+  // CRITICAL: Always update tenant status to 'active' when payment is successful for subscription payments
+  if (isSuccess && payment.tenant_id && paymentFor !== 'customer_bill') {
+    // Check and update tenant status from 'pending' or 'trial' to 'active'
+    const { data: tenantData } = await supabase
+      .from('tenants')
+      .select('status')
+      .eq('id', payment.tenant_id)
+      .single();
+    
+    if (tenantData && (tenantData.status === 'pending' || tenantData.status === 'trial')) {
+      await supabase
+        .from('tenants')
+        .update({ 
+          status: 'active',
+          trial_ends_at: null, // Clear trial since they are now a paying customer
+        })
+        .eq('id', payment.tenant_id);
+      logger.info(`Tenant ${payment.tenant_id} status updated to active after successful payment`);
+    }
+  }
+
+  // If successful payment for subscription with invoice
   if (isSuccess && payment.invoice_number) {
     // Update invoice status by invoice number
     const { data: invoice } = await supabase
@@ -1132,18 +1153,6 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
               ends_at: newEndDate.toISOString(),
             })
             .eq('id', invoice.subscription_id);
-
-          // Also update tenant status to 'active' when payment is successful
-          if (payment.tenant_id) {
-            await supabase
-              .from('tenants')
-              .update({ 
-                status: 'active',
-                trial_ends_at: null, // Clear trial since they are now a paying customer
-              })
-              .eq('id', payment.tenant_id);
-            logger.info(`Tenant ${payment.tenant_id} status updated to active after payment`);
-          }
         }
       }
     }
