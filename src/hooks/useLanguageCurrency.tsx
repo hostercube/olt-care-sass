@@ -381,6 +381,8 @@ const translations: Record<string, Record<string, string>> = {
     
     // Communication
     sms_center: 'SMS Center',
+    sms_templates: 'SMS Templates',
+    email_templates: 'Email Templates',
     campaigns: 'Campaigns',
     all_gateways: 'All Gateways',
     
@@ -801,6 +803,8 @@ const translations: Record<string, Record<string, string>> = {
     
     // Communication
     sms_center: 'এসএমএস সেন্টার',
+    sms_templates: 'এসএমএস টেমপ্লেট',
+    email_templates: 'ইমেইল টেমপ্লেট',
     campaigns: 'ক্যাম্পেইন',
     all_gateways: 'সকল গেটওয়ে',
     
