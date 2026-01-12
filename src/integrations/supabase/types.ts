@@ -399,6 +399,70 @@ export type Database = {
           },
         ]
       }
+      bandwidth_client_rates: {
+        Row: {
+          client_id: string
+          created_at: string
+          effective_from: string | null
+          effective_to: string | null
+          id: string
+          is_active: boolean | null
+          item_id: string
+          notes: string | null
+          rate: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string
+          is_active?: boolean | null
+          item_id: string
+          notes?: string | null
+          rate?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string
+          is_active?: boolean | null
+          item_id?: string
+          notes?: string | null
+          rate?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bandwidth_client_rates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_client_rates_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "bandwidth_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bandwidth_client_rates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bandwidth_clients: {
         Row: {
           account_number: string | null
