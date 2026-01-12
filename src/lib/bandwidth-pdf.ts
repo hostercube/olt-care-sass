@@ -66,6 +66,7 @@ interface PDFOptions {
   companyAddress?: string;
   companyPhone?: string;
   companyEmail?: string;
+  companyLogo?: string;
 }
 
 // Calculate pro-rata amount based on date range
@@ -210,50 +211,52 @@ export function generatePurchaseBillPDF(bill: PurchaseBillData, options: PDFOpti
   
   const tableData = (bill.items || []).map((item, index) => {
     const daysInfo = item.from_date && item.to_date 
-      ? `\n${format(new Date(item.from_date), 'dd/MM')} - ${format(new Date(item.to_date), 'dd/MM')} (${getDaysCount(item.from_date, item.to_date)} days)`
+      ? `${format(new Date(item.from_date), 'dd/MM')} - ${format(new Date(item.to_date), 'dd/MM')} (${getDaysCount(item.from_date, item.to_date)}d)`
       : '';
     return [
       (index + 1).toString(),
-      item.item_name + daysInfo,
+      item.item_name,
       item.unit,
       item.quantity.toString(),
-      `৳${item.rate.toLocaleString()}`,
+      daysInfo,
+      `৳${item.rate.toLocaleString('en-IN')}`,
       item.vat_percent > 0 ? `${item.vat_percent}%` : '-',
-      `৳${item.total.toLocaleString()}`,
+      `৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
     ];
   });
   
   if (tableData.length === 0) {
-    tableData.push(['1', 'Bandwidth Service', '-', '1', `৳${bill.subtotal.toLocaleString()}`, '-', `৳${bill.subtotal.toLocaleString()}`]);
+    tableData.push(['1', 'Bandwidth Service', '-', '1', '-', `৳${bill.subtotal.toLocaleString('en-IN')}`, '-', `৳${bill.subtotal.toLocaleString('en-IN')}`]);
   }
   
   autoTable(doc, {
     startY: yPos,
-    head: [['#', 'Item / Description', 'Unit', 'Qty', 'Rate', 'VAT', 'Total']],
+    head: [['#', 'Item', 'Unit', 'Qty', 'Period', 'Rate/Mo', 'VAT', 'Total']],
     body: tableData,
     headStyles: {
       fillColor: primaryColor,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 9,
-      cellPadding: 4,
+      fontSize: 8,
+      cellPadding: 3,
     },
     bodyStyles: {
       textColor: textColor,
-      fontSize: 9,
-      cellPadding: 4,
+      fontSize: 8,
+      cellPadding: 3,
     },
     alternateRowStyles: {
       fillColor: [249, 250, 251],
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center' },
+      0: { cellWidth: 10, halign: 'center' },
       1: { cellWidth: 'auto' },
-      2: { cellWidth: 20, halign: 'center' },
-      3: { cellWidth: 15, halign: 'center' },
-      4: { cellWidth: 28, halign: 'right' },
-      5: { cellWidth: 18, halign: 'center' },
-      6: { cellWidth: 30, halign: 'right' },
+      2: { cellWidth: 18, halign: 'center' },
+      3: { cellWidth: 12, halign: 'center' },
+      4: { cellWidth: 38, halign: 'center' },
+      5: { cellWidth: 25, halign: 'right' },
+      6: { cellWidth: 15, halign: 'center' },
+      7: { cellWidth: 28, halign: 'right' },
     },
     margin: { left: 15, right: 15 },
     tableLineColor: [229, 231, 235],
@@ -282,7 +285,7 @@ export function generatePurchaseBillPDF(bill: PurchaseBillData, options: PDFOpti
     doc.setTextColor(...mutedColor);
     doc.text(item.label, totalsX, yPos + i * 7);
     doc.setTextColor(...item.color);
-    doc.text(`৳${Math.abs(item.value).toLocaleString()}`, pageWidth - 20, yPos + i * 7, { align: 'right' });
+    doc.text(`৳${Math.abs(item.value).toLocaleString('en-IN')}`, pageWidth - 20, yPos + i * 7, { align: 'right' });
   });
   
   // Total line
@@ -295,19 +298,19 @@ export function generatePurchaseBillPDF(bill: PurchaseBillData, options: PDFOpti
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...primaryColor);
   doc.text('Total:', totalsX, yPos + 4);
-  doc.text(`৳${bill.total_amount.toLocaleString()}`, pageWidth - 20, yPos + 4, { align: 'right' });
+  doc.text(`৳${bill.total_amount.toLocaleString('en-IN')}`, pageWidth - 20, yPos + 4, { align: 'right' });
   
   // Paid & Due
   yPos += 12;
   doc.setFontSize(10);
   doc.setTextColor(...successColor);
   doc.text('Paid:', totalsX, yPos);
-  doc.text(`৳${bill.paid_amount.toLocaleString()}`, pageWidth - 20, yPos, { align: 'right' });
+  doc.text(`৳${bill.paid_amount.toLocaleString('en-IN')}`, pageWidth - 20, yPos, { align: 'right' });
   
   yPos += 7;
   doc.setTextColor(...dangerColor);
   doc.text('Due:', totalsX, yPos);
-  doc.text(`৳${bill.due_amount.toLocaleString()}`, pageWidth - 20, yPos, { align: 'right' });
+  doc.text(`৳${bill.due_amount.toLocaleString('en-IN')}`, pageWidth - 20, yPos, { align: 'right' });
   
   // Remarks
   if (bill.remarks) {
@@ -451,50 +454,52 @@ export function generateSalesInvoicePDF(invoice: SalesInvoiceData, options: PDFO
   
   const tableData = (invoice.items || []).map((item, index) => {
     const daysInfo = item.from_date && item.to_date 
-      ? `\n${format(new Date(item.from_date), 'dd/MM')} - ${format(new Date(item.to_date), 'dd/MM')} (${getDaysCount(item.from_date, item.to_date)} days)`
+      ? `${format(new Date(item.from_date), 'dd/MM')} - ${format(new Date(item.to_date), 'dd/MM')} (${getDaysCount(item.from_date, item.to_date)}d)`
       : '';
     return [
       (index + 1).toString(),
-      item.item_name + daysInfo,
+      item.item_name,
       item.unit,
       item.quantity.toString(),
-      `৳${item.rate.toLocaleString()}`,
+      daysInfo,
+      `৳${item.rate.toLocaleString('en-IN')}`,
       item.vat_percent > 0 ? `${item.vat_percent}%` : '-',
-      `৳${item.total.toLocaleString()}`,
+      `৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
     ];
   });
   
   if (tableData.length === 0) {
-    tableData.push(['1', 'Bandwidth Service', '-', '1', `৳${invoice.subtotal.toLocaleString()}`, '-', `৳${invoice.subtotal.toLocaleString()}`]);
+    tableData.push(['1', 'Bandwidth Service', '-', '1', '-', `৳${invoice.subtotal.toLocaleString('en-IN')}`, '-', `৳${invoice.subtotal.toLocaleString('en-IN')}`]);
   }
   
   autoTable(doc, {
     startY: yPos,
-    head: [['#', 'Item / Description', 'Unit', 'Qty', 'Rate', 'VAT', 'Total']],
+    head: [['#', 'Item', 'Unit', 'Qty', 'Period', 'Rate/Mo', 'VAT', 'Total']],
     body: tableData,
     headStyles: {
       fillColor: primaryColor,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 9,
-      cellPadding: 4,
+      fontSize: 8,
+      cellPadding: 3,
     },
     bodyStyles: {
       textColor: textColor,
-      fontSize: 9,
-      cellPadding: 4,
+      fontSize: 8,
+      cellPadding: 3,
     },
     alternateRowStyles: {
       fillColor: [249, 250, 251],
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center' },
+      0: { cellWidth: 10, halign: 'center' },
       1: { cellWidth: 'auto' },
-      2: { cellWidth: 20, halign: 'center' },
-      3: { cellWidth: 15, halign: 'center' },
-      4: { cellWidth: 28, halign: 'right' },
-      5: { cellWidth: 18, halign: 'center' },
-      6: { cellWidth: 30, halign: 'right' },
+      2: { cellWidth: 18, halign: 'center' },
+      3: { cellWidth: 12, halign: 'center' },
+      4: { cellWidth: 38, halign: 'center' },
+      5: { cellWidth: 25, halign: 'right' },
+      6: { cellWidth: 15, halign: 'center' },
+      7: { cellWidth: 28, halign: 'right' },
     },
     margin: { left: 15, right: 15 },
     tableLineColor: [229, 231, 235],
@@ -523,7 +528,7 @@ export function generateSalesInvoicePDF(invoice: SalesInvoiceData, options: PDFO
     doc.setTextColor(...mutedColor);
     doc.text(item.label, totalsX, yPos + i * 7);
     doc.setTextColor(...item.color);
-    doc.text(`৳${Math.abs(item.value).toLocaleString()}`, pageWidth - 20, yPos + i * 7, { align: 'right' });
+    doc.text(`৳${Math.abs(item.value).toLocaleString('en-IN')}`, pageWidth - 20, yPos + i * 7, { align: 'right' });
   });
   
   // Total line
@@ -536,19 +541,19 @@ export function generateSalesInvoicePDF(invoice: SalesInvoiceData, options: PDFO
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...primaryColor);
   doc.text('Total:', totalsX, yPos + 4);
-  doc.text(`৳${invoice.total_amount.toLocaleString()}`, pageWidth - 20, yPos + 4, { align: 'right' });
+  doc.text(`৳${invoice.total_amount.toLocaleString('en-IN')}`, pageWidth - 20, yPos + 4, { align: 'right' });
   
   // Paid & Due
   yPos += 12;
   doc.setFontSize(10);
   doc.setTextColor(...successColor);
   doc.text('Paid:', totalsX, yPos);
-  doc.text(`৳${invoice.paid_amount.toLocaleString()}`, pageWidth - 20, yPos, { align: 'right' });
+  doc.text(`৳${invoice.paid_amount.toLocaleString('en-IN')}`, pageWidth - 20, yPos, { align: 'right' });
   
   yPos += 7;
   doc.setTextColor(...dangerColor);
   doc.text('Due:', totalsX, yPos);
-  doc.text(`৳${invoice.due_amount.toLocaleString()}`, pageWidth - 20, yPos, { align: 'right' });
+  doc.text(`৳${invoice.due_amount.toLocaleString('en-IN')}`, pageWidth - 20, yPos, { align: 'right' });
   
   // Remarks
   if (invoice.remarks) {
@@ -583,6 +588,30 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
   const primaryColor = isPurchase ? '#4f46e5' : '#10b981';
   const items = (isPurchase ? bill.items : invoice.items) || [];
   
+  const itemsTableRows = items.length > 0 ? items.map((item, i) => `
+    <tr>
+      <td class="text-center">${i + 1}</td>
+      <td>${item.item_name}</td>
+      <td class="text-center">${item.unit}</td>
+      <td class="text-center">${item.quantity}</td>
+      <td class="text-center">${item.from_date && item.to_date ? `${format(new Date(item.from_date), 'dd/MM')} - ${format(new Date(item.to_date), 'dd/MM')} (${getDaysCount(item.from_date, item.to_date)}d)` : '-'}</td>
+      <td class="text-right">৳${item.rate.toLocaleString('en-IN')}</td>
+      <td class="text-center">${item.vat_percent > 0 ? `${item.vat_percent}%` : '-'}</td>
+      <td class="text-right font-semibold">৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+    </tr>
+  `).join('') : `
+    <tr>
+      <td class="text-center">1</td>
+      <td>Bandwidth Service</td>
+      <td class="text-center">-</td>
+      <td class="text-center">1</td>
+      <td class="text-center">-</td>
+      <td class="text-right">৳${data.subtotal.toLocaleString('en-IN')}</td>
+      <td class="text-center">-</td>
+      <td class="text-right font-semibold">৳${data.subtotal.toLocaleString('en-IN')}</td>
+    </tr>
+  `;
+
   return `
     <!DOCTYPE html>
     <html>
@@ -590,47 +619,50 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
       <title>${isPurchase ? 'Purchase Bill' : 'Sales Invoice'} - ${data.invoice_number}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #fff; color: #1f2937; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #fff; color: #1f2937; font-size: 13px; }
         .container { max-width: 800px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid ${primaryColor}; }
-        .company-info h1 { color: ${primaryColor}; font-size: 24px; margin-bottom: 5px; }
-        .company-info p { color: #6b7280; font-size: 12px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 3px solid ${primaryColor}; }
+        .company-info { display: flex; align-items: flex-start; gap: 15px; }
+        .company-logo { width: 60px; height: 60px; object-fit: contain; border-radius: 8px; }
+        .company-details h1 { color: ${primaryColor}; font-size: 22px; margin-bottom: 4px; }
+        .company-details p { color: #6b7280; font-size: 11px; line-height: 1.5; }
         .invoice-info { text-align: right; }
-        .invoice-info h2 { font-size: 28px; color: #1f2937; margin-bottom: 5px; }
-        .invoice-info .invoice-number { color: ${primaryColor}; font-size: 14px; font-weight: 600; }
-        .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-top: 10px; }
+        .invoice-info h2 { font-size: 26px; color: #1f2937; margin-bottom: 4px; }
+        .invoice-info .invoice-number { color: ${primaryColor}; font-size: 13px; font-weight: 600; }
+        .status { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 10px; font-weight: 700; text-transform: uppercase; margin-top: 8px; }
         .status.paid { background: #dcfce7; color: #15803d; }
         .status.partial { background: #fef3c7; color: #b45309; }
         .status.due { background: #fee2e2; color: #dc2626; }
-        .details-section { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
-        .detail-box { background: #f9fafb; padding: 20px; border-radius: 8px; }
-        .detail-box h3 { color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
-        .detail-box .name { font-size: 16px; font-weight: 600; margin-bottom: 5px; }
-        .detail-box p { font-size: 13px; color: #4b5563; line-height: 1.6; }
-        .detail-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-        .detail-row .label { color: #6b7280; }
-        .detail-row .value { font-weight: 600; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        th { background: ${primaryColor}; color: white; padding: 12px 10px; text-align: left; font-size: 12px; text-transform: uppercase; }
-        th:first-child { border-radius: 8px 0 0 0; }
-        th:last-child { border-radius: 0 8px 0 0; text-align: right; }
-        td { padding: 12px 10px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+        .details-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; }
+        .detail-box { background: #f9fafb; padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb; }
+        .detail-box h3 { color: #6b7280; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+        .detail-box .name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+        .detail-box p { font-size: 12px; color: #4b5563; line-height: 1.5; }
+        .detail-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .detail-row .label { color: #6b7280; font-size: 12px; }
+        .detail-row .value { font-weight: 600; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+        th { background: ${primaryColor}; color: white; padding: 10px 8px; text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; }
+        th:first-child { border-radius: 6px 0 0 0; }
+        th:last-child { border-radius: 0 6px 0 0; text-align: right; }
+        td { padding: 10px 8px; border-bottom: 1px solid #e5e7eb; font-size: 12px; }
         tr:nth-child(even) { background: #f9fafb; }
         .text-right { text-align: right; }
         .text-center { text-align: center; }
-        .item-desc { font-size: 11px; color: #6b7280; margin-top: 3px; }
+        .font-semibold { font-weight: 600; }
         .totals { display: flex; justify-content: flex-end; }
-        .totals-box { background: #f9fafb; padding: 20px; border-radius: 8px; min-width: 280px; }
-        .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
-        .total-row.main { border-top: 2px solid ${primaryColor}; margin-top: 10px; padding-top: 15px; font-size: 18px; font-weight: 700; color: ${primaryColor}; }
-        .total-row.paid { color: #15803d; }
-        .total-row.due { color: #dc2626; }
-        .remarks { margin-top: 30px; padding: 15px; background: #f9fafb; border-radius: 8px; }
-        .remarks h4 { font-size: 11px; text-transform: uppercase; color: #6b7280; margin-bottom: 8px; }
-        .remarks p { font-size: 13px; line-height: 1.6; }
-        .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 11px; }
+        .totals-box { background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%); padding: 18px; border-radius: 10px; min-width: 280px; border: 1px solid #e5e7eb; }
+        .total-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+        .total-row.main { border-top: 2px solid ${primaryColor}; margin-top: 10px; padding-top: 12px; font-size: 18px; font-weight: 700; color: ${primaryColor}; }
+        .total-row.paid { color: #15803d; font-weight: 600; }
+        .total-row.due { color: #dc2626; font-weight: 600; }
+        .remarks { margin-top: 25px; padding: 14px; background: #fffbeb; border-radius: 8px; border-left: 4px solid #f59e0b; }
+        .remarks h4 { font-size: 10px; text-transform: uppercase; color: #b45309; margin-bottom: 6px; font-weight: 600; }
+        .remarks p { font-size: 12px; line-height: 1.6; color: #78350f; }
+        .footer { text-align: center; margin-top: 35px; padding-top: 18px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 10px; }
+        .footer p { margin-bottom: 3px; }
         @media print {
-          body { padding: 0; }
+          body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .container { max-width: 100%; }
         }
       </style>
@@ -639,10 +671,13 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
       <div class="container">
         <div class="header">
           <div class="company-info">
-            <h1>${options.companyName || 'Bandwidth Management'}</h1>
-            ${options.companyAddress ? `<p>${options.companyAddress}</p>` : ''}
-            ${options.companyPhone ? `<p>Phone: ${options.companyPhone}</p>` : ''}
-            ${options.companyEmail ? `<p>Email: ${options.companyEmail}</p>` : ''}
+            ${options.companyLogo ? `<img src="${options.companyLogo}" alt="Logo" class="company-logo" />` : ''}
+            <div class="company-details">
+              <h1>${options.companyName || 'Bandwidth Management'}</h1>
+              ${options.companyAddress ? `<p>${options.companyAddress}</p>` : ''}
+              ${options.companyPhone ? `<p>📞 ${options.companyPhone}</p>` : ''}
+              ${options.companyEmail ? `<p>✉️ ${options.companyEmail}</p>` : ''}
+            </div>
           </div>
           <div class="invoice-info">
             <h2>${isPurchase ? 'Purchase Bill' : 'Sales Invoice'}</h2>
@@ -653,14 +688,14 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         
         <div class="details-section">
           <div class="detail-box">
-            <h3>${isPurchase ? 'Provider' : 'Bill To'}</h3>
+            <h3>${isPurchase ? '👤 Provider' : '👤 Bill To'}</h3>
             <div class="name">${isPurchase ? bill.provider?.name || 'N/A' : invoice.client?.name || 'N/A'}</div>
             <p>${isPurchase ? bill.provider?.company_name || '' : invoice.client?.company_name || ''}</p>
             <p>${isPurchase ? bill.provider?.phone || '' : invoice.client?.phone || ''}</p>
             <p>${isPurchase ? bill.provider?.email || '' : invoice.client?.email || ''}</p>
           </div>
           <div class="detail-box">
-            <h3>Invoice Details</h3>
+            <h3>📋 Invoice Details</h3>
             <div class="detail-row">
               <span class="label">Invoice Date:</span>
               <span class="value">${format(new Date(data.billing_date), 'dd MMM yyyy')}</span>
@@ -683,40 +718,18 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         <table>
           <thead>
             <tr>
-              <th style="width: 40px;">#</th>
-              <th>Item / Description</th>
-              <th style="width: 60px;" class="text-center">Unit</th>
-              <th style="width: 50px;" class="text-center">Qty</th>
-              <th style="width: 90px;" class="text-right">Rate</th>
-              <th style="width: 60px;" class="text-center">VAT</th>
-              <th style="width: 100px;">Total</th>
+              <th style="width: 35px;">#</th>
+              <th>Item</th>
+              <th style="width: 55px;" class="text-center">Unit</th>
+              <th style="width: 40px;" class="text-center">Qty</th>
+              <th style="width: 100px;" class="text-center">Period</th>
+              <th style="width: 85px;" class="text-right">Rate/Mo</th>
+              <th style="width: 50px;" class="text-center">VAT</th>
+              <th style="width: 95px;">Total</th>
             </tr>
           </thead>
           <tbody>
-            ${items.length > 0 ? items.map((item, i) => `
-              <tr>
-                <td class="text-center">${i + 1}</td>
-                <td>
-                  ${item.item_name}
-                  ${item.from_date && item.to_date ? `<div class="item-desc">${format(new Date(item.from_date), 'dd/MM/yyyy')} - ${format(new Date(item.to_date), 'dd/MM/yyyy')} (${getDaysCount(item.from_date, item.to_date)} days)</div>` : ''}
-                </td>
-                <td class="text-center">${item.unit}</td>
-                <td class="text-center">${item.quantity}</td>
-                <td class="text-right">৳${item.rate.toLocaleString()}</td>
-                <td class="text-center">${item.vat_percent > 0 ? `${item.vat_percent}%` : '-'}</td>
-                <td class="text-right">৳${item.total.toLocaleString()}</td>
-              </tr>
-            `).join('') : `
-              <tr>
-                <td class="text-center">1</td>
-                <td>Bandwidth Service</td>
-                <td class="text-center">-</td>
-                <td class="text-center">1</td>
-                <td class="text-right">৳${data.subtotal.toLocaleString()}</td>
-                <td class="text-center">-</td>
-                <td class="text-right">৳${data.subtotal.toLocaleString()}</td>
-              </tr>
-            `}
+            ${itemsTableRows}
           </tbody>
         </table>
         
@@ -724,40 +737,40 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
           <div class="totals-box">
             <div class="total-row">
               <span>Subtotal:</span>
-              <span>৳${data.subtotal.toLocaleString()}</span>
+              <span>৳${data.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div class="total-row">
               <span>VAT:</span>
-              <span>৳${data.vat_amount.toLocaleString()}</span>
+              <span>৳${data.vat_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div class="total-row">
               <span>Discount:</span>
-              <span>-৳${data.discount.toLocaleString()}</span>
+              <span>-৳${data.discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div class="total-row main">
               <span>Total:</span>
-              <span>৳${data.total_amount.toLocaleString()}</span>
+              <span>৳${data.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div class="total-row paid">
               <span>Paid:</span>
-              <span>৳${data.paid_amount.toLocaleString()}</span>
+              <span>৳${data.paid_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
             <div class="total-row due">
               <span>Due:</span>
-              <span>৳${data.due_amount.toLocaleString()}</span>
+              <span>৳${data.due_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
         </div>
         
         ${data.remarks ? `
         <div class="remarks">
-          <h4>Remarks</h4>
+          <h4>📝 Remarks</h4>
           <p>${data.remarks}</p>
         </div>
         ` : ''}
         
         <div class="footer">
-          <p>Thank you for your business!</p>
+          <p>✨ Thank you for your business!</p>
           <p>Generated on ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</p>
         </div>
       </div>
