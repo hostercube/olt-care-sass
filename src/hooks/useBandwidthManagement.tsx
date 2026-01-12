@@ -53,11 +53,22 @@ export interface BandwidthClient {
   company_name: string | null;
   email: string | null;
   phone: string | null;
+  mobile: string | null;
   address: string | null;
   contact_person: string | null;
   account_number: string | null;
   bank_details: string | null;
   notes: string | null;
+  status: string | null;
+  reference_by: string | null;
+  nttn_info: string | null;
+  vlan_name: string | null;
+  vlan_ip: string | null;
+  scr_link_id: string | null;
+  activation_date: string | null;
+  ip_address: string | null;
+  pop_name: string | null;
+  username: string | null;
   total_receivable: number;
   is_active: boolean;
   created_at: string;
@@ -748,6 +759,30 @@ export function useBandwidthManagement() {
     }
   };
 
+  const updateBillCollection = async (id: string, data: Partial<BandwidthBillCollection>) => {
+    try {
+      const { error } = await supabase
+        .from('bandwidth_bill_collections')
+        .update({
+          collection_date: data.collection_date,
+          amount: data.amount,
+          payment_method: data.payment_method,
+          received_by: data.received_by,
+          remarks: data.remarks,
+        })
+        .eq('id', id);
+      
+      if (error) throw error;
+      toast.success('Bill collection updated successfully');
+      fetchBillCollections();
+      fetchSalesInvoices();
+      fetchClients();
+    } catch (error: any) {
+      console.error('Error updating bill collection:', error);
+      toast.error('Failed to update bill collection');
+    }
+  };
+
   const deleteBillCollection = async (id: string) => {
     try {
       const { error } = await supabase
@@ -833,6 +868,30 @@ export function useBandwidthManagement() {
     } catch (error: any) {
       console.error('Error creating provider payment:', error);
       toast.error('Failed to record provider payment');
+    }
+  };
+
+  const updateProviderPayment = async (id: string, data: Partial<BandwidthProviderPayment>) => {
+    try {
+      const { error } = await supabase
+        .from('bandwidth_provider_payments')
+        .update({
+          payment_date: data.payment_date,
+          amount: data.amount,
+          payment_method: data.payment_method,
+          paid_by: data.paid_by,
+          remarks: data.remarks,
+        })
+        .eq('id', id);
+      
+      if (error) throw error;
+      toast.success('Provider payment updated successfully');
+      fetchProviderPayments();
+      fetchPurchaseBills();
+      fetchProviders();
+    } catch (error: any) {
+      console.error('Error updating provider payment:', error);
+      toast.error('Failed to update provider payment');
     }
   };
 
@@ -923,10 +982,12 @@ export function useBandwidthManagement() {
     // Bill Collection CRUD
     fetchBillCollections,
     createBillCollection,
+    updateBillCollection,
     deleteBillCollection,
     // Provider Payment CRUD
     fetchProviderPayments,
     createProviderPayment,
+    updateProviderPayment,
     deleteProviderPayment,
   };
 }

@@ -100,8 +100,10 @@ function BandwidthManagementContent() {
     createSalesInvoice,
     deleteSalesInvoice,
     createBillCollection,
+    updateBillCollection,
     deleteBillCollection,
     createProviderPayment,
+    updateProviderPayment,
     deleteProviderPayment,
     fetchCategories,
     fetchItems,
@@ -548,16 +550,27 @@ function BandwidthManagementContent() {
   };
 
   const handleSaveCollection = async () => {
-    await createBillCollection({
-      client_id: collectionForm.client_id || null,
-      invoice_id: collectionForm.invoice_id || null,
-      collection_date: collectionForm.collection_date,
-      amount: collectionForm.amount,
-      payment_method: collectionForm.payment_method,
-      received_by: collectionForm.received_by || null,
-      remarks: collectionForm.remarks || null,
-    });
+    if (editingCollection) {
+      await updateBillCollection(editingCollection.id, {
+        collection_date: collectionForm.collection_date,
+        amount: collectionForm.amount,
+        payment_method: collectionForm.payment_method,
+        received_by: collectionForm.received_by || null,
+        remarks: collectionForm.remarks || null,
+      });
+    } else {
+      await createBillCollection({
+        client_id: collectionForm.client_id || null,
+        invoice_id: collectionForm.invoice_id || null,
+        collection_date: collectionForm.collection_date,
+        amount: collectionForm.amount,
+        payment_method: collectionForm.payment_method,
+        received_by: collectionForm.received_by || null,
+        remarks: collectionForm.remarks || null,
+      });
+    }
     setCollectionDialog(false);
+    setEditingCollection(null);
     setCollectionForm({
       client_id: '',
       invoice_id: '',
@@ -570,16 +583,27 @@ function BandwidthManagementContent() {
   };
 
   const handleSaveProviderPayment = async () => {
-    await createProviderPayment({
-      provider_id: providerPaymentForm.provider_id || null,
-      bill_id: providerPaymentForm.bill_id || null,
-      payment_date: providerPaymentForm.payment_date,
-      amount: providerPaymentForm.amount,
-      payment_method: providerPaymentForm.payment_method,
-      paid_by: providerPaymentForm.paid_by || null,
-      remarks: providerPaymentForm.remarks || null,
-    });
+    if (editingPayment) {
+      await updateProviderPayment(editingPayment.id, {
+        payment_date: providerPaymentForm.payment_date,
+        amount: providerPaymentForm.amount,
+        payment_method: providerPaymentForm.payment_method,
+        paid_by: providerPaymentForm.paid_by || null,
+        remarks: providerPaymentForm.remarks || null,
+      });
+    } else {
+      await createProviderPayment({
+        provider_id: providerPaymentForm.provider_id || null,
+        bill_id: providerPaymentForm.bill_id || null,
+        payment_date: providerPaymentForm.payment_date,
+        amount: providerPaymentForm.amount,
+        payment_method: providerPaymentForm.payment_method,
+        paid_by: providerPaymentForm.paid_by || null,
+        remarks: providerPaymentForm.remarks || null,
+      });
+    }
     setProviderPaymentDialog(false);
+    setEditingPayment(null);
     setProviderPaymentForm({
       provider_id: '',
       bill_id: '',
@@ -1637,7 +1661,7 @@ function BandwidthManagementContent() {
                   <CardTitle>Bill Collections</CardTitle>
                   <CardDescription>Payments received from clients</CardDescription>
                 </div>
-                <Button onClick={() => setCollectionDialog(true)}>
+                <Button onClick={() => { setEditingCollection(null); setCollectionForm({ client_id: '', invoice_id: '', collection_date: format(new Date(), 'yyyy-MM-dd'), amount: 0, payment_method: 'cash', received_by: '', remarks: '' }); setCollectionDialog(true); }}>
                   <Plus className="mr-2 h-4 w-4" /> Record Collection
                 </Button>
               </div>
@@ -1767,7 +1791,7 @@ function BandwidthManagementContent() {
                   <CardTitle>Provider Payments</CardTitle>
                   <CardDescription>Payments made to providers</CardDescription>
                 </div>
-                <Button onClick={() => setProviderPaymentDialog(true)}>
+                <Button onClick={() => { setEditingPayment(null); setProviderPaymentForm({ provider_id: '', bill_id: '', payment_date: format(new Date(), 'yyyy-MM-dd'), amount: 0, payment_method: 'bank_transfer', paid_by: '', remarks: '' }); setProviderPaymentDialog(true); }}>
                   <Plus className="mr-2 h-4 w-4" /> Record Payment
                 </Button>
               </div>
@@ -3026,16 +3050,16 @@ function BandwidthManagementContent() {
       </Dialog>
 
       {/* Collection Dialog */}
-      <Dialog open={collectionDialog} onOpenChange={setCollectionDialog}>
+      <Dialog open={collectionDialog} onOpenChange={(open) => { setCollectionDialog(open); if (!open) setEditingCollection(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Record Bill Collection</DialogTitle>
-            <DialogDescription>Record payment received from client</DialogDescription>
+            <DialogTitle>{editingCollection ? 'Edit Bill Collection' : 'Record Bill Collection'}</DialogTitle>
+            <DialogDescription>{editingCollection ? 'Update collection details' : 'Record payment received from client'}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Client *</Label>
-              <Select value={collectionForm.client_id} onValueChange={(v) => setCollectionForm({ ...collectionForm, client_id: v, invoice_id: '' })}>
+              <Select value={collectionForm.client_id} onValueChange={(v) => setCollectionForm({ ...collectionForm, client_id: v, invoice_id: '' })} disabled={!!editingCollection}>
                 <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                 <SelectContent>
                   {clients.map((c) => (
@@ -3046,7 +3070,7 @@ function BandwidthManagementContent() {
             </div>
             <div className="grid gap-2">
               <Label>Invoice (Optional)</Label>
-              <Select value={collectionForm.invoice_id} onValueChange={(v) => setCollectionForm({ ...collectionForm, invoice_id: v })}>
+              <Select value={collectionForm.invoice_id} onValueChange={(v) => setCollectionForm({ ...collectionForm, invoice_id: v })} disabled={!!editingCollection}>
                 <SelectTrigger><SelectValue placeholder="Select invoice" /></SelectTrigger>
                 <SelectContent>
                   {salesInvoices.filter(i => i.client_id === collectionForm.client_id && i.due_amount > 0).map((i) => (
@@ -3106,16 +3130,16 @@ function BandwidthManagementContent() {
       </Dialog>
 
       {/* Provider Payment Dialog */}
-      <Dialog open={providerPaymentDialog} onOpenChange={setProviderPaymentDialog}>
+      <Dialog open={providerPaymentDialog} onOpenChange={(open) => { setProviderPaymentDialog(open); if (!open) setEditingPayment(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Record Provider Payment</DialogTitle>
-            <DialogDescription>Record payment made to provider</DialogDescription>
+            <DialogTitle>{editingPayment ? 'Edit Provider Payment' : 'Record Provider Payment'}</DialogTitle>
+            <DialogDescription>{editingPayment ? 'Update payment details' : 'Record payment made to provider'}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Provider *</Label>
-              <Select value={providerPaymentForm.provider_id} onValueChange={(v) => setProviderPaymentForm({ ...providerPaymentForm, provider_id: v, bill_id: '' })}>
+              <Select value={providerPaymentForm.provider_id} onValueChange={(v) => setProviderPaymentForm({ ...providerPaymentForm, provider_id: v, bill_id: '' })} disabled={!!editingPayment}>
                 <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
                 <SelectContent>
                   {providers.map((p) => (
@@ -3126,7 +3150,7 @@ function BandwidthManagementContent() {
             </div>
             <div className="grid gap-2">
               <Label>Bill (Optional)</Label>
-              <Select value={providerPaymentForm.bill_id} onValueChange={(v) => setProviderPaymentForm({ ...providerPaymentForm, bill_id: v })}>
+              <Select value={providerPaymentForm.bill_id} onValueChange={(v) => setProviderPaymentForm({ ...providerPaymentForm, bill_id: v })} disabled={!!editingPayment}>
                 <SelectTrigger><SelectValue placeholder="Select bill" /></SelectTrigger>
                 <SelectContent>
                   {purchaseBills.filter(b => b.provider_id === providerPaymentForm.provider_id && b.due_amount > 0).map((b) => (
