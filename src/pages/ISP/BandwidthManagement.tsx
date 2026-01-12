@@ -131,6 +131,15 @@ function BandwidthManagementContent() {
   const [clientsPage, setClientsPage] = useState(1);
   const [clientsPageSize, setClientsPageSize] = useState(20);
   
+  // Filter states for payments and collections
+  const [collectionsMethodFilter, setCollectionsMethodFilter] = useState('all');
+  const [paymentsMethodFilter, setPaymentsMethodFilter] = useState('all');
+  
+  // Ledger pagination states
+  const [providerLedgerPage, setProviderLedgerPage] = useState(1);
+  const [clientLedgerPage, setClientLedgerPage] = useState(1);
+  const ledgerPageSize = 10;
+  
   // Dialog states
   const [categoryDialog, setCategoryDialog] = useState(false);
   const [itemDialog, setItemDialog] = useState(false);
@@ -292,14 +301,26 @@ function BandwidthManagementContent() {
     [filteredSalesInvoices, salesPage, salesPageSize]
   );
   
+  // Filtered collections with method filter
+  const filteredCollections = useMemo(() => 
+    billCollections.filter(c => collectionsMethodFilter === 'all' || c.payment_method === collectionsMethodFilter),
+    [billCollections, collectionsMethodFilter]
+  );
+  
+  // Filtered payments with method filter
+  const filteredPayments = useMemo(() => 
+    providerPayments.filter(p => paymentsMethodFilter === 'all' || p.payment_method === paymentsMethodFilter),
+    [providerPayments, paymentsMethodFilter]
+  );
+  
   const paginatedCollections = useMemo(() => 
-    billCollections.slice((collectionsPage - 1) * collectionsPageSize, collectionsPage * collectionsPageSize),
-    [billCollections, collectionsPage, collectionsPageSize]
+    filteredCollections.slice((collectionsPage - 1) * collectionsPageSize, collectionsPage * collectionsPageSize),
+    [filteredCollections, collectionsPage, collectionsPageSize]
   );
   
   const paginatedPayments = useMemo(() => 
-    providerPayments.slice((paymentsPage - 1) * paymentsPageSize, paymentsPage * paymentsPageSize),
-    [providerPayments, paymentsPage, paymentsPageSize]
+    filteredPayments.slice((paymentsPage - 1) * paymentsPageSize, paymentsPage * paymentsPageSize),
+    [filteredPayments, paymentsPage, paymentsPageSize]
   );
 
   // Calculate profit/loss stats
@@ -1501,14 +1522,30 @@ function BandwidthManagementContent() {
         {/* Bill Collections Tab */}
         <TabsContent value="collections" className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
               <div>
                 <CardTitle>Bill Collections</CardTitle>
                 <CardDescription>Payments received from clients</CardDescription>
               </div>
-              <Button onClick={() => setCollectionDialog(true)}>
-                <Plus className="mr-2 h-4 w-4" /> Record Collection
-              </Button>
+              <div className="flex items-center gap-2">
+                <Select value={collectionsMethodFilter} onValueChange={setCollectionsMethodFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Payment Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Methods</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="bkash">bKash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                    <SelectItem value="online">Online</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={() => setCollectionDialog(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> Record Collection
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -1539,7 +1576,7 @@ function BandwidthManagementContent() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {billCollections.length === 0 && (
+                  {filteredCollections.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No collections found</TableCell>
                     </TableRow>
@@ -1547,7 +1584,7 @@ function BandwidthManagementContent() {
                 </TableBody>
               </Table>
               <TablePagination
-                totalItems={billCollections.length}
+                totalItems={filteredCollections.length}
                 currentPage={collectionsPage}
                 pageSize={collectionsPageSize}
                 onPageChange={setCollectionsPage}
@@ -1560,14 +1597,30 @@ function BandwidthManagementContent() {
         {/* Provider Payments Tab */}
         <TabsContent value="payments" className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
               <div>
                 <CardTitle>Provider Payments</CardTitle>
                 <CardDescription>Payments made to providers</CardDescription>
               </div>
-              <Button onClick={() => setProviderPaymentDialog(true)}>
-                <Plus className="mr-2 h-4 w-4" /> Record Payment
-              </Button>
+              <div className="flex items-center gap-2">
+                <Select value={paymentsMethodFilter} onValueChange={setPaymentsMethodFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Payment Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Methods</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="bkash">bKash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                    <SelectItem value="online">Online</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={() => setProviderPaymentDialog(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> Record Payment
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -1598,7 +1651,7 @@ function BandwidthManagementContent() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {providerPayments.length === 0 && (
+                  {filteredPayments.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No payments found</TableCell>
                     </TableRow>
@@ -1606,7 +1659,7 @@ function BandwidthManagementContent() {
                 </TableBody>
               </Table>
               <TablePagination
-                totalItems={providerPayments.length}
+                totalItems={filteredPayments.length}
                 currentPage={paymentsPage}
                 pageSize={paymentsPageSize}
                 onPageChange={setPaymentsPage}
@@ -2979,126 +3032,180 @@ function BandwidthManagementContent() {
       </Sheet>
 
       {/* Provider Ledger Sheet */}
-      <Sheet open={!!viewProviderLedger} onOpenChange={() => setViewProviderLedger(null)}>
+      <Sheet open={!!viewProviderLedger} onOpenChange={() => { setViewProviderLedger(null); setProviderLedgerPage(1); }}>
         <SheetContent className="w-[700px] sm:max-w-[700px]">
           <SheetHeader>
             <SheetTitle>Provider Ledger</SheetTitle>
             <SheetDescription>{viewProviderLedger?.name} - {viewProviderLedger?.company_name}</SheetDescription>
           </SheetHeader>
-          {viewProviderLedger && (
-            <div className="mt-6 space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <Card>
-                  <CardContent className="pt-4">
-                    <p className="text-sm text-muted-foreground">Total Bills</p>
-                    <p className="text-xl font-bold">৳{getProviderLedger(viewProviderLedger.id).bills.reduce((sum, b) => sum + b.total_amount, 0).toLocaleString()}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4">
-                    <p className="text-sm text-muted-foreground">Total Paid</p>
-                    <p className="text-xl font-bold text-green-600">৳{getProviderLedger(viewProviderLedger.id).payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4">
-                    <p className="text-sm text-muted-foreground">Balance Due</p>
-                    <p className="text-xl font-bold text-red-600">৳{(viewProviderLedger.total_due || 0).toLocaleString()}</p>
-                  </CardContent>
-                </Card>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">Recent Transactions</h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[
-                      ...getProviderLedger(viewProviderLedger.id).bills.map(b => ({ date: b.billing_date, type: 'Bill', ref: b.invoice_number, amount: b.total_amount, isDebit: true })),
-                      ...getProviderLedger(viewProviderLedger.id).payments.map(p => ({ date: p.payment_date, type: 'Payment', ref: p.payment_number, amount: p.amount, isDebit: false })),
-                    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10).map((tx, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{format(new Date(tx.date), 'dd/MM/yyyy')}</TableCell>
-                        <TableCell>{tx.type}</TableCell>
-                        <TableCell>{tx.ref}</TableCell>
-                        <TableCell className={`text-right ${tx.isDebit ? 'text-red-600' : 'text-green-600'}`}>
-                          {tx.isDebit ? '+' : '-'}৳{tx.amount.toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
+          {viewProviderLedger && (() => {
+            const ledgerData = getProviderLedger(viewProviderLedger.id);
+            const allTransactions = [
+              ...ledgerData.bills.map(b => ({ date: b.billing_date, type: 'Bill' as const, ref: b.invoice_number, amount: b.total_amount, isDebit: true })),
+              ...ledgerData.payments.map(p => ({ date: p.payment_date, type: 'Payment' as const, ref: p.payment_number, amount: p.amount, isDebit: false })),
+            ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            const totalPages = Math.ceil(allTransactions.length / ledgerPageSize);
+            const paginatedTx = allTransactions.slice((providerLedgerPage - 1) * ledgerPageSize, providerLedgerPage * ledgerPageSize);
+            
+            return (
+              <ScrollArea className="h-[calc(100vh-120px)] pr-4">
+                <div className="mt-6 space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-muted-foreground">Total Bills</p>
+                        <p className="text-xl font-bold">৳{ledgerData.bills.reduce((sum, b) => sum + b.total_amount, 0).toLocaleString()}</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-muted-foreground">Total Paid</p>
+                        <p className="text-xl font-bold text-green-600">৳{ledgerData.payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-muted-foreground">Balance Due</p>
+                        <p className="text-xl font-bold text-red-600">৳{(viewProviderLedger.total_due || 0).toLocaleString()}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium">All Transactions ({allTransactions.length})</h4>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Reference</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedTx.map((tx, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{format(new Date(tx.date), 'dd/MM/yyyy')}</TableCell>
+                            <TableCell>
+                              <Badge variant={tx.type === 'Bill' ? 'destructive' : 'default'}>{tx.type}</Badge>
+                            </TableCell>
+                            <TableCell>{tx.ref}</TableCell>
+                            <TableCell className={`text-right font-medium ${tx.isDebit ? 'text-red-600' : 'text-green-600'}`}>
+                              {tx.isDebit ? '+' : '-'}৳{tx.amount.toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {allTransactions.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center text-muted-foreground py-6">No transactions found</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4">
+                        <span className="text-sm text-muted-foreground">Page {providerLedgerPage} of {totalPages}</span>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" disabled={providerLedgerPage === 1} onClick={() => setProviderLedgerPage(p => p - 1)}>Previous</Button>
+                          <Button variant="outline" size="sm" disabled={providerLedgerPage === totalPages} onClick={() => setProviderLedgerPage(p => p + 1)}>Next</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+            );
+          })()}
         </SheetContent>
       </Sheet>
 
       {/* Client Ledger Sheet */}
-      <Sheet open={!!viewClientLedger} onOpenChange={() => setViewClientLedger(null)}>
+      <Sheet open={!!viewClientLedger} onOpenChange={() => { setViewClientLedger(null); setClientLedgerPage(1); }}>
         <SheetContent className="w-[700px] sm:max-w-[700px]">
           <SheetHeader>
             <SheetTitle>Client Ledger</SheetTitle>
             <SheetDescription>{viewClientLedger?.name} - {viewClientLedger?.company_name}</SheetDescription>
           </SheetHeader>
-          {viewClientLedger && (
-            <div className="mt-6 space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <Card>
-                  <CardContent className="pt-4">
-                    <p className="text-sm text-muted-foreground">Total Invoiced</p>
-                    <p className="text-xl font-bold">৳{getClientLedger(viewClientLedger.id).invoices.reduce((sum, i) => sum + i.total_amount, 0).toLocaleString()}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4">
-                    <p className="text-sm text-muted-foreground">Total Collected</p>
-                    <p className="text-xl font-bold text-green-600">৳{getClientLedger(viewClientLedger.id).collections.reduce((sum, c) => sum + c.amount, 0).toLocaleString()}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4">
-                    <p className="text-sm text-muted-foreground">Balance Receivable</p>
-                    <p className="text-xl font-bold text-orange-600">৳{(viewClientLedger.total_receivable || 0).toLocaleString()}</p>
-                  </CardContent>
-                </Card>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">Recent Transactions</h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[
-                      ...getClientLedger(viewClientLedger.id).invoices.map(i => ({ date: i.billing_date, type: 'Invoice', ref: i.invoice_number, amount: i.total_amount, isDebit: true })),
-                      ...getClientLedger(viewClientLedger.id).collections.map(c => ({ date: c.collection_date, type: 'Collection', ref: c.receipt_number, amount: c.amount, isDebit: false })),
-                    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10).map((tx, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{format(new Date(tx.date), 'dd/MM/yyyy')}</TableCell>
-                        <TableCell>{tx.type}</TableCell>
-                        <TableCell>{tx.ref}</TableCell>
-                        <TableCell className={`text-right ${tx.isDebit ? 'text-orange-600' : 'text-green-600'}`}>
-                          {tx.isDebit ? '+' : '-'}৳{tx.amount.toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
+          {viewClientLedger && (() => {
+            const ledgerData = getClientLedger(viewClientLedger.id);
+            const allTransactions = [
+              ...ledgerData.invoices.map(i => ({ date: i.billing_date, type: 'Invoice' as const, ref: i.invoice_number, amount: i.total_amount, isDebit: true })),
+              ...ledgerData.collections.map(c => ({ date: c.collection_date, type: 'Collection' as const, ref: c.receipt_number, amount: c.amount, isDebit: false })),
+            ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            const totalPages = Math.ceil(allTransactions.length / ledgerPageSize);
+            const paginatedTx = allTransactions.slice((clientLedgerPage - 1) * ledgerPageSize, clientLedgerPage * ledgerPageSize);
+            
+            return (
+              <ScrollArea className="h-[calc(100vh-120px)] pr-4">
+                <div className="mt-6 space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-muted-foreground">Total Invoiced</p>
+                        <p className="text-xl font-bold">৳{ledgerData.invoices.reduce((sum, i) => sum + i.total_amount, 0).toLocaleString()}</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-muted-foreground">Total Collected</p>
+                        <p className="text-xl font-bold text-green-600">৳{ledgerData.collections.reduce((sum, c) => sum + c.amount, 0).toLocaleString()}</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-muted-foreground">Balance Receivable</p>
+                        <p className="text-xl font-bold text-orange-600">৳{(viewClientLedger.total_receivable || 0).toLocaleString()}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium">All Transactions ({allTransactions.length})</h4>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Reference</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedTx.map((tx, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{format(new Date(tx.date), 'dd/MM/yyyy')}</TableCell>
+                            <TableCell>
+                              <Badge variant={tx.type === 'Invoice' ? 'secondary' : 'default'}>{tx.type}</Badge>
+                            </TableCell>
+                            <TableCell>{tx.ref}</TableCell>
+                            <TableCell className={`text-right font-medium ${tx.isDebit ? 'text-orange-600' : 'text-green-600'}`}>
+                              {tx.isDebit ? '+' : '-'}৳{tx.amount.toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {allTransactions.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center text-muted-foreground py-6">No transactions found</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4">
+                        <span className="text-sm text-muted-foreground">Page {clientLedgerPage} of {totalPages}</span>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" disabled={clientLedgerPage === 1} onClick={() => setClientLedgerPage(p => p - 1)}>Previous</Button>
+                          <Button variant="outline" size="sm" disabled={clientLedgerPage === totalPages} onClick={() => setClientLedgerPage(p => p + 1)}>Next</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+            );
+          })()}
         </SheetContent>
       </Sheet>
     </div>
