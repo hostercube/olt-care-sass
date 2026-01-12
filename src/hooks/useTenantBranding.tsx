@@ -124,7 +124,12 @@ export function useTenantBranding() {
         formData.append('file', file);
         formData.append('type', type);
         
-        const uploadUrl = `${pollingServerUrl}/api/upload/${tenantId}`;
+        // Build upload URL - use /api/upload endpoint
+        const baseUrl = pollingServerUrl.replace(/\/+$/, '');
+        const uploadUrl = `${baseUrl}/api/upload/${tenantId}`;
+        
+        console.log('Uploading to VPS:', uploadUrl);
+        
         const response = await fetch(uploadUrl, {
           method: 'POST',
           body: formData,
@@ -132,12 +137,14 @@ export function useTenantBranding() {
         
         if (response.ok) {
           const data = await response.json();
+          console.log('Upload response:', data);
           if (data.success && data.url) {
             toast.success(`${type === 'logo' ? 'Logo' : 'Favicon'} uploaded successfully`);
             return data.url;
           }
         } else {
-          console.warn('VPS upload failed, falling back to Supabase storage');
+          const errorText = await response.text();
+          console.warn('VPS upload failed:', response.status, errorText);
         }
       }
       
