@@ -53,9 +53,8 @@ interface NavItem {
   requiredModule?: ModuleName;
 }
 
-// OLT Care - Network infrastructure monitoring
+// OLT Care - Network infrastructure monitoring (collapsible section)
 const oltCareItems: NavItem[] = [
-  { title: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'olt_management', href: '/olts', icon: Server },
   { title: 'onu_devices', href: '/onus', icon: Router },
   { title: 'alerts', href: '/alerts', icon: Bell },
@@ -173,6 +172,7 @@ function readImpersonation(): { tenantId: string; tenantName?: string } | null {
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [oltExpanded, setOltExpanded] = useState(false);
   const [customerExpanded, setCustomerExpanded] = useState(true);
   const [billingExpanded, setBillingExpanded] = useState(false);
   const [networkExpanded, setNetworkExpanded] = useState(false);
@@ -209,12 +209,14 @@ export function Sidebar() {
 
   // Auto-expand sections when on relevant routes
   useEffect(() => {
-    if (location.pathname.startsWith('/isp')) {
+    if (location.pathname.startsWith('/olts') || location.pathname.startsWith('/onus') || location.pathname.startsWith('/alerts') || location.pathname.startsWith('/monitoring')) {
+      setOltExpanded(true);
+    } else if (location.pathname.startsWith('/isp')) {
       if (location.pathname.includes('/recharge') || location.pathname.includes('/bkash') || location.pathname.includes('/transactions') || location.pathname.includes('/automation')) {
         setBillingExpanded(true);
       } else if (location.pathname.includes('/mikrotik') || location.pathname.includes('/bandwidth') || location.pathname.includes('/domain')) {
         setNetworkExpanded(true);
-      } else if (location.pathname.includes('/sms') || location.pathname.includes('/campaigns') || location.pathname.includes('/gateways')) {
+      } else if (location.pathname.includes('/sms') || location.pathname.includes('/email') || location.pathname.includes('/campaigns') || location.pathname.includes('/gateways')) {
         setCommunicationExpanded(true);
       } else if (location.pathname.includes('/staff') || location.pathname.includes('/pos') || location.pathname.includes('/reports')) {
         setOperationsExpanded(true);
@@ -370,13 +372,15 @@ export function Sidebar() {
           </>
         ) : (
           <>
-            {!collapsed && (
-              <p className="px-3 mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('olt_care')}</p>
-            )}
-            <div className="flex flex-col gap-0.5">{oltCareItems.map(renderNavItem)}</div>
+            {/* ISP Dashboard at the very top */}
+            {renderNavItem({ title: t('dashboard'), href: '/isp', icon: LayoutDashboard })}
 
-            {/* ISP Dashboard */}
-            {renderNavItem({ title: t('isp_dashboard'), href: '/isp', icon: LayoutDashboard })}
+            {/* OLT Care Module - Collapsible */}
+            {renderSection(t('olt_care'), oltCareItems, {
+              collapsible: true,
+              expanded: oltExpanded,
+              onToggle: () => setOltExpanded((v) => !v),
+            })}
 
             {filteredCustomerMgmtItems.length > 0 && renderSection(t('customer_management'), filteredCustomerMgmtItems, {
               collapsible: true,
