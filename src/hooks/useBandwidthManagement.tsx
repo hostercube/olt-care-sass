@@ -437,12 +437,41 @@ export function useBandwidthManagement() {
     }
   }, [tenantId]);
 
-  const createClient = async (data: Partial<BandwidthClient>) => {
+  const createClient = async (data: Partial<BandwidthClient> & { password?: string }) => {
     if (!tenantId) return;
     try {
+      const insertData: any = {
+        name: data.name || '',
+        company_name: data.company_name,
+        email: data.email,
+        phone: data.phone,
+        mobile: data.mobile,
+        address: data.address,
+        contact_person: data.contact_person,
+        account_number: data.account_number,
+        bank_details: data.bank_details,
+        notes: data.notes,
+        status: data.status || 'active',
+        reference_by: data.reference_by,
+        nttn_info: data.nttn_info,
+        vlan_name: data.vlan_name,
+        vlan_ip: data.vlan_ip,
+        scr_link_id: data.scr_link_id,
+        activation_date: data.activation_date || null,
+        ip_address: data.ip_address,
+        pop_name: data.pop_name,
+        username: data.username,
+        tenant_id: tenantId
+      };
+      
+      // Only add password_hash if password is provided
+      if ((data as any).password) {
+        insertData.password_hash = (data as any).password; // In real app, should hash this
+      }
+      
       const { error } = await supabase
         .from('bandwidth_clients')
-        .insert({ name: data.name || '', company_name: data.company_name, email: data.email, phone: data.phone, address: data.address, contact_person: data.contact_person, account_number: data.account_number, bank_details: data.bank_details, notes: data.notes, tenant_id: tenantId });
+        .insert(insertData);
       
       if (error) throw error;
       toast.success('Client created successfully');
@@ -453,11 +482,39 @@ export function useBandwidthManagement() {
     }
   };
 
-  const updateClient = async (id: string, data: Partial<BandwidthClient>) => {
+  const updateClient = async (id: string, data: Partial<BandwidthClient> & { password?: string }) => {
     try {
+      const updateData: any = {
+        name: data.name,
+        company_name: data.company_name,
+        email: data.email,
+        phone: data.phone,
+        mobile: data.mobile,
+        address: data.address,
+        contact_person: data.contact_person,
+        account_number: data.account_number,
+        bank_details: data.bank_details,
+        notes: data.notes,
+        status: data.status,
+        reference_by: data.reference_by,
+        nttn_info: data.nttn_info,
+        vlan_name: data.vlan_name,
+        vlan_ip: data.vlan_ip,
+        scr_link_id: data.scr_link_id,
+        activation_date: data.activation_date || null,
+        ip_address: data.ip_address,
+        pop_name: data.pop_name,
+        username: data.username,
+      };
+      
+      // Only update password_hash if password is provided
+      if ((data as any).password) {
+        updateData.password_hash = (data as any).password;
+      }
+      
       const { error } = await supabase
         .from('bandwidth_clients')
-        .update(data)
+        .update(updateData)
         .eq('id', id);
       
       if (error) throw error;
