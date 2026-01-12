@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 interface InvoicePDFOptions {
   invoice: Invoice;
   companyName?: string;
+  companySubtitle?: string;
   companyAddress?: string;
   companyEmail?: string;
   companyPhone?: string;
@@ -13,7 +14,7 @@ interface InvoicePDFOptions {
 }
 
 export function generateInvoicePDF(options: InvoicePDFOptions): void {
-  const { invoice, companyName, companyAddress, companyEmail, companyPhone } = options;
+  const { invoice, companyName, companySubtitle, companyAddress, companyEmail, companyPhone, logoUrl } = options;
   
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -29,17 +30,31 @@ export function generateInvoicePDF(options: InvoicePDFOptions): void {
   doc.setFontSize(24);
   doc.setTextColor(...primaryColor);
   doc.setFont('helvetica', 'bold');
-  doc.text(companyName || 'OLT Manager', 20, yPos);
+  doc.text(companyName || 'ISP Point', 20, yPos);
   
-  yPos += 8;
+  yPos += 6;
+  if (companySubtitle) {
+    doc.setFontSize(10);
+    doc.setTextColor(...mutedColor);
+    doc.setFont('helvetica', 'italic');
+    doc.text(companySubtitle, 20, yPos);
+    yPos += 5;
+  }
+  
   doc.setFontSize(10);
   doc.setTextColor(...mutedColor);
   doc.setFont('helvetica', 'normal');
-  if (companyAddress) doc.text(companyAddress, 20, yPos);
-  yPos += 5;
-  if (companyEmail) doc.text(`Email: ${companyEmail}`, 20, yPos);
-  yPos += 5;
-  if (companyPhone) doc.text(`Phone: ${companyPhone}`, 20, yPos);
+  if (companyAddress) {
+    doc.text(companyAddress, 20, yPos);
+    yPos += 5;
+  }
+  if (companyEmail) {
+    doc.text(`Email: ${companyEmail}`, 20, yPos);
+    yPos += 5;
+  }
+  if (companyPhone) {
+    doc.text(`Phone: ${companyPhone}`, 20, yPos);
+  }
   
   // Invoice title
   yPos = 20;
@@ -217,12 +232,23 @@ export function generateInvoicePDF(options: InvoicePDFOptions): void {
   doc.save(`Invoice-${invoice.invoice_number}.pdf`);
 }
 
-export function downloadInvoicePDF(invoice: Invoice, systemSettings?: Record<string, any>): void {
+export interface TenantBrandingInfo {
+  company_name?: string;
+  subtitle?: string;
+  logo_url?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+}
+
+export function downloadInvoicePDF(invoice: Invoice, tenantBranding?: TenantBrandingInfo): void {
   generateInvoicePDF({
     invoice,
-    companyName: systemSettings?.company_name || 'OLT Manager',
-    companyAddress: systemSettings?.company_address || '',
-    companyEmail: systemSettings?.company_email || '',
-    companyPhone: systemSettings?.company_phone || '',
+    companyName: tenantBranding?.company_name || 'ISP Point',
+    companySubtitle: tenantBranding?.subtitle || '',
+    companyAddress: tenantBranding?.address || '',
+    companyEmail: tenantBranding?.email || '',
+    companyPhone: tenantBranding?.phone || '',
+    logoUrl: tenantBranding?.logo_url || '',
   });
 }

@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from './ThemeToggle';
 import { AlertNotificationBell } from '@/components/notifications/AlertNotificationBell';
+import { useTenantBranding } from '@/hooks/useTenantBranding';
 
 interface HeaderProps {
   title: string;
@@ -24,6 +25,7 @@ interface HeaderProps {
 export function Header({ title, subtitle }: HeaderProps) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { branding } = useTenantBranding();
   const [loginAsTenant, setLoginAsTenant] = useState<{ tenantId: string; tenantName: string } | null>(null);
 
   useEffect(() => {
@@ -68,9 +70,19 @@ export function Header({ title, subtitle }: HeaderProps) {
       )}
 
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur px-6">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+        <div className="flex items-center gap-3">
+          {/* Tenant Logo */}
+          {branding.logo_url && (
+            <img 
+              src={branding.logo_url} 
+              alt={branding.company_name} 
+              className="h-8 w-8 object-contain rounded"
+            />
+          )}
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+            {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+          </div>
         </div>
 
         <div className="flex items-center gap-4">
@@ -103,7 +115,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                 <div className="flex flex-col">
                   <span className="font-medium">{user?.email}</span>
                   <span className="text-xs text-muted-foreground">
-                    {loginAsTenant ? `Viewing: ${loginAsTenant.tenantName}` : 'Authenticated'}
+                    {loginAsTenant ? `Viewing: ${loginAsTenant.tenantName}` : branding.company_name}
                   </span>
                 </div>
               </DropdownMenuLabel>

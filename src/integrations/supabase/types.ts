@@ -7049,6 +7049,7 @@ export type Database = {
           district: string | null
           division: string | null
           email: string
+          favicon_url: string | null
           features: Json | null
           id: string
           invoice_footer: string | null
@@ -7074,6 +7075,7 @@ export type Database = {
           phone: string | null
           status: Database["public"]["Enums"]["tenant_status"]
           subdomain: string | null
+          subtitle: string | null
           suspended_at: string | null
           suspended_reason: string | null
           thermal_printer_enabled: boolean | null
@@ -7092,6 +7094,7 @@ export type Database = {
           district?: string | null
           division?: string | null
           email: string
+          favicon_url?: string | null
           features?: Json | null
           id?: string
           invoice_footer?: string | null
@@ -7117,6 +7120,7 @@ export type Database = {
           phone?: string | null
           status?: Database["public"]["Enums"]["tenant_status"]
           subdomain?: string | null
+          subtitle?: string | null
           suspended_at?: string | null
           suspended_reason?: string | null
           thermal_printer_enabled?: boolean | null
@@ -7135,6 +7139,7 @@ export type Database = {
           district?: string | null
           division?: string | null
           email?: string
+          favicon_url?: string | null
           features?: Json | null
           id?: string
           invoice_footer?: string | null
@@ -7160,6 +7165,7 @@ export type Database = {
           phone?: string | null
           status?: Database["public"]["Enums"]["tenant_status"]
           subdomain?: string | null
+          subtitle?: string | null
           suspended_at?: string | null
           suspended_reason?: string | null
           thermal_printer_enabled?: boolean | null
