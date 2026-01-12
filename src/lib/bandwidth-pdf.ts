@@ -686,11 +686,11 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         .detail-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
         .detail-row .label { color: #6b7280; font-size: 13px; }
         .detail-row .value { font-weight: 600; font-size: 13px; color: #1f2937; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; table-layout: fixed; }
-        th { background: ${primaryColor}; color: white; padding: 12px 8px; text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; }
-        th:first-child { border-radius: 8px 0 0 0; width: 35px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        th { background: ${primaryColor}; color: white; padding: 10px 6px; text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; }
+        th:first-child { border-radius: 8px 0 0 0; }
         th:last-child { border-radius: 0 8px 0 0; text-align: right; }
-        td { padding: 12px 8px; border-bottom: 1px solid #e5e7eb; font-size: 13px; word-wrap: break-word; vertical-align: middle; }
+        td { padding: 10px 6px; border-bottom: 1px solid #e5e7eb; font-size: 12px; vertical-align: middle; }
         tr:nth-child(even) { background: #f9fafb; }
         tr:last-child td:first-child { border-radius: 0 0 0 8px; }
         tr:last-child td:last-child { border-radius: 0 0 8px 0; }
@@ -711,6 +711,7 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         @media print {
           body { padding: 15px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .container { max-width: 100%; }
+          table { font-size: 11px; }
         }
       </style>
     </head>
@@ -765,14 +766,14 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         <table>
           <thead>
             <tr>
-              <th style="width: 30px; text-align: center;">#</th>
-              <th style="width: auto;">Item Description</th>
-              <th style="width: 55px; text-align: center;">Unit</th>
-              <th style="width: 40px; text-align: center;">Qty</th>
-              <th style="width: 100px; text-align: center;">Period</th>
-              <th style="width: 85px; text-align: right;">Rate</th>
-              <th style="width: 45px; text-align: center;">VAT</th>
-              <th style="width: 95px; text-align: right;">Total</th>
+              <th style="width: 28px; text-align: center;">#</th>
+              <th>Item</th>
+              <th style="width: 50px; text-align: center;">Unit</th>
+              <th style="width: 35px; text-align: center;">Qty</th>
+              <th style="width: 90px; text-align: center;">Period</th>
+              <th style="width: 70px; text-align: right;">Rate</th>
+              <th style="width: 40px; text-align: center;">VAT</th>
+              <th style="width: 80px; text-align: right;">Total</th>
             </tr>
           </thead>
           <tbody>
