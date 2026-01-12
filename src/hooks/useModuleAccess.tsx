@@ -227,7 +227,14 @@ export function useModuleAccess(): ModuleAccessResult {
       if (superAdminUnscoped) return true;
 
       const paymentGateways = features.payment_gateways as PaymentGatewayPermissions | undefined;
-      if (!paymentGateways) return gateway === 'manual';
+      
+      // If payment_gateways is not defined or empty, check if we're in trial/active mode
+      // Trial tenants and tenants without specific restrictions should have access to all gateways
+      if (!paymentGateways || Object.keys(paymentGateways).length === 0) {
+        // Allow all gateways for trial/active tenants without specific gateway restrictions
+        return true;
+      }
+      
       return paymentGateways[gateway] === true;
     },
     [features, superAdminUnscoped],

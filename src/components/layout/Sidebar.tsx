@@ -52,7 +52,7 @@ interface NavItem {
   requiredModule?: ModuleName;
 }
 
-// OLT Care - Network monitoring items
+// OLT Care - Network infrastructure monitoring
 const oltCareItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: 'OLT Management', href: '/olts', icon: Server },
@@ -61,13 +61,20 @@ const oltCareItems: NavItem[] = [
   { title: 'Monitoring', href: '/monitoring', icon: Activity },
 ];
 
-// ISP Management - Core business operations
-const ispCoreItems: NavItem[] = [
-  { title: 'ISP Dashboard', href: '/isp', icon: LayoutDashboard },
+// Customer Management - Core customer operations
+const customerMgmtItems: NavItem[] = [
   { title: 'Customers', href: '/isp/customers', icon: Users, requiredModule: 'isp_customers' },
   { title: 'Customer Types', href: '/isp/customer-types', icon: UserCheck },
   { title: 'Packages', href: '/isp/packages', icon: Package },
   { title: 'Areas', href: '/isp/areas', icon: MapPin },
+];
+
+// Billing & Finance - Financial operations
+const billingFinanceItems: NavItem[] = [
+  { title: 'Recharge History', href: '/isp/recharge-history', icon: ClipboardList, requiredModule: 'isp_billing' },
+  { title: 'Automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
+  { title: 'bKash Payments', href: '/isp/bkash', icon: Wallet },
+  { title: 'Income/Expense', href: '/isp/transactions', icon: DollarSign },
 ];
 
 // Reseller Management - Multi-level reseller system
@@ -77,28 +84,23 @@ const resellerItems: NavItem[] = [
   { title: 'Reseller Billing', href: '/isp/reseller-billing', icon: Wallet, requiredModule: 'isp_resellers' },
 ];
 
-// Billing & Payments - Financial operations
-const ispBillingItems: NavItem[] = [
-  { title: 'Recharge History', href: '/isp/recharge-history', icon: ClipboardList, requiredModule: 'isp_billing' },
-  { title: 'Automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
-  { title: 'bKash Payments', href: '/isp/bkash', icon: Wallet },
-  { title: 'Payment Gateways', href: '/isp/gateways', icon: CreditCard },
-  { title: 'Income/Expense', href: '/isp/transactions', icon: DollarSign },
-];
-
-// Network & Integration
-const ispNetworkItems: NavItem[] = [
+// Network & Infrastructure - MikroTik, OLT related
+const networkInfraItems: NavItem[] = [
   { title: 'MikroTik', href: '/isp/mikrotik', icon: Wifi, requiredModule: 'isp_mikrotik' },
-  { title: 'SMS Center', href: '/isp/sms', icon: MessageSquare, requiredModule: 'sms_alerts' },
-  { title: 'Campaigns', href: '/isp/campaigns', icon: Megaphone },
+  { title: 'Bandwidth Mgmt', href: '/isp/bandwidth', icon: Gauge, requiredModule: 'isp_bandwidth_management' },
   { title: 'Custom Domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
 ];
 
-// Operations - Staff & Inventory
-const ispOperationsItems: NavItem[] = [
+// Communication & Marketing
+const communicationItems: NavItem[] = [
+  { title: 'SMS Center', href: '/isp/sms', icon: MessageSquare, requiredModule: 'sms_alerts' },
+  { title: 'Campaigns', href: '/isp/campaigns', icon: Megaphone },
+  { title: 'All Gateways', href: '/isp/gateways', icon: CreditCard },
+];
+
+// Operations & HR
+const operationsHRItems: NavItem[] = [
   { title: 'Payroll & HR', href: '/isp/staff', icon: Users, requiredModule: 'isp_hr_payroll' },
-  { title: 'Bandwidth Mgmt', href: '/isp/bandwidth', icon: Gauge, requiredModule: 'isp_bandwidth_management' },
-  { title: 'Roles & Permissions', href: '/isp/roles', icon: Shield },
   { title: 'Inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
   { title: 'Reports', href: '/isp/reports', icon: FileText },
 ];
@@ -106,6 +108,7 @@ const ispOperationsItems: NavItem[] = [
 // System Settings - Admin controls
 const tenantSystemItems: NavItem[] = [
   { title: 'User Management', href: '/users', icon: Shield, adminOnly: true },
+  { title: 'Roles & Permissions', href: '/isp/roles', icon: Shield },
   { title: 'Activity Logs', href: '/activity-logs', icon: ClipboardList },
   { title: 'Notifications', href: '/notifications', icon: Bell },
   { title: 'DB Integrity', href: '/integrity', icon: Database },
@@ -168,12 +171,14 @@ function readImpersonation(): { tenantId: string; tenantName?: string } | null {
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [ispExpanded, setIspExpanded] = useState(true);
+  const [customerExpanded, setCustomerExpanded] = useState(true);
   const [billingExpanded, setBillingExpanded] = useState(false);
   const [networkExpanded, setNetworkExpanded] = useState(false);
+  const [communicationExpanded, setCommunicationExpanded] = useState(false);
   const [operationsExpanded, setOperationsExpanded] = useState(false);
   const [resellerExpanded, setResellerExpanded] = useState(false);
   const [systemExpanded, setSystemExpanded] = useState(false);
+  const [subscriptionExpanded, setSubscriptionExpanded] = useState(false);
   const [impersonation, setImpersonation] = useState<{ tenantId: string; tenantName?: string } | null>(null);
   
   // Super Admin section expansions
@@ -202,15 +207,22 @@ export function Sidebar() {
   // Auto-expand sections when on relevant routes
   useEffect(() => {
     if (location.pathname.startsWith('/isp')) {
-      if (location.pathname.includes('/billing') || location.pathname.includes('/bkash') || location.pathname.includes('/gateways') || location.pathname.includes('/transactions') || location.pathname.includes('/automation')) {
+      if (location.pathname.includes('/recharge') || location.pathname.includes('/bkash') || location.pathname.includes('/transactions') || location.pathname.includes('/automation')) {
         setBillingExpanded(true);
-      } else if (location.pathname.includes('/mikrotik') || location.pathname.includes('/sms') || location.pathname.includes('/domain')) {
+      } else if (location.pathname.includes('/mikrotik') || location.pathname.includes('/bandwidth') || location.pathname.includes('/domain')) {
         setNetworkExpanded(true);
-      } else if (location.pathname.includes('/staff') || location.pathname.includes('/inventory') || location.pathname.includes('/reports')) {
+      } else if (location.pathname.includes('/sms') || location.pathname.includes('/campaigns') || location.pathname.includes('/gateways')) {
+        setCommunicationExpanded(true);
+      } else if (location.pathname.includes('/staff') || location.pathname.includes('/pos') || location.pathname.includes('/reports')) {
         setOperationsExpanded(true);
+      } else if (location.pathname.includes('/reseller')) {
+        setResellerExpanded(true);
       } else {
-        setIspExpanded(true);
+        setCustomerExpanded(true);
       }
+    }
+    if (location.pathname.startsWith('/billing')) {
+      setSubscriptionExpanded(true);
     }
   }, [location.pathname]);
 
@@ -227,10 +239,11 @@ export function Sidebar() {
     });
   };
 
-  const filteredIspCoreItems = useMemo(() => filterByModule(ispCoreItems), [hasAccess, inTenantView, isSuperAdmin]);
-  const filteredBillingItems = useMemo(() => filterByModule(ispBillingItems), [hasAccess, inTenantView, isSuperAdmin]);
-  const filteredNetworkItems = useMemo(() => filterByModule(ispNetworkItems), [hasAccess, inTenantView, isSuperAdmin]);
-  const filteredOperationsItems = useMemo(() => filterByModule(ispOperationsItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredCustomerMgmtItems = useMemo(() => filterByModule(customerMgmtItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredBillingItems = useMemo(() => filterByModule(billingFinanceItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredNetworkItems = useMemo(() => filterByModule(networkInfraItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredCommunicationItems = useMemo(() => filterByModule(communicationItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredOperationsItems = useMemo(() => filterByModule(operationsHRItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredResellerItems = useMemo(() => filterByModule(resellerItems), [hasAccess, inTenantView, isSuperAdmin]);
 
   const renderNavItem = (item: NavItem) => {
@@ -356,22 +369,19 @@ export function Sidebar() {
             )}
             <div className="flex flex-col gap-0.5">{oltCareItems.map(renderNavItem)}</div>
 
-            {renderSection('ISP Management', filteredIspCoreItems, {
+            {/* ISP Dashboard */}
+            {renderNavItem({ title: 'ISP Dashboard', href: '/isp', icon: LayoutDashboard })}
+
+            {filteredCustomerMgmtItems.length > 0 && renderSection('Customer Management', filteredCustomerMgmtItems, {
               collapsible: true,
-              expanded: ispExpanded,
-              onToggle: () => setIspExpanded((v) => !v),
+              expanded: customerExpanded,
+              onToggle: () => setCustomerExpanded((v) => !v),
             })}
 
-            {filteredBillingItems.length > 0 && renderSection('Billing & Payments', filteredBillingItems, {
+            {filteredBillingItems.length > 0 && renderSection('Billing & Finance', filteredBillingItems, {
               collapsible: true,
               expanded: billingExpanded,
               onToggle: () => setBillingExpanded((v) => !v),
-            })}
-
-            {filteredNetworkItems.length > 0 && renderSection('Network & Integration', filteredNetworkItems, {
-              collapsible: true,
-              expanded: networkExpanded,
-              onToggle: () => setNetworkExpanded((v) => !v),
             })}
 
             {filteredResellerItems.length > 0 && renderSection('Reseller Management', filteredResellerItems, {
@@ -380,7 +390,19 @@ export function Sidebar() {
               onToggle: () => setResellerExpanded((v) => !v),
             })}
 
-            {filteredOperationsItems.length > 0 && renderSection('Operations', filteredOperationsItems, {
+            {filteredNetworkItems.length > 0 && renderSection('Network & Infrastructure', filteredNetworkItems, {
+              collapsible: true,
+              expanded: networkExpanded,
+              onToggle: () => setNetworkExpanded((v) => !v),
+            })}
+
+            {filteredCommunicationItems.length > 0 && renderSection('Communication & Gateways', filteredCommunicationItems, {
+              collapsible: true,
+              expanded: communicationExpanded,
+              onToggle: () => setCommunicationExpanded((v) => !v),
+            })}
+
+            {filteredOperationsItems.length > 0 && renderSection('Operations & HR', filteredOperationsItems, {
               collapsible: true,
               expanded: operationsExpanded,
               onToggle: () => setOperationsExpanded((v) => !v),
@@ -392,7 +414,11 @@ export function Sidebar() {
               onToggle: () => setSystemExpanded((v) => !v),
             })}
 
-            {tenantId && renderSection('Subscription & Billing', tenantBillingItems)}
+            {tenantId && renderSection('My Subscription', tenantBillingItems, {
+              collapsible: true,
+              expanded: subscriptionExpanded,
+              onToggle: () => setSubscriptionExpanded((v) => !v),
+            })}
           </>
         )}
       </nav>
