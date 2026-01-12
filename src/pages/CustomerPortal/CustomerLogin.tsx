@@ -7,14 +7,17 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { Wifi, User, Lock, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTenantBrandingById } from '@/hooks/useTenantBranding';
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [tenantInfo, setTenantInfo] = useState<{ name: string; logo?: string } | null>(null);
+  const [tenantId, setTenantId] = useState<string | null>(null);
   
+  const { branding, loading: brandingLoading } = useTenantBrandingById(tenantId);
+
   const [credentials, setCredentials] = useState({
     username: '', // PPPoE username
     password: '', // PPPoE password
@@ -30,9 +33,35 @@ export default function CustomerLogin() {
       return;
     }
 
-    // Fetch tenant branding if available - skip for now
-    setTenantInfo({ name: 'Customer Portal' });
+    // Fetch tenant ID from slug if provided
+    const fetchTenantId = async () => {
+      if (tenantSlug) {
+        const { data } = await supabase
+          .from('tenants')
+          .select('id')
+          .or(`subdomain.eq.${tenantSlug},custom_domain.eq.${tenantSlug}`)
+          .single();
+        if (data) {
+          setTenantId(data.id);
+        }
+      }
+    };
+
+    fetchTenantId();
   }, [tenantSlug, navigate]);
+
+  // Apply favicon if available
+  useEffect(() => {
+    if (branding.favicon_url) {
+      const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+      if (link) {
+        link.href = branding.favicon_url;
+      }
+    }
+    if (branding.company_name) {
+      document.title = `${branding.company_name} - Customer Portal`;
+    }
+  }, [branding]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +69,7 @@ export default function CustomerLogin() {
 
     try {
       // Find customer by PPPoE username and password
-      const { data: customer, error } = await supabase
+      let query = supabase
         .from('customers')
         .select(`
           id,
@@ -62,8 +91,14 @@ export default function CustomerLogin() {
           customer_code
         `)
         .eq('pppoe_username', credentials.username.trim())
-        .eq('pppoe_password', credentials.password)
-        .single();
+        .eq('pppoe_password', credentials.password);
+
+      // Filter by tenant if specified
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
+      }
+
+      const { data: customer, error } = await query.single();
 
       if (error || !customer) {
         toast.error('Invalid PPPoE username or password');
@@ -92,16 +127,16 @@ export default function CustomerLogin() {
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-primary/5 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-            {tenantInfo?.logo ? (
-              <img src={tenantInfo.logo} alt="Logo" className="h-10 w-10 rounded-full object-cover" />
+          <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+            {branding.logo_url ? (
+              <img src={branding.logo_url} alt="Logo" className="h-12 w-12 object-contain" />
             ) : (
               <Wifi className="h-8 w-8 text-primary" />
             )}
           </div>
           <div>
-            <CardTitle className="text-2xl">{tenantInfo?.name || 'Customer Portal'}</CardTitle>
-            <CardDescription>Sign in with your PPPoE credentials</CardDescription>
+            <CardTitle className="text-2xl">{branding.company_name || 'Customer Portal'}</CardTitle>
+            <CardDescription>{branding.subtitle || 'Sign in with your PPPoE credentials'}</CardDescription>
           </div>
         </CardHeader>
         <CardContent>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,12 +14,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useTenantBackup } from '@/hooks/useTenantBackup';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
+import { useTenantBranding } from '@/hooks/useTenantBranding';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -143,6 +144,242 @@ function PasswordChangeCard() {
   );
 }
 
+// Branding Settings Component
+function BrandingSettingsCard() {
+  const { branding, saving, updateBranding, uploadLogo } = useTenantBranding();
+  const [companyName, setCompanyName] = useState('');
+  const [subtitle, setSubtitle] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [faviconUrl, setFaviconUrl] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const faviconInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setCompanyName(branding.company_name);
+    setSubtitle(branding.subtitle);
+    setLogoUrl(branding.logo_url);
+    setFaviconUrl(branding.favicon_url);
+  }, [branding]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    const url = await uploadLogo(file, 'logo');
+    if (url) {
+      setLogoUrl(url);
+      await updateBranding({ logo_url: url });
+    }
+    setUploadingLogo(false);
+  };
+
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingFavicon(true);
+    const url = await uploadLogo(file, 'favicon');
+    if (url) {
+      setFaviconUrl(url);
+      await updateBranding({ favicon_url: url });
+    }
+    setUploadingFavicon(false);
+  };
+
+  const handleSave = async () => {
+    await updateBranding({
+      company_name: companyName,
+      subtitle: subtitle,
+    });
+  };
+
+  return (
+    <Card variant="glass">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Building2 className="h-5 w-5 text-primary" />
+          Company Branding
+        </CardTitle>
+        <CardDescription>
+          Customize your company's appearance across the platform, invoices, and customer portal
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Company Info */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="companyName">Company Name</Label>
+            <Input
+              id="companyName"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="Your ISP Company Name"
+              className="bg-secondary"
+            />
+            <p className="text-xs text-muted-foreground">
+              Displayed in header, invoices, and login pages
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="subtitle">Tagline / Subtitle</Label>
+            <Input
+              id="subtitle"
+              value={subtitle}
+              onChange={(e) => setSubtitle(e.target.value)}
+              placeholder="Your Internet, Our Priority"
+              className="bg-secondary"
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional tagline for branding
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Logo Upload */}
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="space-y-3">
+            <Label>Company Logo</Label>
+            <div className="flex items-center gap-4">
+              <div className="h-20 w-20 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="Logo" className="h-full w-full object-contain" />
+                ) : (
+                  <Image className="h-8 w-8 text-muted-foreground" />
+                )}
+              </div>
+              <div className="space-y-2">
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={uploadingLogo}
+                >
+                  {uploadingLogo ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Upload Logo
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Used in invoices, reports, and customer portal
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label>Favicon / Icon</Label>
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden">
+                {faviconUrl ? (
+                  <img src={faviconUrl} alt="Favicon" className="h-full w-full object-contain" />
+                ) : (
+                  <Image className="h-6 w-6 text-muted-foreground" />
+                )}
+              </div>
+              <div className="space-y-2">
+                <input
+                  ref={faviconInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFaviconUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => faviconInputRef.current?.click()}
+                  disabled={uploadingFavicon}
+                >
+                  {uploadingFavicon ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Upload Icon
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Browser tab icon (32x32 or 64x64 recommended)
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* URL inputs for manual entry */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="logoUrl">Logo URL (Optional)</Label>
+            <Input
+              id="logoUrl"
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://example.com/logo.png"
+              className="bg-secondary"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="faviconUrl">Favicon URL (Optional)</Label>
+            <Input
+              id="faviconUrl"
+              value={faviconUrl}
+              onChange={(e) => setFaviconUrl(e.target.value)}
+              placeholder="https://example.com/favicon.ico"
+              className="bg-secondary"
+            />
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Preview */}
+        <div className="p-4 rounded-lg bg-muted/30 border border-border">
+          <Label className="mb-3 block">Preview</Label>
+          <div className="flex items-center gap-3 p-3 rounded-md bg-background border">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" className="h-10 w-10 object-contain" />
+            ) : (
+              <div className="h-10 w-10 rounded bg-primary/10 flex items-center justify-center">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+            )}
+            <div>
+              <p className="font-semibold">{companyName || 'Your Company Name'}</p>
+              <p className="text-xs text-muted-foreground">{subtitle || 'Your tagline here'}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Branding'
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { settings, loading, saving, updateSetting, saveSettings, resetSettings } = useSystemSettings();
   const { isAdmin } = useUserRole();
@@ -171,8 +408,12 @@ export default function Settings() {
   return (
     <DashboardLayout title="Settings" subtitle="System configuration and preferences">
       <div className="space-y-6 animate-fade-in max-w-4xl">
-        <Tabs defaultValue="general" className="space-y-6">
-          <TabsList className="bg-secondary">
+        <Tabs defaultValue="branding" className="space-y-6">
+          <TabsList className="bg-secondary flex-wrap h-auto py-1">
+            <TabsTrigger value="branding" className="gap-2">
+              <Building2 className="h-4 w-4" />
+              Branding
+            </TabsTrigger>
             <TabsTrigger value="general" className="gap-2">
               <SettingsIcon className="h-4 w-4" />
               General
@@ -196,6 +437,11 @@ export default function Settings() {
               </TabsTrigger>
             )}
           </TabsList>
+
+          {/* Branding Settings */}
+          <TabsContent value="branding" className="space-y-6">
+            <BrandingSettingsCard />
+          </TabsContent>
 
           {/* General Settings */}
           <TabsContent value="general" className="space-y-6">
