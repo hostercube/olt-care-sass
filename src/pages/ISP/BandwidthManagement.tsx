@@ -1874,7 +1874,7 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden xl:grid xl:grid-cols-[2fr_80px_60px_80px_50px_100px_100px_50px_100px_40px] gap-2 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
+              <div className="hidden xl:grid xl:grid-cols-[minmax(120px,1fr)_70px_55px_75px_50px_105px_105px_45px_95px_36px] gap-1.5 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
                 <div>Item</div>
                 <div>Unit</div>
                 <div>Qty</div>
@@ -1891,7 +1891,7 @@ function BandwidthManagementContent() {
                 {purchaseBillItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-3 bg-muted/30">
                     {/* Desktop: Single Row */}
-                    <div className="hidden xl:grid xl:grid-cols-[2fr_80px_60px_80px_50px_100px_100px_50px_100px_40px] gap-2 items-center">
+                    <div className="hidden xl:grid xl:grid-cols-[minmax(120px,1fr)_70px_55px_75px_50px_105px_105px_45px_95px_36px] gap-1.5 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -1902,7 +1902,7 @@ function BandwidthManagementContent() {
                             updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Item" /></SelectTrigger>
+                          <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -1911,28 +1911,28 @@ function BandwidthManagementContent() {
                         </Select>
                       </div>
                       <div>
-                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9 text-sm" />
+                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9 text-xs px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9 text-sm" />
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9 text-xs px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9 text-sm" />
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9 text-xs px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-sm" />
+                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-xs px-1 text-center" />
                       </div>
                       <div>
-                        <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-9 text-sm" />
+                        <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-9 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-9 text-sm" />
+                        <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-9 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-sm bg-muted text-center" />
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-xs bg-muted text-center px-1" />
                       </div>
                       <div>
-                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-sm bg-primary/10 font-semibold" />
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-xs bg-primary/10 font-semibold px-2" />
                       </div>
                       <div className="flex justify-center">
                         <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
@@ -2083,7 +2083,7 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden xl:grid xl:grid-cols-[2fr_80px_60px_80px_50px_100px_100px_50px_100px_40px] gap-2 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
+              <div className="hidden xl:grid xl:grid-cols-[minmax(120px,1fr)_70px_55px_75px_50px_105px_105px_45px_95px_36px] gap-1.5 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
                 <div>Item</div>
                 <div>Unit</div>
                 <div>Qty</div>
@@ -2100,7 +2100,7 @@ function BandwidthManagementContent() {
                 {salesInvoiceItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-3 bg-muted/30">
                     {/* Desktop: Single Row */}
-                    <div className="hidden xl:grid xl:grid-cols-[2fr_80px_60px_80px_50px_100px_100px_50px_100px_40px] gap-2 items-center">
+                    <div className="hidden xl:grid xl:grid-cols-[minmax(120px,1fr)_70px_55px_75px_50px_105px_105px_45px_95px_36px] gap-1.5 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -2111,7 +2111,7 @@ function BandwidthManagementContent() {
                             updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-9"><SelectValue placeholder="Item" /></SelectTrigger>
+                          <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -2120,28 +2120,28 @@ function BandwidthManagementContent() {
                         </Select>
                       </div>
                       <div>
-                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9 text-sm" />
+                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9 text-xs px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9 text-sm" />
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9 text-xs px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9 text-sm" />
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9 text-xs px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-sm" />
+                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-xs px-1 text-center" />
                       </div>
                       <div>
-                        <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-9 text-sm" />
+                        <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-9 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-9 text-sm" />
+                        <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-9 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-sm bg-muted text-center" />
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-xs bg-muted text-center px-1" />
                       </div>
                       <div>
-                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-sm bg-primary/10 font-semibold" />
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-xs bg-primary/10 font-semibold px-2" />
                       </div>
                       <div className="flex justify-center">
                         <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>

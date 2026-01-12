@@ -242,38 +242,44 @@ export function generatePurchaseBillPDF(bill: PurchaseBillData, options: PDFOpti
   
   autoTable(doc, {
     startY: yPos,
-    head: [['#', 'Item', 'Unit', 'Qty', 'Period', 'Rate', 'VAT', 'Total']],
+    head: [['#', 'Item Description', 'Unit', 'Qty', 'Period', 'Rate', 'VAT', 'Total']],
     body: tableData,
     headStyles: {
       fillColor: primaryColor,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 9,
-      cellPadding: 4,
+      cellPadding: 5,
       font: 'helvetica',
+      halign: 'center',
     },
     bodyStyles: {
       textColor: textColor,
       fontSize: 9,
-      cellPadding: 4,
+      cellPadding: 5,
       font: 'helvetica',
+      valign: 'middle',
     },
     alternateRowStyles: {
       fillColor: [249, 250, 251],
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center' },
-      1: { cellWidth: 'auto' },
-      2: { cellWidth: 20, halign: 'center' },
-      3: { cellWidth: 15, halign: 'center' },
-      4: { cellWidth: 42, halign: 'center' },
-      5: { cellWidth: 28, halign: 'right' },
-      6: { cellWidth: 18, halign: 'center' },
-      7: { cellWidth: 32, halign: 'right' },
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 50, halign: 'left', overflow: 'linebreak' },
+      2: { cellWidth: 18, halign: 'center' },
+      3: { cellWidth: 14, halign: 'center' },
+      4: { cellWidth: 38, halign: 'center', fontSize: 8 },
+      5: { cellWidth: 26, halign: 'right' },
+      6: { cellWidth: 16, halign: 'center' },
+      7: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
     },
     margin: { left: 15, right: 15 },
     tableLineColor: [229, 231, 235],
     tableLineWidth: 0.1,
+    styles: {
+      overflow: 'linebreak',
+      cellWidth: 'wrap',
+    },
   });
   
   // Get final Y position
@@ -491,38 +497,44 @@ export function generateSalesInvoicePDF(invoice: SalesInvoiceData, options: PDFO
   
   autoTable(doc, {
     startY: yPos,
-    head: [['#', 'Item', 'Unit', 'Qty', 'Period', 'Rate', 'VAT', 'Total']],
+    head: [['#', 'Item Description', 'Unit', 'Qty', 'Period', 'Rate', 'VAT', 'Total']],
     body: tableData,
     headStyles: {
       fillColor: primaryColor,
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 9,
-      cellPadding: 4,
+      cellPadding: 5,
       font: 'helvetica',
+      halign: 'center',
     },
     bodyStyles: {
       textColor: textColor,
       fontSize: 9,
-      cellPadding: 4,
+      cellPadding: 5,
       font: 'helvetica',
+      valign: 'middle',
     },
     alternateRowStyles: {
       fillColor: [249, 250, 251],
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center' },
-      1: { cellWidth: 'auto' },
-      2: { cellWidth: 20, halign: 'center' },
-      3: { cellWidth: 15, halign: 'center' },
-      4: { cellWidth: 42, halign: 'center' },
-      5: { cellWidth: 28, halign: 'right' },
-      6: { cellWidth: 18, halign: 'center' },
-      7: { cellWidth: 32, halign: 'right' },
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 50, halign: 'left', overflow: 'linebreak' },
+      2: { cellWidth: 18, halign: 'center' },
+      3: { cellWidth: 14, halign: 'center' },
+      4: { cellWidth: 38, halign: 'center', fontSize: 8 },
+      5: { cellWidth: 26, halign: 'right' },
+      6: { cellWidth: 16, halign: 'center' },
+      7: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
     },
     margin: { left: 15, right: 15 },
     tableLineColor: [229, 231, 235],
     tableLineWidth: 0.1,
+    styles: {
+      overflow: 'linebreak',
+      cellWidth: 'wrap',
+    },
   });
   
   // Get final Y position
@@ -616,25 +628,25 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
   
   const itemsTableRows = items.length > 0 ? items.map((item, i) => `
     <tr>
-      <td class="text-center">${i + 1}</td>
-      <td>${item.item_name}</td>
-      <td class="text-center">${item.unit}</td>
-      <td class="text-center">${item.quantity}</td>
-      <td class="text-center">${item.from_date && item.to_date ? `${format(new Date(item.from_date), 'dd/MM')} - ${format(new Date(item.to_date), 'dd/MM')} (${getDaysCount(item.from_date, item.to_date)}d)` : '-'}</td>
-      <td class="text-right">${fmtCurrency(item.rate)}</td>
-      <td class="text-center">${item.vat_percent > 0 ? `${item.vat_percent}%` : '-'}</td>
-      <td class="text-right font-semibold">${fmtCurrency(item.total)}</td>
+      <td style="text-align: center;">${i + 1}</td>
+      <td style="font-weight: 500;">${item.item_name}</td>
+      <td style="text-align: center;">${item.unit}</td>
+      <td style="text-align: center;">${item.quantity}</td>
+      <td style="text-align: center; font-size: 12px;">${item.from_date && item.to_date ? `${format(new Date(item.from_date), 'dd/MM')} - ${format(new Date(item.to_date), 'dd/MM')} (${getDaysCount(item.from_date, item.to_date)}d)` : '-'}</td>
+      <td style="text-align: right;">${fmtCurrency(item.rate)}</td>
+      <td style="text-align: center;">${item.vat_percent > 0 ? `${item.vat_percent}%` : '-'}</td>
+      <td style="text-align: right; font-weight: 600;">${fmtCurrency(item.total)}</td>
     </tr>
   `).join('') : `
     <tr>
-      <td class="text-center">1</td>
-      <td>Bandwidth Service</td>
-      <td class="text-center">-</td>
-      <td class="text-center">1</td>
-      <td class="text-center">-</td>
-      <td class="text-right">${fmtCurrency(data.subtotal)}</td>
-      <td class="text-center">-</td>
-      <td class="text-right font-semibold">${fmtCurrency(data.subtotal)}</td>
+      <td style="text-align: center;">1</td>
+      <td style="font-weight: 500;">Bandwidth Service</td>
+      <td style="text-align: center;">-</td>
+      <td style="text-align: center;">1</td>
+      <td style="text-align: center;">-</td>
+      <td style="text-align: right;">${fmtCurrency(data.subtotal)}</td>
+      <td style="text-align: center;">-</td>
+      <td style="text-align: right; font-weight: 600;">${fmtCurrency(data.subtotal)}</td>
     </tr>
   `;
 
@@ -674,11 +686,11 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         .detail-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
         .detail-row .label { color: #6b7280; font-size: 13px; }
         .detail-row .value { font-weight: 600; font-size: 13px; color: #1f2937; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        th { background: ${primaryColor}; color: white; padding: 12px 10px; text-align: left; font-size: 12px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
-        th:first-child { border-radius: 8px 0 0 0; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; table-layout: fixed; }
+        th { background: ${primaryColor}; color: white; padding: 12px 8px; text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; }
+        th:first-child { border-radius: 8px 0 0 0; width: 35px; }
         th:last-child { border-radius: 0 8px 0 0; text-align: right; }
-        td { padding: 12px 10px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+        td { padding: 12px 8px; border-bottom: 1px solid #e5e7eb; font-size: 13px; word-wrap: break-word; vertical-align: middle; }
         tr:nth-child(even) { background: #f9fafb; }
         tr:last-child td:first-child { border-radius: 0 0 0 8px; }
         tr:last-child td:last-child { border-radius: 0 0 8px 0; }
@@ -753,14 +765,14 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         <table>
           <thead>
             <tr>
-              <th style="width: 40px;">#</th>
-              <th>Item Description</th>
-              <th style="width: 60px;" class="text-center">Unit</th>
-              <th style="width: 45px;" class="text-center">Qty</th>
-              <th style="width: 110px;" class="text-center">Period</th>
-              <th style="width: 90px;" class="text-right">Rate</th>
-              <th style="width: 55px;" class="text-center">VAT</th>
-              <th style="width: 100px;">Total</th>
+              <th style="width: 30px; text-align: center;">#</th>
+              <th style="width: auto;">Item Description</th>
+              <th style="width: 55px; text-align: center;">Unit</th>
+              <th style="width: 40px; text-align: center;">Qty</th>
+              <th style="width: 100px; text-align: center;">Period</th>
+              <th style="width: 85px; text-align: right;">Rate</th>
+              <th style="width: 45px; text-align: center;">VAT</th>
+              <th style="width: 95px; text-align: right;">Total</th>
             </tr>
           </thead>
           <tbody>
