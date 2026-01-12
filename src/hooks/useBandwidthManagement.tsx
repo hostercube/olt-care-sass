@@ -481,7 +481,7 @@ export function useBandwidthManagement() {
     try {
       const { data, error } = await supabase
         .from('bandwidth_purchase_bills')
-        .select('*, provider:bandwidth_providers(*)')
+        .select('*, provider:bandwidth_providers(*), items:bandwidth_purchase_bill_items(*)')
         .eq('tenant_id', tenantId)
         .order('billing_date', { ascending: false });
       
@@ -582,7 +582,7 @@ export function useBandwidthManagement() {
     try {
       const { data, error } = await supabase
         .from('bandwidth_sales_invoices')
-        .select('*, client:bandwidth_clients(*)')
+        .select('*, client:bandwidth_clients(*), items:bandwidth_sales_invoice_items(*)')
         .eq('tenant_id', tenantId)
         .order('billing_date', { ascending: false });
       
