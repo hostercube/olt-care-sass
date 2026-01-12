@@ -9,41 +9,58 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { 
-  Trash2, RefreshCw, Package, Wifi, WifiOff, X, Loader2, AlertTriangle 
+  Trash2, RefreshCw, Package, Wifi, WifiOff, X, Loader2, AlertTriangle, Store
 } from 'lucide-react';
 import type { Customer } from '@/types/isp';
 import type { ISPPackage } from '@/types/isp';
+import type { Reseller } from '@/types/reseller';
 import { toast } from 'sonner';
 
 interface BulkActionsToolbarProps {
   selectedCustomers: Customer[];
   packages: ISPPackage[];
+  resellers?: Reseller[];
   onClearSelection: () => void;
   onBulkDelete: (customerIds: string[]) => Promise<void>;
   onBulkRecharge: (customerIds: string[], months: number) => Promise<void>;
   onBulkPackageChange: (customerIds: string[], packageId: string) => Promise<void>;
   onBulkNetworkEnable: (customerIds: string[]) => Promise<void>;
   onBulkNetworkDisable: (customerIds: string[]) => Promise<void>;
+  onBulkResellerAssign?: (customerIds: string[], resellerId: string | null) => Promise<void>;
 }
+
+const getLevelLabel = (level: number) => {
+  switch (level) {
+    case 1: return 'Master';
+    case 2: return 'Sub';
+    case 3: return 'Sub-Sub';
+    default: return `L${level}`;
+  }
+};
 
 export function BulkActionsToolbar({
   selectedCustomers,
   packages,
+  resellers = [],
   onClearSelection,
   onBulkDelete,
   onBulkRecharge,
   onBulkPackageChange,
   onBulkNetworkEnable,
   onBulkNetworkDisable,
+  onBulkResellerAssign,
 }: BulkActionsToolbarProps) {
   const [showRechargeDialog, setShowRechargeDialog] = useState(false);
   const [showPackageDialog, setShowPackageDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showResellerDialog, setShowResellerDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   
   const [rechargeMonths, setRechargeMonths] = useState(1);
   const [selectedPackageId, setSelectedPackageId] = useState('');
+  const [selectedResellerId, setSelectedResellerId] = useState<string>('');
 
   const count = selectedCustomers.length;
 
@@ -114,6 +131,34 @@ export function BulkActionsToolbar({
     }
   };
 
+  const handleBulkResellerAssign = async () => {
+    if (!onBulkResellerAssign) return;
+    
+    setLoading(true);
+    try {
+      // Pass null if 'direct' is selected to remove reseller assignment
+      const resellerId = selectedResellerId === 'direct' ? null : selectedResellerId;
+      await onBulkResellerAssign(selectedCustomers.map(c => c.id), resellerId);
+      setShowResellerDialog(false);
+      setSelectedResellerId('');
+      onClearSelection();
+    } catch (err) {
+      console.error('Bulk reseller assign error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Build reseller options for searchable select
+  const resellerOptions = [
+    { value: 'direct', label: 'Direct (Remove Reseller)', searchTerms: ['direct', 'remove'] },
+    ...resellers.filter(r => r.is_active).map(r => ({
+      value: r.id,
+      label: `${r.name} (${getLevelLabel(r.level || 1)})`,
+      searchTerms: [r.name, r.phone || '', getLevelLabel(r.level || 1)]
+    }))
+  ];
+
   if (count === 0) return null;
 
   return (
@@ -143,6 +188,18 @@ export function BulkActionsToolbar({
             <Package className="h-4 w-4 mr-1" />
             Change Package
           </Button>
+
+          {onBulkResellerAssign && resellers.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResellerDialog(true)}
+              disabled={loading}
+            >
+              <Store className="h-4 w-4 mr-1" />
+              Assign Reseller
+            </Button>
+          )}
           
           <Button
             variant="outline"
@@ -246,6 +303,66 @@ export function BulkActionsToolbar({
             <Button onClick={handleBulkPackageChange} disabled={loading || !selectedPackageId}>
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Update {count} Customers
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reseller Assignment Dialog */}
+      <Dialog open={showResellerDialog} onOpenChange={setShowResellerDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Reseller</DialogTitle>
+            <DialogDescription>
+              Assign {count} customer(s) to a reseller or sub-reseller. 
+              Select "Direct" to remove reseller assignment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Select Reseller</Label>
+              <SearchableSelect
+                options={resellerOptions}
+                value={selectedResellerId}
+                onValueChange={setSelectedResellerId}
+                placeholder="Choose a reseller..."
+                searchPlaceholder="Search by name or phone..."
+              />
+              {selectedResellerId === 'direct' && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  Customers will be moved to Direct (no reseller). They will appear in your main customer list.
+                </p>
+              )}
+              {selectedResellerId && selectedResellerId !== 'direct' && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  Customers will be assigned to this reseller. The reseller will be able to manage and recharge these customers.
+                </p>
+              )}
+            </div>
+            <div className="max-h-40 overflow-y-auto space-y-1 p-3 bg-muted/50 rounded-md">
+              <p className="text-xs text-muted-foreground mb-2">Selected customers:</p>
+              {selectedCustomers.slice(0, 10).map((c) => (
+                <p key={c.id} className="text-sm">
+                  • {c.name} ({c.customer_code || 'N/A'})
+                  {c.reseller && (
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      Current: {c.reseller.name}
+                    </Badge>
+                  )}
+                </p>
+              ))}
+              {count > 10 && (
+                <p className="text-sm text-muted-foreground">...and {count - 10} more</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowResellerDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkResellerAssign} disabled={loading || !selectedResellerId}>
+              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {selectedResellerId === 'direct' ? `Move ${count} to Direct` : `Assign ${count} Customers`}
             </Button>
           </DialogFooter>
         </DialogContent>

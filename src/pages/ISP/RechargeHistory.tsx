@@ -96,6 +96,8 @@ export default function RechargeHistory() {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [resellerFilter, setResellerFilter] = useState('');
   const [areaFilter, setAreaFilter] = useState('');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   
@@ -173,8 +175,18 @@ export default function RechargeHistory() {
       result = result.filter(r => r.customer?.area_id === areaFilter);
     }
 
+    // Payment method filter
+    if (paymentMethodFilter !== 'all') {
+      result = result.filter(r => r.payment_method === paymentMethodFilter);
+    }
+
+    // Status filter (due vs completed)
+    if (statusFilter !== 'all') {
+      result = result.filter(r => r.status === statusFilter);
+    }
+
     return result;
-  }, [recharges, searchTerm, sourceFilter, areaFilter]);
+  }, [recharges, searchTerm, sourceFilter, areaFilter, paymentMethodFilter, statusFilter]);
 
   // Pagination
   const paginatedRecharges = useMemo(() => {
@@ -190,13 +202,14 @@ export default function RechargeHistory() {
     const byStaff = filteredRecharges.filter(r => r.collected_by_type === 'staff').length;
     const byReseller = filteredRecharges.filter(r => ['reseller', 'sub_reseller', 'sub_sub_reseller'].includes(r.collected_by_type || '')).length;
     const byOnline = filteredRecharges.filter(r => ['online_payment', 'auto'].includes(r.collected_by_type || '')).length;
-    return { totalAmount, totalDiscount, byAdmin, byStaff, byReseller, byOnline, total: filteredRecharges.length };
+    const dueRecharges = filteredRecharges.filter(r => r.status === 'due').length;
+    return { totalAmount, totalDiscount, byAdmin, byStaff, byReseller, byOnline, dueRecharges, total: filteredRecharges.length };
   }, [filteredRecharges]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, sourceFilter, areaFilter, resellerFilter, dateFrom, dateTo]);
+  }, [searchTerm, sourceFilter, areaFilter, resellerFilter, dateFrom, dateTo, paymentMethodFilter, statusFilter]);
 
   // Export CSV
   const exportCSV = () => {
@@ -244,7 +257,7 @@ export default function RechargeHistory() {
       subtitle="View all customer recharges with detailed tracking"
     >
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-6 mb-6">
+      <div className="grid gap-4 md:grid-cols-7 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -323,6 +336,19 @@ export default function RechargeHistory() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-yellow-500/10">
+                <Wallet className="h-5 w-5 text-yellow-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Due (বাকি)</p>
+                <p className="text-2xl font-bold text-yellow-600">{stats.dueRecharges}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Main Content */}
@@ -342,7 +368,7 @@ export default function RechargeHistory() {
         </CardHeader>
         <CardContent>
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 mb-4">
             <div className="lg:col-span-2 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -367,13 +393,30 @@ export default function RechargeHistory() {
                 <SelectItem value="auto">Auto Payment</SelectItem>
               </SelectContent>
             </Select>
-            <SearchableSelect
-              options={resellerOptions}
-              value={resellerFilter}
-              onValueChange={setResellerFilter}
-              placeholder="All Resellers"
-              allowClear
-            />
+            <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Payment Method" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Methods</SelectItem>
+                <SelectItem value="cash">Cash</SelectItem>
+                <SelectItem value="bkash">bKash</SelectItem>
+                <SelectItem value="nagad">Nagad</SelectItem>
+                <SelectItem value="bank">Bank Transfer</SelectItem>
+                <SelectItem value="online">Online</SelectItem>
+                <SelectItem value="due">Due (বাকি)</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="due">Due</SelectItem>
+              </SelectContent>
+            </Select>
             <Input
               type="date"
               value={dateFrom}
@@ -397,6 +440,13 @@ export default function RechargeHistory() {
               placeholder="All Areas"
               allowClear
             />
+            <SearchableSelect
+              options={resellerOptions}
+              value={resellerFilter}
+              onValueChange={setResellerFilter}
+              placeholder="All Resellers"
+              allowClear
+            />
           </div>
 
           {/* Table */}
@@ -415,18 +465,20 @@ export default function RechargeHistory() {
                       <TableHead>Date</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Payment</TableHead>
                       <TableHead>Months</TableHead>
                       <TableHead>Old Expiry</TableHead>
                       <TableHead>New Expiry</TableHead>
                       <TableHead>Discount</TableHead>
                       <TableHead>Collected By</TableHead>
                       <TableHead>Reseller</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedRecharges.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                           No recharges found
                         </TableCell>
                       </TableRow>
@@ -452,6 +504,19 @@ export default function RechargeHistory() {
                           <TableCell className="text-right font-medium text-green-600">
                             ৳{recharge.amount.toLocaleString()}
                           </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={recharge.payment_method === 'due' ? 'secondary' : 'outline'}
+                              className={recharge.payment_method === 'due' ? 'bg-yellow-500/10 text-yellow-600' : ''}
+                            >
+                              {recharge.payment_method === 'due' ? 'Due' : 
+                               recharge.payment_method === 'bkash' ? 'bKash' :
+                               recharge.payment_method === 'nagad' ? 'Nagad' :
+                               recharge.payment_method === 'bank' ? 'Bank' :
+                               recharge.payment_method === 'online' ? 'Online' :
+                               recharge.payment_method || 'Cash'}
+                            </Badge>
+                          </TableCell>
                           <TableCell>{recharge.months || 1}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {recharge.old_expiry ? format(new Date(recharge.old_expiry), 'dd MMM yyyy') : '-'}
@@ -474,6 +539,14 @@ export default function RechargeHistory() {
                             ) : (
                               <span className="text-muted-foreground">Direct</span>
                             )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={recharge.status === 'due' ? 'secondary' : 'default'}
+                              className={recharge.status === 'due' ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500' : 'bg-green-500/10 text-green-600'}
+                            >
+                              {recharge.status === 'due' ? 'Due' : 'Paid'}
+                            </Badge>
                           </TableCell>
                         </TableRow>
                       ))

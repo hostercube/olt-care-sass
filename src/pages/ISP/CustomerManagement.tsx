@@ -379,6 +379,21 @@ export default function CustomerManagement() {
     refetch();
   }, [customers, setServiceStatus, refetch]);
 
+  const handleBulkResellerAssign = useCallback(async (customerIds: string[], resellerId: string | null) => {
+    const { error } = await supabase
+      .from('customers')
+      .update({ reseller_id: resellerId })
+      .in('id', customerIds);
+
+    if (error) {
+      toast.error('Failed to assign reseller');
+      throw error;
+    }
+
+    toast.success(`${customerIds.length} customers ${resellerId ? 'assigned to reseller' : 'moved to Direct'}`);
+    refetch();
+  }, [refetch]);
+
   const exportCSV = () => {
     const headers = ['Code', 'Name', 'Phone', 'PPPoE', 'Package', 'Status', 'Expiry', 'Due'];
     const rows = filteredCustomers.map(c => [
@@ -673,12 +688,14 @@ export default function CustomerManagement() {
           <BulkActionsToolbar
             selectedCustomers={selectedCustomers}
             packages={packages}
+            resellers={resellers}
             onClearSelection={clearSelection}
             onBulkDelete={handleBulkDelete}
             onBulkRecharge={handleBulkRecharge}
             onBulkPackageChange={handleBulkPackageChange}
             onBulkNetworkEnable={handleBulkNetworkEnable}
             onBulkNetworkDisable={handleBulkNetworkDisable}
+            onBulkResellerAssign={handleBulkResellerAssign}
           />
 
           {/* Table */}
