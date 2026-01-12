@@ -2015,7 +2015,7 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-[minmax(120px,1fr)_60px_50px_80px_50px_90px_90px_45px_90px_36px] gap-2 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
+              <div className="hidden lg:grid lg:grid-cols-[140px_55px_50px_85px_50px_95px_95px_50px_100px_36px] gap-1.5 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
                 <div>Item</div>
                 <div className="text-center">Unit</div>
                 <div className="text-center">Qty</div>
@@ -2032,7 +2032,7 @@ function BandwidthManagementContent() {
                 {purchaseBillItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-[minmax(120px,1fr)_60px_50px_80px_50px_90px_90px_45px_90px_36px] gap-2 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[140px_55px_50px_85px_50px_95px_95px_50px_100px_36px] gap-1.5 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -2329,7 +2329,7 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-[minmax(120px,1fr)_60px_50px_80px_50px_90px_90px_45px_90px_36px] gap-2 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
+              <div className="hidden lg:grid lg:grid-cols-[140px_55px_50px_85px_50px_95px_95px_50px_100px_36px] gap-1.5 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
                 <div>Item</div>
                 <div className="text-center">Unit</div>
                 <div className="text-center">Qty</div>
@@ -2346,7 +2346,7 @@ function BandwidthManagementContent() {
                 {salesInvoiceItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-[minmax(120px,1fr)_60px_50px_80px_50px_90px_90px_45px_90px_36px] gap-2 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[140px_55px_50px_85px_50px_95px_95px_50px_100px_36px] gap-1.5 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
