@@ -95,6 +95,8 @@ const networkInfraItems: NavItem[] = [
 // Communication & Marketing
 const communicationItems: NavItem[] = [
   { title: 'sms_center', href: '/isp/sms', icon: MessageSquare, requiredModule: 'sms_alerts' },
+  { title: 'sms_templates', href: '/isp/sms-templates', icon: FileText },
+  { title: 'email_templates', href: '/isp/email-templates', icon: Mail },
   { title: 'campaigns', href: '/isp/campaigns', icon: Megaphone },
   { title: 'all_gateways', href: '/isp/gateways', icon: CreditCard },
 ];
