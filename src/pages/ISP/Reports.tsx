@@ -1,17 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
+import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import { 
   FileText, Download, Loader2, BarChart3, Users, DollarSign, TrendingUp,
   AlertCircle, UserPlus, UserMinus, Wallet, Building2, Clock, Phone,
-  CheckCircle, XCircle, Calendar, Printer, FileSpreadsheet
+  CheckCircle, XCircle, Calendar, Printer, FileSpreadsheet, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, subMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns';
@@ -32,12 +33,83 @@ const reportTypes = [
   { id: 'complain', name: 'Complain Report', icon: AlertCircle },
 ];
 
+const ITEMS_PER_PAGE = 20;
+
+// Pagination component
+const TablePagination = ({ 
+  currentPage, 
+  totalPages, 
+  onPageChange,
+  totalItems
+}: { 
+  currentPage: number; 
+  totalPages: number; 
+  onPageChange: (page: number) => void;
+  totalItems: number;
+}) => {
+  if (totalPages <= 1) return null;
+  
+  return (
+    <div className="flex items-center justify-between mt-4 px-2">
+      <p className="text-sm text-muted-foreground">
+        Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, totalItems)} of {totalItems}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm">
+          Page {currentPage} of {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 export default function Reports() {
   const { tenantId, tenant } = useTenantContext();
+  const { t } = useLanguageCurrency();
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [activeTab, setActiveTab] = useState('btrc');
   const [reportData, setReportData] = useState<any>(null);
+  
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  
+  // Pagination states
+  const [collectionPage, setCollectionPage] = useState(1);
+  const [newConnectionsPage, setNewConnectionsPage] = useState(1);
+  const [disabledPage, setDisabledPage] = useState(1);
+  const [dueBillsPage, setDueBillsPage] = useState(1);
+  const [nonGeneratedPage, setNonGeneratedPage] = useState(1);
+  const [todayNewPage, setTodayNewPage] = useState(1);
+
+  // Reset pagination when tab changes
+  useEffect(() => {
+    setCollectionPage(1);
+    setNewConnectionsPage(1);
+    setDisabledPage(1);
+    setDueBillsPage(1);
+    setNonGeneratedPage(1);
+    setTodayNewPage(1);
+    setSearchQuery('');
+    setStatusFilter('all');
+  }, [activeTab]);
 
   const fetchReportData = useCallback(async () => {
     if (!tenantId) return;
@@ -118,13 +190,11 @@ export default function Reports() {
       const monthlyCollection = payments.reduce((sum, p) => sum + Number(p.amount), 0);
       const monthlyDue = unpaidBills.reduce((sum, b) => sum + (b.total_amount - (b.paid_amount || 0)), 0);
       
-      // Calculate income and expense from transactions
       const incomeTransactions = transactions.filter((t: any) => t.type === 'income');
       const expenseTransactions = transactions.filter((t: any) => t.type === 'expense');
       const totalTransactionIncome = incomeTransactions.reduce((sum, t: any) => sum + Number(t.amount), 0);
       const totalTransactionExpense = expenseTransactions.reduce((sum, t: any) => sum + Number(t.amount), 0);
 
-      // Group transactions by category
       const incomeByCategory: Record<string, { name: string; amount: number }> = {};
       const expenseByCategory: Record<string, { name: string; amount: number }> = {};
       
@@ -182,14 +252,12 @@ export default function Reports() {
         totalSalary,
         nonGeneratedBillCustomers,
         customers,
-        // Financial data
         transactions,
         categories,
         totalTransactionIncome,
         totalTransactionExpense,
         incomeByCategory: Object.values(incomeByCategory),
         expenseByCategory: Object.values(expenseByCategory),
-        // Combined totals
         totalIncome: monthlyCollection + totalTransactionIncome,
         totalExpense: totalSalary + totalTransactionExpense,
       });
@@ -217,7 +285,6 @@ export default function Reports() {
     return months;
   };
 
-  // Export to CSV function
   const exportToCSV = (data: any[], filename: string, headers: string[]) => {
     if (!data || data.length === 0) {
       toast.error('No data to export');
@@ -290,7 +357,68 @@ export default function Reports() {
     }
   };
 
-  // Render content based on active tab
+  // Filter and paginate helper
+  const filterAndPaginate = useCallback((items: any[], page: number, filterFn?: (item: any) => boolean) => {
+    let filtered = items || [];
+    
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((item: any) => 
+        item.name?.toLowerCase().includes(query) ||
+        item.customer_code?.toLowerCase().includes(query) ||
+        item.phone?.includes(query) ||
+        item.customer?.name?.toLowerCase().includes(query) ||
+        item.bill_number?.toLowerCase().includes(query)
+      );
+    }
+    
+    if (filterFn) {
+      filtered = filtered.filter(filterFn);
+    }
+    
+    const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+    const paginatedItems = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+    
+    return { items: paginatedItems, totalPages, totalItems: filtered.length };
+  }, [searchQuery]);
+
+  // Filtered data for collection tab
+  const filteredBills = useMemo(() => {
+    let bills = reportData?.bills || [];
+    if (statusFilter !== 'all') {
+      bills = bills.filter((b: any) => b.status === statusFilter);
+    }
+    return filterAndPaginate(bills, collectionPage);
+  }, [reportData?.bills, statusFilter, collectionPage, filterAndPaginate]);
+
+  // Render filter bar
+  const renderFilterBar = (showStatusFilter = false, statusOptions?: { value: string; label: string }[]) => (
+    <div className="flex flex-col sm:flex-row gap-3 mb-4">
+      <div className="relative flex-1">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder={t('search') + '...'}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+      {showStatusFilter && statusOptions && (
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder={t('filter_by_status')} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('all')}</SelectItem>
+            {statusOptions.map(opt => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  );
+
   const renderReportContent = () => {
     if (loading) {
       return (
@@ -507,7 +635,14 @@ export default function Reports() {
                 </Card>
               </div>
 
-              <ScrollArea className="h-[400px]">
+              {renderFilterBar(true, [
+                { value: 'paid', label: t('paid') },
+                { value: 'partial', label: 'Partial' },
+                { value: 'pending', label: t('pending') },
+                { value: 'overdue', label: t('overdue') },
+              ])}
+
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -519,22 +654,36 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData?.bills?.slice(0, 50).map((bill: any) => (
-                      <TableRow key={bill.id}>
-                        <TableCell className="font-mono text-sm">{bill.bill_number}</TableCell>
-                        <TableCell>{bill.customer?.name || 'N/A'}</TableCell>
-                        <TableCell>৳{bill.total_amount}</TableCell>
-                        <TableCell>৳{bill.paid_amount || 0}</TableCell>
-                        <TableCell>
-                          <Badge variant={bill.status === 'paid' ? 'default' : bill.status === 'partial' ? 'secondary' : 'destructive'}>
-                            {bill.status}
-                          </Badge>
+                    {filteredBills.items.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          {t('no_data')}
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      filteredBills.items.map((bill: any) => (
+                        <TableRow key={bill.id}>
+                          <TableCell className="font-mono text-sm">{bill.bill_number}</TableCell>
+                          <TableCell>{bill.customer?.name || 'N/A'}</TableCell>
+                          <TableCell>৳{bill.total_amount}</TableCell>
+                          <TableCell>৳{bill.paid_amount || 0}</TableCell>
+                          <TableCell>
+                            <Badge variant={bill.status === 'paid' ? 'default' : bill.status === 'partial' ? 'secondary' : 'destructive'}>
+                              {bill.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
-              </ScrollArea>
+              </div>
+              <TablePagination
+                currentPage={collectionPage}
+                totalPages={filteredBills.totalPages}
+                totalItems={filteredBills.totalItems}
+                onPageChange={setCollectionPage}
+              />
             </CardContent>
           </Card>
         );
@@ -629,7 +778,8 @@ export default function Reports() {
           </Card>
         );
 
-      case 'new-connections':
+      case 'new-connections': {
+        const newConnectionsData = filterAndPaginate(reportData?.newCustomers || [], newConnectionsPage);
         return (
           <Card>
             <CardHeader className="flex flex-row items-start justify-between">
@@ -645,7 +795,8 @@ export default function Reports() {
               </Badge>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[400px]">
+              {renderFilterBar()}
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -657,14 +808,14 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData?.newCustomers?.length === 0 ? (
+                    {newConnectionsData.items.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                           No new connections this month
                         </TableCell>
                       </TableRow>
                     ) : (
-                      reportData?.newCustomers?.map((c: any) => (
+                      newConnectionsData.items.map((c: any) => (
                         <TableRow key={c.id}>
                           <TableCell className="font-mono">{c.customer_code}</TableCell>
                           <TableCell className="font-medium">{c.name}</TableCell>
@@ -676,12 +827,20 @@ export default function Reports() {
                     )}
                   </TableBody>
                 </Table>
-              </ScrollArea>
+              </div>
+              <TablePagination
+                currentPage={newConnectionsPage}
+                totalPages={newConnectionsData.totalPages}
+                totalItems={newConnectionsData.totalItems}
+                onPageChange={setNewConnectionsPage}
+              />
             </CardContent>
           </Card>
         );
+      }
 
-      case 'disabled':
+      case 'disabled': {
+        const disabledData = filterAndPaginate(reportData?.disabledCustomers || [], disabledPage);
         return (
           <Card>
             <CardHeader className="flex flex-row items-start justify-between">
@@ -697,7 +856,8 @@ export default function Reports() {
               </Badge>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[400px]">
+              {renderFilterBar()}
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -709,14 +869,14 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData?.disabledCustomers?.length === 0 ? (
+                    {disabledData.items.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                           No disabled customers
                         </TableCell>
                       </TableRow>
                     ) : (
-                      reportData?.disabledCustomers?.map((c: any) => (
+                      disabledData.items.map((c: any) => (
                         <TableRow key={c.id}>
                           <TableCell className="font-mono">{c.customer_code}</TableCell>
                           <TableCell className="font-medium">{c.name}</TableCell>
@@ -730,12 +890,20 @@ export default function Reports() {
                     )}
                   </TableBody>
                 </Table>
-              </ScrollArea>
+              </div>
+              <TablePagination
+                currentPage={disabledPage}
+                totalPages={disabledData.totalPages}
+                totalItems={disabledData.totalItems}
+                onPageChange={setDisabledPage}
+              />
             </CardContent>
           </Card>
         );
+      }
 
-      case 'due-bills':
+      case 'due-bills': {
+        const dueBillsData = filterAndPaginate(reportData?.unpaidBills || [], dueBillsPage);
         return (
           <Card>
             <CardHeader className="flex flex-row items-start justify-between">
@@ -748,7 +916,7 @@ export default function Reports() {
               </div>
               <div className="flex gap-2">
                 <Badge variant="destructive" className="text-lg">
-                  ৳{reportData?.monthlyDue?.toLocaleString() || 0} Due
+                  ৳{reportData?.monthlyDue?.toLocaleString() || 0}
                 </Badge>
                 <Button variant="outline" size="sm" onClick={() => downloadReport('Due Bills')}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -757,64 +925,73 @@ export default function Reports() {
               </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[400px]">
+              {renderFilterBar()}
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Bill No</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Phone</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Paid</TableHead>
-                      <TableHead>Due</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Due</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData?.unpaidBills?.length === 0 ? (
+                    {dueBillsData.items.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                          <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                          All bills paid! No dues.
+                          No due bills found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      reportData?.unpaidBills?.map((b: any) => (
-                        <TableRow key={b.id}>
-                          <TableCell className="font-mono">{b.bill_number}</TableCell>
-                          <TableCell className="font-medium">{b.customer?.name || 'N/A'}</TableCell>
-                          <TableCell>{b.customer?.phone || '-'}</TableCell>
-                          <TableCell>৳{b.total_amount}</TableCell>
-                          <TableCell>৳{b.paid_amount || 0}</TableCell>
-                          <TableCell className="text-destructive font-bold">
-                            ৳{(b.total_amount - (b.paid_amount || 0)).toLocaleString()}
+                      dueBillsData.items.map((bill: any) => (
+                        <TableRow key={bill.id}>
+                          <TableCell className="font-mono text-sm">{bill.bill_number}</TableCell>
+                          <TableCell className="font-medium">{bill.customer?.name || 'N/A'}</TableCell>
+                          <TableCell>{bill.customer?.phone || '-'}</TableCell>
+                          <TableCell className="text-right">৳{bill.total_amount}</TableCell>
+                          <TableCell className="text-right">৳{bill.paid_amount || 0}</TableCell>
+                          <TableCell className="text-right font-bold text-red-600">
+                            ৳{(bill.total_amount - (bill.paid_amount || 0)).toLocaleString()}
                           </TableCell>
                         </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
-              </ScrollArea>
+              </div>
+              <TablePagination
+                currentPage={dueBillsPage}
+                totalPages={dueBillsData.totalPages}
+                totalItems={dueBillsData.totalItems}
+                onPageChange={setDueBillsPage}
+              />
             </CardContent>
           </Card>
         );
+      }
 
-      case 'non-generated':
+      case 'non-generated': {
+        const nonGeneratedData = filterAndPaginate(reportData?.nonGeneratedBillCustomers || [], nonGeneratedPage);
         return (
           <Card>
             <CardHeader className="flex flex-row items-start justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <XCircle className="h-5 w-5" />
-                  Non Generated Bills
+                  Non-Generated Bills
                 </CardTitle>
-                <CardDescription>Active customers without bills this month</CardDescription>
+                <CardDescription>Active customers without bills for this month</CardDescription>
               </div>
               <Badge variant="secondary" className="text-lg">
                 {reportData?.nonGeneratedBillCustomers?.length || 0}
               </Badge>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[400px]">
+              {renderFilterBar()}
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -822,36 +999,43 @@ export default function Reports() {
                       <TableHead>Name</TableHead>
                       <TableHead>Phone</TableHead>
                       <TableHead>Package</TableHead>
-                      <TableHead>Monthly Bill</TableHead>
+                      <TableHead className="text-right">Monthly Bill</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData?.nonGeneratedBillCustomers?.length === 0 ? (
+                    {nonGeneratedData.items.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                          <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
                           All active customers have bills generated
                         </TableCell>
                       </TableRow>
                     ) : (
-                      reportData?.nonGeneratedBillCustomers?.map((c: any) => (
+                      nonGeneratedData.items.map((c: any) => (
                         <TableRow key={c.id}>
                           <TableCell className="font-mono">{c.customer_code}</TableCell>
                           <TableCell className="font-medium">{c.name}</TableCell>
                           <TableCell>{c.phone || '-'}</TableCell>
                           <TableCell>{c.package?.name || '-'}</TableCell>
-                          <TableCell>৳{c.monthly_bill || c.package?.price || 0}</TableCell>
+                          <TableCell className="text-right">৳{c.monthly_bill || c.package?.price || 0}</TableCell>
                         </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
-              </ScrollArea>
+              </div>
+              <TablePagination
+                currentPage={nonGeneratedPage}
+                totalPages={nonGeneratedData.totalPages}
+                totalItems={nonGeneratedData.totalItems}
+                onPageChange={setNonGeneratedPage}
+              />
             </CardContent>
           </Card>
         );
+      }
 
-      case 'today-new':
+      case 'today-new': {
+        const todayNewData = filterAndPaginate(reportData?.todayNewCustomers || [], todayNewPage);
         return (
           <Card>
             <CardHeader className="flex flex-row items-start justify-between">
@@ -860,19 +1044,15 @@ export default function Reports() {
                   <Clock className="h-5 w-5" />
                   Today's New Connections
                 </CardTitle>
-                <CardDescription>New connections added today</CardDescription>
+                <CardDescription>New customer connections today ({format(new Date(), 'dd MMM yyyy')})</CardDescription>
               </div>
-              <Badge variant="default" className="text-lg">
+              <Badge variant="secondary" className="text-lg">
                 {reportData?.todayNewCustomers?.length || 0} Today
               </Badge>
             </CardHeader>
             <CardContent>
-              {reportData?.todayNewCustomers?.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Clock className="h-12 w-12 mx-auto mb-4" />
-                  <p>No new connections today</p>
-                </div>
-              ) : (
+              {renderFilterBar()}
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -884,36 +1064,66 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData?.todayNewCustomers?.map((c: any) => (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-mono">{c.customer_code}</TableCell>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell>{c.phone || '-'}</TableCell>
-                        <TableCell>{c.package?.name || '-'}</TableCell>
-                        <TableCell>{c.area?.name || '-'}</TableCell>
+                    {todayNewData.items.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          No new connections today
+                        </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      todayNewData.items.map((c: any) => (
+                        <TableRow key={c.id}>
+                          <TableCell className="font-mono">{c.customer_code}</TableCell>
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell>{c.phone || '-'}</TableCell>
+                          <TableCell>{c.package?.name || '-'}</TableCell>
+                          <TableCell>{c.area?.name || '-'}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
-              )}
+              </div>
+              <TablePagination
+                currentPage={todayNewPage}
+                totalPages={todayNewData.totalPages}
+                totalItems={todayNewData.totalItems}
+                onPageChange={setTodayNewPage}
+              />
+            </CardContent>
+          </Card>
+        );
+      }
+
+      case 'connection-request':
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="h-5 w-5" />
+                Connection Request Report
+              </CardTitle>
+              <CardDescription>Pending and processed connection requests</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-12 text-muted-foreground">
+                <Phone className="h-12 w-12 mx-auto mb-4" />
+                <p>Connection request data will be available here</p>
+                <p className="text-sm">Navigate to Connection Requests to view details</p>
+              </div>
             </CardContent>
           </Card>
         );
 
-      case 'connection-request':
       case 'complain':
         return (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                {activeTab === 'complain' ? <AlertCircle className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
-                {activeTab === 'complain' ? 'Complain Report' : 'Connection Request Report'}
+                <AlertCircle className="h-5 w-5" />
+                Complain Report
               </CardTitle>
-              <CardDescription>
-                {activeTab === 'complain' 
-                  ? 'Customer complaints and support tickets' 
-                  : 'New connection requests and inquiries'}
-              </CardDescription>
+              <CardDescription>Customer complaints and support tickets</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-center py-12 text-muted-foreground">
@@ -930,9 +1140,11 @@ export default function Reports() {
     }
   };
 
+  const currentReport = reportTypes.find(r => r.id === activeTab);
+
   return (
     <DashboardLayout
-      title="Reports & Analytics"
+      title={t('reports')}
       subtitle="Comprehensive business reports and BTRC compliance"
     >
       {/* Summary Cards */}
@@ -941,7 +1153,7 @@ export default function Reports() {
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Total Customers</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">{t('total_customers')}</p>
                 <p className="text-lg sm:text-2xl font-bold">{reportData?.totalCustomers || 0}</p>
                 <p className="text-xs text-green-600">+{reportData?.newCustomers?.length || 0} new</p>
               </div>
@@ -953,7 +1165,7 @@ export default function Reports() {
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Active Customers</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">{t('active_customers')}</p>
                 <p className="text-lg sm:text-2xl font-bold text-green-600">{reportData?.activeCustomers || 0}</p>
                 <p className="text-xs text-muted-foreground">
                   {((reportData?.activeCustomers / reportData?.totalCustomers) * 100 || 0).toFixed(1)}% of total
@@ -967,7 +1179,7 @@ export default function Reports() {
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Monthly Collection</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">{t('monthly_collection')}</p>
                 <p className="text-lg sm:text-2xl font-bold text-green-600">৳{reportData?.monthlyCollection?.toLocaleString() || 0}</p>
               </div>
               <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
@@ -978,7 +1190,7 @@ export default function Reports() {
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-muted-foreground">Pending Due</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">{t('pending_due')}</p>
                 <p className="text-lg sm:text-2xl font-bold text-red-600">৳{reportData?.monthlyDue?.toLocaleString() || 0}</p>
               </div>
               <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-red-500" />
@@ -987,8 +1199,8 @@ export default function Reports() {
         </Card>
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-6">
+      {/* Controls - Month + Report Type Dropdown */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mb-6">
         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
           <SelectTrigger className="w-full sm:w-[200px]">
             <Calendar className="h-4 w-4 mr-2" />
@@ -1000,30 +1212,29 @@ export default function Reports() {
             ))}
           </SelectContent>
         </Select>
+        
+        {/* Report Type Selector - Using Select dropdown instead of buttons */}
+        <Select value={activeTab} onValueChange={setActiveTab}>
+          <SelectTrigger className="w-full sm:w-[300px]">
+            {currentReport && <currentReport.icon className="h-4 w-4 mr-2" />}
+            <SelectValue placeholder="Select Report" />
+          </SelectTrigger>
+          <SelectContent>
+            {reportTypes.map(report => (
+              <SelectItem key={report.id} value={report.id}>
+                <div className="flex items-center gap-2">
+                  <report.icon className="h-4 w-4" />
+                  <span>{report.name}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        
         <Button variant="outline" className="w-full sm:w-auto" onClick={() => downloadReport('All Reports')}>
           <Download className="h-4 w-4 mr-2" />
-          Export All Reports
+          Export All
         </Button>
-      </div>
-
-      {/* Report Type Selection - Horizontal scrollable buttons */}
-      <div className="mb-6">
-        <ScrollArea className="w-full pb-4">
-          <div className="flex gap-2 pb-2">
-            {reportTypes.map(report => (
-              <Button
-                key={report.id}
-                variant={activeTab === report.id ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setActiveTab(report.id)}
-                className="whitespace-nowrap"
-              >
-                <report.icon className="h-4 w-4 mr-2" />
-                {report.name}
-              </Button>
-            ))}
-          </div>
-        </ScrollArea>
       </div>
 
       {/* Report Content */}
