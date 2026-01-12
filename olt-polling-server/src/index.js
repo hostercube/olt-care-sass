@@ -3289,8 +3289,13 @@ setupResellerRoutes(app, supabase);
 
 // ============= VPS FILE STORAGE ENDPOINTS =============
 // Configure multer for file uploads
-const uploadsDir = path.join(__dirname, '../../uploads');
+// CRITICAL: Use path relative to olt-polling-server folder to match Nginx config
+// __dirname = olt-polling-server/src, so '../uploads' = olt-polling-server/uploads
+const uploadsDir = path.join(__dirname, '../uploads');
 const tenantAssetsDir = path.join(uploadsDir, 'tenant-assets');
+
+logger.info(`Uploads directory configured: ${uploadsDir}`);
+logger.info(`Tenant assets directory: ${tenantAssetsDir}`);
 
 // Ensure directories exist
 [uploadsDir, tenantAssetsDir].forEach(dir => {
