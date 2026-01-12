@@ -483,7 +483,7 @@ export default function AreasManagement() {
               <SearchableSelect
                 options={divisions.map(d => ({ value: d.id, label: d.name }))}
                 value={selectedDivisionId}
-                onChange={setSelectedDivisionId}
+                onValueChange={setSelectedDivisionId}
                 placeholder={t('select_division')}
               />
             </div>
@@ -518,7 +518,7 @@ export default function AreasManagement() {
               <SearchableSelect
                 options={divisions.map(d => ({ value: d.id, label: d.name }))}
                 value={upazilaDivisionId}
-                onChange={(v) => { setUpazilaDivisionId(v); setSelectedDistrictId(''); }}
+                onValueChange={(v) => { setUpazilaDivisionId(v); setSelectedDistrictId(''); }}
                 placeholder={t('select_division')}
               />
             </div>
@@ -527,7 +527,7 @@ export default function AreasManagement() {
               <SearchableSelect
                 options={filteredDistrictsForUpazila.map(d => ({ value: d.id, label: d.name }))}
                 value={selectedDistrictId}
-                onChange={setSelectedDistrictId}
+                onValueChange={setSelectedDistrictId}
                 placeholder={t('select_district')}
               />
             </div>
@@ -563,7 +563,7 @@ export default function AreasManagement() {
                 <SearchableSelect
                   options={divisions.map(d => ({ value: d.id, label: d.name }))}
                   value={unionDivisionId}
-                  onChange={(v) => { setUnionDivisionId(v); setUnionDistrictId(''); setSelectedUpazilaId(''); }}
+                  onValueChange={(v) => { setUnionDivisionId(v); setUnionDistrictId(''); setSelectedUpazilaId(''); }}
                   placeholder={t('select_division')}
                 />
               </div>
@@ -572,7 +572,7 @@ export default function AreasManagement() {
                 <SearchableSelect
                   options={filteredDistrictsForUnion.map(d => ({ value: d.id, label: d.name }))}
                   value={unionDistrictId}
-                  onChange={(v) => { setUnionDistrictId(v); setSelectedUpazilaId(''); }}
+                  onValueChange={(v) => { setUnionDistrictId(v); setSelectedUpazilaId(''); }}
                   placeholder={t('select_district')}
                 />
               </div>
@@ -582,7 +582,7 @@ export default function AreasManagement() {
               <SearchableSelect
                 options={filteredUpazilasForUnion.map(u => ({ value: u.id, label: u.name }))}
                 value={selectedUpazilaId}
-                onChange={setSelectedUpazilaId}
+                onValueChange={setSelectedUpazilaId}
                 placeholder={t('select_upazila')}
               />
             </div>
@@ -618,7 +618,7 @@ export default function AreasManagement() {
                 <SearchableSelect
                   options={divisions.map(d => ({ value: d.id, label: d.name }))}
                   value={villageDivisionId}
-                  onChange={(v) => { setVillageDivisionId(v); setVillageDistrictId(''); setVillageUpazilaId(''); setSelectedUnionId(''); }}
+                  onValueChange={(v) => { setVillageDivisionId(v); setVillageDistrictId(''); setVillageUpazilaId(''); setSelectedUnionId(''); }}
                   placeholder={t('select_division')}
                 />
               </div>
@@ -627,7 +627,7 @@ export default function AreasManagement() {
                 <SearchableSelect
                   options={filteredDistrictsForVillage.map(d => ({ value: d.id, label: d.name }))}
                   value={villageDistrictId}
-                  onChange={(v) => { setVillageDistrictId(v); setVillageUpazilaId(''); setSelectedUnionId(''); }}
+                  onValueChange={(v) => { setVillageDistrictId(v); setVillageUpazilaId(''); setSelectedUnionId(''); }}
                   placeholder={t('select_district')}
                 />
               </div>
@@ -638,7 +638,7 @@ export default function AreasManagement() {
                 <SearchableSelect
                   options={filteredUpazilasForVillage.map(u => ({ value: u.id, label: u.name }))}
                   value={villageUpazilaId}
-                  onChange={(v) => { setVillageUpazilaId(v); setSelectedUnionId(''); }}
+                  onValueChange={(v) => { setVillageUpazilaId(v); setSelectedUnionId(''); }}
                   placeholder={t('select_upazila')}
                 />
               </div>
@@ -647,7 +647,7 @@ export default function AreasManagement() {
                 <SearchableSelect
                   options={filteredUnionsForVillage.map(u => ({ value: u.id, label: u.name }))}
                   value={selectedUnionId}
-                  onChange={setSelectedUnionId}
+                  onValueChange={setSelectedUnionId}
                   placeholder={t('select_union')}
                 />
               </div>
