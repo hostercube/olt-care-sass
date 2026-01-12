@@ -85,6 +85,7 @@ export default function CustomerProfile() {
   const [selectedPackageId, setSelectedPackageId] = useState<string>('');
   const [newExpiryDate, setNewExpiryDate] = useState<Date | undefined>(undefined);
   const [rechargeMonths, setRechargeMonths] = useState<number>(1);
+  const [rechargePaymentMethod, setRechargePaymentMethod] = useState<string>('cash');
   const [onuInfo, setOnuInfo] = useState<any>(null);
 
   const hasOltAccess = hasAccess('olt_care');
@@ -557,6 +558,7 @@ export default function CustomerProfile() {
       }
 
       // Record recharge with collected_by tracking
+      const isDueRecharge = rechargePaymentMethod === 'due';
       const rechargeData: any = {
         tenant_id: customer.tenant_id,
         customer_id: customer.id,
@@ -565,12 +567,21 @@ export default function CustomerProfile() {
         old_expiry: customer.expiry_date,
         new_expiry: newExpiry.toISOString().split('T')[0],
         discount: commission,
-        payment_method: 'cash',
-        status: 'completed',
+        payment_method: rechargePaymentMethod,
+        status: isDueRecharge ? 'due' : 'completed',
         collected_by: user?.id || null,
         collected_by_type: 'tenant_admin',
         collected_by_name: user?.email?.split('@')[0] || 'Tenant Admin',
       };
+
+      // If due recharge, update customer's due_amount
+      if (isDueRecharge) {
+        const currentDue = customer.due_amount || 0;
+        const newDue = currentDue + (packagePrice * rechargeMonths);
+        await supabase.from('customers').update({
+          due_amount: newDue,
+        }).eq('id', customer.id);
+      }
 
       // If customer has a reseller, track it
       if (customer.reseller_id) {
@@ -1361,21 +1372,44 @@ export default function CustomerProfile() {
               Package: {customer?.package?.name || 'N/A'} | Monthly: ৳{customer?.monthly_bill || 0}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label>Months to Recharge</Label>
-            <Select value={rechargeMonths.toString()} onValueChange={(v) => setRechargeMonths(parseInt(v))}>
-              <SelectTrigger className="mt-2">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 Month</SelectItem>
-                <SelectItem value="2">2 Months</SelectItem>
-                <SelectItem value="3">3 Months</SelectItem>
-                <SelectItem value="6">6 Months</SelectItem>
-                <SelectItem value="12">12 Months</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="mt-4 text-sm text-muted-foreground">
+          <div className="py-4 space-y-4">
+            <div>
+              <Label>Months to Recharge</Label>
+              <Select value={rechargeMonths.toString()} onValueChange={(v) => setRechargeMonths(parseInt(v))}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 Month</SelectItem>
+                  <SelectItem value="2">2 Months</SelectItem>
+                  <SelectItem value="3">3 Months</SelectItem>
+                  <SelectItem value="6">6 Months</SelectItem>
+                  <SelectItem value="12">12 Months</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Payment Method</Label>
+              <Select value={rechargePaymentMethod} onValueChange={setRechargePaymentMethod}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bkash">bKash</SelectItem>
+                  <SelectItem value="nagad">Nagad</SelectItem>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                  <SelectItem value="online">Online Payment</SelectItem>
+                  <SelectItem value="due">Due (বাকি)</SelectItem>
+                </SelectContent>
+              </Select>
+              {rechargePaymentMethod === 'due' && (
+                <p className="mt-2 text-sm text-yellow-600">
+                  Customer will be activated but amount will be added to their due balance.
+                </p>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
               Amount: ৳{(customer?.monthly_bill || 0) * rechargeMonths}
             </p>
           </div>
@@ -1383,7 +1417,7 @@ export default function CustomerProfile() {
             <Button variant="outline" onClick={() => setShowRechargeDialog(false)}>Cancel</Button>
             <Button onClick={handleRecharge} disabled={actionLoading === 'recharge'}>
               {actionLoading === 'recharge' && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Recharge
+              {rechargePaymentMethod === 'due' ? 'Recharge (Due)' : 'Recharge'}
             </Button>
           </DialogFooter>
         </DialogContent>
