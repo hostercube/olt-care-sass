@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Plus, 
   Edit, 
@@ -38,7 +39,8 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useBandwidthManagement, BandwidthCategory, BandwidthItem, BandwidthProvider, BandwidthClient, PurchaseBillItem, SalesInvoiceItem, BandwidthPurchaseBill, BandwidthSalesInvoice } from '@/hooks/useBandwidthManagement';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, differenceInDays, getDaysInMonth } from 'date-fns';
+import { generatePurchaseBillPDF, generateSalesInvoicePDF, generatePrintHTML, calculateProRataAmount, getDaysCount } from '@/lib/bandwidth-pdf';
 
 export default function BandwidthManagement() {
   return (
@@ -419,14 +421,33 @@ function BandwidthManagementContent() {
   const handlePrint = (type: 'purchase' | 'sales', data: any) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-
-    const html = type === 'purchase' 
-      ? generatePurchaseBillPrintHTML(data)
-      : generateSalesInvoicePrintHTML(data);
-    
+    const html = generatePrintHTML(type, data);
     printWindow.document.write(html);
     printWindow.document.close();
-    printWindow.print();
+  };
+
+  const handleDownloadPDF = (type: 'purchase' | 'sales', data: any) => {
+    if (type === 'purchase') {
+      generatePurchaseBillPDF(data);
+    } else {
+      generateSalesInvoicePDF(data);
+    }
+  };
+
+  // Pro-rata calculation when dates change
+  const calculateItemTotal = (item: PurchaseBillItem | SalesInvoiceItem) => {
+    const baseRate = item.rate;
+    let calculatedAmount = baseRate * item.quantity;
+    
+    // If dates are set, calculate pro-rata
+    if (item.from_date && item.to_date) {
+      const days = getDaysCount(item.from_date, item.to_date);
+      const daysInMonth = getDaysInMonth(new Date(item.from_date));
+      calculatedAmount = (baseRate / daysInMonth) * days * item.quantity;
+    }
+    
+    const vatAmount = calculatedAmount * (item.vat_percent / 100);
+    return { amount: calculatedAmount, vatAmount, total: calculatedAmount + vatAmount };
   };
 
   const generatePurchaseBillPrintHTML = (bill: BandwidthPurchaseBill) => `
@@ -1076,9 +1097,12 @@ function BandwidthManagementContent() {
                           {bill.payment_status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-1">
                         <Button variant="ghost" size="icon" onClick={() => setViewPurchaseBill(bill)} title="View Details">
                           <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDownloadPDF('purchase', bill)} title="Download PDF">
+                          <FileText className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => handlePrint('purchase', bill)} title="Print">
                           <Printer className="h-4 w-4" />
@@ -1226,9 +1250,12 @@ function BandwidthManagementContent() {
                           {invoice.payment_status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-1">
                         <Button variant="ghost" size="icon" onClick={() => setViewSalesInvoice(invoice)} title="View Details">
                           <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDownloadPDF('sales', invoice)} title="Download PDF">
+                          <FileText className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => handlePrint('sales', invoice)} title="Print">
                           <Printer className="h-4 w-4" />
@@ -1706,9 +1733,11 @@ function BandwidthManagementContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Purchase Bill Dialog */}
+      {/* Purchase Bill Dialog - Responsive */}
       <Dialog open={purchaseBillDialog} onOpenChange={setPurchaseBillDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-[95vw] md:max-w-4xl max-h-[90vh] p-0">
+          <ScrollArea className="max-h-[90vh]">
+            <div className="p-6">
           <DialogHeader>
             <DialogTitle>Create Purchase Bill</DialogTitle>
             <DialogDescription>Record a new purchase bill from provider</DialogDescription>
