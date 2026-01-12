@@ -1872,12 +1872,16 @@ function BandwidthManagementContent() {
             <Button variant="outline" onClick={() => setPurchaseBillDialog(false)}>Cancel</Button>
             <Button onClick={handleSavePurchaseBill} disabled={!purchaseBillForm.provider_id || purchaseBillItems.every(i => !i.rate)}>Save Bill</Button>
           </DialogFooter>
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
 
-      {/* Sales Invoice Dialog */}
+      {/* Sales Invoice Dialog - Responsive */}
       <Dialog open={salesInvoiceDialog} onOpenChange={setSalesInvoiceDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-[95vw] md:max-w-4xl max-h-[90vh] p-0">
+          <ScrollArea className="max-h-[90vh]">
+            <div className="p-6">
           <DialogHeader>
             <DialogTitle>Create Sales Invoice</DialogTitle>
             <DialogDescription>Create a new invoice for client</DialogDescription>
@@ -2000,6 +2004,8 @@ function BandwidthManagementContent() {
             <Button variant="outline" onClick={() => setSalesInvoiceDialog(false)}>Cancel</Button>
             <Button onClick={handleSaveSalesInvoice} disabled={!salesInvoiceForm.client_id || salesInvoiceItems.every(i => !i.rate)}>Save Invoice</Button>
           </DialogFooter>
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
 
@@ -2221,6 +2227,9 @@ function BandwidthManagementContent() {
                 </div>
               )}
               <div className="flex gap-2 pt-4">
+                <Button variant="outline" onClick={() => handleDownloadPDF('purchase', viewPurchaseBill)} className="flex-1">
+                  <FileText className="mr-2 h-4 w-4" /> Download PDF
+                </Button>
                 <Button onClick={() => handlePrint('purchase', viewPurchaseBill)} className="flex-1">
                   <Printer className="mr-2 h-4 w-4" /> Print
                 </Button>
@@ -2292,6 +2301,9 @@ function BandwidthManagementContent() {
                 </div>
               )}
               <div className="flex gap-2 pt-4">
+                <Button variant="outline" onClick={() => handleDownloadPDF('sales', viewSalesInvoice)} className="flex-1">
+                  <FileText className="mr-2 h-4 w-4" /> Download PDF
+                </Button>
                 <Button onClick={() => handlePrint('sales', viewSalesInvoice)} className="flex-1">
                   <Printer className="mr-2 h-4 w-4" /> Print
                 </Button>
