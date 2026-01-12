@@ -252,10 +252,21 @@ function BrandingSettingsCard() {
             <div className="flex items-center gap-4">
               <div className="h-20 w-20 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden">
                 {logoUrl ? (
-                  <img src={logoUrl} alt="Logo" className="h-full w-full object-contain" />
-                ) : (
+                  <img 
+                    src={`${logoUrl}${logoUrl.includes('?') ? '&' : '?'}t=${Date.now()}`} 
+                    alt="Logo" 
+                    className="h-full w-full object-contain"
+                    onError={(e) => {
+                      console.error('Logo failed to load:', logoUrl);
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <div className={`flex flex-col items-center justify-center ${logoUrl ? 'hidden' : ''}`}>
                   <Image className="h-8 w-8 text-muted-foreground" />
-                )}
+                  {logoUrl && <span className="text-xs text-destructive mt-1">Failed</span>}
+                </div>
               </div>
               <div className="space-y-2">
                 <input
@@ -290,10 +301,21 @@ function BrandingSettingsCard() {
             <div className="flex items-center gap-4">
               <div className="h-16 w-16 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden">
                 {faviconUrl ? (
-                  <img src={faviconUrl} alt="Favicon" className="h-full w-full object-contain" />
-                ) : (
+                  <img 
+                    src={`${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}t=${Date.now()}`} 
+                    alt="Favicon" 
+                    className="h-full w-full object-contain"
+                    onError={(e) => {
+                      console.error('Favicon failed to load:', faviconUrl);
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <div className={`flex flex-col items-center justify-center ${faviconUrl ? 'hidden' : ''}`}>
                   <Image className="h-6 w-6 text-muted-foreground" />
-                )}
+                  {faviconUrl && <span className="text-xs text-destructive mt-1">Failed</span>}
+                </div>
               </div>
               <div className="space-y-2">
                 <input
@@ -355,7 +377,15 @@ function BrandingSettingsCard() {
           <Label className="mb-3 block">Preview</Label>
           <div className="flex items-center gap-3 p-3 rounded-md bg-background border">
             {logoUrl ? (
-              <img src={logoUrl} alt="Logo" className="h-10 w-10 object-contain" />
+              <img 
+                src={`${logoUrl}${logoUrl.includes('?') ? '&' : '?'}t=${Date.now()}`} 
+                alt="Logo" 
+                className="h-10 w-10 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '';
+                  (e.target as HTMLImageElement).alt = 'Image unavailable';
+                }}
+              />
             ) : (
               <div className="h-10 w-10 rounded bg-primary/10 flex items-center justify-center">
                 <Building2 className="h-5 w-5 text-primary" />
