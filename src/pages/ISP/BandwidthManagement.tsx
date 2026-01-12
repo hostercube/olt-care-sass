@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ModuleAccessGuard } from '@/components/layout/ModuleAccessGuard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -39,8 +39,22 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useBandwidthManagement, BandwidthCategory, BandwidthItem, BandwidthProvider, BandwidthClient, PurchaseBillItem, SalesInvoiceItem, BandwidthPurchaseBill, BandwidthSalesInvoice } from '@/hooks/useBandwidthManagement';
+import { useTenantContext } from '@/hooks/useSuperAdmin';
+import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, endOfMonth, subMonths, differenceInDays, getDaysInMonth } from 'date-fns';
 import { generatePurchaseBillPDF, generateSalesInvoicePDF, generatePrintHTML, calculateProRataAmount, getDaysCount } from '@/lib/bandwidth-pdf';
+
+interface TenantInfo {
+  id: string;
+  name: string;
+  company_name: string | null;
+  logo_url: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  invoice_header: string | null;
+  invoice_footer: string | null;
+}
 
 export default function BandwidthManagement() {
   return (
@@ -418,19 +432,51 @@ function BandwidthManagementContent() {
     fetchProviderPayments();
   };
 
+  // Fetch tenant info for PDF/Print
+  const { tenantId } = useTenantContext();
+  const [tenantInfo, setTenantInfo] = useState<TenantInfo | null>(null);
+  
+  const fetchTenantInfo = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('id, name, company_name, logo_url, phone, email, address, invoice_header, invoice_footer')
+        .eq('id', tenantId)
+        .single();
+      if (error) throw error;
+      setTenantInfo(data as TenantInfo);
+    } catch (err) {
+      console.error('Error fetching tenant info:', err);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    fetchTenantInfo();
+  }, [fetchTenantInfo]);
+
+  const getPDFOptions = () => ({
+    companyName: tenantInfo?.company_name || tenantInfo?.name || 'Bandwidth Management',
+    companyAddress: tenantInfo?.address || undefined,
+    companyPhone: tenantInfo?.phone || undefined,
+    companyEmail: tenantInfo?.email || undefined,
+    companyLogo: tenantInfo?.logo_url || undefined,
+  });
+
   const handlePrint = (type: 'purchase' | 'sales', data: any) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    const html = generatePrintHTML(type, data);
+    const html = generatePrintHTML(type, data, getPDFOptions());
     printWindow.document.write(html);
     printWindow.document.close();
   };
 
   const handleDownloadPDF = (type: 'purchase' | 'sales', data: any) => {
+    const options = getPDFOptions();
     if (type === 'purchase') {
-      generatePurchaseBillPDF(data);
+      generatePurchaseBillPDF(data, options);
     } else {
-      generateSalesInvoicePDF(data);
+      generateSalesInvoicePDF(data, options);
     }
   };
 
@@ -1781,7 +1827,7 @@ function BandwidthManagementContent() {
 
       {/* Purchase Bill Dialog - Responsive */}
       <Dialog open={purchaseBillDialog} onOpenChange={setPurchaseBillDialog}>
-        <DialogContent className="w-full max-w-[95vw] md:max-w-4xl max-h-[90vh] p-0">
+        <DialogContent className="w-full max-w-[98vw] lg:max-w-6xl max-h-[90vh] p-0">
           <ScrollArea className="max-h-[90vh]">
             <div className="p-6">
           <DialogHeader>
@@ -1826,13 +1872,26 @@ function BandwidthManagementContent() {
                   <Plus className="h-4 w-4 mr-1" /> Add Item
                 </Button>
               </div>
-              <div className="space-y-4">
+              
+              {/* Header Row - Desktop Only */}
+              <div className="hidden lg:grid lg:grid-cols-12 gap-2 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
+                <div className="col-span-2">Item</div>
+                <div className="col-span-1">Unit</div>
+                <div className="col-span-1">Qty</div>
+                <div className="col-span-1">Rate</div>
+                <div className="col-span-1">VAT%</div>
+                <div className="col-span-2">From - To Date</div>
+                <div className="col-span-1">Days</div>
+                <div className="col-span-2">Total</div>
+                <div className="col-span-1"></div>
+              </div>
+
+              <div className="space-y-3">
                 {purchaseBillItems.map((item, index) => (
-                  <div key={index} className="border rounded-lg p-3 bg-muted/30 space-y-3">
-                    {/* Row 1: Item, Unit, Qty, Rate, VAT */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                      <div className="col-span-2 md:col-span-1">
-                        <Label className="text-xs font-medium">Item</Label>
+                  <div key={index} className="border rounded-lg p-3 bg-muted/30">
+                    {/* Desktop: Single Row */}
+                    <div className="hidden lg:grid lg:grid-cols-12 gap-2 items-center">
+                      <div className="col-span-2">
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
                           updatePurchaseBillItem(index, 'item_id', v);
@@ -1842,7 +1901,7 @@ function BandwidthManagementContent() {
                             updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
+                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -1850,63 +1909,92 @@ function BandwidthManagementContent() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Unit</Label>
-                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} />
+                      <div className="col-span-1">
+                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9 text-xs" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Qty</Label>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} />
+                      <div className="col-span-1">
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9 text-xs" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Rate/Month</Label>
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} />
+                      <div className="col-span-1">
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9 text-xs" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">VAT %</Label>
-                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} />
+                      <div className="col-span-1">
+                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-xs w-14" />
                       </div>
-                    </div>
-                    {/* Row 2: From Date, To Date, Days, Total, Delete */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
-                      <div>
-                        <Label className="text-xs font-medium">From Date</Label>
-                        <Input 
-                          type="date" 
-                          value={item.from_date} 
-                          onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)}
-                          className="text-sm"
-                        />
+                      <div className="col-span-2 flex gap-1">
+                        <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-9 text-xs" />
+                        <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-9 text-xs" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">To Date</Label>
-                        <Input 
-                          type="date" 
-                          value={item.to_date} 
-                          onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)}
-                          className="text-sm"
-                        />
+                      <div className="col-span-1">
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-xs bg-muted w-12" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Days</Label>
-                        <Input 
-                          value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} 
-                          readOnly 
-                          className="bg-muted"
-                        />
+                      <div className="col-span-2">
+                        <Input value={`৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} readOnly className="h-9 text-xs bg-primary/10 font-semibold" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Total (incl. VAT)</Label>
-                        <Input 
-                          value={`৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                          readOnly 
-                          className="bg-primary/10 font-semibold"
-                        />
-                      </div>
-                      <div className="flex justify-end">
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
+                      <div className="col-span-1 flex justify-center">
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
+                      </div>
+                    </div>
+
+                    {/* Mobile: Two Rows */}
+                    <div className="lg:hidden space-y-3">
+                      <div className="grid grid-cols-5 gap-2">
+                        <div className="col-span-2">
+                          <Label className="text-xs">Item</Label>
+                          <Select value={item.item_id || ''} onValueChange={(v) => {
+                            const selectedItem = items.find(i => i.id === v);
+                            updatePurchaseBillItem(index, 'item_id', v);
+                            if (selectedItem) {
+                              updatePurchaseBillItem(index, 'item_name', selectedItem.name);
+                              updatePurchaseBillItem(index, 'unit', selectedItem.unit);
+                              updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
+                            }
+                          }}>
+                            <SelectTrigger className="h-9"><SelectValue placeholder="Item" /></SelectTrigger>
+                            <SelectContent>
+                              {items.map((i) => (
+                                <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Unit</Label>
+                          <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Qty</Label>
+                          <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Rate</Label>
+                          <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-5 gap-2 items-end">
+                        <div>
+                          <Label className="text-xs">From</Label>
+                          <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-9 text-xs" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">To</Label>
+                          <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-9 text-xs" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Days</Label>
+                          <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 bg-muted" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Total</Label>
+                          <Input value={`৳${item.total.toLocaleString('en-IN')}`} readOnly className="h-9 bg-primary/10 font-semibold" />
+                        </div>
+                        <div className="flex justify-end">
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1953,7 +2041,7 @@ function BandwidthManagementContent() {
 
       {/* Sales Invoice Dialog - Responsive */}
       <Dialog open={salesInvoiceDialog} onOpenChange={setSalesInvoiceDialog}>
-        <DialogContent className="w-full max-w-[95vw] md:max-w-4xl max-h-[90vh] p-0">
+        <DialogContent className="w-full max-w-[98vw] lg:max-w-6xl max-h-[90vh] p-0">
           <ScrollArea className="max-h-[90vh]">
             <div className="p-6">
           <DialogHeader>
@@ -1990,13 +2078,26 @@ function BandwidthManagementContent() {
                   <Plus className="h-4 w-4 mr-1" /> Add Item
                 </Button>
               </div>
-              <div className="space-y-4">
+              
+              {/* Header Row - Desktop Only */}
+              <div className="hidden lg:grid lg:grid-cols-12 gap-2 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
+                <div className="col-span-2">Item</div>
+                <div className="col-span-1">Unit</div>
+                <div className="col-span-1">Qty</div>
+                <div className="col-span-1">Rate</div>
+                <div className="col-span-1">VAT%</div>
+                <div className="col-span-2">From - To Date</div>
+                <div className="col-span-1">Days</div>
+                <div className="col-span-2">Total</div>
+                <div className="col-span-1"></div>
+              </div>
+
+              <div className="space-y-3">
                 {salesInvoiceItems.map((item, index) => (
-                  <div key={index} className="border rounded-lg p-3 bg-muted/30 space-y-3">
-                    {/* Row 1: Item, Unit, Qty, Rate, VAT */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                      <div className="col-span-2 md:col-span-1">
-                        <Label className="text-xs font-medium">Item</Label>
+                  <div key={index} className="border rounded-lg p-3 bg-muted/30">
+                    {/* Desktop: Single Row */}
+                    <div className="hidden lg:grid lg:grid-cols-12 gap-2 items-center">
+                      <div className="col-span-2">
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
                           updateSalesInvoiceItem(index, 'item_id', v);
@@ -2006,7 +2107,7 @@ function BandwidthManagementContent() {
                             updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
+                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -2014,63 +2115,92 @@ function BandwidthManagementContent() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Unit</Label>
-                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} />
+                      <div className="col-span-1">
+                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9 text-xs" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Qty</Label>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} />
+                      <div className="col-span-1">
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9 text-xs" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Rate/Month</Label>
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} />
+                      <div className="col-span-1">
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9 text-xs" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">VAT %</Label>
-                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} />
+                      <div className="col-span-1">
+                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-xs w-14" />
                       </div>
-                    </div>
-                    {/* Row 2: From Date, To Date, Days, Total, Delete */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
-                      <div>
-                        <Label className="text-xs font-medium">From Date</Label>
-                        <Input 
-                          type="date" 
-                          value={item.from_date} 
-                          onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)}
-                          className="text-sm"
-                        />
+                      <div className="col-span-2 flex gap-1">
+                        <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-9 text-xs" />
+                        <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-9 text-xs" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">To Date</Label>
-                        <Input 
-                          type="date" 
-                          value={item.to_date} 
-                          onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)}
-                          className="text-sm"
-                        />
+                      <div className="col-span-1">
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-xs bg-muted w-12" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Days</Label>
-                        <Input 
-                          value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} 
-                          readOnly 
-                          className="bg-muted"
-                        />
+                      <div className="col-span-2">
+                        <Input value={`৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} readOnly className="h-9 text-xs bg-primary/10 font-semibold" />
                       </div>
-                      <div>
-                        <Label className="text-xs font-medium">Total (incl. VAT)</Label>
-                        <Input 
-                          value={`৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                          readOnly 
-                          className="bg-primary/10 font-semibold"
-                        />
-                      </div>
-                      <div className="flex justify-end">
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
+                      <div className="col-span-1 flex justify-center">
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
+                      </div>
+                    </div>
+
+                    {/* Mobile: Two Rows */}
+                    <div className="lg:hidden space-y-3">
+                      <div className="grid grid-cols-5 gap-2">
+                        <div className="col-span-2">
+                          <Label className="text-xs">Item</Label>
+                          <Select value={item.item_id || ''} onValueChange={(v) => {
+                            const selectedItem = items.find(i => i.id === v);
+                            updateSalesInvoiceItem(index, 'item_id', v);
+                            if (selectedItem) {
+                              updateSalesInvoiceItem(index, 'item_name', selectedItem.name);
+                              updateSalesInvoiceItem(index, 'unit', selectedItem.unit);
+                              updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
+                            }
+                          }}>
+                            <SelectTrigger className="h-9"><SelectValue placeholder="Item" /></SelectTrigger>
+                            <SelectContent>
+                              {items.map((i) => (
+                                <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Unit</Label>
+                          <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Qty</Label>
+                          <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Rate</Label>
+                          <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-5 gap-2 items-end">
+                        <div>
+                          <Label className="text-xs">From</Label>
+                          <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-9 text-xs" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">To</Label>
+                          <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-9 text-xs" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Days</Label>
+                          <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 bg-muted" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Total</Label>
+                          <Input value={`৳${item.total.toLocaleString('en-IN')}`} readOnly className="h-9 bg-primary/10 font-semibold" />
+                        </div>
+                        <div className="flex justify-end">
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
