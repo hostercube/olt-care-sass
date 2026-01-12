@@ -1874,14 +1874,14 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden xl:grid xl:grid-cols-[minmax(120px,1fr)_70px_55px_75px_50px_105px_105px_45px_95px_36px] gap-1.5 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
+              <div className="hidden xl:grid xl:grid-cols-[180px_65px_50px_70px_45px_95px_95px_40px_85px_32px] gap-1 px-2 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
                 <div>Item</div>
                 <div>Unit</div>
                 <div>Qty</div>
                 <div>Rate</div>
                 <div>VAT%</div>
-                <div>From Date</div>
-                <div>To Date</div>
+                <div>From</div>
+                <div>To</div>
                 <div>Days</div>
                 <div>Total</div>
                 <div></div>
@@ -1891,7 +1891,7 @@ function BandwidthManagementContent() {
                 {purchaseBillItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-3 bg-muted/30">
                     {/* Desktop: Single Row */}
-                    <div className="hidden xl:grid xl:grid-cols-[minmax(120px,1fr)_70px_55px_75px_50px_105px_105px_45px_95px_36px] gap-1.5 items-center">
+                    <div className="hidden xl:grid xl:grid-cols-[180px_65px_50px_70px_45px_95px_95px_40px_85px_32px] gap-1 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -1902,7 +1902,7 @@ function BandwidthManagementContent() {
                             updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Item" /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -1911,32 +1911,32 @@ function BandwidthManagementContent() {
                         </Select>
                       </div>
                       <div>
-                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9 text-xs px-2" />
+                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-8 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9 text-xs px-2" />
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-8 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9 text-xs px-2" />
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-8 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-xs px-1 text-center" />
+                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-8 text-xs px-1 text-center" />
                       </div>
                       <div>
-                        <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-9 text-xs px-1.5" />
+                        <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-8 text-[10px] px-1" />
                       </div>
                       <div>
-                        <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-9 text-xs px-1.5" />
+                        <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-8 text-[10px] px-1" />
                       </div>
                       <div>
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-xs bg-muted text-center px-1" />
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-8 text-xs bg-muted text-center px-1" />
                       </div>
                       <div>
-                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-xs bg-primary/10 font-semibold px-2" />
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-8 text-xs bg-primary/10 font-semibold px-1.5" />
                       </div>
                       <div className="flex justify-center">
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
                         </Button>
                       </div>
                     </div>
@@ -1991,7 +1991,7 @@ function BandwidthManagementContent() {
                         </div>
                         <div>
                           <Label className="text-xs">Total</Label>
-                          <Input value={`৳${item.total.toLocaleString('en-IN')}`} readOnly className="h-9 bg-primary/10 font-semibold" />
+                          <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 bg-primary/10 font-semibold" />
                         </div>
                         <div className="flex justify-end">
                           <Button type="button" variant="ghost" size="icon" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
@@ -2008,11 +2008,11 @@ function BandwidthManagementContent() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="grid gap-2">
                 <Label className="text-sm font-medium">Subtotal</Label>
-                <Input value={`৳${purchaseBillSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="bg-muted" />
+                <Input value={purchaseBillSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-muted" />
               </div>
               <div className="grid gap-2">
                 <Label className="text-sm font-medium">VAT</Label>
-                <Input value={`৳${purchaseBillVat.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="bg-muted" />
+                <Input value={purchaseBillVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-muted" />
               </div>
               <div className="grid gap-2">
                 <Label className="text-sm font-medium">Discount</Label>
@@ -2024,7 +2024,7 @@ function BandwidthManagementContent() {
               </div>
               <div className="grid gap-2">
                 <Label className="text-sm font-medium">Grand Total</Label>
-                <Input value={`৳${purchaseBillTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="font-bold bg-primary/10" />
+                <Input value={purchaseBillTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="font-bold bg-primary/10" />
               </div>
             </div>
 
@@ -2083,14 +2083,14 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden xl:grid xl:grid-cols-[minmax(120px,1fr)_70px_55px_75px_50px_105px_105px_45px_95px_36px] gap-1.5 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
+              <div className="hidden xl:grid xl:grid-cols-[180px_65px_50px_70px_45px_95px_95px_40px_85px_32px] gap-1 px-2 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
                 <div>Item</div>
                 <div>Unit</div>
                 <div>Qty</div>
                 <div>Rate</div>
                 <div>VAT%</div>
-                <div>From Date</div>
-                <div>To Date</div>
+                <div>From</div>
+                <div>To</div>
                 <div>Days</div>
                 <div>Total</div>
                 <div></div>
@@ -2100,7 +2100,7 @@ function BandwidthManagementContent() {
                 {salesInvoiceItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-3 bg-muted/30">
                     {/* Desktop: Single Row */}
-                    <div className="hidden xl:grid xl:grid-cols-[minmax(120px,1fr)_70px_55px_75px_50px_105px_105px_45px_95px_36px] gap-1.5 items-center">
+                    <div className="hidden xl:grid xl:grid-cols-[180px_65px_50px_70px_45px_95px_95px_40px_85px_32px] gap-1 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -2111,7 +2111,7 @@ function BandwidthManagementContent() {
                             updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Item" /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -2120,32 +2120,32 @@ function BandwidthManagementContent() {
                         </Select>
                       </div>
                       <div>
-                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9 text-xs px-2" />
+                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-8 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9 text-xs px-2" />
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-8 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9 text-xs px-2" />
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-8 text-xs px-1.5" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-xs px-1 text-center" />
+                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-8 text-xs px-1 text-center" />
                       </div>
                       <div>
-                        <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-9 text-xs px-1.5" />
+                        <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-8 text-[10px] px-1" />
                       </div>
                       <div>
-                        <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-9 text-xs px-1.5" />
+                        <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-8 text-[10px] px-1" />
                       </div>
                       <div>
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-xs bg-muted text-center px-1" />
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-8 text-xs bg-muted text-center px-1" />
                       </div>
                       <div>
-                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-xs bg-primary/10 font-semibold px-2" />
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-8 text-xs bg-primary/10 font-semibold px-1.5" />
                       </div>
                       <div className="flex justify-center">
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
                         </Button>
                       </div>
                     </div>
@@ -2200,7 +2200,7 @@ function BandwidthManagementContent() {
                         </div>
                         <div>
                           <Label className="text-xs">Total</Label>
-                          <Input value={`৳${item.total.toLocaleString('en-IN')}`} readOnly className="h-9 bg-primary/10 font-semibold" />
+                          <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 bg-primary/10 font-semibold" />
                         </div>
                         <div className="flex justify-end">
                           <Button type="button" variant="ghost" size="icon" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
@@ -2217,11 +2217,11 @@ function BandwidthManagementContent() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="grid gap-2">
                 <Label className="text-sm font-medium">Subtotal</Label>
-                <Input value={`৳${salesInvoiceSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="bg-muted" />
+                <Input value={salesInvoiceSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-muted" />
               </div>
               <div className="grid gap-2">
                 <Label className="text-sm font-medium">VAT</Label>
-                <Input value={`৳${salesInvoiceVat.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="bg-muted" />
+                <Input value={salesInvoiceVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-muted" />
               </div>
               <div className="grid gap-2">
                 <Label className="text-sm font-medium">Discount</Label>
@@ -2229,7 +2229,7 @@ function BandwidthManagementContent() {
               </div>
               <div className="grid gap-2">
                 <Label className="text-sm font-medium">Grand Total</Label>
-                <Input value={`৳${salesInvoiceTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="font-bold bg-primary/10" />
+                <Input value={salesInvoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="font-bold bg-primary/10" />
               </div>
             </div>
 
@@ -2405,148 +2405,220 @@ function BandwidthManagementContent() {
 
       {/* Purchase Bill Details Sheet */}
       <Sheet open={!!viewPurchaseBill} onOpenChange={() => setViewPurchaseBill(null)}>
-        <SheetContent className="w-[600px] sm:max-w-[600px]">
+        <SheetContent className="w-[700px] sm:max-w-[700px]">
           <SheetHeader>
             <SheetTitle>Purchase Bill Details</SheetTitle>
             <SheetDescription>Invoice: {viewPurchaseBill?.invoice_number}</SheetDescription>
           </SheetHeader>
           {viewPurchaseBill && (
-            <div className="mt-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Provider</p>
-                  <p className="font-medium">{viewPurchaseBill.provider?.name || 'N/A'}</p>
+            <ScrollArea className="h-[calc(100vh-120px)] pr-4">
+              <div className="mt-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Provider</p>
+                    <p className="font-medium">{viewPurchaseBill.provider?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Billing Date</p>
+                    <p className="font-medium">{format(new Date(viewPurchaseBill.billing_date), 'dd/MM/yyyy')}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Billing Date</p>
-                  <p className="font-medium">{format(new Date(viewPurchaseBill.billing_date), 'dd/MM/yyyy')}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <Badge variant={viewPurchaseBill.payment_status === 'paid' ? 'default' : 'destructive'}>{viewPurchaseBill.payment_status}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Payment Method</p>
+                    <p className="font-medium capitalize">{viewPurchaseBill.payment_method?.replace('_', ' ') || 'N/A'}</p>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                {viewPurchaseBill.items && viewPurchaseBill.items.length > 0 && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-muted px-3 py-2">
+                      <h4 className="font-medium text-sm">Items</h4>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Item</TableHead>
+                          <TableHead className="text-xs text-center">Qty</TableHead>
+                          <TableHead className="text-xs text-right">Rate</TableHead>
+                          <TableHead className="text-xs text-center">Period</TableHead>
+                          <TableHead className="text-xs text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {viewPurchaseBill.items.map((item: any, index: number) => (
+                          <TableRow key={item.id || index}>
+                            <TableCell className="text-sm font-medium">{item.item_name}</TableCell>
+                            <TableCell className="text-sm text-center">{item.quantity} {item.unit}</TableCell>
+                            <TableCell className="text-sm text-right">৳{(item.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                            <TableCell className="text-xs text-center">
+                              {item.from_date && item.to_date ? `${format(new Date(item.from_date), 'dd/MM')} - ${format(new Date(item.to_date), 'dd/MM')}` : '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-right font-medium">৳{(item.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                <div className="border-t pt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>৳{(viewPurchaseBill.subtotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">VAT</span>
+                    <span>৳{(viewPurchaseBill.vat_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Discount</span>
+                    <span>-৳{(viewPurchaseBill.discount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t pt-2">
+                    <span>Total</span>
+                    <span>৳{viewPurchaseBill.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Paid</span>
+                    <span className="text-green-600">৳{viewPurchaseBill.paid_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Due</span>
+                    <span className="text-red-600">৳{viewPurchaseBill.due_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+                {viewPurchaseBill.remarks && (
+                  <div className="border-t pt-4">
+                    <p className="text-sm text-muted-foreground">Remarks</p>
+                    <p>{viewPurchaseBill.remarks}</p>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-4">
+                  <Button variant="outline" onClick={() => handleDownloadPDF('purchase', viewPurchaseBill)} className="flex-1">
+                    <FileText className="mr-2 h-4 w-4" /> Download PDF
+                  </Button>
+                  <Button onClick={() => handlePrint('purchase', viewPurchaseBill)} className="flex-1">
+                    <Printer className="mr-2 h-4 w-4" /> Print
+                  </Button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge variant={viewPurchaseBill.payment_status === 'paid' ? 'default' : 'destructive'}>{viewPurchaseBill.payment_status}</Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Payment Method</p>
-                  <p className="font-medium capitalize">{viewPurchaseBill.payment_method?.replace('_', ' ') || 'N/A'}</p>
-                </div>
-              </div>
-              <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>৳{(viewPurchaseBill.subtotal || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">VAT</span>
-                  <span>৳{(viewPurchaseBill.vat_amount || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Discount</span>
-                  <span>-৳{(viewPurchaseBill.discount || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between font-bold border-t pt-2">
-                  <span>Total</span>
-                  <span>৳{viewPurchaseBill.total_amount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Paid</span>
-                  <span className="text-green-600">৳{viewPurchaseBill.paid_amount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Due</span>
-                  <span className="text-red-600">৳{viewPurchaseBill.due_amount.toLocaleString()}</span>
-                </div>
-              </div>
-              {viewPurchaseBill.remarks && (
-                <div className="border-t pt-4">
-                  <p className="text-sm text-muted-foreground">Remarks</p>
-                  <p>{viewPurchaseBill.remarks}</p>
-                </div>
-              )}
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" onClick={() => handleDownloadPDF('purchase', viewPurchaseBill)} className="flex-1">
-                  <FileText className="mr-2 h-4 w-4" /> Download PDF
-                </Button>
-                <Button onClick={() => handlePrint('purchase', viewPurchaseBill)} className="flex-1">
-                  <Printer className="mr-2 h-4 w-4" /> Print
-                </Button>
-              </div>
-            </div>
+            </ScrollArea>
           )}
         </SheetContent>
       </Sheet>
 
       {/* Sales Invoice Details Sheet */}
       <Sheet open={!!viewSalesInvoice} onOpenChange={() => setViewSalesInvoice(null)}>
-        <SheetContent className="w-[600px] sm:max-w-[600px]">
+        <SheetContent className="w-[700px] sm:max-w-[700px]">
           <SheetHeader>
             <SheetTitle>Sales Invoice Details</SheetTitle>
             <SheetDescription>Invoice: {viewSalesInvoice?.invoice_number}</SheetDescription>
           </SheetHeader>
           {viewSalesInvoice && (
-            <div className="mt-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Client</p>
-                  <p className="font-medium">{viewSalesInvoice.client?.name || 'N/A'}</p>
+            <ScrollArea className="h-[calc(100vh-120px)] pr-4">
+              <div className="mt-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Client</p>
+                    <p className="font-medium">{viewSalesInvoice.client?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Billing Date</p>
+                    <p className="font-medium">{format(new Date(viewSalesInvoice.billing_date), 'dd/MM/yyyy')}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Billing Date</p>
-                  <p className="font-medium">{format(new Date(viewSalesInvoice.billing_date), 'dd/MM/yyyy')}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Due Date</p>
+                    <p className="font-medium">{viewSalesInvoice.due_date ? format(new Date(viewSalesInvoice.due_date), 'dd/MM/yyyy') : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <Badge variant={viewSalesInvoice.payment_status === 'paid' ? 'default' : 'destructive'}>{viewSalesInvoice.payment_status}</Badge>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                {viewSalesInvoice.items && viewSalesInvoice.items.length > 0 && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-muted px-3 py-2">
+                      <h4 className="font-medium text-sm">Items</h4>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Item</TableHead>
+                          <TableHead className="text-xs text-center">Qty</TableHead>
+                          <TableHead className="text-xs text-right">Rate</TableHead>
+                          <TableHead className="text-xs text-center">Period</TableHead>
+                          <TableHead className="text-xs text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {viewSalesInvoice.items.map((item: any, index: number) => (
+                          <TableRow key={item.id || index}>
+                            <TableCell className="text-sm font-medium">{item.item_name}</TableCell>
+                            <TableCell className="text-sm text-center">{item.quantity} {item.unit}</TableCell>
+                            <TableCell className="text-sm text-right">৳{(item.rate || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                            <TableCell className="text-xs text-center">
+                              {item.from_date && item.to_date ? `${format(new Date(item.from_date), 'dd/MM')} - ${format(new Date(item.to_date), 'dd/MM')}` : '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-right font-medium">৳{(item.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                <div className="border-t pt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>৳{(viewSalesInvoice.subtotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">VAT</span>
+                    <span>৳{(viewSalesInvoice.vat_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Discount</span>
+                    <span>-৳{(viewSalesInvoice.discount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t pt-2">
+                    <span>Total</span>
+                    <span>৳{viewSalesInvoice.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Paid</span>
+                    <span className="text-green-600">৳{viewSalesInvoice.paid_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Due</span>
+                    <span className="text-red-600">৳{viewSalesInvoice.due_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+                {viewSalesInvoice.remarks && (
+                  <div className="border-t pt-4">
+                    <p className="text-sm text-muted-foreground">Remarks</p>
+                    <p>{viewSalesInvoice.remarks}</p>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-4">
+                  <Button variant="outline" onClick={() => handleDownloadPDF('sales', viewSalesInvoice)} className="flex-1">
+                    <FileText className="mr-2 h-4 w-4" /> Download PDF
+                  </Button>
+                  <Button onClick={() => handlePrint('sales', viewSalesInvoice)} className="flex-1">
+                    <Printer className="mr-2 h-4 w-4" /> Print
+                  </Button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Due Date</p>
-                  <p className="font-medium">{viewSalesInvoice.due_date ? format(new Date(viewSalesInvoice.due_date), 'dd/MM/yyyy') : 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge variant={viewSalesInvoice.payment_status === 'paid' ? 'default' : 'destructive'}>{viewSalesInvoice.payment_status}</Badge>
-                </div>
-              </div>
-              <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>৳{(viewSalesInvoice.subtotal || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">VAT</span>
-                  <span>৳{(viewSalesInvoice.vat_amount || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Discount</span>
-                  <span>-৳{(viewSalesInvoice.discount || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between font-bold border-t pt-2">
-                  <span>Total</span>
-                  <span>৳{viewSalesInvoice.total_amount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Paid</span>
-                  <span className="text-green-600">৳{viewSalesInvoice.paid_amount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Due</span>
-                  <span className="text-red-600">৳{viewSalesInvoice.due_amount.toLocaleString()}</span>
-                </div>
-              </div>
-              {viewSalesInvoice.remarks && (
-                <div className="border-t pt-4">
-                  <p className="text-sm text-muted-foreground">Remarks</p>
-                  <p>{viewSalesInvoice.remarks}</p>
-                </div>
-              )}
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" onClick={() => handleDownloadPDF('sales', viewSalesInvoice)} className="flex-1">
-                  <FileText className="mr-2 h-4 w-4" /> Download PDF
-                </Button>
-                <Button onClick={() => handlePrint('sales', viewSalesInvoice)} className="flex-1">
-                  <Printer className="mr-2 h-4 w-4" /> Print
-                </Button>
-              </div>
-            </div>
+            </ScrollArea>
           )}
         </SheetContent>
       </Sheet>
