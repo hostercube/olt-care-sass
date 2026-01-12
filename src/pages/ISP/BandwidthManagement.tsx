@@ -450,22 +450,22 @@ function BandwidthManagementContent() {
       company_name: client.company_name || '', 
       email: client.email || '', 
       phone: client.phone || '', 
-      mobile: (client as any).mobile || '',
+      mobile: client.mobile || '',
       address: client.address || '', 
       contact_person: client.contact_person || '', 
       account_number: client.account_number || '', 
       bank_details: client.bank_details || '', 
       notes: client.notes || '',
-      status: (client as any).status || 'active',
-      reference_by: (client as any).reference_by || '',
-      nttn_info: (client as any).nttn_info || '',
-      vlan_name: (client as any).vlan_name || '',
-      vlan_ip: (client as any).vlan_ip || '',
-      scr_link_id: (client as any).scr_link_id || '',
-      activation_date: (client as any).activation_date || '',
-      ip_address: (client as any).ip_address || '',
-      pop_name: (client as any).pop_name || '',
-      username: (client as any).username || '',
+      status: client.status || 'active',
+      reference_by: client.reference_by || '',
+      nttn_info: client.nttn_info || '',
+      vlan_name: client.vlan_name || '',
+      vlan_ip: client.vlan_ip || '',
+      scr_link_id: client.scr_link_id || '',
+      activation_date: client.activation_date || '',
+      ip_address: client.ip_address || '',
+      pop_name: client.pop_name || '',
+      username: client.username || '',
       password: ''
     });
     setClientDialog(true);
@@ -2368,7 +2368,7 @@ function BandwidthManagementContent() {
         <SheetContent className="w-[600px] sm:max-w-[600px]">
           <SheetHeader>
             <SheetTitle>Client Details</SheetTitle>
-            <SheetDescription>{viewClientDetails?.name} - {viewClientDetails?.company_name}</SheetDescription>
+            <SheetDescription>{viewClientDetails?.name} {viewClientDetails?.company_name ? `- ${viewClientDetails.company_name}` : ''}</SheetDescription>
           </SheetHeader>
           {viewClientDetails && (
             <ScrollArea className="h-[calc(100vh-120px)] pr-4">
@@ -2382,11 +2382,11 @@ function BandwidthManagementContent() {
                     <div><span className="text-muted-foreground">Name:</span> <strong>{viewClientDetails.name}</strong></div>
                     <div><span className="text-muted-foreground">Company:</span> <strong>{viewClientDetails.company_name || '-'}</strong></div>
                     <div><span className="text-muted-foreground">Contact Person:</span> <strong>{viewClientDetails.contact_person || '-'}</strong></div>
-                    <div><span className="text-muted-foreground">Email:</span> <strong>{viewClientDetails.email || '-'}</strong></div>
-                    <div><span className="text-muted-foreground">Mobile:</span> <strong>{(viewClientDetails as any).mobile || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Email:</span> <strong className="text-primary">{viewClientDetails.email || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Mobile:</span> <strong>{viewClientDetails.mobile || '-'}</strong></div>
                     <div><span className="text-muted-foreground">Phone:</span> <strong>{viewClientDetails.phone || '-'}</strong></div>
-                    <div><span className="text-muted-foreground">Status:</span> <Badge variant={(viewClientDetails as any).status === 'active' ? 'default' : 'secondary'}>{(viewClientDetails as any).status || 'active'}</Badge></div>
-                    <div><span className="text-muted-foreground">Reference By:</span> <strong>{(viewClientDetails as any).reference_by || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Status:</span> <Badge variant={viewClientDetails.status === 'active' ? 'default' : viewClientDetails.status === 'inactive' ? 'secondary' : 'destructive'}>{viewClientDetails.status || 'active'}</Badge></div>
+                    <div><span className="text-muted-foreground">Reference By:</span> <strong>{viewClientDetails.reference_by || '-'}</strong></div>
                     <div className="col-span-2"><span className="text-muted-foreground">Address:</span> <strong>{viewClientDetails.address || '-'}</strong></div>
                   </CardContent>
                 </Card>
@@ -2397,13 +2397,14 @@ function BandwidthManagementContent() {
                     <CardTitle className="text-sm flex items-center gap-2"><RefreshCw className="h-4 w-4" /> Transmission Information</CardTitle>
                   </CardHeader>
                   <CardContent className="grid grid-cols-2 gap-3 text-sm">
-                    <div><span className="text-muted-foreground">NTTN Info:</span> <strong>{(viewClientDetails as any).nttn_info || '-'}</strong></div>
-                    <div><span className="text-muted-foreground">VLAN Name:</span> <strong>{(viewClientDetails as any).vlan_name || '-'}</strong></div>
-                    <div><span className="text-muted-foreground">VLAN IP:</span> <strong>{(viewClientDetails as any).vlan_ip || '-'}</strong></div>
-                    <div><span className="text-muted-foreground">SCR/Link ID:</span> <strong>{(viewClientDetails as any).scr_link_id || '-'}</strong></div>
-                    <div><span className="text-muted-foreground">Activation Date:</span> <strong>{(viewClientDetails as any).activation_date ? format(new Date((viewClientDetails as any).activation_date), 'dd/MM/yyyy') : '-'}</strong></div>
-                    <div><span className="text-muted-foreground">IP Address:</span> <strong>{(viewClientDetails as any).ip_address || '-'}</strong></div>
-                    <div><span className="text-muted-foreground">POP Name:</span> <strong>{(viewClientDetails as any).pop_name || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">NTTN Info:</span> <strong>{viewClientDetails.nttn_info || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">VLAN Name:</span> <strong>{viewClientDetails.vlan_name || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">VLAN IP:</span> <strong>{viewClientDetails.vlan_ip || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">SCR/Link ID:</span> <strong>{viewClientDetails.scr_link_id || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Activation Date:</span> <strong>{viewClientDetails.activation_date ? format(new Date(viewClientDetails.activation_date), 'dd/MM/yyyy') : '-'}</strong></div>
+                    <div><span className="text-muted-foreground">IP Address:</span> <strong>{viewClientDetails.ip_address || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">POP Name:</span> <strong>{viewClientDetails.pop_name || '-'}</strong></div>
+                    <div><span className="text-muted-foreground">Username:</span> <strong>{viewClientDetails.username || '-'}</strong></div>
                   </CardContent>
                 </Card>
 
