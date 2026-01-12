@@ -115,28 +115,28 @@ export function useTenantBranding() {
     }
 
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
       const fileName = `${tenantId}/${type}_${Date.now()}.${fileExt}`;
       const bucket = 'tenant-assets';
 
-      // Check if bucket exists, create if not
-      const { data: buckets } = await supabase.storage.listBuckets();
-      const bucketExists = buckets?.some(b => b.name === bucket);
-      
-      if (!bucketExists) {
-        await supabase.storage.createBucket(bucket, { public: true });
-      }
-
+      // Upload directly - bucket should exist from migration
       const { data, error } = await supabase.storage
         .from(bucket)
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, file, { 
+          upsert: true,
+          contentType: file.type 
+        });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Upload error:', error);
+        throw error;
+      }
 
       const { data: urlData } = supabase.storage
         .from(bucket)
         .getPublicUrl(data.path);
 
+      toast.success(`${type === 'logo' ? 'Logo' : 'Favicon'} uploaded successfully`);
       return urlData.publicUrl;
     } catch (error: any) {
       console.error('Error uploading file:', error);

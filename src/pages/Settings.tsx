@@ -14,13 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload, Globe, DollarSign } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useTenantBackup } from '@/hooks/useTenantBackup';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { useTenantBranding } from '@/hooks/useTenantBranding';
+import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -174,6 +175,7 @@ function BrandingSettingsCard() {
       await updateBranding({ logo_url: url });
     }
     setUploadingLogo(false);
+    if (logoInputRef.current) logoInputRef.current.value = '';
   };
 
   const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,12 +189,15 @@ function BrandingSettingsCard() {
       await updateBranding({ favicon_url: url });
     }
     setUploadingFavicon(false);
+    if (faviconInputRef.current) faviconInputRef.current.value = '';
   };
 
   const handleSave = async () => {
     await updateBranding({
       company_name: companyName,
       subtitle: subtitle,
+      logo_url: logoUrl,
+      favicon_url: faviconUrl,
     });
   };
 
@@ -380,6 +385,143 @@ function BrandingSettingsCard() {
   );
 }
 
+// Language & Currency Settings Component
+function LocalizationSettingsCard() {
+  const { 
+    languages, 
+    currencies, 
+    currentLanguage, 
+    currentCurrency, 
+    currencySymbol,
+    setLanguage, 
+    setCurrency, 
+    loading 
+  } = useLanguageCurrency();
+  const [savingLang, setSavingLang] = useState(false);
+  const [savingCurr, setSavingCurr] = useState(false);
+
+  const handleLanguageChange = async (code: string) => {
+    setSavingLang(true);
+    await setLanguage(code);
+    toast.success(`Language changed to ${languages.find(l => l.code === code)?.name || code}`);
+    setSavingLang(false);
+  };
+
+  const handleCurrencyChange = async (code: string) => {
+    setSavingCurr(true);
+    await setCurrency(code);
+    toast.success(`Currency changed to ${currencies.find(c => c.code === code)?.name || code}`);
+    setSavingCurr(false);
+  };
+
+  if (loading) {
+    return (
+      <Card variant="glass">
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card variant="glass">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Globe className="h-5 w-5 text-primary" />
+          Language & Currency
+        </CardTitle>
+        <CardDescription>
+          Set your preferred language and currency for the entire platform
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Language Selection */}
+          <div className="space-y-3">
+            <Label htmlFor="language" className="flex items-center gap-2">
+              <Globe className="h-4 w-4" />
+              Display Language
+            </Label>
+            <Select 
+              value={currentLanguage} 
+              onValueChange={handleLanguageChange}
+              disabled={savingLang}
+            >
+              <SelectTrigger className="bg-secondary">
+                <SelectValue placeholder="Select language" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border">
+                {languages.map((lang) => (
+                  <SelectItem key={lang.code} value={lang.code}>
+                    <span className="flex items-center gap-2">
+                      {lang.native_name || lang.name}
+                      <span className="text-muted-foreground">({lang.name})</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              All labels, menus, and texts will be displayed in this language
+            </p>
+          </div>
+
+          {/* Currency Selection */}
+          <div className="space-y-3">
+            <Label htmlFor="currency" className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Currency
+            </Label>
+            <Select 
+              value={currentCurrency} 
+              onValueChange={handleCurrencyChange}
+              disabled={savingCurr}
+            >
+              <SelectTrigger className="bg-secondary">
+                <SelectValue placeholder="Select currency" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border">
+                {currencies.map((curr) => (
+                  <SelectItem key={curr.code} value={curr.code}>
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium">{curr.symbol}</span>
+                      {curr.name}
+                      <span className="text-muted-foreground">({curr.code})</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              All amounts will be displayed with this currency symbol
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Preview */}
+        <div className="p-4 rounded-lg bg-muted/30 border border-border">
+          <Label className="mb-3 block">Preview</Label>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="p-3 rounded-md bg-background border">
+              <p className="text-sm text-muted-foreground mb-1">Sample Amount</p>
+              <p className="text-2xl font-bold">{currencySymbol}1,250.00</p>
+            </div>
+            <div className="p-3 rounded-md bg-background border">
+              <p className="text-sm text-muted-foreground mb-1">Current Language</p>
+              <p className="text-lg font-medium">
+                {languages.find(l => l.code === currentLanguage)?.native_name || currentLanguage}
+              </p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { settings, loading, saving, updateSetting, saveSettings, resetSettings } = useSystemSettings();
   const { isAdmin } = useUserRole();
@@ -441,6 +583,7 @@ export default function Settings() {
           {/* Branding Settings */}
           <TabsContent value="branding" className="space-y-6">
             <BrandingSettingsCard />
+            <LocalizationSettingsCard />
           </TabsContent>
 
           {/* General Settings */}
