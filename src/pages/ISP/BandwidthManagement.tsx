@@ -557,7 +557,7 @@ function BandwidthManagementContent() {
         payment_method: collectionForm.payment_method,
         received_by: collectionForm.received_by || null,
         remarks: collectionForm.remarks || null,
-      });
+      }, editingCollection.amount); // Pass original amount for cascading updates
     } else {
       await createBillCollection({
         client_id: collectionForm.client_id || null,
@@ -590,7 +590,7 @@ function BandwidthManagementContent() {
         payment_method: providerPaymentForm.payment_method,
         paid_by: providerPaymentForm.paid_by || null,
         remarks: providerPaymentForm.remarks || null,
-      });
+      }, editingPayment.amount); // Pass original amount for cascading updates
     } else {
       await createProviderPayment({
         provider_id: providerPaymentForm.provider_id || null,
