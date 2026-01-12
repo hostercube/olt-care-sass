@@ -16,6 +16,14 @@ import './config.js';
 import { supabase } from './supabase-client.js';
 import express from 'express';
 import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import cron from 'node-cron';
 import { pollOLT, testOLTConnection, testAllProtocols } from './polling/olt-poller.js';
 import { parseVSOLMacTable } from './polling/parsers/vsol-parser.js';
@@ -3278,6 +3286,133 @@ app.post('/payments/bkash/checkout-redirect', (req, res) => {
 
 // Setup Reseller Portal API routes
 setupResellerRoutes(app, supabase);
+
+// ============= VPS FILE STORAGE ENDPOINTS =============
+// Configure multer for file uploads
+const uploadsDir = path.join(__dirname, '../../uploads');
+const tenantAssetsDir = path.join(uploadsDir, 'tenant-assets');
+
+// Ensure directories exist
+[uploadsDir, tenantAssetsDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    logger.info(`Created directory: ${dir}`);
+  }
+});
+
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const tenantId = req.params.tenantId || 'general';
+    const tenantDir = path.join(tenantAssetsDir, tenantId);
+    if (!fs.existsSync(tenantDir)) {
+      fs.mkdirSync(tenantDir, { recursive: true });
+    }
+    cb(null, tenantDir);
+  },
+  filename: (req, file, cb) => {
+    const type = req.body.type || 'file';
+    const ext = path.extname(file.originalname).toLowerCase() || '.png';
+    const filename = `${type}_${Date.now()}${ext}`;
+    cb(null, filename);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only images are allowed.'));
+    }
+  }
+});
+
+// File upload endpoint
+app.post('/api/upload/:tenantId', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+    
+    const tenantId = req.params.tenantId;
+    const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'https://oltapp.isppoint.com';
+    const relativePath = `/uploads/tenant-assets/${tenantId}/${req.file.filename}`;
+    const publicUrl = `${publicBaseUrl}/olt-polling-server${relativePath}`;
+    
+    logger.info(`File uploaded: ${req.file.filename} for tenant ${tenantId}`);
+    
+    res.json({
+      success: true,
+      filename: req.file.filename,
+      path: relativePath,
+      url: publicUrl,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+  } catch (error) {
+    logger.error('File upload error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Also without /api prefix
+app.post('/upload/:tenantId', upload.single('file'), (req, res) => {
+  req.url = `/api/upload/${req.params.tenantId}`;
+  // Need to manually handle since multer already processed
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+    
+    const tenantId = req.params.tenantId;
+    const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'https://oltapp.isppoint.com';
+    const relativePath = `/uploads/tenant-assets/${tenantId}/${req.file.filename}`;
+    const publicUrl = `${publicBaseUrl}/olt-polling-server${relativePath}`;
+    
+    res.json({
+      success: true,
+      filename: req.file.filename,
+      path: relativePath,
+      url: publicUrl,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+  } catch (error) {
+    logger.error('File upload error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(uploadsDir));
+
+// Delete file endpoint
+app.delete('/api/upload/:tenantId/:filename', (req, res) => {
+  try {
+    const { tenantId, filename } = req.params;
+    const filePath = path.join(tenantAssetsDir, tenantId, filename);
+    
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      logger.info(`File deleted: ${filename} for tenant ${tenantId}`);
+      res.json({ success: true, message: 'File deleted' });
+    } else {
+      res.status(404).json({ success: false, error: 'File not found' });
+    }
+  } catch (error) {
+    logger.error('File delete error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/upload/:tenantId/:filename', (req, res) => {
+  req.url = `/api/upload/${req.params.tenantId}/${req.params.filename}`;
+  app.handle(req, res);
+});
 
 // Start server
 const PORT = process.env.PORT || 3001;
