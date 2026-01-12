@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
+import { LanguageCurrencyProvider } from "@/hooks/useLanguageCurrency";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { SuperAdminRoute } from "@/components/layout/SuperAdminRoute";
 import { TenantAccessGuard } from "@/components/layout/TenantAccessGuard";
@@ -111,6 +112,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <LanguageCurrencyProvider>
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Landing />} />
@@ -558,6 +560,7 @@ const App = () => (
 
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </LanguageCurrencyProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

@@ -77,6 +77,10 @@ const translations: Record<string, Record<string, string>> = {
     due_amount: 'Due Amount',
     connection_date: 'Connection Date',
     address: 'Address',
+    customer_code: 'Customer Code',
+    pppoe_username: 'PPPoE Username',
+    router: 'Router',
+    reseller: 'Reseller',
     
     // Actions
     save: 'Save',
@@ -92,6 +96,9 @@ const translations: Record<string, Record<string, string>> = {
     apply: 'Apply',
     confirm: 'Confirm',
     close: 'Close',
+    select_all: 'Select All',
+    clear_filters: 'Clear Filters',
+    bulk_actions: 'Bulk Actions',
     
     // Status Values
     active: 'Active',
@@ -100,6 +107,8 @@ const translations: Record<string, Record<string, string>> = {
     pending: 'Pending',
     online: 'Online',
     offline: 'Offline',
+    cancelled: 'Cancelled',
+    all: 'All',
     
     // Billing
     recharge: 'Recharge',
@@ -127,7 +136,6 @@ const translations: Record<string, Record<string, string>> = {
     // Areas & Resellers
     areas: 'Areas',
     resellers: 'Resellers',
-    reseller: 'Reseller',
     resellers_list: 'Resellers List',
     reseller_roles: 'Reseller Roles',
     reseller_billing: 'Reseller Billing',
@@ -174,6 +182,18 @@ const translations: Record<string, Record<string, string>> = {
     success: 'Success',
     warning: 'Warning',
     info: 'Information',
+    
+    // Filter Labels
+    filter_by_status: 'Filter by Status',
+    filter_by_package: 'Filter by Package',
+    filter_by_area: 'Filter by Area',
+    filter_by_router: 'Filter by Router',
+    filter_by_reseller: 'Filter by Reseller',
+    expiry_filter: 'Expiry Filter',
+    expiring_today: 'Expiring Today',
+    expiring_7_days: 'Expiring in 7 Days',
+    expiring_30_days: 'Expiring in 30 Days',
+    already_expired: 'Already Expired',
   },
   bn: {
     // Navigation & Layout
@@ -233,6 +253,10 @@ const translations: Record<string, Record<string, string>> = {
     due_amount: 'বকেয়া পরিমাণ',
     connection_date: 'সংযোগ তারিখ',
     address: 'ঠিকানা',
+    customer_code: 'গ্রাহক কোড',
+    pppoe_username: 'পিপিপিওই ইউজারনেম',
+    router: 'রাউটার',
+    reseller: 'রিসেলার',
     
     // Actions
     save: 'সংরক্ষণ',
@@ -248,6 +272,9 @@ const translations: Record<string, Record<string, string>> = {
     apply: 'প্রয়োগ',
     confirm: 'নিশ্চিত',
     close: 'বন্ধ',
+    select_all: 'সব নির্বাচন করুন',
+    clear_filters: 'ফিল্টার পরিষ্কার করুন',
+    bulk_actions: 'বাল্ক অ্যাকশন',
     
     // Status Values
     active: 'সক্রিয়',
@@ -256,6 +283,8 @@ const translations: Record<string, Record<string, string>> = {
     pending: 'অপেক্ষমাণ',
     online: 'অনলাইন',
     offline: 'অফলাইন',
+    cancelled: 'বাতিল',
+    all: 'সব',
     
     // Billing
     recharge: 'রিচার্জ',
@@ -283,7 +312,6 @@ const translations: Record<string, Record<string, string>> = {
     // Areas & Resellers
     areas: 'এলাকা',
     resellers: 'রিসেলার',
-    reseller: 'রিসেলার',
     resellers_list: 'রিসেলার তালিকা',
     reseller_roles: 'রিসেলার রোল',
     reseller_billing: 'রিসেলার বিলিং',
@@ -330,6 +358,18 @@ const translations: Record<string, Record<string, string>> = {
     success: 'সফল',
     warning: 'সতর্কতা',
     info: 'তথ্য',
+    
+    // Filter Labels
+    filter_by_status: 'স্ট্যাটাস অনুযায়ী ফিল্টার',
+    filter_by_package: 'প্যাকেজ অনুযায়ী ফিল্টার',
+    filter_by_area: 'এলাকা অনুযায়ী ফিল্টার',
+    filter_by_router: 'রাউটার অনুযায়ী ফিল্টার',
+    filter_by_reseller: 'রিসেলার অনুযায়ী ফিল্টার',
+    expiry_filter: 'মেয়াদ ফিল্টার',
+    expiring_today: 'আজ মেয়াদ শেষ',
+    expiring_7_days: '৭ দিনের মধ্যে মেয়াদ শেষ',
+    expiring_30_days: '৩০ দিনের মধ্যে মেয়াদ শেষ',
+    already_expired: 'ইতিমধ্যে মেয়াদ শেষ',
   },
 };
 

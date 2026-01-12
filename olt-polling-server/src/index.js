@@ -3331,6 +3331,13 @@ const upload = multer({
   }
 });
 
+// Helper to generate public URL for uploaded files
+const getPublicFileUrl = (tenantId, filename) => {
+  const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'https://oltapp.isppoint.com';
+  // Use /api/files path which is routed through Nginx to this server
+  return `${publicBaseUrl}/olt-polling-server/api/files/tenant-assets/${tenantId}/${filename}`;
+};
+
 // File upload endpoint
 app.post('/api/upload/:tenantId', upload.single('file'), (req, res) => {
   try {
@@ -3339,16 +3346,13 @@ app.post('/api/upload/:tenantId', upload.single('file'), (req, res) => {
     }
     
     const tenantId = req.params.tenantId;
-    const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'https://oltapp.isppoint.com';
-    const relativePath = `/uploads/tenant-assets/${tenantId}/${req.file.filename}`;
-    const publicUrl = `${publicBaseUrl}/olt-polling-server${relativePath}`;
+    const publicUrl = getPublicFileUrl(tenantId, req.file.filename);
     
-    logger.info(`File uploaded: ${req.file.filename} for tenant ${tenantId}`);
+    logger.info(`File uploaded: ${req.file.filename} for tenant ${tenantId}, URL: ${publicUrl}`);
     
     res.json({
       success: true,
       filename: req.file.filename,
-      path: relativePath,
       url: publicUrl,
       size: req.file.size,
       mimetype: req.file.mimetype
@@ -3361,22 +3365,17 @@ app.post('/api/upload/:tenantId', upload.single('file'), (req, res) => {
 
 // Also without /api prefix
 app.post('/upload/:tenantId', upload.single('file'), (req, res) => {
-  req.url = `/api/upload/${req.params.tenantId}`;
-  // Need to manually handle since multer already processed
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
     
     const tenantId = req.params.tenantId;
-    const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'https://oltapp.isppoint.com';
-    const relativePath = `/uploads/tenant-assets/${tenantId}/${req.file.filename}`;
-    const publicUrl = `${publicBaseUrl}/olt-polling-server${relativePath}`;
+    const publicUrl = getPublicFileUrl(tenantId, req.file.filename);
     
     res.json({
       success: true,
       filename: req.file.filename,
-      path: relativePath,
       url: publicUrl,
       size: req.file.size,
       mimetype: req.file.mimetype
@@ -3387,8 +3386,9 @@ app.post('/upload/:tenantId', upload.single('file'), (req, res) => {
   }
 });
 
-// Serve uploaded files statically
-app.use('/uploads', express.static(uploadsDir));
+// Serve uploaded files statically via /api/files route
+app.use('/api/files', express.static(uploadsDir));
+app.use('/files', express.static(uploadsDir));
 
 // Delete file endpoint
 app.delete('/api/upload/:tenantId/:filename', (req, res) => {
