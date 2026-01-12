@@ -627,7 +627,7 @@ export default function MikroTikManagement() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingRouter ? 'Edit Router' : 'Add MikroTik Router'}</DialogTitle>
           </DialogHeader>

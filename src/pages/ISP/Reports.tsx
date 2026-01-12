@@ -46,56 +46,108 @@ export default function Reports() {
       const startDate = startOfMonth(parseISO(selectedMonth + '-01'));
       const endDate = endOfMonth(startDate);
 
-      const { data: customers } = await supabase
-        .from('customers')
-        .select('id, name, status, created_at, monthly_bill, customer_code, phone, pppoe_username, expiry_date, connection_date, package:isp_packages(name, price), area:areas(name)')
-        .eq('tenant_id', tenantId);
+      const [
+        customersRes,
+        billsRes,
+        paymentsRes,
+        staffRes,
+        salaryPaymentsRes,
+        transactionsRes,
+        categoriesRes
+      ] = await Promise.all([
+        supabase
+          .from('customers')
+          .select('id, name, status, created_at, monthly_bill, customer_code, phone, pppoe_username, expiry_date, connection_date, package:isp_packages(name, price), area:areas(name)')
+          .eq('tenant_id', tenantId),
+        supabase
+          .from('customer_bills')
+          .select('*, customer:customers(name, customer_code, phone)')
+          .eq('tenant_id', tenantId)
+          .eq('billing_month', selectedMonth),
+        supabase
+          .from('customer_payments')
+          .select('*, customer:customers(name, customer_code), collected_by')
+          .eq('tenant_id', tenantId)
+          .gte('payment_date', startDate.toISOString())
+          .lte('payment_date', endDate.toISOString()),
+        supabase
+          .from('staff')
+          .select('*')
+          .eq('tenant_id', tenantId),
+        supabase
+          .from('salary_payments')
+          .select('*, staff:staff(name, designation)')
+          .eq('tenant_id', tenantId)
+          .eq('month', selectedMonth),
+        supabase
+          .from('transactions')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .gte('date', startDate.toISOString().split('T')[0])
+          .lte('date', endDate.toISOString().split('T')[0]),
+        supabase
+          .from('expense_categories')
+          .select('*')
+          .eq('tenant_id', tenantId)
+      ]);
 
-      const { data: bills } = await supabase
-        .from('customer_bills')
-        .select('*, customer:customers(name, customer_code, phone)')
-        .eq('tenant_id', tenantId)
-        .eq('billing_month', selectedMonth);
+      const customers = customersRes.data || [];
+      const bills = billsRes.data || [];
+      const payments = paymentsRes.data || [];
+      const staff = staffRes.data || [];
+      const salaryPayments = salaryPaymentsRes.data || [];
+      const transactions = transactionsRes.data || [];
+      const categories = categoriesRes.data || [];
 
-      const { data: payments } = await supabase
-        .from('customer_payments')
-        .select('*, customer:customers(name, customer_code), collected_by')
-        .eq('tenant_id', tenantId)
-        .gte('payment_date', startDate.toISOString())
-        .lte('payment_date', endDate.toISOString());
-
-      const { data: staff } = await supabase
-        .from('staff')
-        .select('*')
-        .eq('tenant_id', tenantId);
-
-      const { data: salaryPayments } = await supabase
-        .from('salary_payments')
-        .select('*, staff:staff(name, designation)')
-        .eq('tenant_id', tenantId)
-        .eq('month', selectedMonth);
-
-      const activeCustomers = customers?.filter(c => c.status === 'active').length || 0;
-      const totalCustomers = customers?.length || 0;
-      const newCustomers = customers?.filter(c => 
+      const activeCustomers = customers.filter(c => c.status === 'active').length;
+      const totalCustomers = customers.length;
+      const newCustomers = customers.filter(c => 
         c.created_at && c.created_at.startsWith(selectedMonth)
-      ) || [];
-      const disabledCustomers = customers?.filter(c => c.status === 'suspended' || c.status === 'cancelled') || [];
+      );
+      const disabledCustomers = customers.filter(c => c.status === 'suspended' || c.status === 'cancelled');
       
       const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const todayNewCustomers = customers?.filter(c => 
+      const todayNewCustomers = customers.filter(c => 
         c.created_at && c.created_at.startsWith(todayStr)
-      ) || [];
+      );
 
-      const paidBills = bills?.filter(b => b.status === 'paid') || [];
-      const unpaidBills = bills?.filter(b => b.status !== 'paid') || [];
-      const partialBills = bills?.filter(b => b.status === 'partial') || [];
+      const paidBills = bills.filter(b => b.status === 'paid');
+      const unpaidBills = bills.filter(b => b.status !== 'paid');
+      const partialBills = bills.filter(b => b.status === 'partial');
       
-      const monthlyCollection = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+      const monthlyCollection = payments.reduce((sum, p) => sum + Number(p.amount), 0);
       const monthlyDue = unpaidBills.reduce((sum, b) => sum + (b.total_amount - (b.paid_amount || 0)), 0);
       
+      // Calculate income and expense from transactions
+      const incomeTransactions = transactions.filter((t: any) => t.type === 'income');
+      const expenseTransactions = transactions.filter((t: any) => t.type === 'expense');
+      const totalTransactionIncome = incomeTransactions.reduce((sum, t: any) => sum + Number(t.amount), 0);
+      const totalTransactionExpense = expenseTransactions.reduce((sum, t: any) => sum + Number(t.amount), 0);
+
+      // Group transactions by category
+      const incomeByCategory: Record<string, { name: string; amount: number }> = {};
+      const expenseByCategory: Record<string, { name: string; amount: number }> = {};
+      
+      incomeTransactions.forEach((t: any) => {
+        const catId = t.category_id || 'uncategorized';
+        const cat = categories.find((c: any) => c.id === catId);
+        if (!incomeByCategory[catId]) {
+          incomeByCategory[catId] = { name: cat?.name || 'Uncategorized', amount: 0 };
+        }
+        incomeByCategory[catId].amount += Number(t.amount);
+      });
+
+      expenseTransactions.forEach((t: any) => {
+        const catId = t.category_id || 'uncategorized';
+        const cat = categories.find((c: any) => c.id === catId);
+        if (!expenseByCategory[catId]) {
+          expenseByCategory[catId] = { name: cat?.name || 'Uncategorized', amount: 0 };
+        }
+        expenseByCategory[catId].amount += Number(t.amount);
+      });
+
       const collectorPayments: Record<string, { name: string; amount: number; count: number }> = {};
-      payments?.forEach(p => {
+      payments.forEach(p => {
         const collectorId = p.collected_by || 'unknown';
         if (!collectorPayments[collectorId]) {
           collectorPayments[collectorId] = { name: collectorId === 'unknown' ? 'Online/Self' : 'Collector', amount: 0, count: 0 };
@@ -104,12 +156,12 @@ export default function Reports() {
         collectorPayments[collectorId].count += 1;
       });
 
-      const customersWithBills = new Set(bills?.map(b => b.customer_id) || []);
-      const nonGeneratedBillCustomers = customers?.filter(c => 
+      const customersWithBills = new Set(bills.map(b => b.customer_id));
+      const nonGeneratedBillCustomers = customers.filter(c => 
         c.status === 'active' && !customersWithBills.has(c.id)
-      ) || [];
+      );
 
-      const totalSalary = salaryPayments?.reduce((sum, s) => sum + Number(s.net_salary || 0), 0) || 0;
+      const totalSalary = salaryPayments.reduce((sum, s) => sum + Number(s.net_salary || 0), 0);
 
       setReportData({
         totalCustomers,
@@ -119,17 +171,27 @@ export default function Reports() {
         todayNewCustomers,
         monthlyCollection,
         monthlyDue,
-        bills: bills || [],
+        bills,
         paidBills,
         unpaidBills,
         partialBills,
-        payments: payments || [],
+        payments,
         collectorPayments: Object.values(collectorPayments),
-        staff: staff || [],
-        salaryPayments: salaryPayments || [],
+        staff,
+        salaryPayments,
         totalSalary,
         nonGeneratedBillCustomers,
-        customers: customers || [],
+        customers,
+        // Financial data
+        transactions,
+        categories,
+        totalTransactionIncome,
+        totalTransactionExpense,
+        incomeByCategory: Object.values(incomeByCategory),
+        expenseByCategory: Object.values(expenseByCategory),
+        // Combined totals
+        totalIncome: monthlyCollection + totalTransactionIncome,
+        totalExpense: totalSalary + totalTransactionExpense,
       });
     } catch (err) {
       console.error('Error fetching report:', err);
@@ -320,68 +382,86 @@ export default function Reports() {
       case 'financial':
         return (
           <Card>
-            <CardHeader className="flex flex-row items-start justify-between">
+            <CardHeader className="flex flex-col sm:flex-row items-start justify-between gap-4">
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="h-5 w-5" />
                   Income, Expense & Profit/Loss Report
                 </CardTitle>
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => downloadReport('Financial')}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  CSV
-                </Button>
-              </div>
+              <Button variant="outline" size="sm" onClick={() => downloadReport('Financial')}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                CSV
+              </Button>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                 <Card className="bg-green-50 dark:bg-green-950/20 border-green-200">
                   <CardContent className="p-4">
                     <p className="text-sm text-muted-foreground">Total Income</p>
-                    <p className="text-2xl font-bold text-green-600">৳{reportData?.monthlyCollection?.toLocaleString()}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-600">৳{(reportData?.totalIncome || 0).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Collections: ৳{(reportData?.monthlyCollection || 0).toLocaleString()} + Other: ৳{(reportData?.totalTransactionIncome || 0).toLocaleString()}
+                    </p>
                   </CardContent>
                 </Card>
                 <Card className="bg-red-50 dark:bg-red-950/20 border-red-200">
                   <CardContent className="p-4">
-                    <p className="text-sm text-muted-foreground">Total Expense (Salary)</p>
-                    <p className="text-2xl font-bold text-red-600">৳{reportData?.totalSalary?.toLocaleString()}</p>
+                    <p className="text-sm text-muted-foreground">Total Expense</p>
+                    <p className="text-xl sm:text-2xl font-bold text-red-600">৳{(reportData?.totalExpense || 0).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Salary: ৳{(reportData?.totalSalary || 0).toLocaleString()} + Other: ৳{(reportData?.totalTransactionExpense || 0).toLocaleString()}
+                    </p>
                   </CardContent>
                 </Card>
-                <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200">
+                <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 sm:col-span-2 lg:col-span-1">
                   <CardContent className="p-4">
                     <p className="text-sm text-muted-foreground">Net Profit/Loss</p>
-                    <p className={`text-2xl font-bold ${(reportData?.monthlyCollection - reportData?.totalSalary) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      ৳{((reportData?.monthlyCollection || 0) - (reportData?.totalSalary || 0)).toLocaleString()}
+                    <p className={`text-xl sm:text-2xl font-bold ${((reportData?.totalIncome || 0) - (reportData?.totalExpense || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      ৳{((reportData?.totalIncome || 0) - (reportData?.totalExpense || 0)).toLocaleString()}
                     </p>
                   </CardContent>
                 </Card>
               </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>Bill Collection</TableCell>
-                    <TableCell className="text-right text-green-600">৳{reportData?.monthlyCollection?.toLocaleString()}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Staff Salary</TableCell>
-                    <TableCell className="text-right text-red-600">৳{reportData?.totalSalary?.toLocaleString()}</TableCell>
-                  </TableRow>
-                  <TableRow className="border-t-2 font-bold">
-                    <TableCell>Net Profit/Loss</TableCell>
-                    <TableCell className={`text-right ${(reportData?.monthlyCollection - reportData?.totalSalary) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      ৳{((reportData?.monthlyCollection || 0) - (reportData?.totalSalary || 0)).toLocaleString()}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Category</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow className="bg-green-50/50 dark:bg-green-950/10">
+                      <TableCell className="font-medium">Bill Collection</TableCell>
+                      <TableCell className="text-right text-green-600">+৳{(reportData?.monthlyCollection || 0).toLocaleString()}</TableCell>
+                    </TableRow>
+                    {reportData?.incomeByCategory?.map((cat: any, idx: number) => (
+                      <TableRow key={`inc-${idx}`} className="bg-green-50/30 dark:bg-green-950/5">
+                        <TableCell className="pl-8">{cat.name}</TableCell>
+                        <TableCell className="text-right text-green-600">+৳{cat.amount.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="bg-red-50/50 dark:bg-red-950/10">
+                      <TableCell className="font-medium">Staff Salary</TableCell>
+                      <TableCell className="text-right text-red-600">-৳{(reportData?.totalSalary || 0).toLocaleString()}</TableCell>
+                    </TableRow>
+                    {reportData?.expenseByCategory?.map((cat: any, idx: number) => (
+                      <TableRow key={`exp-${idx}`} className="bg-red-50/30 dark:bg-red-950/5">
+                        <TableCell className="pl-8">{cat.name}</TableCell>
+                        <TableCell className="text-right text-red-600">-৳{cat.amount.toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2 font-bold">
+                      <TableCell>Net Profit/Loss</TableCell>
+                      <TableCell className={`text-right ${((reportData?.totalIncome || 0) - (reportData?.totalExpense || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        ৳{((reportData?.totalIncome || 0) - (reportData?.totalExpense || 0)).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         );
@@ -856,61 +936,61 @@ export default function Reports() {
       subtitle="Comprehensive business reports and BTRC compliance"
     >
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Customers</p>
-                <p className="text-2xl font-bold">{reportData?.totalCustomers || 0}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Total Customers</p>
+                <p className="text-lg sm:text-2xl font-bold">{reportData?.totalCustomers || 0}</p>
                 <p className="text-xs text-green-600">+{reportData?.newCustomers?.length || 0} new</p>
               </div>
-              <Users className="h-8 w-8 text-primary" />
+              <Users className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Active Customers</p>
-                <p className="text-2xl font-bold text-green-600">{reportData?.activeCustomers || 0}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Active Customers</p>
+                <p className="text-lg sm:text-2xl font-bold text-green-600">{reportData?.activeCustomers || 0}</p>
                 <p className="text-xs text-muted-foreground">
                   {((reportData?.activeCustomers / reportData?.totalCustomers) * 100 || 0).toFixed(1)}% of total
                 </p>
               </div>
-              <TrendingUp className="h-8 w-8 text-green-500" />
+              <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Monthly Collection</p>
-                <p className="text-2xl font-bold text-green-600">৳{reportData?.monthlyCollection?.toLocaleString() || 0}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Monthly Collection</p>
+                <p className="text-lg sm:text-2xl font-bold text-green-600">৳{reportData?.monthlyCollection?.toLocaleString() || 0}</p>
               </div>
-              <DollarSign className="h-8 w-8 text-green-500" />
+              <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Pending Due</p>
-                <p className="text-2xl font-bold text-red-600">৳{reportData?.monthlyDue?.toLocaleString() || 0}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Pending Due</p>
+                <p className="text-lg sm:text-2xl font-bold text-red-600">৳{reportData?.monthlyDue?.toLocaleString() || 0}</p>
               </div>
-              <FileText className="h-8 w-8 text-red-500" />
+              <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-red-500" />
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Controls */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-6">
         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-full sm:w-[200px]">
             <Calendar className="h-4 w-4 mr-2" />
             <SelectValue />
           </SelectTrigger>
@@ -920,7 +1000,7 @@ export default function Reports() {
             ))}
           </SelectContent>
         </Select>
-        <Button variant="outline" onClick={() => downloadReport('All Reports')}>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={() => downloadReport('All Reports')}>
           <Download className="h-4 w-4 mr-2" />
           Export All Reports
         </Button>
