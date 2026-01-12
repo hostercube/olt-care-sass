@@ -55,65 +55,65 @@ interface NavItem {
 
 // OLT Care - Network infrastructure monitoring
 const oltCareItems: NavItem[] = [
-  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: 'OLT Management', href: '/olts', icon: Server },
-  { title: 'ONU Devices', href: '/onus', icon: Router },
-  { title: 'Alerts', href: '/alerts', icon: Bell },
-  { title: 'Monitoring', href: '/monitoring', icon: Activity },
+  { title: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'olt_management', href: '/olts', icon: Server },
+  { title: 'onu_devices', href: '/onus', icon: Router },
+  { title: 'alerts', href: '/alerts', icon: Bell },
+  { title: 'monitoring', href: '/monitoring', icon: Activity },
 ];
 
 // Customer Management - Core customer operations
 const customerMgmtItems: NavItem[] = [
-  { title: 'Customers', href: '/isp/customers', icon: Users, requiredModule: 'isp_customers' },
-  { title: 'Customer Types', href: '/isp/customer-types', icon: UserCheck },
-  { title: 'Packages', href: '/isp/packages', icon: Package },
-  { title: 'Areas', href: '/isp/areas', icon: MapPin },
+  { title: 'customers', href: '/isp/customers', icon: Users, requiredModule: 'isp_customers' },
+  { title: 'customer_types', href: '/isp/customer-types', icon: UserCheck },
+  { title: 'packages', href: '/isp/packages', icon: Package },
+  { title: 'areas', href: '/isp/areas', icon: MapPin },
 ];
 
 // Billing & Finance - Financial operations
 const billingFinanceItems: NavItem[] = [
-  { title: 'Recharge History', href: '/isp/recharge-history', icon: ClipboardList, requiredModule: 'isp_billing' },
-  { title: 'Automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
-  { title: 'bKash Payments', href: '/isp/bkash', icon: Wallet },
-  { title: 'Income/Expense', href: '/isp/transactions', icon: DollarSign },
+  { title: 'recharge_history', href: '/isp/recharge-history', icon: ClipboardList, requiredModule: 'isp_billing' },
+  { title: 'automation', href: '/isp/automation', icon: Zap, requiredModule: 'isp_billing' },
+  { title: 'bkash_payments', href: '/isp/bkash', icon: Wallet },
+  { title: 'income_expense', href: '/isp/transactions', icon: DollarSign },
 ];
 
 // Reseller Management - Multi-level reseller system
 const resellerItems: NavItem[] = [
-  { title: 'Resellers List', href: '/isp/resellers', icon: UserCheck, requiredModule: 'isp_resellers' },
-  { title: 'Reseller Roles', href: '/isp/reseller-roles', icon: Shield, requiredModule: 'isp_resellers' },
-  { title: 'Reseller Billing', href: '/isp/reseller-billing', icon: Wallet, requiredModule: 'isp_resellers' },
+  { title: 'resellers_list', href: '/isp/resellers', icon: UserCheck, requiredModule: 'isp_resellers' },
+  { title: 'reseller_roles', href: '/isp/reseller-roles', icon: Shield, requiredModule: 'isp_resellers' },
+  { title: 'reseller_billing', href: '/isp/reseller-billing', icon: Wallet, requiredModule: 'isp_resellers' },
 ];
 
 // Network & Infrastructure - MikroTik, OLT related
 const networkInfraItems: NavItem[] = [
-  { title: 'MikroTik', href: '/isp/mikrotik', icon: Wifi, requiredModule: 'isp_mikrotik' },
-  { title: 'Bandwidth Mgmt', href: '/isp/bandwidth', icon: Gauge, requiredModule: 'isp_bandwidth_management' },
-  { title: 'Custom Domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
+  { title: 'mikrotik', href: '/isp/mikrotik', icon: Wifi, requiredModule: 'isp_mikrotik' },
+  { title: 'bandwidth_mgmt', href: '/isp/bandwidth', icon: Gauge, requiredModule: 'isp_bandwidth_management' },
+  { title: 'custom_domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
 ];
 
 // Communication & Marketing
 const communicationItems: NavItem[] = [
-  { title: 'SMS Center', href: '/isp/sms', icon: MessageSquare, requiredModule: 'sms_alerts' },
-  { title: 'Campaigns', href: '/isp/campaigns', icon: Megaphone },
-  { title: 'All Gateways', href: '/isp/gateways', icon: CreditCard },
+  { title: 'sms_center', href: '/isp/sms', icon: MessageSquare, requiredModule: 'sms_alerts' },
+  { title: 'campaigns', href: '/isp/campaigns', icon: Megaphone },
+  { title: 'all_gateways', href: '/isp/gateways', icon: CreditCard },
 ];
 
 // Operations & HR
 const operationsHRItems: NavItem[] = [
-  { title: 'Payroll & HR', href: '/isp/staff', icon: Users, requiredModule: 'isp_hr_payroll' },
-  { title: 'Inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
-  { title: 'Reports', href: '/isp/reports', icon: FileText },
+  { title: 'payroll_hr', href: '/isp/staff', icon: Users, requiredModule: 'isp_hr_payroll' },
+  { title: 'inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
+  { title: 'reports', href: '/isp/reports', icon: FileText },
 ];
 
 // System Settings - Admin controls
 const tenantSystemItems: NavItem[] = [
-  { title: 'User Management', href: '/users', icon: Shield, adminOnly: true },
-  { title: 'Roles & Permissions', href: '/isp/roles', icon: Shield },
-  { title: 'Activity Logs', href: '/activity-logs', icon: ClipboardList },
-  { title: 'Notifications', href: '/notifications', icon: Bell },
-  { title: 'DB Integrity', href: '/integrity', icon: Database },
-  { title: 'Settings', href: '/settings', icon: Settings },
+  { title: 'user_management', href: '/users', icon: Shield, adminOnly: true },
+  { title: 'roles_permissions', href: '/isp/roles', icon: Shield },
+  { title: 'activity_logs', href: '/activity-logs', icon: ClipboardList },
+  { title: 'notifications', href: '/notifications', icon: Bell },
+  { title: 'db_integrity', href: '/integrity', icon: Database },
+  { title: 'settings', href: '/settings', icon: Settings },
 ];
 
 // Super Admin - Core items
@@ -152,10 +152,10 @@ const superAdminOtherItems: NavItem[] = [
 
 // Subscription & Billing for tenants
 const tenantBillingItems: NavItem[] = [
-  { title: 'My Subscription', href: '/billing/subscription', icon: FileText },
-  { title: 'Invoices', href: '/billing/history', icon: Receipt },
-  { title: 'Make Payment', href: '/billing/pay', icon: CreditCard },
-  { title: 'Renew', href: '/billing/renew', icon: Zap },
+  { title: 'my_subscription', href: '/billing/subscription', icon: FileText },
+  { title: 'invoices', href: '/billing/history', icon: Receipt },
+  { title: 'make_payment', href: '/billing/pay', icon: CreditCard },
+  { title: 'renew', href: '/billing/renew', icon: Zap },
 ];
 
 function readImpersonation(): { tenantId: string; tenantName?: string } | null {
@@ -250,6 +250,9 @@ export function Sidebar() {
 
   const renderNavItem = (item: NavItem) => {
     const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
+    // Translate the title using t() function
+    const translatedTitle = t(item.title) || item.title;
+    
     return (
       <Link
         key={item.href}
@@ -265,7 +268,7 @@ export function Sidebar() {
         <item.icon className={cn('h-4 w-4 flex-shrink-0', isActive && 'text-primary')} />
         {!collapsed && (
           <>
-            <span className="flex-1 truncate">{item.title}</span>
+            <span className="flex-1 truncate">{translatedTitle}</span>
             {item.badge && (
               <Badge variant="danger" className="h-5 min-w-[20px] justify-center">
                 {item.badge}
