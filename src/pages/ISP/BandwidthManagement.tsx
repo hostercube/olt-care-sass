@@ -15,6 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { DatePicker, CompactDatePicker } from '@/components/ui/date-picker';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 import { 
   Plus, 
   Edit, 
@@ -32,7 +36,7 @@ import {
   Printer,
   Download,
   FileText,
-  Calendar,
+  Calendar as CalendarIcon,
   BarChart3,
   ArrowUpRight,
   ArrowDownRight,
@@ -41,7 +45,7 @@ import {
 import { useBandwidthManagement, BandwidthCategory, BandwidthItem, BandwidthProvider, BandwidthClient, PurchaseBillItem, SalesInvoiceItem, BandwidthPurchaseBill, BandwidthSalesInvoice } from '@/hooks/useBandwidthManagement';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { supabase } from '@/integrations/supabase/client';
-import { format, startOfMonth, endOfMonth, subMonths, differenceInDays, getDaysInMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, differenceInDays, getDaysInMonth, parse } from 'date-fns';
 import { generatePurchaseBillPDF, generateSalesInvoicePDF, generatePrintHTML, calculateProRataAmount, getDaysCount } from '@/lib/bandwidth-pdf';
 
 interface TenantInfo {
@@ -1865,33 +1869,33 @@ function BandwidthManagementContent() {
               </div>
             </div>
 
-            <div className="border rounded-lg p-4">
+            <div className="border rounded-lg p-4 bg-card">
               <div className="flex justify-between items-center mb-4">
-                <h4 className="font-medium">Items</h4>
-                <Button type="button" variant="outline" size="sm" onClick={addPurchaseBillItem}>
+                <h4 className="font-semibold text-base">Invoice Items</h4>
+                <Button type="button" variant="default" size="sm" onClick={addPurchaseBillItem}>
                   <Plus className="h-4 w-4 mr-1" /> Add Item
                 </Button>
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden xl:grid xl:grid-cols-[180px_65px_50px_70px_45px_95px_95px_40px_85px_32px] gap-1 px-2 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
-                <div>Item</div>
-                <div>Unit</div>
-                <div>Qty</div>
-                <div>Rate</div>
-                <div>VAT%</div>
-                <div>From</div>
-                <div>To</div>
-                <div>Days</div>
-                <div>Total</div>
+              <div className="hidden lg:grid lg:grid-cols-[minmax(150px,1.5fr)_60px_50px_80px_50px_100px_100px_50px_90px_36px] gap-2 px-3 py-3 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-3 border">
+                <div>Item Name</div>
+                <div className="text-center">Unit</div>
+                <div className="text-center">Qty</div>
+                <div className="text-center">Rate/Mo</div>
+                <div className="text-center">VAT%</div>
+                <div className="text-center">From Date</div>
+                <div className="text-center">To Date</div>
+                <div className="text-center">Days</div>
+                <div className="text-right">Total</div>
                 <div></div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {purchaseBillItems.map((item, index) => (
-                  <div key={index} className="border rounded-lg p-3 bg-muted/30">
+                  <div key={index} className="border rounded-lg p-3 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden xl:grid xl:grid-cols-[180px_65px_50px_70px_45px_95px_95px_40px_85px_32px] gap-1 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[minmax(150px,1.5fr)_60px_50px_80px_50px_100px_100px_50px_90px_36px] gap-2 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -1902,7 +1906,7 @@ function BandwidthManagementContent() {
                             updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Item" /></SelectTrigger>
+                          <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -1911,41 +1915,61 @@ function BandwidthManagementContent() {
                         </Select>
                       </div>
                       <div>
-                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-8 text-xs px-1.5" />
+                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9 text-sm text-center px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-8 text-xs px-1.5" />
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9 text-sm text-center px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-8 text-xs px-1.5" />
+                        <Input type="number" min="0" step="0.01" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9 text-sm text-center px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-8 text-xs px-1 text-center" />
+                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-sm text-center px-1" />
                       </div>
                       <div>
-                        <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-8 text-[10px] px-1" />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("h-9 w-full justify-start text-left font-normal text-xs px-2", !item.from_date && "text-muted-foreground")}>
+                              <CalendarIcon className="mr-1 h-3 w-3" />
+                              {item.from_date ? format(new Date(item.from_date), "dd/MM/yy") : "From"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="single" selected={item.from_date ? new Date(item.from_date) : undefined} onSelect={(date) => updatePurchaseBillItem(index, 'from_date', date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                          </PopoverContent>
+                        </Popover>
                       </div>
                       <div>
-                        <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-8 text-[10px] px-1" />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("h-9 w-full justify-start text-left font-normal text-xs px-2", !item.to_date && "text-muted-foreground")}>
+                              <CalendarIcon className="mr-1 h-3 w-3" />
+                              {item.to_date ? format(new Date(item.to_date), "dd/MM/yy") : "To"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="single" selected={item.to_date ? new Date(item.to_date) : undefined} onSelect={(date) => updatePurchaseBillItem(index, 'to_date', date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                          </PopoverContent>
+                        </Popover>
                       </div>
                       <div>
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-8 text-xs bg-muted text-center px-1" />
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-sm bg-muted text-center px-1 font-medium" />
                       </div>
                       <div>
-                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-8 text-xs bg-primary/10 font-semibold px-1.5" />
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-sm bg-primary/10 font-bold text-right px-2" />
                       </div>
                       <div className="flex justify-center">
-                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </div>
 
-                    {/* Mobile/Tablet: Two Rows */}
-                    <div className="xl:hidden space-y-3">
-                      <div className="grid grid-cols-5 gap-2">
+                    {/* Mobile/Tablet: Stacked Layout */}
+                    <div className="lg:hidden space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <div className="col-span-2">
-                          <Label className="text-xs">Item</Label>
+                          <Label className="text-xs font-medium mb-1 block">Item</Label>
                           <Select value={item.item_id || ''} onValueChange={(v) => {
                             const selectedItem = items.find(i => i.id === v);
                             updatePurchaseBillItem(index, 'item_id', v);
@@ -1955,7 +1979,7 @@ function BandwidthManagementContent() {
                               updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
                             }
                           }}>
-                            <SelectTrigger className="h-9"><SelectValue placeholder="Item" /></SelectTrigger>
+                            <SelectTrigger className="h-10"><SelectValue placeholder="Select Item" /></SelectTrigger>
                             <SelectContent>
                               {items.map((i) => (
                                 <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -1964,37 +1988,61 @@ function BandwidthManagementContent() {
                           </Select>
                         </div>
                         <div>
-                          <Label className="text-xs">Unit</Label>
-                          <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9" />
+                          <Label className="text-xs font-medium mb-1 block">Unit</Label>
+                          <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-10" />
                         </div>
                         <div>
-                          <Label className="text-xs">Qty</Label>
-                          <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9" />
+                          <Label className="text-xs font-medium mb-1 block">Quantity</Label>
+                          <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-10" />
                         </div>
                         <div>
-                          <Label className="text-xs">Rate</Label>
-                          <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9" />
+                          <Label className="text-xs font-medium mb-1 block">Rate/Month</Label>
+                          <Input type="number" min="0" step="0.01" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-10" />
+                        </div>
+                        <div>
+                          <Label className="text-xs font-medium mb-1 block">VAT %</Label>
+                          <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-10" />
                         </div>
                       </div>
-                      <div className="grid grid-cols-5 gap-2 items-end">
+                      <div className="grid grid-cols-4 gap-3 items-end">
                         <div>
-                          <Label className="text-xs">From</Label>
-                          <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-9 text-xs" />
+                          <Label className="text-xs font-medium mb-1 block">From Date</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className={cn("h-10 w-full justify-start text-left font-normal", !item.from_date && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {item.from_date ? format(new Date(item.from_date), "dd/MM") : "Pick"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar mode="single" selected={item.from_date ? new Date(item.from_date) : undefined} onSelect={(date) => updatePurchaseBillItem(index, 'from_date', date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         <div>
-                          <Label className="text-xs">To</Label>
-                          <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-9 text-xs" />
+                          <Label className="text-xs font-medium mb-1 block">To Date</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className={cn("h-10 w-full justify-start text-left font-normal", !item.to_date && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {item.to_date ? format(new Date(item.to_date), "dd/MM") : "Pick"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar mode="single" selected={item.to_date ? new Date(item.to_date) : undefined} onSelect={(date) => updatePurchaseBillItem(index, 'to_date', date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         <div>
-                          <Label className="text-xs">Days</Label>
-                          <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 bg-muted" />
+                          <Label className="text-xs font-medium mb-1 block">Days</Label>
+                          <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-10 bg-muted font-medium text-center" />
                         </div>
-                        <div>
-                          <Label className="text-xs">Total</Label>
-                          <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 bg-primary/10 font-semibold" />
-                        </div>
-                        <div className="flex justify-end">
-                          <Button type="button" variant="ghost" size="icon" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <Label className="text-xs font-medium mb-1 block">Total</Label>
+                            <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-10 bg-primary/10 font-bold" />
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" className="h-10 w-10 hover:bg-destructive/10" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
@@ -2066,41 +2114,61 @@ function BandwidthManagementContent() {
               </div>
               <div className="grid gap-2">
                 <Label>Billing Date</Label>
-                <Input type="date" value={salesInvoiceForm.billing_date} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, billing_date: e.target.value })} className="text-sm" />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !salesInvoiceForm.billing_date && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {salesInvoiceForm.billing_date ? format(new Date(salesInvoiceForm.billing_date), "dd/MM/yyyy") : "Pick date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={salesInvoiceForm.billing_date ? new Date(salesInvoiceForm.billing_date) : undefined} onSelect={(date) => setSalesInvoiceForm({ ...salesInvoiceForm, billing_date: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="grid gap-2">
                 <Label>Due Date</Label>
-                <Input type="date" value={salesInvoiceForm.due_date} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, due_date: e.target.value })} className="text-sm" />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !salesInvoiceForm.due_date && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {salesInvoiceForm.due_date ? format(new Date(salesInvoiceForm.due_date), "dd/MM/yyyy") : "Pick date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={salesInvoiceForm.due_date ? new Date(salesInvoiceForm.due_date) : undefined} onSelect={(date) => setSalesInvoiceForm({ ...salesInvoiceForm, due_date: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 
-            <div className="border rounded-lg p-4">
+            <div className="border rounded-lg p-4 bg-card">
               <div className="flex justify-between items-center mb-4">
-                <h4 className="font-medium">Items</h4>
-                <Button type="button" variant="outline" size="sm" onClick={addSalesInvoiceItem}>
+                <h4 className="font-semibold text-base">Invoice Items</h4>
+                <Button type="button" variant="default" size="sm" onClick={addSalesInvoiceItem}>
                   <Plus className="h-4 w-4 mr-1" /> Add Item
                 </Button>
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden xl:grid xl:grid-cols-[180px_65px_50px_70px_45px_95px_95px_40px_85px_32px] gap-1 px-2 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
-                <div>Item</div>
-                <div>Unit</div>
-                <div>Qty</div>
-                <div>Rate</div>
-                <div>VAT%</div>
-                <div>From</div>
-                <div>To</div>
-                <div>Days</div>
-                <div>Total</div>
+              <div className="hidden lg:grid lg:grid-cols-[minmax(150px,1.5fr)_60px_50px_80px_50px_100px_100px_50px_90px_36px] gap-2 px-3 py-3 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-3 border">
+                <div>Item Name</div>
+                <div className="text-center">Unit</div>
+                <div className="text-center">Qty</div>
+                <div className="text-center">Rate/Mo</div>
+                <div className="text-center">VAT%</div>
+                <div className="text-center">From Date</div>
+                <div className="text-center">To Date</div>
+                <div className="text-center">Days</div>
+                <div className="text-right">Total</div>
                 <div></div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {salesInvoiceItems.map((item, index) => (
-                  <div key={index} className="border rounded-lg p-3 bg-muted/30">
+                  <div key={index} className="border rounded-lg p-3 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden xl:grid xl:grid-cols-[180px_65px_50px_70px_45px_95px_95px_40px_85px_32px] gap-1 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[minmax(150px,1.5fr)_60px_50px_80px_50px_100px_100px_50px_90px_36px] gap-2 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -2111,7 +2179,7 @@ function BandwidthManagementContent() {
                             updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Item" /></SelectTrigger>
+                          <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -2120,41 +2188,61 @@ function BandwidthManagementContent() {
                         </Select>
                       </div>
                       <div>
-                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-8 text-xs px-1.5" />
+                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9 text-sm text-center px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-8 text-xs px-1.5" />
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9 text-sm text-center px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-8 text-xs px-1.5" />
+                        <Input type="number" min="0" step="0.01" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9 text-sm text-center px-2" />
                       </div>
                       <div>
-                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-8 text-xs px-1 text-center" />
+                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-sm text-center px-1" />
                       </div>
                       <div>
-                        <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-8 text-[10px] px-1" />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("h-9 w-full justify-start text-left font-normal text-xs px-2", !item.from_date && "text-muted-foreground")}>
+                              <CalendarIcon className="mr-1 h-3 w-3" />
+                              {item.from_date ? format(new Date(item.from_date), "dd/MM/yy") : "From"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="single" selected={item.from_date ? new Date(item.from_date) : undefined} onSelect={(date) => updateSalesInvoiceItem(index, 'from_date', date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                          </PopoverContent>
+                        </Popover>
                       </div>
                       <div>
-                        <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-8 text-[10px] px-1" />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className={cn("h-9 w-full justify-start text-left font-normal text-xs px-2", !item.to_date && "text-muted-foreground")}>
+                              <CalendarIcon className="mr-1 h-3 w-3" />
+                              {item.to_date ? format(new Date(item.to_date), "dd/MM/yy") : "To"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="single" selected={item.to_date ? new Date(item.to_date) : undefined} onSelect={(date) => updateSalesInvoiceItem(index, 'to_date', date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                          </PopoverContent>
+                        </Popover>
                       </div>
                       <div>
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-8 text-xs bg-muted text-center px-1" />
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-sm bg-muted text-center px-1 font-medium" />
                       </div>
                       <div>
-                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-8 text-xs bg-primary/10 font-semibold px-1.5" />
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-sm bg-primary/10 font-bold text-right px-2" />
                       </div>
                       <div className="flex justify-center">
-                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </div>
 
-                    {/* Mobile/Tablet: Two Rows */}
-                    <div className="xl:hidden space-y-3">
-                      <div className="grid grid-cols-5 gap-2">
+                    {/* Mobile/Tablet: Stacked Layout */}
+                    <div className="lg:hidden space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <div className="col-span-2">
-                          <Label className="text-xs">Item</Label>
+                          <Label className="text-xs font-medium mb-1 block">Item</Label>
                           <Select value={item.item_id || ''} onValueChange={(v) => {
                             const selectedItem = items.find(i => i.id === v);
                             updateSalesInvoiceItem(index, 'item_id', v);
@@ -2164,7 +2252,7 @@ function BandwidthManagementContent() {
                               updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
                             }
                           }}>
-                            <SelectTrigger className="h-9"><SelectValue placeholder="Item" /></SelectTrigger>
+                            <SelectTrigger className="h-10"><SelectValue placeholder="Select Item" /></SelectTrigger>
                             <SelectContent>
                               {items.map((i) => (
                                 <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -2173,37 +2261,61 @@ function BandwidthManagementContent() {
                           </Select>
                         </div>
                         <div>
-                          <Label className="text-xs">Unit</Label>
-                          <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9" />
+                          <Label className="text-xs font-medium mb-1 block">Unit</Label>
+                          <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-10" />
                         </div>
                         <div>
-                          <Label className="text-xs">Qty</Label>
-                          <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9" />
+                          <Label className="text-xs font-medium mb-1 block">Quantity</Label>
+                          <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-10" />
                         </div>
                         <div>
-                          <Label className="text-xs">Rate</Label>
-                          <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9" />
+                          <Label className="text-xs font-medium mb-1 block">Rate/Month</Label>
+                          <Input type="number" min="0" step="0.01" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-10" />
+                        </div>
+                        <div>
+                          <Label className="text-xs font-medium mb-1 block">VAT %</Label>
+                          <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-10" />
                         </div>
                       </div>
-                      <div className="grid grid-cols-5 gap-2 items-end">
+                      <div className="grid grid-cols-4 gap-3 items-end">
                         <div>
-                          <Label className="text-xs">From</Label>
-                          <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-9 text-xs" />
+                          <Label className="text-xs font-medium mb-1 block">From Date</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className={cn("h-10 w-full justify-start text-left font-normal", !item.from_date && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {item.from_date ? format(new Date(item.from_date), "dd/MM") : "Pick"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar mode="single" selected={item.from_date ? new Date(item.from_date) : undefined} onSelect={(date) => updateSalesInvoiceItem(index, 'from_date', date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         <div>
-                          <Label className="text-xs">To</Label>
-                          <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-9 text-xs" />
+                          <Label className="text-xs font-medium mb-1 block">To Date</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className={cn("h-10 w-full justify-start text-left font-normal", !item.to_date && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {item.to_date ? format(new Date(item.to_date), "dd/MM") : "Pick"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar mode="single" selected={item.to_date ? new Date(item.to_date) : undefined} onSelect={(date) => updateSalesInvoiceItem(index, 'to_date', date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         <div>
-                          <Label className="text-xs">Days</Label>
-                          <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 bg-muted" />
+                          <Label className="text-xs font-medium mb-1 block">Days</Label>
+                          <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-10 bg-muted font-medium text-center" />
                         </div>
-                        <div>
-                          <Label className="text-xs">Total</Label>
-                          <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 bg-primary/10 font-semibold" />
-                        </div>
-                        <div className="flex justify-end">
-                          <Button type="button" variant="ghost" size="icon" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <Label className="text-xs font-medium mb-1 block">Total</Label>
+                            <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-10 bg-primary/10 font-bold" />
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" className="h-10 w-10 hover:bg-destructive/10" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
