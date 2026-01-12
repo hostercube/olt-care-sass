@@ -133,11 +133,24 @@ function BandwidthManagementContent() {
   
   // Filter states for payments and collections
   const [collectionsMethodFilter, setCollectionsMethodFilter] = useState('all');
-  const [paymentsMethodFilter, setPaymentsMethodFilter] = useState('all');
+  const [collectionsClientFilter, setCollectionsClientFilter] = useState('all');
+  const [collectionsDateFrom, setCollectionsDateFrom] = useState('');
+  const [collectionsDateTo, setCollectionsDateTo] = useState('');
+  const [collectionsSearch, setCollectionsSearch] = useState('');
   
-  // Ledger pagination states
+  const [paymentsMethodFilter, setPaymentsMethodFilter] = useState('all');
+  const [paymentsProviderFilter, setPaymentsProviderFilter] = useState('all');
+  const [paymentsDateFrom, setPaymentsDateFrom] = useState('');
+  const [paymentsDateTo, setPaymentsDateTo] = useState('');
+  const [paymentsSearch, setPaymentsSearch] = useState('');
+  
+  // Ledger pagination and filter states
   const [providerLedgerPage, setProviderLedgerPage] = useState(1);
   const [clientLedgerPage, setClientLedgerPage] = useState(1);
+  const [providerLedgerSearch, setProviderLedgerSearch] = useState('');
+  const [clientLedgerSearch, setClientLedgerSearch] = useState('');
+  const [providerLedgerTypeFilter, setProviderLedgerTypeFilter] = useState('all');
+  const [clientLedgerTypeFilter, setClientLedgerTypeFilter] = useState('all');
   const ledgerPageSize = 10;
   
   // Dialog states
@@ -301,16 +314,38 @@ function BandwidthManagementContent() {
     [filteredSalesInvoices, salesPage, salesPageSize]
   );
   
-  // Filtered collections with method filter
+  // Filtered collections with all filters
   const filteredCollections = useMemo(() => 
-    billCollections.filter(c => collectionsMethodFilter === 'all' || c.payment_method === collectionsMethodFilter),
-    [billCollections, collectionsMethodFilter]
+    billCollections.filter(c => {
+      const matchMethod = collectionsMethodFilter === 'all' || c.payment_method === collectionsMethodFilter;
+      const matchClient = collectionsClientFilter === 'all' || c.client_id === collectionsClientFilter;
+      const matchSearch = !collectionsSearch || 
+        c.receipt_number.toLowerCase().includes(collectionsSearch.toLowerCase()) ||
+        (c.client?.name && c.client.name.toLowerCase().includes(collectionsSearch.toLowerCase())) ||
+        (c.received_by && c.received_by.toLowerCase().includes(collectionsSearch.toLowerCase()));
+      const collDate = new Date(c.collection_date);
+      const matchDateFrom = !collectionsDateFrom || collDate >= new Date(collectionsDateFrom);
+      const matchDateTo = !collectionsDateTo || collDate <= new Date(collectionsDateTo);
+      return matchMethod && matchClient && matchSearch && matchDateFrom && matchDateTo;
+    }),
+    [billCollections, collectionsMethodFilter, collectionsClientFilter, collectionsSearch, collectionsDateFrom, collectionsDateTo]
   );
   
-  // Filtered payments with method filter
+  // Filtered payments with all filters
   const filteredPayments = useMemo(() => 
-    providerPayments.filter(p => paymentsMethodFilter === 'all' || p.payment_method === paymentsMethodFilter),
-    [providerPayments, paymentsMethodFilter]
+    providerPayments.filter(p => {
+      const matchMethod = paymentsMethodFilter === 'all' || p.payment_method === paymentsMethodFilter;
+      const matchProvider = paymentsProviderFilter === 'all' || p.provider_id === paymentsProviderFilter;
+      const matchSearch = !paymentsSearch || 
+        p.payment_number.toLowerCase().includes(paymentsSearch.toLowerCase()) ||
+        (p.provider?.name && p.provider.name.toLowerCase().includes(paymentsSearch.toLowerCase())) ||
+        (p.paid_by && p.paid_by.toLowerCase().includes(paymentsSearch.toLowerCase()));
+      const payDate = new Date(p.payment_date);
+      const matchDateFrom = !paymentsDateFrom || payDate >= new Date(paymentsDateFrom);
+      const matchDateTo = !paymentsDateTo || payDate <= new Date(paymentsDateTo);
+      return matchMethod && matchProvider && matchSearch && matchDateFrom && matchDateTo;
+    }),
+    [providerPayments, paymentsMethodFilter, paymentsProviderFilter, paymentsSearch, paymentsDateFrom, paymentsDateTo]
   );
   
   const paginatedCollections = useMemo(() => 
@@ -1522,15 +1557,40 @@ function BandwidthManagementContent() {
         {/* Bill Collections Tab */}
         <TabsContent value="collections" className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
-              <div>
-                <CardTitle>Bill Collections</CardTitle>
-                <CardDescription>Payments received from clients</CardDescription>
+            <CardHeader className="flex flex-col gap-4">
+              <div className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Bill Collections</CardTitle>
+                  <CardDescription>Payments received from clients</CardDescription>
+                </div>
+                <Button onClick={() => setCollectionDialog(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> Record Collection
+                </Button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search receipt, client..." 
+                    value={collectionsSearch} 
+                    onChange={(e) => setCollectionsSearch(e.target.value)} 
+                    className="pl-8 w-48"
+                  />
+                </div>
+                <Select value={collectionsClientFilter} onValueChange={setCollectionsClientFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="All Clients" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Clients</SelectItem>
+                    {clients.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={collectionsMethodFilter} onValueChange={setCollectionsMethodFilter}>
                   <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Payment Method" />
+                    <SelectValue placeholder="All Methods" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Methods</SelectItem>
@@ -1542,9 +1602,34 @@ function BandwidthManagementContent() {
                     <SelectItem value="online">Online</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button onClick={() => setCollectionDialog(true)}>
-                  <Plus className="mr-2 h-4 w-4" /> Record Collection
-                </Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-32 justify-start text-left font-normal h-9 text-xs">
+                      <CalendarIcon className="mr-1 h-3 w-3" />
+                      {collectionsDateFrom ? format(new Date(collectionsDateFrom), "dd/MM/yy") : "From"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={collectionsDateFrom ? new Date(collectionsDateFrom) : undefined} onSelect={(date) => setCollectionsDateFrom(date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                  </PopoverContent>
+                </Popover>
+                <span className="text-muted-foreground text-sm">to</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-32 justify-start text-left font-normal h-9 text-xs">
+                      <CalendarIcon className="mr-1 h-3 w-3" />
+                      {collectionsDateTo ? format(new Date(collectionsDateTo), "dd/MM/yy") : "To"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={collectionsDateTo ? new Date(collectionsDateTo) : undefined} onSelect={(date) => setCollectionsDateTo(date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                  </PopoverContent>
+                </Popover>
+                {(collectionsSearch || collectionsClientFilter !== 'all' || collectionsMethodFilter !== 'all' || collectionsDateFrom || collectionsDateTo) && (
+                  <Button variant="ghost" size="sm" onClick={() => { setCollectionsSearch(''); setCollectionsClientFilter('all'); setCollectionsMethodFilter('all'); setCollectionsDateFrom(''); setCollectionsDateTo(''); }}>
+                    Clear Filters
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -1557,6 +1642,7 @@ function BandwidthManagementContent() {
                     <TableHead>Date</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Method</TableHead>
+                    <TableHead>Received By</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1569,6 +1655,7 @@ function BandwidthManagementContent() {
                       <TableCell>{format(new Date(collection.collection_date), 'dd/MM/yyyy')}</TableCell>
                       <TableCell>৳{collection.amount.toLocaleString()}</TableCell>
                       <TableCell className="capitalize">{collection.payment_method?.replace('_', ' ') || '-'}</TableCell>
+                      <TableCell>{collection.received_by || '-'}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, type: 'collection', id: collection.id, name: collection.receipt_number })}>
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -1578,7 +1665,7 @@ function BandwidthManagementContent() {
                   ))}
                   {filteredCollections.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No collections found</TableCell>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No collections found</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -1597,15 +1684,40 @@ function BandwidthManagementContent() {
         {/* Provider Payments Tab */}
         <TabsContent value="payments" className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
-              <div>
-                <CardTitle>Provider Payments</CardTitle>
-                <CardDescription>Payments made to providers</CardDescription>
+            <CardHeader className="flex flex-col gap-4">
+              <div className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Provider Payments</CardTitle>
+                  <CardDescription>Payments made to providers</CardDescription>
+                </div>
+                <Button onClick={() => setProviderPaymentDialog(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> Record Payment
+                </Button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search payment, provider..." 
+                    value={paymentsSearch} 
+                    onChange={(e) => setPaymentsSearch(e.target.value)} 
+                    className="pl-8 w-48"
+                  />
+                </div>
+                <Select value={paymentsProviderFilter} onValueChange={setPaymentsProviderFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="All Providers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Providers</SelectItem>
+                    {providers.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={paymentsMethodFilter} onValueChange={setPaymentsMethodFilter}>
                   <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Payment Method" />
+                    <SelectValue placeholder="All Methods" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Methods</SelectItem>
@@ -1617,9 +1729,34 @@ function BandwidthManagementContent() {
                     <SelectItem value="online">Online</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button onClick={() => setProviderPaymentDialog(true)}>
-                  <Plus className="mr-2 h-4 w-4" /> Record Payment
-                </Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-32 justify-start text-left font-normal h-9 text-xs">
+                      <CalendarIcon className="mr-1 h-3 w-3" />
+                      {paymentsDateFrom ? format(new Date(paymentsDateFrom), "dd/MM/yy") : "From"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={paymentsDateFrom ? new Date(paymentsDateFrom) : undefined} onSelect={(date) => setPaymentsDateFrom(date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                  </PopoverContent>
+                </Popover>
+                <span className="text-muted-foreground text-sm">to</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-32 justify-start text-left font-normal h-9 text-xs">
+                      <CalendarIcon className="mr-1 h-3 w-3" />
+                      {paymentsDateTo ? format(new Date(paymentsDateTo), "dd/MM/yy") : "To"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={paymentsDateTo ? new Date(paymentsDateTo) : undefined} onSelect={(date) => setPaymentsDateTo(date ? format(date, 'yyyy-MM-dd') : '')} initialFocus />
+                  </PopoverContent>
+                </Popover>
+                {(paymentsSearch || paymentsProviderFilter !== 'all' || paymentsMethodFilter !== 'all' || paymentsDateFrom || paymentsDateTo) && (
+                  <Button variant="ghost" size="sm" onClick={() => { setPaymentsSearch(''); setPaymentsProviderFilter('all'); setPaymentsMethodFilter('all'); setPaymentsDateFrom(''); setPaymentsDateTo(''); }}>
+                    Clear Filters
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -1632,6 +1769,7 @@ function BandwidthManagementContent() {
                     <TableHead>Date</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Method</TableHead>
+                    <TableHead>Paid By</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1644,6 +1782,7 @@ function BandwidthManagementContent() {
                       <TableCell>{format(new Date(payment.payment_date), 'dd/MM/yyyy')}</TableCell>
                       <TableCell>৳{payment.amount.toLocaleString()}</TableCell>
                       <TableCell className="capitalize">{payment.payment_method?.replace('_', ' ') || '-'}</TableCell>
+                      <TableCell>{payment.paid_by || '-'}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => setDeleteDialog({ open: true, type: 'providerPayment', id: payment.id, name: payment.payment_number })}>
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -1653,7 +1792,7 @@ function BandwidthManagementContent() {
                   ))}
                   {filteredPayments.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No payments found</TableCell>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No payments found</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -3032,7 +3171,7 @@ function BandwidthManagementContent() {
       </Sheet>
 
       {/* Provider Ledger Sheet */}
-      <Sheet open={!!viewProviderLedger} onOpenChange={() => { setViewProviderLedger(null); setProviderLedgerPage(1); }}>
+      <Sheet open={!!viewProviderLedger} onOpenChange={() => { setViewProviderLedger(null); setProviderLedgerPage(1); setProviderLedgerSearch(''); setProviderLedgerTypeFilter('all'); }}>
         <SheetContent className="w-[700px] sm:max-w-[700px]">
           <SheetHeader>
             <SheetTitle>Provider Ledger</SheetTitle>
@@ -3044,8 +3183,69 @@ function BandwidthManagementContent() {
               ...ledgerData.bills.map(b => ({ date: b.billing_date, type: 'Bill' as const, ref: b.invoice_number, amount: b.total_amount, isDebit: true })),
               ...ledgerData.payments.map(p => ({ date: p.payment_date, type: 'Payment' as const, ref: p.payment_number, amount: p.amount, isDebit: false })),
             ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            const totalPages = Math.ceil(allTransactions.length / ledgerPageSize);
-            const paginatedTx = allTransactions.slice((providerLedgerPage - 1) * ledgerPageSize, providerLedgerPage * ledgerPageSize);
+            
+            // Apply filters
+            const filteredTx = allTransactions.filter(tx => {
+              const matchType = providerLedgerTypeFilter === 'all' || tx.type === providerLedgerTypeFilter;
+              const matchSearch = !providerLedgerSearch || tx.ref.toLowerCase().includes(providerLedgerSearch.toLowerCase());
+              return matchType && matchSearch;
+            });
+            
+            const totalPages = Math.ceil(filteredTx.length / ledgerPageSize);
+            const paginatedTx = filteredTx.slice((providerLedgerPage - 1) * ledgerPageSize, providerLedgerPage * ledgerPageSize);
+            
+            const handlePrintLedger = () => {
+              const printWindow = window.open('', '_blank');
+              if (!printWindow) return;
+              const html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <title>Provider Ledger - ${viewProviderLedger.name}</title>
+                  <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; }
+                    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                    .summary { display: flex; justify-content: space-between; margin-bottom: 20px; }
+                    .summary-item { text-align: center; padding: 10px; border: 1px solid #ddd; flex: 1; margin: 0 5px; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    th { background-color: #f5f5f5; }
+                    .debit { color: #dc2626; }
+                    .credit { color: #16a34a; }
+                    @media print { body { padding: 0; } }
+                  </style>
+                </head>
+                <body>
+                  <div class="header">
+                    <h1>Provider Ledger</h1>
+                    <h2>${viewProviderLedger.name}${viewProviderLedger.company_name ? ' - ' + viewProviderLedger.company_name : ''}</h2>
+                    <p>Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+                  </div>
+                  <div class="summary">
+                    <div class="summary-item"><strong>Total Bills</strong><br/>৳${ledgerData.bills.reduce((sum, b) => sum + b.total_amount, 0).toLocaleString()}</div>
+                    <div class="summary-item"><strong>Total Paid</strong><br/>৳${ledgerData.payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</div>
+                    <div class="summary-item"><strong>Balance Due</strong><br/>৳${(viewProviderLedger.total_due || 0).toLocaleString()}</div>
+                  </div>
+                  <table>
+                    <thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Amount</th></tr></thead>
+                    <tbody>
+                      ${filteredTx.map(tx => `
+                        <tr>
+                          <td>${format(new Date(tx.date), 'dd/MM/yyyy')}</td>
+                          <td>${tx.type}</td>
+                          <td>${tx.ref}</td>
+                          <td class="${tx.isDebit ? 'debit' : 'credit'}">${tx.isDebit ? '+' : '-'}৳${tx.amount.toLocaleString()}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </body>
+                </html>
+              `;
+              printWindow.document.write(html);
+              printWindow.document.close();
+              setTimeout(() => printWindow.print(), 250);
+            };
             
             return (
               <ScrollArea className="h-[calc(100vh-120px)] pr-4">
@@ -3070,9 +3270,36 @@ function BandwidthManagementContent() {
                       </CardContent>
                     </Card>
                   </div>
+                  
+                  {/* Filters */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[150px]">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Search reference..." 
+                        value={providerLedgerSearch} 
+                        onChange={(e) => { setProviderLedgerSearch(e.target.value); setProviderLedgerPage(1); }}
+                        className="pl-8"
+                      />
+                    </div>
+                    <Select value={providerLedgerTypeFilter} onValueChange={(v) => { setProviderLedgerTypeFilter(v); setProviderLedgerPage(1); }}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="All Types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="Bill">Bills</SelectItem>
+                        <SelectItem value="Payment">Payments</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="sm" onClick={handlePrintLedger}>
+                      <Printer className="mr-2 h-4 w-4" /> Print
+                    </Button>
+                  </div>
+                  
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">All Transactions ({allTransactions.length})</h4>
+                      <h4 className="font-medium">Transactions ({filteredTx.length})</h4>
                     </div>
                     <Table>
                       <TableHeader>
@@ -3096,7 +3323,7 @@ function BandwidthManagementContent() {
                             </TableCell>
                           </TableRow>
                         ))}
-                        {allTransactions.length === 0 && (
+                        {filteredTx.length === 0 && (
                           <TableRow>
                             <TableCell colSpan={4} className="text-center text-muted-foreground py-6">No transactions found</TableCell>
                           </TableRow>
@@ -3121,7 +3348,7 @@ function BandwidthManagementContent() {
       </Sheet>
 
       {/* Client Ledger Sheet */}
-      <Sheet open={!!viewClientLedger} onOpenChange={() => { setViewClientLedger(null); setClientLedgerPage(1); }}>
+      <Sheet open={!!viewClientLedger} onOpenChange={() => { setViewClientLedger(null); setClientLedgerPage(1); setClientLedgerSearch(''); setClientLedgerTypeFilter('all'); }}>
         <SheetContent className="w-[700px] sm:max-w-[700px]">
           <SheetHeader>
             <SheetTitle>Client Ledger</SheetTitle>
@@ -3133,8 +3360,69 @@ function BandwidthManagementContent() {
               ...ledgerData.invoices.map(i => ({ date: i.billing_date, type: 'Invoice' as const, ref: i.invoice_number, amount: i.total_amount, isDebit: true })),
               ...ledgerData.collections.map(c => ({ date: c.collection_date, type: 'Collection' as const, ref: c.receipt_number, amount: c.amount, isDebit: false })),
             ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            const totalPages = Math.ceil(allTransactions.length / ledgerPageSize);
-            const paginatedTx = allTransactions.slice((clientLedgerPage - 1) * ledgerPageSize, clientLedgerPage * ledgerPageSize);
+            
+            // Apply filters
+            const filteredTx = allTransactions.filter(tx => {
+              const matchType = clientLedgerTypeFilter === 'all' || tx.type === clientLedgerTypeFilter;
+              const matchSearch = !clientLedgerSearch || tx.ref.toLowerCase().includes(clientLedgerSearch.toLowerCase());
+              return matchType && matchSearch;
+            });
+            
+            const totalPages = Math.ceil(filteredTx.length / ledgerPageSize);
+            const paginatedTx = filteredTx.slice((clientLedgerPage - 1) * ledgerPageSize, clientLedgerPage * ledgerPageSize);
+            
+            const handlePrintLedger = () => {
+              const printWindow = window.open('', '_blank');
+              if (!printWindow) return;
+              const html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <title>Client Ledger - ${viewClientLedger.name}</title>
+                  <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; }
+                    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                    .summary { display: flex; justify-content: space-between; margin-bottom: 20px; }
+                    .summary-item { text-align: center; padding: 10px; border: 1px solid #ddd; flex: 1; margin: 0 5px; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    th { background-color: #f5f5f5; }
+                    .debit { color: #ea580c; }
+                    .credit { color: #16a34a; }
+                    @media print { body { padding: 0; } }
+                  </style>
+                </head>
+                <body>
+                  <div class="header">
+                    <h1>Client Ledger</h1>
+                    <h2>${viewClientLedger.name}${viewClientLedger.company_name ? ' - ' + viewClientLedger.company_name : ''}</h2>
+                    <p>Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+                  </div>
+                  <div class="summary">
+                    <div class="summary-item"><strong>Total Invoiced</strong><br/>৳${ledgerData.invoices.reduce((sum, i) => sum + i.total_amount, 0).toLocaleString()}</div>
+                    <div class="summary-item"><strong>Total Collected</strong><br/>৳${ledgerData.collections.reduce((sum, c) => sum + c.amount, 0).toLocaleString()}</div>
+                    <div class="summary-item"><strong>Balance Receivable</strong><br/>৳${(viewClientLedger.total_receivable || 0).toLocaleString()}</div>
+                  </div>
+                  <table>
+                    <thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Amount</th></tr></thead>
+                    <tbody>
+                      ${filteredTx.map(tx => `
+                        <tr>
+                          <td>${format(new Date(tx.date), 'dd/MM/yyyy')}</td>
+                          <td>${tx.type}</td>
+                          <td>${tx.ref}</td>
+                          <td class="${tx.isDebit ? 'debit' : 'credit'}">${tx.isDebit ? '+' : '-'}৳${tx.amount.toLocaleString()}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </body>
+                </html>
+              `;
+              printWindow.document.write(html);
+              printWindow.document.close();
+              setTimeout(() => printWindow.print(), 250);
+            };
             
             return (
               <ScrollArea className="h-[calc(100vh-120px)] pr-4">
@@ -3159,9 +3447,36 @@ function BandwidthManagementContent() {
                       </CardContent>
                     </Card>
                   </div>
+                  
+                  {/* Filters */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[150px]">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Search reference..." 
+                        value={clientLedgerSearch} 
+                        onChange={(e) => { setClientLedgerSearch(e.target.value); setClientLedgerPage(1); }}
+                        className="pl-8"
+                      />
+                    </div>
+                    <Select value={clientLedgerTypeFilter} onValueChange={(v) => { setClientLedgerTypeFilter(v); setClientLedgerPage(1); }}>
+                      <SelectTrigger className="w-[130px]">
+                        <SelectValue placeholder="All Types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="Invoice">Invoices</SelectItem>
+                        <SelectItem value="Collection">Collections</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="sm" onClick={handlePrintLedger}>
+                      <Printer className="mr-2 h-4 w-4" /> Print
+                    </Button>
+                  </div>
+                  
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">All Transactions ({allTransactions.length})</h4>
+                      <h4 className="font-medium">Transactions ({filteredTx.length})</h4>
                     </div>
                     <Table>
                       <TableHeader>
@@ -3185,7 +3500,7 @@ function BandwidthManagementContent() {
                             </TableCell>
                           </TableRow>
                         ))}
-                        {allTransactions.length === 0 && (
+                        {filteredTx.length === 0 && (
                           <TableRow>
                             <TableCell colSpan={4} className="text-center text-muted-foreground py-6">No transactions found</TableCell>
                           </TableRow>
