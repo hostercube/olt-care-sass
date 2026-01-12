@@ -107,7 +107,7 @@ export default function Invoices() {
   }, [searchParams, invoices]);
 
   const handleDownloadPDF = (invoice: Invoice) => {
-    downloadInvoicePDF(invoice, settings);
+    downloadInvoicePDF(invoice);
   };
 
   const handlePayInvoice = (invoice: Invoice) => {
