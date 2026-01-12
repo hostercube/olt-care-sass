@@ -41,6 +41,7 @@ import { VPSStatusIndicator } from './VPSStatusIndicator';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useSuperAdmin, useTenantContext } from '@/hooks/useSuperAdmin';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
+import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import type { ModuleName } from '@/types/saas';
 
 interface NavItem {
@@ -191,6 +192,7 @@ export function Sidebar() {
   const { isSuperAdmin } = useSuperAdmin();
   const { tenantId, isImpersonating } = useTenantContext() as any;
   const { hasAccess } = useModuleAccess();
+  const { t } = useLanguageCurrency();
 
   // Keep state synced with storage for super admins.
   useEffect(() => {
@@ -365,56 +367,56 @@ export function Sidebar() {
         ) : (
           <>
             {!collapsed && (
-              <p className="px-3 mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">OLT Care</p>
+              <p className="px-3 mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('olt_care')}</p>
             )}
             <div className="flex flex-col gap-0.5">{oltCareItems.map(renderNavItem)}</div>
 
             {/* ISP Dashboard */}
-            {renderNavItem({ title: 'ISP Dashboard', href: '/isp', icon: LayoutDashboard })}
+            {renderNavItem({ title: t('isp_dashboard'), href: '/isp', icon: LayoutDashboard })}
 
-            {filteredCustomerMgmtItems.length > 0 && renderSection('Customer Management', filteredCustomerMgmtItems, {
+            {filteredCustomerMgmtItems.length > 0 && renderSection(t('customer_management'), filteredCustomerMgmtItems, {
               collapsible: true,
               expanded: customerExpanded,
               onToggle: () => setCustomerExpanded((v) => !v),
             })}
 
-            {filteredBillingItems.length > 0 && renderSection('Billing & Finance', filteredBillingItems, {
+            {filteredBillingItems.length > 0 && renderSection(t('billing_finance'), filteredBillingItems, {
               collapsible: true,
               expanded: billingExpanded,
               onToggle: () => setBillingExpanded((v) => !v),
             })}
 
-            {filteredResellerItems.length > 0 && renderSection('Reseller Management', filteredResellerItems, {
+            {filteredResellerItems.length > 0 && renderSection(t('reseller_management'), filteredResellerItems, {
               collapsible: true,
               expanded: resellerExpanded,
               onToggle: () => setResellerExpanded((v) => !v),
             })}
 
-            {filteredNetworkItems.length > 0 && renderSection('Network & Infrastructure', filteredNetworkItems, {
+            {filteredNetworkItems.length > 0 && renderSection(t('network_infrastructure'), filteredNetworkItems, {
               collapsible: true,
               expanded: networkExpanded,
               onToggle: () => setNetworkExpanded((v) => !v),
             })}
 
-            {filteredCommunicationItems.length > 0 && renderSection('Communication & Gateways', filteredCommunicationItems, {
+            {filteredCommunicationItems.length > 0 && renderSection(t('communication_gateways'), filteredCommunicationItems, {
               collapsible: true,
               expanded: communicationExpanded,
               onToggle: () => setCommunicationExpanded((v) => !v),
             })}
 
-            {filteredOperationsItems.length > 0 && renderSection('Operations & HR', filteredOperationsItems, {
+            {filteredOperationsItems.length > 0 && renderSection(t('operations_hr'), filteredOperationsItems, {
               collapsible: true,
               expanded: operationsExpanded,
               onToggle: () => setOperationsExpanded((v) => !v),
             })}
 
-            {renderSection('System', filteredTenantSystemItems, {
+            {renderSection(t('system'), filteredTenantSystemItems, {
               collapsible: true,
               expanded: systemExpanded,
               onToggle: () => setSystemExpanded((v) => !v),
             })}
 
-            {tenantId && renderSection('My Subscription', tenantBillingItems, {
+            {tenantId && renderSection(t('my_subscription'), tenantBillingItems, {
               collapsible: true,
               expanded: subscriptionExpanded,
               onToggle: () => setSubscriptionExpanded((v) => !v),

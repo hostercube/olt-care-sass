@@ -115,11 +115,37 @@ export function useTenantBranding() {
     }
 
     try {
+      // Try VPS server upload first
+      const pollingServerUrl = await getPollingServerUrl();
+      
+      if (pollingServerUrl) {
+        // Upload to VPS server
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('type', type);
+        
+        const uploadUrl = `${pollingServerUrl}/api/upload/${tenantId}`;
+        const response = await fetch(uploadUrl, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.url) {
+            toast.success(`${type === 'logo' ? 'Logo' : 'Favicon'} uploaded successfully`);
+            return data.url;
+          }
+        } else {
+          console.warn('VPS upload failed, falling back to Supabase storage');
+        }
+      }
+      
+      // Fallback to Supabase storage
       const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
       const fileName = `${tenantId}/${type}_${Date.now()}.${fileExt}`;
       const bucket = 'tenant-assets';
 
-      // Upload directly - bucket should exist from migration
       const { data, error } = await supabase.storage
         .from(bucket)
         .upload(fileName, file, { 
@@ -128,7 +154,7 @@ export function useTenantBranding() {
         });
 
       if (error) {
-        console.error('Upload error:', error);
+        console.error('Supabase upload error:', error);
         throw error;
       }
 
@@ -143,6 +169,30 @@ export function useTenantBranding() {
       toast.error(error.message || 'Failed to upload file');
       return null;
     }
+  };
+
+  // Helper to get polling server URL
+  const getPollingServerUrl = async (): Promise<string | null> => {
+    try {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'platform_settings')
+        .single();
+      
+      if (data?.value) {
+        const settings = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        let url = settings.pollingServerUrl;
+        if (url) {
+          // Normalize URL
+          url = url.replace(/\/+$/, '').replace(/\/api$/, '');
+          return url;
+        }
+      }
+    } catch (error) {
+      console.warn('Could not get polling server URL:', error);
+    }
+    return null;
   };
 
   return {
