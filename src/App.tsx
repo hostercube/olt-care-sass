@@ -78,6 +78,8 @@ import ISPCampaignManagement from "./pages/ISP/CampaignManagement";
 import CustomerTypes from "./pages/ISP/CustomerTypes";
 import RechargeHistory from "./pages/ISP/RechargeHistory";
 import BandwidthManagement from "./pages/ISP/BandwidthManagement";
+import ISPSMSTemplates from "./pages/ISP/SMSTemplates";
+import ISPEmailTemplates from "./pages/ISP/EmailTemplates";
 
 // Customer Portal Pages
 import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
@@ -422,6 +424,20 @@ const App = () => (
                     <ModuleAccessGuard module="isp_resellers" moduleName="Reseller Roles">
                       <ResellerRolesManagement />
                     </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/sms-templates" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ISPSMSTemplates />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/email-templates" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ISPEmailTemplates />
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
