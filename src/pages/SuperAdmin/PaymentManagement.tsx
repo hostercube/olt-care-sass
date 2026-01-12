@@ -270,7 +270,7 @@ export default function PaymentManagement() {
   };
 
   const handleDownloadInvoice = (invoice: Invoice) => {
-    downloadInvoicePDF(invoice, settings);
+    downloadInvoicePDF(invoice);
   };
 
   const handleCancelInvoice = async (invoice: Invoice) => {

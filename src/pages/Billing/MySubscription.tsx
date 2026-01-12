@@ -313,7 +313,7 @@ export default function MySubscription() {
                         <Button
                           variant="ghost"
                           className="gap-2"
-                          onClick={() => downloadInvoicePDF(invoice as any, settings)}
+                          onClick={() => downloadInvoicePDF(invoice as any)}
                         >
                           <Download className="h-4 w-4" />
                           PDF

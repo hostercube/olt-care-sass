@@ -147,7 +147,7 @@ export default function BillingHistory() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => downloadInvoicePDF(invoice, settings)}
+                            onClick={() => downloadInvoicePDF(invoice)}
                             aria-label={`Download ${invoice.invoice_number} PDF`}
                           >
                             <Download className="h-4 w-4" />
