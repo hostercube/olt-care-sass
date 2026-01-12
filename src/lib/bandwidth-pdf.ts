@@ -686,11 +686,11 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         .detail-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
         .detail-row .label { color: #6b7280; font-size: 13px; }
         .detail-row .value { font-weight: 600; font-size: 13px; color: #1f2937; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        th { background: ${primaryColor}; color: white; padding: 10px 6px; text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; }
-        th:first-child { border-radius: 8px 0 0 0; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; table-layout: fixed; }
+        th { background: ${primaryColor}; color: white; padding: 10px 4px; text-align: left; font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.2px; word-wrap: break-word; }
+        th:first-child { border-radius: 8px 0 0 0; width: 25px; }
         th:last-child { border-radius: 0 8px 0 0; text-align: right; }
-        td { padding: 10px 6px; border-bottom: 1px solid #e5e7eb; font-size: 12px; vertical-align: middle; }
+        td { padding: 10px 4px; border-bottom: 1px solid #e5e7eb; font-size: 11px; vertical-align: middle; word-wrap: break-word; }
         tr:nth-child(even) { background: #f9fafb; }
         tr:last-child td:first-child { border-radius: 0 0 0 8px; }
         tr:last-child td:last-child { border-radius: 0 0 8px 0; }
@@ -711,7 +711,8 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         @media print {
           body { padding: 15px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .container { max-width: 100%; }
-          table { font-size: 11px; }
+          table { font-size: 10px; }
+          th, td { padding: 8px 3px; }
         }
       </style>
     </head>
@@ -766,14 +767,14 @@ export function generatePrintHTML(type: 'purchase' | 'sales', data: PurchaseBill
         <table>
           <thead>
             <tr>
-              <th style="width: 28px; text-align: center;">#</th>
-              <th>Item</th>
-              <th style="width: 50px; text-align: center;">Unit</th>
+              <th style="width: 24px; text-align: center;">#</th>
+              <th style="width: auto;">Item</th>
+              <th style="width: 45px; text-align: center;">Unit</th>
               <th style="width: 35px; text-align: center;">Qty</th>
               <th style="width: 90px; text-align: center;">Period</th>
-              <th style="width: 70px; text-align: right;">Rate</th>
+              <th style="width: 65px; text-align: right;">Rate</th>
               <th style="width: 40px; text-align: center;">VAT</th>
-              <th style="width: 80px; text-align: right;">Total</th>
+              <th style="width: 75px; text-align: right;">Total</th>
             </tr>
           </thead>
           <tbody>

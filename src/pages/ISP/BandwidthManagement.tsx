@@ -156,6 +156,7 @@ function BandwidthManagementContent() {
     remarks: '',
     discount: 0,
     paid_amount: 0,
+    payment_reference: '',
   });
   const [purchaseBillItems, setPurchaseBillItems] = useState<PurchaseBillItem[]>([{
     item_id: null,
@@ -178,6 +179,11 @@ function BandwidthManagementContent() {
     due_date: '',
     remarks: '',
     discount: 0,
+    paid_amount: 0,
+    payment_method: '',
+    paid_by: '',
+    received_by: '',
+    payment_reference: '',
   });
   const [salesInvoiceItems, setSalesInvoiceItems] = useState<SalesInvoiceItem[]>([{
     item_id: null,
@@ -634,6 +640,7 @@ function BandwidthManagementContent() {
       remarks: '',
       discount: 0,
       paid_amount: 0,
+      payment_reference: '',
     });
     setPurchaseBillItems([{
       item_id: null,
@@ -657,6 +664,11 @@ function BandwidthManagementContent() {
       due_date: '',
       remarks: '',
       discount: 0,
+      paid_amount: 0,
+      payment_method: '',
+      paid_by: '',
+      received_by: '',
+      payment_reference: '',
     });
     setSalesInvoiceItems([{
       item_id: null,
@@ -1877,7 +1889,7 @@ function BandwidthManagementContent() {
             <DialogDescription>Record a new purchase bill from provider</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Provider *</Label>
                 <Select value={purchaseBillForm.provider_id} onValueChange={(v) => setPurchaseBillForm({ ...purchaseBillForm, provider_id: v })}>
@@ -1903,18 +1915,6 @@ function BandwidthManagementContent() {
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="grid gap-2">
-                <Label>Payment Method</Label>
-                <Select value={purchaseBillForm.payment_method} onValueChange={(v) => setPurchaseBillForm({ ...purchaseBillForm, payment_method: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="bkash">bKash</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             <div className="border rounded-lg p-4 bg-card">
@@ -1926,11 +1926,11 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-[minmax(180px,2fr)_55px_45px_75px_45px_90px_90px_40px_85px_32px] gap-1 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
-                <div>Item Name</div>
+              <div className="hidden lg:grid lg:grid-cols-[140px_50px_40px_70px_40px_82px_82px_35px_80px_28px] gap-1.5 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
+                <div>Item</div>
                 <div className="text-center">Unit</div>
                 <div className="text-center">Qty</div>
-                <div className="text-center">Rate/Mo</div>
+                <div className="text-center">Rate</div>
                 <div className="text-center">VAT%</div>
                 <div className="text-center">From</div>
                 <div className="text-center">To</div>
@@ -1943,7 +1943,7 @@ function BandwidthManagementContent() {
                 {purchaseBillItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-[minmax(180px,2fr)_55px_45px_75px_45px_90px_90px_40px_85px_32px] gap-1 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[140px_50px_40px_70px_40px_82px_82px_35px_80px_28px] gap-1.5 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -2099,32 +2099,75 @@ function BandwidthManagementContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="grid gap-2">
-                <Label className="text-sm font-medium">Subtotal</Label>
-                <Input value={purchaseBillSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-muted" />
+            {/* Totals and Payment Details - Side by Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Totals Summary */}
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <h5 className="font-semibold text-sm mb-3">Amount Summary</h5>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Subtotal</Label>
+                    <Input value={purchaseBillSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="bg-background h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">VAT</Label>
+                    <Input value={purchaseBillVat.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="bg-background h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Discount</Label>
+                    <Input type="number" min="0" value={purchaseBillForm.discount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, discount: Number(e.target.value) })} className="h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground font-semibold">Grand Total</Label>
+                    <Input value={purchaseBillTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="font-bold bg-primary/10 h-9" />
+                  </div>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label className="text-sm font-medium">VAT</Label>
-                <Input value={purchaseBillVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-muted" />
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-sm font-medium">Discount</Label>
-                <Input type="number" min="0" value={purchaseBillForm.discount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, discount: Number(e.target.value) })} />
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-sm font-medium">Paid Amount</Label>
-                <Input type="number" min="0" value={purchaseBillForm.paid_amount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, paid_amount: Number(e.target.value) })} />
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-sm font-medium">Grand Total</Label>
-                <Input value={purchaseBillTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="font-bold bg-primary/10" />
+
+              {/* Payment Details */}
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <h5 className="font-semibold text-sm mb-3">Payment Details</h5>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Paid Amount</Label>
+                    <Input type="number" min="0" value={purchaseBillForm.paid_amount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, paid_amount: Number(e.target.value) })} className="h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Due Amount</Label>
+                    <Input value={(purchaseBillTotal - purchaseBillForm.paid_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="bg-destructive/10 text-destructive font-semibold h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Payment Method</Label>
+                    <Select value={purchaseBillForm.payment_method} onValueChange={(v) => setPurchaseBillForm({ ...purchaseBillForm, payment_method: v })}>
+                      <SelectTrigger className="h-9"><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="bkash">bKash</SelectItem>
+                        <SelectItem value="nagad">Nagad</SelectItem>
+                        <SelectItem value="check">Check</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Reference/TrxID</Label>
+                    <Input value={purchaseBillForm.payment_reference} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, payment_reference: e.target.value })} placeholder="Transaction ID" className="h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Paid By</Label>
+                    <Input value={purchaseBillForm.paid_by} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, paid_by: e.target.value })} placeholder="Who paid" className="h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Received By</Label>
+                    <Input value={purchaseBillForm.received_by} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, received_by: e.target.value })} placeholder="Receiver name" className="h-9" />
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="grid gap-2">
               <Label>Remarks</Label>
-              <Textarea value={purchaseBillForm.remarks} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, remarks: e.target.value })} placeholder="Notes" />
+              <Textarea value={purchaseBillForm.remarks} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, remarks: e.target.value })} placeholder="Notes" rows={2} />
             </div>
           </div>
           <DialogFooter>
@@ -2197,11 +2240,11 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-[minmax(180px,2fr)_55px_45px_75px_45px_90px_90px_40px_85px_32px] gap-1 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
-                <div>Item Name</div>
+              <div className="hidden lg:grid lg:grid-cols-[140px_50px_40px_70px_40px_82px_82px_35px_80px_28px] gap-1.5 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
+                <div>Item</div>
                 <div className="text-center">Unit</div>
                 <div className="text-center">Qty</div>
-                <div className="text-center">Rate/Mo</div>
+                <div className="text-center">Rate</div>
                 <div className="text-center">VAT%</div>
                 <div className="text-center">From</div>
                 <div className="text-center">To</div>
@@ -2214,7 +2257,7 @@ function BandwidthManagementContent() {
                 {salesInvoiceItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-[minmax(180px,2fr)_55px_45px_75px_45px_90px_90px_40px_85px_32px] gap-1 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[140px_50px_40px_70px_40px_82px_82px_35px_80px_28px] gap-1.5 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -2370,28 +2413,75 @@ function BandwidthManagementContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="grid gap-2">
-                <Label className="text-sm font-medium">Subtotal</Label>
-                <Input value={salesInvoiceSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-muted" />
+            {/* Totals and Payment Details - Side by Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Totals Summary */}
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <h5 className="font-semibold text-sm mb-3">Amount Summary</h5>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Subtotal</Label>
+                    <Input value={salesInvoiceSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="bg-background h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">VAT</Label>
+                    <Input value={salesInvoiceVat.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="bg-background h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Discount</Label>
+                    <Input type="number" min="0" value={salesInvoiceForm.discount} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, discount: Number(e.target.value) })} className="h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground font-semibold">Grand Total</Label>
+                    <Input value={salesInvoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="font-bold bg-primary/10 h-9" />
+                  </div>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label className="text-sm font-medium">VAT</Label>
-                <Input value={salesInvoiceVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-muted" />
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-sm font-medium">Discount</Label>
-                <Input type="number" min="0" value={salesInvoiceForm.discount} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, discount: Number(e.target.value) })} />
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-sm font-medium">Grand Total</Label>
-                <Input value={salesInvoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="font-bold bg-primary/10" />
+
+              {/* Payment Details */}
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <h5 className="font-semibold text-sm mb-3">Payment Details</h5>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Paid Amount</Label>
+                    <Input type="number" min="0" value={salesInvoiceForm.paid_amount} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, paid_amount: Number(e.target.value) })} className="h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Due Amount</Label>
+                    <Input value={(salesInvoiceTotal - salesInvoiceForm.paid_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="bg-destructive/10 text-destructive font-semibold h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Payment Method</Label>
+                    <Select value={salesInvoiceForm.payment_method} onValueChange={(v) => setSalesInvoiceForm({ ...salesInvoiceForm, payment_method: v })}>
+                      <SelectTrigger className="h-9"><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="bkash">bKash</SelectItem>
+                        <SelectItem value="nagad">Nagad</SelectItem>
+                        <SelectItem value="check">Check</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Reference/TrxID</Label>
+                    <Input value={salesInvoiceForm.payment_reference} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, payment_reference: e.target.value })} placeholder="Transaction ID" className="h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Paid By</Label>
+                    <Input value={salesInvoiceForm.paid_by} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, paid_by: e.target.value })} placeholder="Who paid" className="h-9" />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Received By</Label>
+                    <Input value={salesInvoiceForm.received_by} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, received_by: e.target.value })} placeholder="Receiver name" className="h-9" />
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="grid gap-2">
               <Label>Remarks</Label>
-              <Textarea value={salesInvoiceForm.remarks} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, remarks: e.target.value })} placeholder="Notes" />
+              <Textarea value={salesInvoiceForm.remarks} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, remarks: e.target.value })} placeholder="Notes" rows={2} />
             </div>
           </div>
           <DialogFooter>
