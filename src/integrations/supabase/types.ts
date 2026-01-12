@@ -2330,9 +2330,11 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean | null
+          is_system: boolean | null
           name: string
           subject: string
           template_type: string
+          tenant_id: string | null
           updated_at: string
           variables: Json | null
         }
@@ -2341,9 +2343,11 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean | null
+          is_system?: boolean | null
           name: string
           subject: string
           template_type: string
+          tenant_id?: string | null
           updated_at?: string
           variables?: Json | null
         }
@@ -2352,13 +2356,23 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean | null
+          is_system?: boolean | null
           name?: string
           subject?: string
           template_type?: string
+          tenant_id?: string | null
           updated_at?: string
           variables?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "email_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       employee_ledger: {
         Row: {
