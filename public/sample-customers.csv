@@ -4,3 +4,6 @@ Customer Name,Mobile,Email,Address,PackageName,Bandwidth,Router name,PPPoE Secre
 "Mohammad Hasan","01912345678","hasan@example.com","Village: Rupganj, Union: Araihazar","5MB","5","Branch Router","hasan_pppoe","pass789","Rupganj","4/27/25","active","Rural area"
 "Rashida Khatun","01612345678","rashida@example.com","Block B, Section 12, Mirpur","10MB","10","Main Router","rashida_pppoe","passabc","Mirpur","3/15/25","expired","Needs renewal"
 "Kamal Ahmed","01512345678","kamal@example.com","Bazar Para, Narayanganj","15MB","15","Branch Router","kamal_pppoe","passdef","Narayanganj","5/20/25","active","Business package"
+"Jahanara Akhter","01711223344","jahanara@email.com","Uttara Sector 7, Road 12","30MB","30","Main Router","jahanara_user","secure789","Uttara","6/15/25","active","Corporate package"
+"Mizanur Rahman","01811223344","mizan@email.com","Bashundhara R/A Block D","50MB","50","Main Router","mizan_fiber","mypass123","Bashundhara","7/10/25","active","High speed fiber"
+"Salma Khatun","01911223344","salma@email.com","Mohakhali DOHS","10MB","10","Branch Router","salma_net","net12345","Mohakhali","2/28/25","suspended","Payment pending"
