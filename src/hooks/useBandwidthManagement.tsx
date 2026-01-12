@@ -2,6 +2,30 @@ import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { toast } from 'sonner';
+import type { Json } from '@/integrations/supabase/types';
+
+// Activity logging helper
+const logBandwidthActivity = async (
+  tenantId: string | null,
+  action: string,
+  entityType: string,
+  entityId: string,
+  details: Record<string, unknown>
+) => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from('activity_logs').insert({
+      user_id: user?.id || null,
+      tenant_id: tenantId,
+      action,
+      entity_type: entityType,
+      entity_id: entityId,
+      details: details as Json,
+    });
+  } catch (error) {
+    console.error('Error logging activity:', error);
+  }
+};
 
 // Types
 export interface BandwidthCategory {
@@ -816,8 +840,16 @@ export function useBandwidthManagement() {
     }
   };
 
-  const updateBillCollection = async (id: string, data: Partial<BandwidthBillCollection>) => {
+  const updateBillCollection = async (id: string, data: Partial<BandwidthBillCollection>, oldAmount?: number) => {
     try {
+      // Find the existing collection to get original values
+      const existingCollection = billCollections.find(c => c.id === id);
+      if (!existingCollection) throw new Error('Collection not found');
+      
+      const originalAmount = oldAmount ?? existingCollection.amount;
+      const newAmount = data.amount ?? originalAmount;
+      const amountDifference = newAmount - originalAmount;
+      
       const { error } = await supabase
         .from('bandwidth_bill_collections')
         .update({
@@ -830,6 +862,46 @@ export function useBandwidthManagement() {
         .eq('id', id);
       
       if (error) throw error;
+
+      // Update invoice paid amount if linked and amount changed
+      if (existingCollection.invoice_id && amountDifference !== 0) {
+        const invoice = salesInvoices.find(i => i.id === existingCollection.invoice_id);
+        if (invoice) {
+          const newPaidAmount = (invoice.paid_amount || 0) + amountDifference;
+          const newDueAmount = invoice.total_amount - newPaidAmount;
+          const newStatus = newDueAmount <= 0 ? 'paid' : newPaidAmount > 0 ? 'partial' : 'due';
+          
+          await supabase
+            .from('bandwidth_sales_invoices')
+            .update({ 
+              paid_amount: newPaidAmount, 
+              due_amount: newDueAmount,
+              payment_status: newStatus
+            })
+            .eq('id', existingCollection.invoice_id);
+        }
+      }
+
+      // Update client's total receivable if amount changed
+      if (existingCollection.client_id && amountDifference !== 0) {
+        const client = clients.find(c => c.id === existingCollection.client_id);
+        if (client) {
+          await supabase
+            .from('bandwidth_clients')
+            .update({ total_receivable: Math.max(0, (client.total_receivable || 0) - amountDifference) })
+            .eq('id', existingCollection.client_id);
+        }
+      }
+
+      // Log activity
+      await logBandwidthActivity(tenantId, 'update_collection', 'bandwidth_bill_collection', id, {
+        receipt_number: existingCollection.receipt_number,
+        client_name: existingCollection.client?.name,
+        old_amount: originalAmount,
+        new_amount: newAmount,
+        payment_method: data.payment_method,
+      });
+
       toast.success('Bill collection updated successfully');
       fetchBillCollections();
       fetchSalesInvoices();
@@ -842,14 +914,59 @@ export function useBandwidthManagement() {
 
   const deleteBillCollection = async (id: string) => {
     try {
+      // Find collection to reverse its effects
+      const collection = billCollections.find(c => c.id === id);
+      if (!collection) throw new Error('Collection not found');
+
+      // Reverse invoice paid amount if linked
+      if (collection.invoice_id && collection.amount) {
+        const invoice = salesInvoices.find(i => i.id === collection.invoice_id);
+        if (invoice) {
+          const newPaidAmount = Math.max(0, (invoice.paid_amount || 0) - collection.amount);
+          const newDueAmount = invoice.total_amount - newPaidAmount;
+          const newStatus = newDueAmount >= invoice.total_amount ? 'due' : newPaidAmount > 0 ? 'partial' : 'due';
+          
+          await supabase
+            .from('bandwidth_sales_invoices')
+            .update({ 
+              paid_amount: newPaidAmount, 
+              due_amount: newDueAmount,
+              payment_status: newStatus
+            })
+            .eq('id', collection.invoice_id);
+        }
+      }
+
+      // Reverse client's total receivable
+      if (collection.client_id && collection.amount) {
+        const client = clients.find(c => c.id === collection.client_id);
+        if (client) {
+          await supabase
+            .from('bandwidth_clients')
+            .update({ total_receivable: (client.total_receivable || 0) + collection.amount })
+            .eq('id', collection.client_id);
+        }
+      }
+
       const { error } = await supabase
         .from('bandwidth_bill_collections')
         .delete()
         .eq('id', id);
       
       if (error) throw error;
+
+      // Log activity
+      await logBandwidthActivity(tenantId, 'delete_collection', 'bandwidth_bill_collection', id, {
+        receipt_number: collection.receipt_number,
+        client_name: collection.client?.name,
+        amount: collection.amount,
+        payment_method: collection.payment_method,
+      });
+
       toast.success('Bill collection deleted successfully');
       fetchBillCollections();
+      fetchSalesInvoices();
+      fetchClients();
     } catch (error: any) {
       console.error('Error deleting bill collection:', error);
       toast.error('Failed to delete bill collection');
@@ -928,8 +1045,16 @@ export function useBandwidthManagement() {
     }
   };
 
-  const updateProviderPayment = async (id: string, data: Partial<BandwidthProviderPayment>) => {
+  const updateProviderPayment = async (id: string, data: Partial<BandwidthProviderPayment>, oldAmount?: number) => {
     try {
+      // Find the existing payment to get original values
+      const existingPayment = providerPayments.find(p => p.id === id);
+      if (!existingPayment) throw new Error('Payment not found');
+      
+      const originalAmount = oldAmount ?? existingPayment.amount;
+      const newAmount = data.amount ?? originalAmount;
+      const amountDifference = newAmount - originalAmount;
+      
       const { error } = await supabase
         .from('bandwidth_provider_payments')
         .update({
@@ -942,6 +1067,46 @@ export function useBandwidthManagement() {
         .eq('id', id);
       
       if (error) throw error;
+
+      // Update bill paid amount if linked and amount changed
+      if (existingPayment.bill_id && amountDifference !== 0) {
+        const bill = purchaseBills.find(b => b.id === existingPayment.bill_id);
+        if (bill) {
+          const newPaidAmount = (bill.paid_amount || 0) + amountDifference;
+          const newDueAmount = bill.total_amount - newPaidAmount;
+          const newStatus = newDueAmount <= 0 ? 'paid' : newPaidAmount > 0 ? 'partial' : 'due';
+          
+          await supabase
+            .from('bandwidth_purchase_bills')
+            .update({ 
+              paid_amount: newPaidAmount, 
+              due_amount: newDueAmount,
+              payment_status: newStatus
+            })
+            .eq('id', existingPayment.bill_id);
+        }
+      }
+
+      // Update provider's total due if amount changed
+      if (existingPayment.provider_id && amountDifference !== 0) {
+        const provider = providers.find(p => p.id === existingPayment.provider_id);
+        if (provider) {
+          await supabase
+            .from('bandwidth_providers')
+            .update({ total_due: Math.max(0, (provider.total_due || 0) - amountDifference) })
+            .eq('id', existingPayment.provider_id);
+        }
+      }
+
+      // Log activity
+      await logBandwidthActivity(tenantId, 'update_payment', 'bandwidth_provider_payment', id, {
+        payment_number: existingPayment.payment_number,
+        provider_name: existingPayment.provider?.name,
+        old_amount: originalAmount,
+        new_amount: newAmount,
+        payment_method: data.payment_method,
+      });
+
       toast.success('Provider payment updated successfully');
       fetchProviderPayments();
       fetchPurchaseBills();
@@ -954,14 +1119,59 @@ export function useBandwidthManagement() {
 
   const deleteProviderPayment = async (id: string) => {
     try {
+      // Find payment to reverse its effects
+      const payment = providerPayments.find(p => p.id === id);
+      if (!payment) throw new Error('Payment not found');
+
+      // Reverse bill paid amount if linked
+      if (payment.bill_id && payment.amount) {
+        const bill = purchaseBills.find(b => b.id === payment.bill_id);
+        if (bill) {
+          const newPaidAmount = Math.max(0, (bill.paid_amount || 0) - payment.amount);
+          const newDueAmount = bill.total_amount - newPaidAmount;
+          const newStatus = newDueAmount >= bill.total_amount ? 'due' : newPaidAmount > 0 ? 'partial' : 'due';
+          
+          await supabase
+            .from('bandwidth_purchase_bills')
+            .update({ 
+              paid_amount: newPaidAmount, 
+              due_amount: newDueAmount,
+              payment_status: newStatus
+            })
+            .eq('id', payment.bill_id);
+        }
+      }
+
+      // Reverse provider's total due
+      if (payment.provider_id && payment.amount) {
+        const provider = providers.find(p => p.id === payment.provider_id);
+        if (provider) {
+          await supabase
+            .from('bandwidth_providers')
+            .update({ total_due: (provider.total_due || 0) + payment.amount })
+            .eq('id', payment.provider_id);
+        }
+      }
+
       const { error } = await supabase
         .from('bandwidth_provider_payments')
         .delete()
         .eq('id', id);
       
       if (error) throw error;
+
+      // Log activity
+      await logBandwidthActivity(tenantId, 'delete_payment', 'bandwidth_provider_payment', id, {
+        payment_number: payment.payment_number,
+        provider_name: payment.provider?.name,
+        amount: payment.amount,
+        payment_method: payment.payment_method,
+      });
+
       toast.success('Provider payment deleted successfully');
       fetchProviderPayments();
+      fetchPurchaseBills();
+      fetchProviders();
     } catch (error: any) {
       console.error('Error deleting provider payment:', error);
       toast.error('Failed to delete provider payment');
