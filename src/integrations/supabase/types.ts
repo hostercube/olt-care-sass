@@ -1756,6 +1756,10 @@ export type Database = {
           new_expiry: string | null
           notes: string | null
           old_expiry: string | null
+          original_payment_method: string | null
+          paid_at: string | null
+          paid_by: string | null
+          paid_by_name: string | null
           payment_method: string | null
           recharge_date: string
           reseller_id: string | null
@@ -1776,6 +1780,10 @@ export type Database = {
           new_expiry?: string | null
           notes?: string | null
           old_expiry?: string | null
+          original_payment_method?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          paid_by_name?: string | null
           payment_method?: string | null
           recharge_date?: string
           reseller_id?: string | null
@@ -1796,6 +1804,10 @@ export type Database = {
           new_expiry?: string | null
           notes?: string | null
           old_expiry?: string | null
+          original_payment_method?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          paid_by_name?: string | null
           payment_method?: string | null
           recharge_date?: string
           reseller_id?: string | null

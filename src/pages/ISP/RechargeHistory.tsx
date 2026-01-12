@@ -18,12 +18,17 @@ import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
 import { 
   Receipt, Search, RefreshCw, Download, User, Store, CreditCard,
-  Calendar, Filter, Users, TrendingUp, Wallet, ChevronLeft, ChevronRight
+  Calendar, Filter, Users, TrendingUp, Wallet, ChevronLeft, ChevronRight,
+  Edit, Check, Clock, CheckCircle2, Loader2, X
 } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
+} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { TablePagination } from '@/components/ui/table-pagination';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 interface CustomerRecharge {
   id: string;
@@ -41,6 +46,10 @@ interface CustomerRecharge {
   collected_by_type: string | null;
   collected_by_name: string | null;
   reseller_id: string | null;
+  paid_at: string | null;
+  paid_by: string | null;
+  paid_by_name: string | null;
+  original_payment_method: string | null;
   customer?: { 
     id: string; 
     name: string; 
@@ -100,6 +109,14 @@ export default function RechargeHistory() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [todayOnly, setTodayOnly] = useState(false);
+  
+  // Edit Due Dialog State
+  const [showEditDueDialog, setShowEditDueDialog] = useState(false);
+  const [selectedRecharge, setSelectedRecharge] = useState<CustomerRecharge | null>(null);
+  const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
+  const [editCollectorName, setEditCollectorName] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -154,6 +171,12 @@ export default function RechargeHistory() {
   const filteredRecharges = useMemo(() => {
     let result = [...recharges];
 
+    // Today only filter
+    if (todayOnly) {
+      const today = new Date().toISOString().split('T')[0];
+      result = result.filter(r => r.recharge_date.startsWith(today));
+    }
+
     // Search filter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -161,7 +184,8 @@ export default function RechargeHistory() {
         r.customer?.name?.toLowerCase().includes(term) ||
         r.customer?.customer_code?.toLowerCase().includes(term) ||
         r.customer?.phone?.includes(term) ||
-        r.collected_by_name?.toLowerCase().includes(term)
+        r.collected_by_name?.toLowerCase().includes(term) ||
+        r.paid_by_name?.toLowerCase().includes(term)
       );
     }
 
@@ -175,8 +199,10 @@ export default function RechargeHistory() {
       result = result.filter(r => r.customer?.area_id === areaFilter);
     }
 
-    // Payment method filter
-    if (paymentMethodFilter !== 'all') {
+    // Payment method filter - special handling for 'paid_from_due'
+    if (paymentMethodFilter === 'paid_from_due') {
+      result = result.filter(r => r.original_payment_method === 'due' && r.status === 'completed');
+    } else if (paymentMethodFilter !== 'all') {
       result = result.filter(r => r.payment_method === paymentMethodFilter);
     }
 
@@ -186,7 +212,7 @@ export default function RechargeHistory() {
     }
 
     return result;
-  }, [recharges, searchTerm, sourceFilter, areaFilter, paymentMethodFilter, statusFilter]);
+  }, [recharges, searchTerm, sourceFilter, areaFilter, paymentMethodFilter, statusFilter, todayOnly]);
 
   // Pagination
   const paginatedRecharges = useMemo(() => {
@@ -203,13 +229,77 @@ export default function RechargeHistory() {
     const byReseller = filteredRecharges.filter(r => ['reseller', 'sub_reseller', 'sub_sub_reseller'].includes(r.collected_by_type || '')).length;
     const byOnline = filteredRecharges.filter(r => ['online_payment', 'auto'].includes(r.collected_by_type || '')).length;
     const dueRecharges = filteredRecharges.filter(r => r.status === 'due').length;
-    return { totalAmount, totalDiscount, byAdmin, byStaff, byReseller, byOnline, dueRecharges, total: filteredRecharges.length };
-  }, [filteredRecharges]);
+    const paidFromDue = filteredRecharges.filter(r => r.original_payment_method === 'due' && r.status === 'completed').length;
+    const todayTotal = recharges.filter(r => r.recharge_date.startsWith(new Date().toISOString().split('T')[0])).length;
+    return { totalAmount, totalDiscount, byAdmin, byStaff, byReseller, byOnline, dueRecharges, paidFromDue, todayTotal, total: filteredRecharges.length };
+  }, [filteredRecharges, recharges]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, sourceFilter, areaFilter, resellerFilter, dateFrom, dateTo, paymentMethodFilter, statusFilter]);
+  }, [searchTerm, sourceFilter, areaFilter, resellerFilter, dateFrom, dateTo, paymentMethodFilter, statusFilter, todayOnly]);
+
+  // Handle mark due as paid
+  const handleMarkAsPaid = async () => {
+    if (!selectedRecharge || !tenantId) return;
+    
+    setEditLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const collectorName = editCollectorName || 'Admin';
+      
+      // Update recharge record
+      const { error } = await supabase
+        .from('customer_recharges')
+        .update({
+          status: 'completed',
+          payment_method: editPaymentMethod,
+          original_payment_method: 'due', // Track that this was originally due
+          paid_at: new Date().toISOString(),
+          paid_by: user?.id || null,
+          paid_by_name: collectorName,
+        })
+        .eq('id', selectedRecharge.id);
+      
+      if (error) throw error;
+      
+      // Update customer due_amount
+      if (selectedRecharge.customer_id) {
+        const { data: customer } = await supabase
+          .from('customers')
+          .select('due_amount')
+          .eq('id', selectedRecharge.customer_id)
+          .single();
+        
+        if (customer) {
+          const newDue = Math.max(0, (customer.due_amount || 0) - selectedRecharge.amount);
+          await supabase
+            .from('customers')
+            .update({ due_amount: newDue })
+            .eq('id', selectedRecharge.customer_id);
+        }
+      }
+      
+      toast.success('Due recharge marked as paid!');
+      setShowEditDueDialog(false);
+      setSelectedRecharge(null);
+      fetchRecharges();
+    } catch (err) {
+      console.error('Error updating recharge:', err);
+      toast.error('Failed to update recharge');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // Open edit dialog for due recharge
+  const openEditDueDialog = (recharge: CustomerRecharge, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedRecharge(recharge);
+    setEditPaymentMethod('cash');
+    setEditCollectorName('');
+    setShowEditDueDialog(true);
+  };
 
   // Export CSV
   const exportCSV = () => {
@@ -257,16 +347,29 @@ export default function RechargeHistory() {
       subtitle="View all customer recharges with detailed tracking"
     >
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-7 mb-6">
-        <Card>
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-8 mb-6">
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => { setTodayOnly(true); setStatusFilter('all'); setPaymentMethodFilter('all'); }}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-cyan-500/10">
+                <Calendar className="h-5 w-5 text-cyan-500" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Today</p>
+                <p className="text-xl font-bold">{stats.todayTotal}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => { setTodayOnly(false); setStatusFilter('all'); setPaymentMethodFilter('all'); }}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
                 <Receipt className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Recharges</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
+                <p className="text-xs text-muted-foreground">Total</p>
+                <p className="text-xl font-bold">{stats.total}</p>
               </div>
             </div>
           </CardContent>
@@ -278,73 +381,73 @@ export default function RechargeHistory() {
                 <TrendingUp className="h-5 w-5 text-green-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Amount</p>
-                <p className="text-2xl font-bold text-green-600">৳{stats.totalAmount.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Amount</p>
+                <p className="text-xl font-bold text-green-600">৳{stats.totalAmount.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => { setSourceFilter('tenant_admin'); }}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-500/10">
                 <User className="h-5 w-5 text-blue-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">By Admin</p>
-                <p className="text-2xl font-bold">{stats.byAdmin}</p>
+                <p className="text-xs text-muted-foreground">Admin</p>
+                <p className="text-xl font-bold">{stats.byAdmin}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => { setSourceFilter('staff'); }}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-orange-500/10">
                 <Users className="h-5 w-5 text-orange-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">By Staff</p>
-                <p className="text-2xl font-bold">{stats.byStaff}</p>
+                <p className="text-xs text-muted-foreground">Staff</p>
+                <p className="text-xl font-bold">{stats.byStaff}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <Store className="h-5 w-5 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">By Reseller</p>
-                <p className="text-2xl font-bold">{stats.byReseller}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-500/10">
-                <CreditCard className="h-5 w-5 text-emerald-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Online</p>
-                <p className="text-2xl font-bold">{stats.byOnline}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => { setStatusFilter('due'); }}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-yellow-500/10">
                 <Wallet className="h-5 w-5 text-yellow-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Due (বাকি)</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats.dueRecharges}</p>
+                <p className="text-xs text-muted-foreground">Due (বাকি)</p>
+                <p className="text-xl font-bold text-yellow-600">{stats.dueRecharges}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => { setPaymentMethodFilter('paid_from_due'); }}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10">
+                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Paid from Due</p>
+                <p className="text-xl font-bold text-emerald-600">{stats.paidFromDue}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => { setSourceFilter('reseller'); }}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-500/10">
+                <Store className="h-5 w-5 text-purple-500" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Reseller</p>
+                <p className="text-xl font-bold">{stats.byReseller}</p>
               </div>
             </div>
           </CardContent>
@@ -405,6 +508,7 @@ export default function RechargeHistory() {
                 <SelectItem value="bank">Bank Transfer</SelectItem>
                 <SelectItem value="online">Online</SelectItem>
                 <SelectItem value="due">Due (বাকি)</SelectItem>
+                <SelectItem value="paid_from_due">Paid from Due</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -432,7 +536,7 @@ export default function RechargeHistory() {
           </div>
 
           {/* Additional filters row */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
             <SearchableSelect
               options={areaOptions}
               value={areaFilter}
@@ -447,6 +551,34 @@ export default function RechargeHistory() {
               placeholder="All Resellers"
               allowClear
             />
+            <Button
+              variant={todayOnly ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setTodayOnly(!todayOnly)}
+              className="h-10"
+            >
+              <Calendar className="h-4 w-4 mr-2" />
+              {todayOnly ? 'Today Only ✓' : 'Today Only'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchTerm('');
+                setSourceFilter('all');
+                setPaymentMethodFilter('all');
+                setStatusFilter('all');
+                setAreaFilter('');
+                setResellerFilter('');
+                setDateFrom('');
+                setDateTo('');
+                setTodayOnly(false);
+              }}
+              className="h-10"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Clear Filters
+            </Button>
           </div>
 
           {/* Table */}
@@ -469,16 +601,16 @@ export default function RechargeHistory() {
                       <TableHead>Months</TableHead>
                       <TableHead>Old Expiry</TableHead>
                       <TableHead>New Expiry</TableHead>
-                      <TableHead>Discount</TableHead>
                       <TableHead>Collected By</TableHead>
                       <TableHead>Reseller</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedRecharges.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                           No recharges found
                         </TableCell>
                       </TableRow>
@@ -524,9 +656,6 @@ export default function RechargeHistory() {
                           <TableCell className="text-sm text-green-600">
                             {recharge.new_expiry ? format(new Date(recharge.new_expiry), 'dd MMM yyyy') : '-'}
                           </TableCell>
-                          <TableCell className={recharge.discount && recharge.discount > 0 ? 'text-red-600' : ''}>
-                            {recharge.discount && recharge.discount > 0 ? `৳${recharge.discount}` : '-'}
-                          </TableCell>
                           <TableCell>
                             {getCollectorTypeBadge(recharge.collected_by_type, recharge.collected_by_name)}
                           </TableCell>
@@ -541,12 +670,41 @@ export default function RechargeHistory() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge 
-                              variant={recharge.status === 'due' ? 'secondary' : 'default'}
-                              className={recharge.status === 'due' ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500' : 'bg-green-500/10 text-green-600'}
-                            >
-                              {recharge.status === 'due' ? 'Due' : 'Paid'}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge 
+                                variant={recharge.status === 'due' ? 'secondary' : 'default'}
+                                className={recharge.status === 'due' ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500' : 'bg-green-500/10 text-green-600'}
+                              >
+                                {recharge.status === 'due' ? 'Due' : 'Paid'}
+                              </Badge>
+                              {recharge.original_payment_method === 'due' && recharge.status === 'completed' && (
+                                <span className="text-xs text-muted-foreground">(was Due)</span>
+                              )}
+                            </div>
+                            {recharge.paid_at && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Paid: {format(new Date(recharge.paid_at), 'dd MMM, hh:mm a')}
+                              </p>
+                            )}
+                            {recharge.paid_by_name && (
+                              <p className="text-xs text-muted-foreground">
+                                By: {recharge.paid_by_name}
+                              </p>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {recharge.status === 'due' ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => openEditDueDialog(recharge, e)}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Mark Paid
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))
@@ -569,6 +727,66 @@ export default function RechargeHistory() {
           )}
         </CardContent>
       </Card>
+
+      {/* Mark Due as Paid Dialog */}
+      <Dialog open={showEditDueDialog} onOpenChange={setShowEditDueDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark Due as Paid</DialogTitle>
+            <DialogDescription>
+              Update payment details for this due recharge
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRecharge && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted/50 rounded-md">
+                <p className="font-medium">{selectedRecharge.customer?.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  Amount: ৳{selectedRecharge.amount.toLocaleString()}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Recharge Date: {format(new Date(selectedRecharge.recharge_date), 'dd MMM yyyy')}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Actual Payment Method</Label>
+                <Select value={editPaymentMethod} onValueChange={setEditPaymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bkash">bKash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="bank">Bank Transfer</SelectItem>
+                    <SelectItem value="online">Online</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Collected By (Name)</Label>
+                <Input
+                  value={editCollectorName}
+                  onChange={(e) => setEditCollectorName(e.target.value)}
+                  placeholder="Enter collector name..."
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDueDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleMarkAsPaid} disabled={editLoading}>
+              {editLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Mark as Paid
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
