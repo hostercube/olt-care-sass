@@ -5,7 +5,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useCustomerImport } from '@/hooks/useCustomerImport';
-import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, Loader2, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface ImportCustomersDialogProps {
@@ -56,19 +56,27 @@ export function ImportCustomersDialog({ open, onOpenChange, onSuccess }: ImportC
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
-            Import Customers from CSV
+            Import Customers
           </DialogTitle>
           <DialogDescription>
-            Upload a CSV file to bulk import customers. Packages and areas will be auto-created if they don't exist.
+            Upload a CSV or Excel (.xlsx) file to bulk import customers with MikroTik PPPoE auto-creation.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Supported Columns Info */}
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              <strong>Supported columns:</strong> Customer Name, Mobile, Email, Address, PackageName, Bandwidth, Router name, PPPoE Secret, PPPoE Password, Area, WillExpire(m/d/y), Status, Notes
+            </AlertDescription>
+          </Alert>
+
           {/* Download Template */}
           <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
             <div>
               <p className="font-medium text-sm">Download Template</p>
-              <p className="text-xs text-muted-foreground">Get the CSV template with all required columns</p>
+              <p className="text-xs text-muted-foreground">Get the CSV template with all supported columns</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => downloading()}>
               <Download className="h-4 w-4 mr-2" />
@@ -84,7 +92,7 @@ export function ImportCustomersDialog({ open, onOpenChange, onSuccess }: ImportC
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls"
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -102,11 +110,24 @@ export function ImportCustomersDialog({ open, onOpenChange, onSuccess }: ImportC
               <>
                 <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  Click to select a CSV file or drag and drop
+                  Click to select a CSV or Excel file
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Supports .csv, .xlsx, .xls formats
                 </p>
               </>
             )}
           </div>
+
+          {/* MikroTik Note */}
+          {selectedFile && !result && (
+            <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <Info className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
+                PPPoE users will be auto-created on MikroTik if Router name, PPPoE Secret, and Password are provided.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Progress */}
           {importing && (
@@ -130,7 +151,7 @@ export function ImportCustomersDialog({ open, onOpenChange, onSuccess }: ImportC
                 {(result.mikrotikCreated ?? 0) > 0 && (
                   <div className="flex items-center gap-2 text-blue-600">
                     <CheckCircle className="h-4 w-4" />
-                    <span className="text-sm">{result.mikrotikCreated} PPPoE on MikroTik</span>
+                    <span className="text-sm">{result.mikrotikCreated} PPPoE created</span>
                   </div>
                 )}
                 {result.failed > 0 && (

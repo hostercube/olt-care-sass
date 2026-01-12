@@ -1,11 +1,6 @@
-name,phone,email,address,package_name,monthly_bill,pppoe_username,pppoe_password,mikrotik_name,area_name,connection_date,expiry_date,status
-"Abdul Karim","01712345678","abdul@example.com","House 12, Road 5, Dhanmondi","10 Mbps Premium",800,"abdul_pppoe","pass123","Main Router","Dhanmondi","2024-01-01","2024-02-01","active"
-"Fatema Begum","01812345678","fatema@example.com","Flat 3A, Green Tower, Gulshan","20 Mbps Business",1200,"fatema_pppoe","pass456","Main Router","Gulshan","2024-01-05","2024-02-05","active"
-"Mohammad Hasan","01912345678","hasan@example.com","Village: Rupganj, Union: Araihazar","5 Mbps Basic",500,"hasan_pppoe","pass789","Branch Router","Rupganj","2024-01-10","2024-02-10","active"
-"Rashida Khatun","01612345678","rashida@example.com","Block B, Section 12, Mirpur","10 Mbps Premium",800,"rashida_pppoe","passabc","Main Router","Mirpur","2024-01-15","2024-02-15","expired"
-"Kamal Ahmed","01512345678","kamal@example.com","Bazar Para, Narayanganj","15 Mbps Standard",1000,"kamal_pppoe","passdef","Branch Router","Narayanganj","2024-01-20","2024-02-20","active"
-"Salma Akter","01712345679","salma@example.com","House 45, Sector 7, Uttara","20 Mbps Business",1200,"salma_pppoe","passghi","Main Router","Uttara","2024-01-25","2024-02-25","active"
-"Rahim Uddin","01812345679","rahim@example.com","Manikganj Bazar","5 Mbps Basic",500,"rahim_pppoe","passjkl","Branch Router","Manikganj","2024-02-01","2024-03-01","pending"
-"Nasreen Jahan","01912345679","nasreen@example.com","Tongi Industrial Area","10 Mbps Premium",800,"nasreen_pppoe","passmno","Main Router","Tongi","2024-02-05","2024-03-05","active"
-"Shahid Hossain","01612345679","shahid@example.com","Savar EPZ","25 Mbps Corporate",1500,"shahid_pppoe","passpqr","Main Router","Savar","2024-02-10","2024-03-10","active"
-"Jahanara Begum","01512345679","jahanara@example.com","Keraniganj Market","5 Mbps Basic",500,"jahanara_pppoe","passstu","Branch Router","Keraniganj","2024-02-15","2024-03-15","suspended"
+Customer Name,Mobile,Email,Address,PackageName,Bandwidth,Router name,PPPoE Secret,PPPoE Password,Area,WillExpire(m/d/y),Subscription. Status,Notes
+"Abdul Karim","01712345678","abdul@example.com","House 12, Road 5, Dhanmondi","10MB","10","Main Router","abdul_pppoe","pass123","Dhanmondi","4/25/25","active","New customer"
+"Fatema Begum","01812345678","fatema@example.com","Flat 3A, Green Tower, Gulshan","20MB","20","Main Router","fatema_pppoe","pass456","Gulshan","4/26/25","active","Premium customer"
+"Mohammad Hasan","01912345678","hasan@example.com","Village: Rupganj, Union: Araihazar","5MB","5","Branch Router","hasan_pppoe","pass789","Rupganj","4/27/25","active","Rural area"
+"Rashida Khatun","01612345678","rashida@example.com","Block B, Section 12, Mirpur","10MB","10","Main Router","rashida_pppoe","passabc","Mirpur","3/15/25","expired","Needs renewal"
+"Kamal Ahmed","01512345678","kamal@example.com","Bazar Para, Narayanganj","15MB","15","Branch Router","kamal_pppoe","passdef","Narayanganj","5/20/25","active","Business package"
