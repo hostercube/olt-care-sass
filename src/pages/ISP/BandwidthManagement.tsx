@@ -1827,8 +1827,8 @@ function BandwidthManagementContent() {
 
       {/* Purchase Bill Dialog - Responsive */}
       <Dialog open={purchaseBillDialog} onOpenChange={setPurchaseBillDialog}>
-        <DialogContent className="w-full max-w-[98vw] lg:max-w-6xl max-h-[90vh] p-0">
-          <ScrollArea className="max-h-[90vh]">
+        <DialogContent className="w-full max-w-[99vw] xl:max-w-7xl max-h-[95vh] p-0">
+          <ScrollArea className="max-h-[95vh]">
             <div className="p-6">
           <DialogHeader>
             <DialogTitle>Create Purchase Bill</DialogTitle>
@@ -1849,7 +1849,7 @@ function BandwidthManagementContent() {
               </div>
               <div className="grid gap-2">
                 <Label>Billing Date</Label>
-                <Input type="date" value={purchaseBillForm.billing_date} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, billing_date: e.target.value })} className="text-sm" />
+                <Input type="date" value={purchaseBillForm.billing_date} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, billing_date: e.target.value })} />
               </div>
               <div className="grid gap-2">
                 <Label>Payment Method</Label>
@@ -1874,24 +1874,25 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-12 gap-2 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
-                <div className="col-span-2">Item</div>
-                <div className="col-span-1">Unit</div>
-                <div className="col-span-1">Qty</div>
-                <div className="col-span-1">Rate</div>
-                <div className="col-span-1">VAT%</div>
-                <div className="col-span-2">From - To Date</div>
-                <div className="col-span-1">Days</div>
-                <div className="col-span-2">Total</div>
-                <div className="col-span-1"></div>
+              <div className="hidden xl:grid xl:grid-cols-[2fr_80px_60px_80px_50px_100px_100px_50px_100px_40px] gap-2 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
+                <div>Item</div>
+                <div>Unit</div>
+                <div>Qty</div>
+                <div>Rate</div>
+                <div>VAT%</div>
+                <div>From Date</div>
+                <div>To Date</div>
+                <div>Days</div>
+                <div>Total</div>
+                <div></div>
               </div>
 
               <div className="space-y-3">
                 {purchaseBillItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-3 bg-muted/30">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-12 gap-2 items-center">
-                      <div className="col-span-2">
+                    <div className="hidden xl:grid xl:grid-cols-[2fr_80px_60px_80px_50px_100px_100px_50px_100px_40px] gap-2 items-center">
+                      <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
                           updatePurchaseBillItem(index, 'item_id', v);
@@ -1901,7 +1902,7 @@ function BandwidthManagementContent() {
                             updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Item" /></SelectTrigger>
+                          <SelectTrigger className="h-9"><SelectValue placeholder="Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -1909,37 +1910,39 @@ function BandwidthManagementContent() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="col-span-1">
-                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9 text-xs" />
+                      <div>
+                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-1">
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9 text-xs" />
+                      <div>
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-1">
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9 text-xs" />
+                      <div>
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-1">
-                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-xs w-14" />
+                      <div>
+                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-2 flex gap-1">
-                        <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-9 text-xs" />
-                        <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-9 text-xs" />
+                      <div>
+                        <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-1">
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-xs bg-muted w-12" />
+                      <div>
+                        <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-2">
-                        <Input value={`৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} readOnly className="h-9 text-xs bg-primary/10 font-semibold" />
+                      <div>
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-sm bg-muted text-center" />
                       </div>
-                      <div className="col-span-1 flex justify-center">
+                      <div>
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-sm bg-primary/10 font-semibold" />
+                      </div>
+                      <div className="flex justify-center">
                         <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </div>
 
-                    {/* Mobile: Two Rows */}
-                    <div className="lg:hidden space-y-3">
+                    {/* Mobile/Tablet: Two Rows */}
+                    <div className="xl:hidden space-y-3">
                       <div className="grid grid-cols-5 gap-2">
                         <div className="col-span-2">
                           <Label className="text-xs">Item</Label>
@@ -2041,8 +2044,8 @@ function BandwidthManagementContent() {
 
       {/* Sales Invoice Dialog - Responsive */}
       <Dialog open={salesInvoiceDialog} onOpenChange={setSalesInvoiceDialog}>
-        <DialogContent className="w-full max-w-[98vw] lg:max-w-6xl max-h-[90vh] p-0">
-          <ScrollArea className="max-h-[90vh]">
+        <DialogContent className="w-full max-w-[99vw] xl:max-w-7xl max-h-[95vh] p-0">
+          <ScrollArea className="max-h-[95vh]">
             <div className="p-6">
           <DialogHeader>
             <DialogTitle>Create Sales Invoice</DialogTitle>
@@ -2080,24 +2083,25 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-12 gap-2 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
-                <div className="col-span-2">Item</div>
-                <div className="col-span-1">Unit</div>
-                <div className="col-span-1">Qty</div>
-                <div className="col-span-1">Rate</div>
-                <div className="col-span-1">VAT%</div>
-                <div className="col-span-2">From - To Date</div>
-                <div className="col-span-1">Days</div>
-                <div className="col-span-2">Total</div>
-                <div className="col-span-1"></div>
+              <div className="hidden xl:grid xl:grid-cols-[2fr_80px_60px_80px_50px_100px_100px_50px_100px_40px] gap-2 px-3 py-2 bg-muted/50 rounded-t-lg text-xs font-medium text-muted-foreground mb-2">
+                <div>Item</div>
+                <div>Unit</div>
+                <div>Qty</div>
+                <div>Rate</div>
+                <div>VAT%</div>
+                <div>From Date</div>
+                <div>To Date</div>
+                <div>Days</div>
+                <div>Total</div>
+                <div></div>
               </div>
 
               <div className="space-y-3">
                 {salesInvoiceItems.map((item, index) => (
                   <div key={index} className="border rounded-lg p-3 bg-muted/30">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-12 gap-2 items-center">
-                      <div className="col-span-2">
+                    <div className="hidden xl:grid xl:grid-cols-[2fr_80px_60px_80px_50px_100px_100px_50px_100px_40px] gap-2 items-center">
+                      <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
                           updateSalesInvoiceItem(index, 'item_id', v);
@@ -2107,7 +2111,7 @@ function BandwidthManagementContent() {
                             updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Item" /></SelectTrigger>
+                          <SelectTrigger className="h-9"><SelectValue placeholder="Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -2115,37 +2119,39 @@ function BandwidthManagementContent() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="col-span-1">
-                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9 text-xs" />
+                      <div>
+                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-1">
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9 text-xs" />
+                      <div>
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-1">
-                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9 text-xs" />
+                      <div>
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-1">
-                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-xs w-14" />
+                      <div>
+                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-2 flex gap-1">
-                        <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-9 text-xs" />
-                        <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-9 text-xs" />
+                      <div>
+                        <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-1">
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-xs bg-muted w-12" />
+                      <div>
+                        <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} className="h-9 text-sm" />
                       </div>
-                      <div className="col-span-2">
-                        <Input value={`৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} readOnly className="h-9 text-xs bg-primary/10 font-semibold" />
+                      <div>
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-sm bg-muted text-center" />
                       </div>
-                      <div className="col-span-1 flex justify-center">
+                      <div>
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-sm bg-primary/10 font-semibold" />
+                      </div>
+                      <div className="flex justify-center">
                         <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </div>
 
-                    {/* Mobile: Two Rows */}
-                    <div className="lg:hidden space-y-3">
+                    {/* Mobile/Tablet: Two Rows */}
+                    <div className="xl:hidden space-y-3">
                       <div className="grid grid-cols-5 gap-2">
                         <div className="col-span-2">
                           <Label className="text-xs">Item</Label>
