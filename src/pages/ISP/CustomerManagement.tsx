@@ -21,6 +21,7 @@ import { useMikroTikSync } from '@/hooks/useMikroTikSync';
 import { useMikroTikRouters } from '@/hooks/useMikroTikRouters';
 import { useAreas } from '@/hooks/useAreas';
 import { useResellerSystem } from '@/hooks/useResellerSystem';
+import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import { supabase } from '@/integrations/supabase/client';
 import { AddCustomerDialog } from '@/components/isp/AddCustomerDialog';
 import { EditCustomerDialog } from '@/components/isp/EditCustomerDialog';
@@ -47,13 +48,13 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
 
-const statusConfig: Record<CustomerStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any }> = {
-  active: { label: 'Active', variant: 'default', icon: UserCheck },
-  expired: { label: 'Expired', variant: 'destructive', icon: Clock },
-  suspended: { label: 'Suspended', variant: 'destructive', icon: Ban },
-  pending: { label: 'Pending', variant: 'secondary', icon: Clock },
-  cancelled: { label: 'Cancelled', variant: 'outline', icon: UserX },
-};
+const getStatusConfig = (t: (key: string) => string): Record<CustomerStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any }> => ({
+  active: { label: t('active'), variant: 'default', icon: UserCheck },
+  expired: { label: t('expired'), variant: 'destructive', icon: Clock },
+  suspended: { label: t('suspended'), variant: 'destructive', icon: Ban },
+  pending: { label: t('pending'), variant: 'secondary', icon: Clock },
+  cancelled: { label: t('cancelled'), variant: 'outline', icon: UserX },
+});
 
 interface FilterState {
   status: string;
@@ -70,6 +71,8 @@ interface FilterState {
 
 export default function CustomerManagement() {
   const navigate = useNavigate();
+  const { t, formatCurrency } = useLanguageCurrency();
+  const statusConfig = getStatusConfig(t);
   const { customers, loading, stats, refetch, deleteCustomer } = useCustomers();
   const { packages } = useISPPackages();
   const { routers } = useMikroTikRouters();
@@ -400,8 +403,8 @@ export default function CustomerManagement() {
 
   return (
     <DashboardLayout
-      title="Customer Management"
-      subtitle="Manage ISP customers, packages, and billing"
+      title={t('customer_management')}
+      subtitle={t('customers')}
     >
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-5 mb-6">
@@ -412,7 +415,7 @@ export default function CustomerManagement() {
                 <Users className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total</p>
+                <p className="text-sm text-muted-foreground">{t('total_customers')}</p>
                 <p className="text-2xl font-bold">{stats.total}</p>
               </div>
             </div>
@@ -425,7 +428,7 @@ export default function CustomerManagement() {
                 <UserCheck className="h-5 w-5 text-green-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Active</p>
+                <p className="text-sm text-muted-foreground">{t('active')}</p>
                 <p className="text-2xl font-bold text-green-600">{stats.active}</p>
               </div>
             </div>
@@ -438,7 +441,7 @@ export default function CustomerManagement() {
                 <Clock className="h-5 w-5 text-red-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Expired</p>
+                <p className="text-sm text-muted-foreground">{t('expired')}</p>
                 <p className="text-2xl font-bold text-red-600">{stats.expired}</p>
               </div>
             </div>
@@ -451,7 +454,7 @@ export default function CustomerManagement() {
                 <Ban className="h-5 w-5 text-orange-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Suspended</p>
+                <p className="text-sm text-muted-foreground">{t('suspended')}</p>
                 <p className="text-2xl font-bold text-orange-600">{stats.suspended}</p>
               </div>
             </div>
@@ -464,8 +467,8 @@ export default function CustomerManagement() {
                 <span className="text-yellow-600 font-bold text-lg">৳</span>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Due</p>
-                <p className="text-2xl font-bold text-yellow-600">৳{stats.totalDue.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">{t('pending_due')}</p>
+                <p className="text-2xl font-bold text-yellow-600">{formatCurrency(stats.totalDue)}</p>
               </div>
             </div>
           </CardContent>
@@ -475,23 +478,23 @@ export default function CustomerManagement() {
       {/* Main Content */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle>Customers</CardTitle>
+          <CardTitle>{t('customers')}</CardTitle>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowImportDialog(true)}>
               <Upload className="h-4 w-4 mr-2" />
-              Import
+              {t('import')}
             </Button>
             <Button variant="outline" size="sm" onClick={exportCSV}>
               <Download className="h-4 w-4 mr-2" />
-              Export
+              {t('export')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
+              {t('refresh')}
             </Button>
             <Button onClick={() => setShowAddDialog(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
-              Add Customer
+              {t('add_customer')}
             </Button>
           </div>
         </CardHeader>
@@ -502,7 +505,7 @@ export default function CustomerManagement() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by name, phone, PPPoE, code..."
+                  placeholder={t('search_customers')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9"
@@ -510,15 +513,15 @@ export default function CustomerManagement() {
               </div>
               <Select value={filters.status} onValueChange={(v) => setFilters(f => ({ ...f, status: v }))}>
                 <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t('status')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="expired">Expired</SelectItem>
-                  <SelectItem value="suspended">Suspended</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="all">{t('all')}</SelectItem>
+                  <SelectItem value="active">{t('active')}</SelectItem>
+                  <SelectItem value="expired">{t('expired')}</SelectItem>
+                  <SelectItem value="suspended">{t('suspended')}</SelectItem>
+                  <SelectItem value="pending">{t('pending')}</SelectItem>
+                  <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
                 </SelectContent>
               </Select>
               <Button 
@@ -528,7 +531,7 @@ export default function CustomerManagement() {
                 className="gap-2"
               >
                 <Filter className="h-4 w-4" />
-                Filters
+                {t('filter')}
                 {activeFilterCount > 0 && (
                   <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center">
                     {activeFilterCount}
@@ -538,7 +541,7 @@ export default function CustomerManagement() {
               {activeFilterCount > 0 && (
                 <Button variant="ghost" size="sm" onClick={clearFilters}>
                   <X className="h-4 w-4 mr-1" />
-                  Clear
+                  {t('clear')}
                 </Button>
               )}
             </div>
@@ -547,13 +550,13 @@ export default function CustomerManagement() {
             {showFilters && (
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 p-4 bg-muted/50 rounded-lg">
                 <div>
-                  <Label className="text-xs text-muted-foreground">Package</Label>
+                  <Label className="text-xs text-muted-foreground">{t('package')}</Label>
                   <Select value={filters.package} onValueChange={(v) => setFilters(f => ({ ...f, package: v }))}>
                     <SelectTrigger className="h-9">
-                      <SelectValue placeholder="All Packages" />
+                      <SelectValue placeholder={t('all')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Packages</SelectItem>
+                      <SelectItem value="all">{t('all')}</SelectItem>
                       {packages.map(pkg => (
                         <SelectItem key={pkg.id} value={pkg.id}>{pkg.name}</SelectItem>
                       ))}
@@ -561,26 +564,26 @@ export default function CustomerManagement() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Area</Label>
+                  <Label className="text-xs text-muted-foreground">{t('area')}</Label>
                   <SearchableSelect
                     value={filters.area === 'all' ? '' : filters.area}
                     onValueChange={(v) => setFilters(f => ({ ...f, area: v || 'all' }))}
                     options={areas.map(area => ({ value: area.id, label: `${area.name}${area.upazila ? ` (${area.upazila})` : ''}` }))}
-                    placeholder="All Areas"
-                    searchPlaceholder="Search areas..."
+                    placeholder={t('all')}
+                    searchPlaceholder={t('search')}
                     allowClear
-                    clearLabel="All Areas"
+                    clearLabel={t('all')}
                     triggerClassName="h-9"
                   />
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">MikroTik</Label>
+                  <Label className="text-xs text-muted-foreground">{t('router')}</Label>
                   <Select value={filters.mikrotik} onValueChange={(v) => setFilters(f => ({ ...f, mikrotik: v }))}>
                     <SelectTrigger className="h-9">
-                      <SelectValue placeholder="All Routers" />
+                      <SelectValue placeholder={t('all')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Routers</SelectItem>
+                      <SelectItem value="all">{t('all')}</SelectItem>
                       {routers.map(router => (
                         <SelectItem key={router.id} value={router.id}>{router.name}</SelectItem>
                       ))}
@@ -588,36 +591,35 @@ export default function CustomerManagement() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Reseller</Label>
+                  <Label className="text-xs text-muted-foreground">{t('reseller')}</Label>
                   <SearchableSelect
                     value={filters.reseller === 'all' ? '' : filters.reseller}
                     onValueChange={(v) => setFilters(f => ({ ...f, reseller: v || 'all' }))}
                     options={resellers.map(r => ({ value: r.id, label: `${r.name}${r.phone ? ` (${r.phone})` : ''}` }))}
-                    placeholder="All Resellers"
-                    searchPlaceholder="Search by name or phone..."
+                    placeholder={t('all')}
+                    searchPlaceholder={t('search')}
                     allowClear
-                    clearLabel="All Resellers"
+                    clearLabel={t('all')}
                     triggerClassName="h-9"
                   />
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Expiry Status</Label>
+                  <Label className="text-xs text-muted-foreground">{t('expiry_filter')}</Label>
                   <Select value={filters.expiryFilter} onValueChange={(v) => setFilters(f => ({ ...f, expiryFilter: v }))}>
                     <SelectTrigger className="h-9">
-                      <SelectValue placeholder="All" />
+                      <SelectValue placeholder={t('all')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="expired">Already Expired</SelectItem>
-                      <SelectItem value="expiring_today">Expiring Today</SelectItem>
-                      <SelectItem value="expiring_week">Expiring in 7 Days</SelectItem>
-                      <SelectItem value="expiring_month">Expiring in 30 Days</SelectItem>
-                      <SelectItem value="not_expired">Not Expired</SelectItem>
+                      <SelectItem value="all">{t('all')}</SelectItem>
+                      <SelectItem value="expired">{t('already_expired')}</SelectItem>
+                      <SelectItem value="expiring_today">{t('expiring_today')}</SelectItem>
+                      <SelectItem value="expiring_week">{t('expiring_7_days')}</SelectItem>
+                      <SelectItem value="expiring_month">{t('expiring_30_days')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Expiry Date Range</Label>
+                  <Label className="text-xs text-muted-foreground">{t('expiry_date')}</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" className="w-full h-9 justify-start text-left font-normal">
@@ -626,7 +628,7 @@ export default function CustomerManagement() {
                             {filters.expiryDateFrom ? format(filters.expiryDateFrom, 'MMM d') : '...'} - {filters.expiryDateTo ? format(filters.expiryDateTo, 'MMM d') : '...'}
                           </span>
                         ) : (
-                          <span className="text-muted-foreground">Select range</span>
+                          <span className="text-muted-foreground">{t('filter')}</span>
                         )}
                       </Button>
                     </PopoverTrigger>
@@ -657,7 +659,7 @@ export default function CustomerManagement() {
                           className="w-full"
                           onClick={() => setFilters(f => ({ ...f, expiryDateFrom: undefined, expiryDateTo: undefined }))}
                         >
-                          Clear
+                          {t('clear')}
                         </Button>
                       </div>
                     </PopoverContent>
@@ -697,23 +699,23 @@ export default function CustomerManagement() {
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead className="hidden lg:table-cell">Reseller</TableHead>
-                    <TableHead>PPPoE</TableHead>
-                    <TableHead>Package</TableHead>
-                    <TableHead>Expiry</TableHead>
-                    <TableHead>Due</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t('customer_code')}</TableHead>
+                    <TableHead>{t('name')}</TableHead>
+                    <TableHead>{t('phone')}</TableHead>
+                    <TableHead className="hidden lg:table-cell">{t('reseller')}</TableHead>
+                    <TableHead>{t('pppoe_username')}</TableHead>
+                    <TableHead>{t('package')}</TableHead>
+                    <TableHead>{t('expiry_date')}</TableHead>
+                    <TableHead>{t('due_amount')}</TableHead>
+                    <TableHead>{t('status')}</TableHead>
+                    <TableHead className="text-right">{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedCustomers.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                        No customers found
+                        {t('no_data')}
                       </TableCell>
                     </TableRow>
                   ) : (

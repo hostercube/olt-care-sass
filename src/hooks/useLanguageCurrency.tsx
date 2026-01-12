@@ -147,7 +147,7 @@ const translations: Record<string, Record<string, string>> = {
     custom_domain: 'Custom Domain',
     olt: 'OLT',
     onu: 'ONU',
-    routers: 'Routers',
+    router: 'Router',
     devices: 'Devices',
     alerts: 'Alerts',
     
@@ -323,7 +323,7 @@ const translations: Record<string, Record<string, string>> = {
     custom_domain: 'কাস্টম ডোমেইন',
     olt: 'ওএলটি',
     onu: 'ওএনইউ',
-    routers: 'রাউটার',
+    router: 'রাউটার',
     devices: 'ডিভাইস',
     alerts: 'সতর্কতা',
     

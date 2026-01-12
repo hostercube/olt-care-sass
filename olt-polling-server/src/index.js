@@ -3334,8 +3334,8 @@ const upload = multer({
 // Helper to generate public URL for uploaded files
 const getPublicFileUrl = (tenantId, filename) => {
   const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'https://oltapp.isppoint.com';
-  // Use /api/files path which is routed through Nginx to this server
-  return `${publicBaseUrl}/olt-polling-server/api/files/tenant-assets/${tenantId}/${filename}`;
+  // Direct URL path - Nginx routes /uploads to static folder
+  return `${publicBaseUrl}/uploads/tenant-assets/${tenantId}/${filename}`;
 };
 
 // File upload endpoint
@@ -3386,9 +3386,10 @@ app.post('/upload/:tenantId', upload.single('file'), (req, res) => {
   }
 });
 
-// Serve uploaded files statically via /api/files route
+// Serve uploaded files statically via multiple routes for compatibility
 app.use('/api/files', express.static(uploadsDir));
 app.use('/files', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir));
 
 // Delete file endpoint
 app.delete('/api/upload/:tenantId/:filename', (req, res) => {
