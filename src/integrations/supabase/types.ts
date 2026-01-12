@@ -466,6 +466,7 @@ export type Database = {
       bandwidth_clients: {
         Row: {
           account_number: string | null
+          activation_date: string | null
           address: string | null
           bank_details: string | null
           company_name: string | null
@@ -473,16 +474,28 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          ip_address: string | null
           is_active: boolean | null
+          mobile: string | null
           name: string
           notes: string | null
+          nttn_info: string | null
+          password_hash: string | null
           phone: string | null
+          pop_name: string | null
+          reference_by: string | null
+          scr_link_id: string | null
+          status: string | null
           tenant_id: string
           total_receivable: number | null
           updated_at: string
+          username: string | null
+          vlan_ip: string | null
+          vlan_name: string | null
         }
         Insert: {
           account_number?: string | null
+          activation_date?: string | null
           address?: string | null
           bank_details?: string | null
           company_name?: string | null
@@ -490,16 +503,28 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          ip_address?: string | null
           is_active?: boolean | null
+          mobile?: string | null
           name: string
           notes?: string | null
+          nttn_info?: string | null
+          password_hash?: string | null
           phone?: string | null
+          pop_name?: string | null
+          reference_by?: string | null
+          scr_link_id?: string | null
+          status?: string | null
           tenant_id: string
           total_receivable?: number | null
           updated_at?: string
+          username?: string | null
+          vlan_ip?: string | null
+          vlan_name?: string | null
         }
         Update: {
           account_number?: string | null
+          activation_date?: string | null
           address?: string | null
           bank_details?: string | null
           company_name?: string | null
@@ -507,13 +532,24 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          ip_address?: string | null
           is_active?: boolean | null
+          mobile?: string | null
           name?: string
           notes?: string | null
+          nttn_info?: string | null
+          password_hash?: string | null
           phone?: string | null
+          pop_name?: string | null
+          reference_by?: string | null
+          scr_link_id?: string | null
+          status?: string | null
           tenant_id?: string
           total_receivable?: number | null
           updated_at?: string
+          username?: string | null
+          vlan_ip?: string | null
+          vlan_name?: string | null
         }
         Relationships: [
           {
