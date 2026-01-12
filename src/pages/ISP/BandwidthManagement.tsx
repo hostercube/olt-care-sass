@@ -659,11 +659,23 @@ function BandwidthManagementContent() {
     const newItems = [...purchaseBillItems];
     (newItems[index] as any)[field] = value;
     
-    // Recalculate totals
+    // Recalculate totals with pro-rata calculation
     const item = newItems[index];
-    const baseTotal = item.quantity * item.rate;
-    item.vat_amount = baseTotal * (item.vat_percent / 100);
-    item.total = baseTotal + item.vat_amount;
+    let calculatedAmount = item.quantity * item.rate;
+    
+    // If both dates are set and valid, calculate pro-rata
+    if (item.from_date && item.to_date && item.rate > 0) {
+      const fromDate = new Date(item.from_date);
+      const toDate = new Date(item.to_date);
+      if (toDate >= fromDate) {
+        const days = getDaysCount(item.from_date, item.to_date);
+        const daysInMonth = getDaysInMonth(fromDate);
+        calculatedAmount = (item.rate / daysInMonth) * days * item.quantity;
+      }
+    }
+    
+    item.vat_amount = calculatedAmount * (item.vat_percent / 100);
+    item.total = calculatedAmount + item.vat_amount;
     
     setPurchaseBillItems(newItems);
   };
@@ -672,11 +684,23 @@ function BandwidthManagementContent() {
     const newItems = [...salesInvoiceItems];
     (newItems[index] as any)[field] = value;
     
-    // Recalculate totals
+    // Recalculate totals with pro-rata calculation
     const item = newItems[index];
-    const baseTotal = item.quantity * item.rate;
-    item.vat_amount = baseTotal * (item.vat_percent / 100);
-    item.total = baseTotal + item.vat_amount;
+    let calculatedAmount = item.quantity * item.rate;
+    
+    // If both dates are set and valid, calculate pro-rata
+    if (item.from_date && item.to_date && item.rate > 0) {
+      const fromDate = new Date(item.from_date);
+      const toDate = new Date(item.to_date);
+      if (toDate >= fromDate) {
+        const days = getDaysCount(item.from_date, item.to_date);
+        const daysInMonth = getDaysInMonth(fromDate);
+        calculatedAmount = (item.rate / daysInMonth) * days * item.quantity;
+      }
+    }
+    
+    item.vat_amount = calculatedAmount * (item.vat_percent / 100);
+    item.total = calculatedAmount + item.vat_amount;
     
     setSalesInvoiceItems(newItems);
   };
@@ -693,12 +717,34 @@ function BandwidthManagementContent() {
     }
   };
 
-  // Calculate bill totals
-  const purchaseBillSubtotal = purchaseBillItems.reduce((sum, i) => sum + (i.quantity * i.rate), 0);
+  // Calculate bill totals with pro-rata
+  const purchaseBillSubtotal = purchaseBillItems.reduce((sum, item) => {
+    if (item.from_date && item.to_date && item.rate > 0) {
+      const fromDate = new Date(item.from_date);
+      const toDate = new Date(item.to_date);
+      if (toDate >= fromDate) {
+        const days = getDaysCount(item.from_date, item.to_date);
+        const daysInMonth = getDaysInMonth(fromDate);
+        return sum + (item.rate / daysInMonth) * days * item.quantity;
+      }
+    }
+    return sum + (item.quantity * item.rate);
+  }, 0);
   const purchaseBillVat = purchaseBillItems.reduce((sum, i) => sum + i.vat_amount, 0);
   const purchaseBillTotal = purchaseBillSubtotal + purchaseBillVat - purchaseBillForm.discount;
 
-  const salesInvoiceSubtotal = salesInvoiceItems.reduce((sum, i) => sum + (i.quantity * i.rate), 0);
+  const salesInvoiceSubtotal = salesInvoiceItems.reduce((sum, item) => {
+    if (item.from_date && item.to_date && item.rate > 0) {
+      const fromDate = new Date(item.from_date);
+      const toDate = new Date(item.to_date);
+      if (toDate >= fromDate) {
+        const days = getDaysCount(item.from_date, item.to_date);
+        const daysInMonth = getDaysInMonth(fromDate);
+        return sum + (item.rate / daysInMonth) * days * item.quantity;
+      }
+    }
+    return sum + (item.quantity * item.rate);
+  }, 0);
   const salesInvoiceVat = salesInvoiceItems.reduce((sum, i) => sum + i.vat_amount, 0);
   const salesInvoiceTotal = salesInvoiceSubtotal + salesInvoiceVat - salesInvoiceForm.discount;
 
@@ -1743,7 +1789,7 @@ function BandwidthManagementContent() {
             <DialogDescription>Record a new purchase bill from provider</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label>Provider *</Label>
                 <Select value={purchaseBillForm.provider_id} onValueChange={(v) => setPurchaseBillForm({ ...purchaseBillForm, provider_id: v })}>
@@ -1757,7 +1803,7 @@ function BandwidthManagementContent() {
               </div>
               <div className="grid gap-2">
                 <Label>Billing Date</Label>
-                <Input type="date" value={purchaseBillForm.billing_date} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, billing_date: e.target.value })} />
+                <Input type="date" value={purchaseBillForm.billing_date} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, billing_date: e.target.value })} className="text-sm" />
               </div>
               <div className="grid gap-2">
                 <Label>Payment Method</Label>
@@ -1782,84 +1828,112 @@ function BandwidthManagementContent() {
               </div>
               <div className="space-y-4">
                 {purchaseBillItems.map((item, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-3">
-                      <Label className="text-xs">Item</Label>
-                      <Select value={item.item_id || ''} onValueChange={(v) => {
-                        const selectedItem = items.find(i => i.id === v);
-                        updatePurchaseBillItem(index, 'item_id', v);
-                        if (selectedItem) {
-                          updatePurchaseBillItem(index, 'item_name', selectedItem.name);
-                          updatePurchaseBillItem(index, 'unit', selectedItem.unit);
-                          updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
-                        }
-                      }}>
-                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>
-                          {items.map((i) => (
-                            <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  <div key={index} className="border rounded-lg p-3 bg-muted/30 space-y-3">
+                    {/* Row 1: Item, Unit, Qty, Rate, VAT */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="col-span-2 md:col-span-1">
+                        <Label className="text-xs font-medium">Item</Label>
+                        <Select value={item.item_id || ''} onValueChange={(v) => {
+                          const selectedItem = items.find(i => i.id === v);
+                          updatePurchaseBillItem(index, 'item_id', v);
+                          if (selectedItem) {
+                            updatePurchaseBillItem(index, 'item_name', selectedItem.name);
+                            updatePurchaseBillItem(index, 'unit', selectedItem.unit);
+                            updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
+                          }
+                        }}>
+                          <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
+                          <SelectContent>
+                            {items.map((i) => (
+                              <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Unit</Label>
+                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Qty</Label>
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Rate/Month</Label>
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">VAT %</Label>
+                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} />
+                      </div>
                     </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">Unit</Label>
-                      <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">Qty</Label>
-                      <Input type="number" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">Rate</Label>
-                      <Input type="number" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">VAT %</Label>
-                      <Input type="number" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">From</Label>
-                      <Input type="date" value={item.from_date} onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">To</Label>
-                      <Input type="date" value={item.to_date} onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)} />
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-xs">Total (incl. VAT)</Label>
-                      <Input value={`৳${item.total.toLocaleString()}`} readOnly />
-                    </div>
-                    <div className="col-span-1">
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                    {/* Row 2: From Date, To Date, Days, Total, Delete */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+                      <div>
+                        <Label className="text-xs font-medium">From Date</Label>
+                        <Input 
+                          type="date" 
+                          value={item.from_date} 
+                          onChange={(e) => updatePurchaseBillItem(index, 'from_date', e.target.value)}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">To Date</Label>
+                        <Input 
+                          type="date" 
+                          value={item.to_date} 
+                          onChange={(e) => updatePurchaseBillItem(index, 'to_date', e.target.value)}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Days</Label>
+                        <Input 
+                          value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} 
+                          readOnly 
+                          className="bg-muted"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Total (incl. VAT)</Label>
+                        <Input 
+                          value={`৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                          readOnly 
+                          className="bg-primary/10 font-semibold"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="grid grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="grid gap-2">
-                <Label>Subtotal</Label>
-                <Input value={`৳${purchaseBillSubtotal.toLocaleString()}`} readOnly />
+                <Label className="text-sm font-medium">Subtotal</Label>
+                <Input value={`৳${purchaseBillSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="bg-muted" />
               </div>
               <div className="grid gap-2">
-                <Label>VAT</Label>
-                <Input value={`৳${purchaseBillVat.toLocaleString()}`} readOnly />
+                <Label className="text-sm font-medium">VAT</Label>
+                <Input value={`৳${purchaseBillVat.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="bg-muted" />
               </div>
               <div className="grid gap-2">
-                <Label>Discount</Label>
-                <Input type="number" value={purchaseBillForm.discount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, discount: Number(e.target.value) })} />
+                <Label className="text-sm font-medium">Discount</Label>
+                <Input type="number" min="0" value={purchaseBillForm.discount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, discount: Number(e.target.value) })} />
               </div>
               <div className="grid gap-2">
-                <Label>Paid Amount</Label>
-                <Input type="number" value={purchaseBillForm.paid_amount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, paid_amount: Number(e.target.value) })} />
+                <Label className="text-sm font-medium">Paid Amount</Label>
+                <Input type="number" min="0" value={purchaseBillForm.paid_amount} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, paid_amount: Number(e.target.value) })} />
               </div>
               <div className="grid gap-2">
-                <Label>Grand Total</Label>
-                <Input value={`৳${purchaseBillTotal.toLocaleString()}`} readOnly className="font-bold" />
+                <Label className="text-sm font-medium">Grand Total</Label>
+                <Input value={`৳${purchaseBillTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="font-bold bg-primary/10" />
               </div>
             </div>
 
@@ -1887,7 +1961,7 @@ function BandwidthManagementContent() {
             <DialogDescription>Create a new invoice for client</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label>Client *</Label>
                 <Select value={salesInvoiceForm.client_id} onValueChange={(v) => setSalesInvoiceForm({ ...salesInvoiceForm, client_id: v })}>
@@ -1901,11 +1975,11 @@ function BandwidthManagementContent() {
               </div>
               <div className="grid gap-2">
                 <Label>Billing Date</Label>
-                <Input type="date" value={salesInvoiceForm.billing_date} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, billing_date: e.target.value })} />
+                <Input type="date" value={salesInvoiceForm.billing_date} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, billing_date: e.target.value })} className="text-sm" />
               </div>
               <div className="grid gap-2">
                 <Label>Due Date</Label>
-                <Input type="date" value={salesInvoiceForm.due_date} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, due_date: e.target.value })} />
+                <Input type="date" value={salesInvoiceForm.due_date} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, due_date: e.target.value })} className="text-sm" />
               </div>
             </div>
 
@@ -1918,80 +1992,108 @@ function BandwidthManagementContent() {
               </div>
               <div className="space-y-4">
                 {salesInvoiceItems.map((item, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-3">
-                      <Label className="text-xs">Item</Label>
-                      <Select value={item.item_id || ''} onValueChange={(v) => {
-                        const selectedItem = items.find(i => i.id === v);
-                        updateSalesInvoiceItem(index, 'item_id', v);
-                        if (selectedItem) {
-                          updateSalesInvoiceItem(index, 'item_name', selectedItem.name);
-                          updateSalesInvoiceItem(index, 'unit', selectedItem.unit);
-                          updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
-                        }
-                      }}>
-                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>
-                          {items.map((i) => (
-                            <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  <div key={index} className="border rounded-lg p-3 bg-muted/30 space-y-3">
+                    {/* Row 1: Item, Unit, Qty, Rate, VAT */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="col-span-2 md:col-span-1">
+                        <Label className="text-xs font-medium">Item</Label>
+                        <Select value={item.item_id || ''} onValueChange={(v) => {
+                          const selectedItem = items.find(i => i.id === v);
+                          updateSalesInvoiceItem(index, 'item_id', v);
+                          if (selectedItem) {
+                            updateSalesInvoiceItem(index, 'item_name', selectedItem.name);
+                            updateSalesInvoiceItem(index, 'unit', selectedItem.unit);
+                            updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
+                          }
+                        }}>
+                          <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
+                          <SelectContent>
+                            {items.map((i) => (
+                              <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Unit</Label>
+                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Qty</Label>
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Rate/Month</Label>
+                        <Input type="number" min="0" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">VAT %</Label>
+                        <Input type="number" min="0" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} />
+                      </div>
                     </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">Unit</Label>
-                      <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">Qty</Label>
-                      <Input type="number" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">Rate</Label>
-                      <Input type="number" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">VAT %</Label>
-                      <Input type="number" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">From</Label>
-                      <Input type="date" value={item.from_date} onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)} />
-                    </div>
-                    <div className="col-span-1">
-                      <Label className="text-xs">To</Label>
-                      <Input type="date" value={item.to_date} onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)} />
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-xs">Total (incl. VAT)</Label>
-                      <Input value={`৳${item.total.toLocaleString()}`} readOnly />
-                    </div>
-                    <div className="col-span-1">
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                    {/* Row 2: From Date, To Date, Days, Total, Delete */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+                      <div>
+                        <Label className="text-xs font-medium">From Date</Label>
+                        <Input 
+                          type="date" 
+                          value={item.from_date} 
+                          onChange={(e) => updateSalesInvoiceItem(index, 'from_date', e.target.value)}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">To Date</Label>
+                        <Input 
+                          type="date" 
+                          value={item.to_date} 
+                          onChange={(e) => updateSalesInvoiceItem(index, 'to_date', e.target.value)}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Days</Label>
+                        <Input 
+                          value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} 
+                          readOnly 
+                          className="bg-muted"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium">Total (incl. VAT)</Label>
+                        <Input 
+                          value={`৳${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                          readOnly 
+                          className="bg-primary/10 font-semibold"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="grid gap-2">
-                <Label>Subtotal</Label>
-                <Input value={`৳${salesInvoiceSubtotal.toLocaleString()}`} readOnly />
+                <Label className="text-sm font-medium">Subtotal</Label>
+                <Input value={`৳${salesInvoiceSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="bg-muted" />
               </div>
               <div className="grid gap-2">
-                <Label>VAT</Label>
-                <Input value={`৳${salesInvoiceVat.toLocaleString()}`} readOnly />
+                <Label className="text-sm font-medium">VAT</Label>
+                <Input value={`৳${salesInvoiceVat.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="bg-muted" />
               </div>
               <div className="grid gap-2">
-                <Label>Discount</Label>
-                <Input type="number" value={salesInvoiceForm.discount} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, discount: Number(e.target.value) })} />
+                <Label className="text-sm font-medium">Discount</Label>
+                <Input type="number" min="0" value={salesInvoiceForm.discount} onChange={(e) => setSalesInvoiceForm({ ...salesInvoiceForm, discount: Number(e.target.value) })} />
               </div>
               <div className="grid gap-2">
-                <Label>Grand Total</Label>
-                <Input value={`৳${salesInvoiceTotal.toLocaleString()}`} readOnly className="font-bold" />
+                <Label className="text-sm font-medium">Grand Total</Label>
+                <Input value={`৳${salesInvoiceTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} readOnly className="font-bold bg-primary/10" />
               </div>
             </div>
 
