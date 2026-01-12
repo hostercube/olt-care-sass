@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useISPPackages } from '@/hooks/useISPPackages';
+import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import { Package, Plus, Edit, Trash2, Loader2 } from 'lucide-react';
 import type { ISPPackage } from '@/types/isp';
 import {
@@ -22,20 +23,21 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 
-// Billing cycle options
-const billingCycles = [
-  { value: 'monthly', label: 'Monthly', days: 30 },
-  { value: '3-monthly', label: '3 Monthly', days: 90 },
-  { value: '6-monthly', label: '6 Monthly', days: 180 },
-  { value: 'yearly', label: 'Yearly', days: 365 },
-];
-
 export default function ISPPackages() {
   const { packages, loading, createPackage, updatePackage, deletePackage } = useISPPackages();
+  const { t, formatCurrency } = useLanguageCurrency();
   const [showDialog, setShowDialog] = useState(false);
   const [editingPackage, setEditingPackage] = useState<ISPPackage | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<ISPPackage | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Billing cycle options with translations
+  const billingCycles = [
+    { value: 'monthly', label: t('monthly'), days: 30 },
+    { value: '3-monthly', label: t('three_monthly'), days: 90 },
+    { value: '6-monthly', label: t('six_monthly'), days: 180 },
+    { value: 'yearly', label: t('yearly'), days: 365 },
+  ];
 
   const [formData, setFormData] = useState({
     name: '',
@@ -134,26 +136,26 @@ export default function ISPPackages() {
       if (found) return found.label;
     }
     // Fallback to deriving from validity_days
-    if (pkg.validity_days >= 365) return 'Yearly';
-    if (pkg.validity_days >= 180) return '6 Monthly';
-    if (pkg.validity_days >= 90) return '3 Monthly';
-    return 'Monthly';
+    if (pkg.validity_days >= 365) return t('yearly');
+    if (pkg.validity_days >= 180) return t('six_monthly');
+    if (pkg.validity_days >= 90) return t('three_monthly');
+    return t('monthly');
   };
 
   return (
     <DashboardLayout
-      title="ISP Packages"
-      subtitle="Manage internet packages for customers"
+      title={t('packages')}
+      subtitle={t('manage_internet_packages')}
     >
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5" />
-            Packages
+            {t('packages')}
           </CardTitle>
           <Button onClick={() => { resetForm(); setShowDialog(true); }}>
             <Plus className="h-4 w-4 mr-2" />
-            Add Package
+            {t('add_package')}
           </Button>
         </CardHeader>
         <CardContent>
@@ -161,12 +163,12 @@ export default function ISPPackages() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Speed</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Billing Cycle</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t('name')}</TableHead>
+                  <TableHead>{t('speed')}</TableHead>
+                  <TableHead>{t('price')}</TableHead>
+                  <TableHead>{t('billing_cycle')}</TableHead>
+                  <TableHead>{t('status')}</TableHead>
+                  <TableHead className="text-right">{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -179,7 +181,7 @@ export default function ISPPackages() {
                 ) : packages.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No packages found. Create your first package.
+                      {t('no_packages_found')}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -197,14 +199,14 @@ export default function ISPPackages() {
                         {pkg.download_speed}/{pkg.upload_speed} {pkg.speed_unit.toUpperCase()}
                       </TableCell>
                       <TableCell className="font-medium">
-                        ৳{pkg.price.toLocaleString()}
+                        {formatCurrency(pkg.price)}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{getBillingCycleLabel(pkg)}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant={pkg.is_active ? 'default' : 'secondary'}>
-                          {pkg.is_active ? 'Active' : 'Inactive'}
+                          {pkg.is_active ? t('active') : t('inactive')}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -228,11 +230,11 @@ export default function ISPPackages() {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingPackage ? 'Edit Package' : 'Add New Package'}</DialogTitle>
+            <DialogTitle>{editingPackage ? t('edit_package') : t('add_package')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label>Package Name *</Label>
+              <Label>{t('package_name')} *</Label>
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
@@ -242,17 +244,17 @@ export default function ISPPackages() {
             </div>
 
             <div className="space-y-2">
-              <Label>Description</Label>
+              <Label>{t('description')}</Label>
               <Input
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Package description"
+                placeholder={t('description')}
               />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Download Speed</Label>
+                <Label>{t('download_speed')}</Label>
                 <Input
                   type="number"
                   value={formData.download_speed}
@@ -262,7 +264,7 @@ export default function ISPPackages() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Upload Speed</Label>
+                <Label>{t('upload_speed')}</Label>
                 <Input
                   type="number"
                   value={formData.upload_speed}
@@ -272,7 +274,7 @@ export default function ISPPackages() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Unit</Label>
+                <Label>{t('unit')}</Label>
                 <Select
                   value={formData.speed_unit}
                   onValueChange={(value: any) => setFormData(prev => ({ ...prev, speed_unit: value }))}
@@ -290,7 +292,7 @@ export default function ISPPackages() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Price (৳) *</Label>
+                <Label>{t('price')} *</Label>
                 <Input
                   type="number"
                   value={formData.price}
@@ -301,7 +303,7 @@ export default function ISPPackages() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Billing Cycle</Label>
+                <Label>{t('billing_cycle')}</Label>
                 <Select
                   value={formData.billing_cycle}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, billing_cycle: value }))}
@@ -312,7 +314,7 @@ export default function ISPPackages() {
                   <SelectContent>
                     {billingCycles.map((cycle) => (
                       <SelectItem key={cycle.value} value={cycle.value}>
-                        {cycle.label} ({cycle.days} days)
+                        {cycle.label} ({cycle.days} {t('days')})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -322,11 +324,11 @@ export default function ISPPackages() {
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
-                Cancel
+                {t('cancel')}
               </Button>
               <Button type="submit" disabled={saving || !formData.name || !formData.price}>
                 {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {editingPackage ? 'Save Changes' : 'Create Package'}
+                {editingPackage ? t('save_changes') : t('create_package')}
               </Button>
             </DialogFooter>
           </form>
@@ -337,15 +339,15 @@ export default function ISPPackages() {
       <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Package</AlertDialogTitle>
+            <AlertDialogTitle>{t('delete_package')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deleteConfirm?.name}"? This will deactivate the package.
+              {t('are_you_sure')} "{deleteConfirm?.name}"? {t('this_will_deactivate')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Delete
+              {t('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

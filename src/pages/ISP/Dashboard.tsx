@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useCustomerBills } from '@/hooks/useCustomerBills';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
+import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import { 
   Users, UserCheck, Clock, DollarSign, TrendingUp, 
   Receipt, AlertCircle, Activity, Wifi, WifiOff, RefreshCw,
@@ -29,6 +30,7 @@ export default function ISPDashboard() {
   const { areas } = useAreas();
   const { packages } = useISPPackages();
   const { tenant } = useTenantContext();
+  const { t, formatCurrency } = useLanguageCurrency();
   const navigate = useNavigate();
 
   const loading = customersLoading || billsLoading || onusLoading;
@@ -39,10 +41,10 @@ export default function ISPDashboard() {
 
   // Customer status pie chart data
   const customerPieData = [
-    { name: 'Active', value: customerStats.active, color: 'hsl(var(--chart-1))' },
-    { name: 'Expired', value: customerStats.expired, color: 'hsl(var(--chart-2))' },
-    { name: 'Suspended', value: customerStats.suspended, color: 'hsl(var(--chart-3))' },
-    { name: 'Pending', value: customerStats.pending, color: 'hsl(var(--chart-4))' },
+    { name: t('active'), value: customerStats.active, color: 'hsl(var(--chart-1))' },
+    { name: t('expired'), value: customerStats.expired, color: 'hsl(var(--chart-2))' },
+    { name: t('suspended'), value: customerStats.suspended, color: 'hsl(var(--chart-3))' },
+    { name: t('pending'), value: customerStats.pending, color: 'hsl(var(--chart-4))' },
   ].filter(d => d.value > 0);
 
   // Collection stats (mock data for chart)
@@ -55,7 +57,7 @@ export default function ISPDashboard() {
 
   if (loading) {
     return (
-      <DashboardLayout title="ISP Dashboard" subtitle="Loading...">
+      <DashboardLayout title={t('isp_dashboard')} subtitle={t('loading')}>
         <div className="grid gap-4 md:grid-cols-4">
           {[...Array(8)].map((_, i) => (
             <Skeleton key={i} className="h-28" />
@@ -67,26 +69,26 @@ export default function ISPDashboard() {
 
   return (
     <DashboardLayout
-      title="ISP Dashboard"
-      subtitle={`Welcome back, ${tenant?.name || 'ISP Owner'}`}
+      title={t('isp_dashboard')}
+      subtitle={`${t('welcome_back')}, ${tenant?.name || 'ISP Owner'}`}
     >
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-2 mb-6">
         <Button onClick={() => navigate('/isp/customers')}>
           <Users className="h-4 w-4 mr-2" />
-          Manage Customers
+          {t('manage_customers')}
         </Button>
         <Button variant="outline" onClick={() => navigate('/isp/billing')}>
           <Receipt className="h-4 w-4 mr-2" />
-          View Bills
+          {t('view_bills')}
         </Button>
         <Button variant="outline" onClick={() => navigate('/isp/packages')}>
           <Package className="h-4 w-4 mr-2" />
-          Packages
+          {t('packages')}
         </Button>
         <Button variant="ghost" onClick={() => refetch()}>
           <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
+          {t('refresh')}
         </Button>
       </div>
 
@@ -96,10 +98,10 @@ export default function ISPDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Customers</p>
+                <p className="text-sm text-muted-foreground">{t('total_customers')}</p>
                 <p className="text-3xl font-bold">{customerStats.total}</p>
                 <div className="flex gap-1 mt-1">
-                  <Badge variant="success" className="text-xs">{customerStats.active} active</Badge>
+                  <Badge variant="success" className="text-xs">{customerStats.active} {t('active').toLowerCase()}</Badge>
                 </div>
               </div>
               <div className="p-3 rounded-full bg-primary/10">
@@ -113,9 +115,9 @@ export default function ISPDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Monthly Collection</p>
-                <p className="text-3xl font-bold text-success">৳{billStats.totalPaid.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground mt-1">{billStats.paid} bills paid</p>
+                <p className="text-sm text-muted-foreground">{t('monthly_collection')}</p>
+                <p className="text-3xl font-bold text-success">{formatCurrency(billStats.totalPaid)}</p>
+                <p className="text-xs text-muted-foreground mt-1">{billStats.paid} {t('bills_paid')}</p>
               </div>
               <div className="p-3 rounded-full bg-success/10">
                 <TrendingUp className="h-6 w-6 text-success" />
@@ -128,9 +130,9 @@ export default function ISPDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Due</p>
-                <p className="text-3xl font-bold text-warning">৳{customerStats.totalDue.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground mt-1">{billStats.unpaid} unpaid bills</p>
+                <p className="text-sm text-muted-foreground">{t('total_due')}</p>
+                <p className="text-3xl font-bold text-warning">{formatCurrency(customerStats.totalDue)}</p>
+                <p className="text-xs text-muted-foreground mt-1">{billStats.unpaid} {t('unpaid_bills')}</p>
               </div>
               <div className="p-3 rounded-full bg-warning/10">
                 <DollarSign className="h-6 w-6 text-warning" />
@@ -143,9 +145,9 @@ export default function ISPDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Expired Customers</p>
+                <p className="text-sm text-muted-foreground">{t('expired_customers')}</p>
                 <p className="text-3xl font-bold text-destructive">{customerStats.expired}</p>
-                <p className="text-xs text-muted-foreground mt-1">Need renewal</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('need_renewal')}</p>
               </div>
               <div className="p-3 rounded-full bg-destructive/10">
                 <Clock className="h-6 w-6 text-destructive" />
@@ -161,7 +163,7 @@ export default function ISPDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Online Devices</p>
+                <p className="text-sm text-muted-foreground">{t('online_devices')}</p>
                 <p className="text-2xl font-bold text-success">{onlineONUs}</p>
               </div>
               <div className="p-2 rounded-full bg-success/10">
@@ -175,7 +177,7 @@ export default function ISPDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Offline Devices</p>
+                <p className="text-sm text-muted-foreground">{t('offline_devices')}</p>
                 <p className="text-2xl font-bold text-destructive">{offlineONUs}</p>
               </div>
               <div className="p-2 rounded-full bg-destructive/10">
@@ -189,7 +191,7 @@ export default function ISPDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Service Areas</p>
+                <p className="text-sm text-muted-foreground">{t('service_areas')}</p>
                 <p className="text-2xl font-bold">{areas?.length || 0}</p>
               </div>
               <div className="p-2 rounded-full bg-chart-2/10">
@@ -203,7 +205,7 @@ export default function ISPDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Active Packages</p>
+                <p className="text-sm text-muted-foreground">{t('active_packages')}</p>
                 <p className="text-2xl font-bold">{packages?.length || 0}</p>
               </div>
               <div className="p-2 rounded-full bg-chart-3/10">
@@ -219,8 +221,8 @@ export default function ISPDashboard() {
         {/* Customer Distribution */}
         <Card>
           <CardHeader>
-            <CardTitle>Customer Status Distribution</CardTitle>
-            <CardDescription>Breakdown of customer statuses</CardDescription>
+            <CardTitle>{t('customer_status_distribution')}</CardTitle>
+            <CardDescription>{t('breakdown_customer_status')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -253,7 +255,7 @@ export default function ISPDashboard() {
                 </ResponsiveContainer>
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                  No customer data available
+                  {t('no_customer_data')}
                 </div>
               )}
             </div>
@@ -263,8 +265,8 @@ export default function ISPDashboard() {
         {/* Collection Trend */}
         <Card>
           <CardHeader>
-            <CardTitle>Collection vs Due Trend</CardTitle>
-            <CardDescription>Monthly payment collections</CardDescription>
+            <CardTitle>{t('collection_vs_due')}</CardTitle>
+            <CardDescription>{t('monthly_payment_collections')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -280,7 +282,7 @@ export default function ISPDashboard() {
                   <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
                   <Tooltip 
-                    formatter={(value: number) => [`৳${value.toLocaleString()}`, '']}
+                    formatter={(value: number) => [formatCurrency(value), '']}
                     contentStyle={{ 
                       backgroundColor: 'hsl(var(--card))', 
                       border: '1px solid hsl(var(--border))',
@@ -290,7 +292,7 @@ export default function ISPDashboard() {
                   <Area 
                     type="monotone" 
                     dataKey="collected" 
-                    name="Collected"
+                    name={t('paid')}
                     stroke="hsl(var(--chart-1))" 
                     strokeWidth={2}
                     fillOpacity={1} 
@@ -299,7 +301,7 @@ export default function ISPDashboard() {
                   <Area 
                     type="monotone" 
                     dataKey="due" 
-                    name="Due"
+                    name={t('due')}
                     stroke="hsl(var(--chart-3))" 
                     strokeWidth={2}
                     fill="transparent" 
@@ -318,8 +320,8 @@ export default function ISPDashboard() {
             <div className="flex items-center gap-4">
               <Users className="h-8 w-8 text-primary" />
               <div>
-                <h3 className="font-semibold">Customer Management</h3>
-                <p className="text-sm text-muted-foreground">Add, edit, and manage customers</p>
+                <h3 className="font-semibold">{t('customer_management')}</h3>
+                <p className="text-sm text-muted-foreground">{t('add_edit_manage_customers')}</p>
               </div>
             </div>
             <ArrowRight className="h-5 w-5 text-muted-foreground" />
@@ -331,8 +333,8 @@ export default function ISPDashboard() {
             <div className="flex items-center gap-4">
               <Receipt className="h-8 w-8 text-primary" />
               <div>
-                <h3 className="font-semibold">Billing & Payments</h3>
-                <p className="text-sm text-muted-foreground">View bills and record payments</p>
+                <h3 className="font-semibold">{t('billing_payments')}</h3>
+                <p className="text-sm text-muted-foreground">{t('view_bills_record_payments')}</p>
               </div>
             </div>
             <ArrowRight className="h-5 w-5 text-muted-foreground" />
@@ -344,8 +346,8 @@ export default function ISPDashboard() {
             <div className="flex items-center gap-4">
               <Activity className="h-8 w-8 text-primary" />
               <div>
-                <h3 className="font-semibold">MikroTik Automation</h3>
-                <p className="text-sm text-muted-foreground">Manage routers and PPPoE</p>
+                <h3 className="font-semibold">{t('mikrotik_automation')}</h3>
+                <p className="text-sm text-muted-foreground">{t('manage_routers_pppoe')}</p>
               </div>
             </div>
             <ArrowRight className="h-5 w-5 text-muted-foreground" />
