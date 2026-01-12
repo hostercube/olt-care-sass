@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useAuth } from '@/hooks/useAuth';
+import { useCurrentUserName } from '@/hooks/useCurrentUserName';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { useMikroTikSync } from '@/hooks/useMikroTikSync';
 import { useISPPackages } from '@/hooks/useISPPackages';
@@ -59,6 +60,7 @@ export default function CustomerProfile() {
   const [searchParams] = useSearchParams();
   const { tenantId, isSuperAdmin } = useTenantContext();
   const { user } = useAuth();
+  const currentUser = useCurrentUserName();
   const { hasAccess } = useModuleAccess();
   const { getCustomerNetworkStatus, togglePPPoEUser, saveCallerId, removeCallerId, updatePPPoEUser, disconnectSession, getLiveBandwidth, activateCustomer, switchToExpiredProfile } = useMikroTikSync();
   const { packages } = useISPPackages();
@@ -541,7 +543,7 @@ export default function CustomerProfile() {
               balance_before: reseller.balance,
               balance_after: newBalance,
               customer_id: customer.id,
-              description: `Customer recharge by ${user?.email?.split('@')[0] || 'Tenant Admin'} (${rechargeMonths} month${rechargeMonths > 1 ? 's' : ''}). Package: ৳${totalPackagePrice}, Commission: ৳${commission}, Deducted: ৳${deductAmount}`,
+              description: `Customer recharge by ${currentUser.name} (${rechargeMonths} month${rechargeMonths > 1 ? 's' : ''}). Package: ৳${totalPackagePrice}, Commission: ৳${commission}, Deducted: ৳${deductAmount}`,
             } as any);
 
             // Update reseller balance
@@ -570,8 +572,8 @@ export default function CustomerProfile() {
         payment_method: rechargePaymentMethod,
         status: isDueRecharge ? 'due' : 'completed',
         collected_by: user?.id || null,
-        collected_by_type: 'tenant_admin',
-        collected_by_name: user?.email?.split('@')[0] || 'Tenant Admin',
+        collected_by_type: currentUser.collectorType,
+        collected_by_name: currentUser.name,
       };
 
       // If due recharge, update customer's due_amount

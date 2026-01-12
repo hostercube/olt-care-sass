@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useAreas } from '@/hooks/useAreas';
 import { useResellers } from '@/hooks/useResellers';
+import { useCurrentUserName } from '@/hooks/useCurrentUserName';
 import { 
   Receipt, Search, RefreshCw, Download, User, Store, CreditCard,
   Calendar, Filter, Users, TrendingUp, Wallet, ChevronLeft, ChevronRight,
@@ -96,6 +97,7 @@ export default function RechargeHistory() {
   const { tenantId, loading: contextLoading } = useTenantContext();
   const { areas } = useAreas();
   const { resellers } = useResellers();
+  const currentUser = useCurrentUserName();
   
   const [recharges, setRecharges] = useState<CustomerRecharge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +117,6 @@ export default function RechargeHistory() {
   const [showEditDueDialog, setShowEditDueDialog] = useState(false);
   const [selectedRecharge, setSelectedRecharge] = useState<CustomerRecharge | null>(null);
   const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
-  const [editCollectorName, setEditCollectorName] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   
   // Pagination
@@ -246,9 +247,8 @@ export default function RechargeHistory() {
     setEditLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const collectorName = editCollectorName || 'Admin';
       
-      // Update recharge record
+      // Update recharge record with current user's name
       const { error } = await supabase
         .from('customer_recharges')
         .update({
@@ -257,7 +257,7 @@ export default function RechargeHistory() {
           original_payment_method: 'due', // Track that this was originally due
           paid_at: new Date().toISOString(),
           paid_by: user?.id || null,
-          paid_by_name: collectorName,
+          paid_by_name: currentUser.name || 'Admin',
         })
         .eq('id', selectedRecharge.id);
       
@@ -297,7 +297,6 @@ export default function RechargeHistory() {
     e.stopPropagation();
     setSelectedRecharge(recharge);
     setEditPaymentMethod('cash');
-    setEditCollectorName('');
     setShowEditDueDialog(true);
   };
 
@@ -766,12 +765,15 @@ export default function RechargeHistory() {
               </div>
               
               <div className="space-y-2">
-                <Label>Collected By (Name)</Label>
-                <Input
-                  value={editCollectorName}
-                  onChange={(e) => setEditCollectorName(e.target.value)}
-                  placeholder="Enter collector name..."
-                />
+                <Label>Collected By</Label>
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{currentUser.name}</span>
+                  <Badge variant="outline" className="ml-auto">{currentUser.role}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Logged in user will be recorded automatically
+                </p>
               </div>
             </div>
           )}
