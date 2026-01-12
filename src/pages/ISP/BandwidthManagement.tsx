@@ -1146,12 +1146,31 @@ function BandwidthManagementContent() {
                 <CardTitle>Purchase Bills</CardTitle>
                 <CardDescription>Bills from bandwidth providers</CardDescription>
               </div>
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-2 items-center flex-wrap">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <Input type="date" value={dateFilter.from} onChange={(e) => setDateFilter({ ...dateFilter, from: e.target.value })} className="w-36" />
-                  <span className="text-muted-foreground">to</span>
-                  <Input type="date" value={dateFilter.to} onChange={(e) => setDateFilter({ ...dateFilter, to: e.target.value })} className="w-36" />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-32 justify-start text-left font-normal h-9 text-xs">
+                        <CalendarIcon className="mr-1 h-3 w-3" />
+                        {dateFilter.from ? format(new Date(dateFilter.from), "dd/MM/yy") : "From"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={dateFilter.from ? new Date(dateFilter.from) : undefined} onSelect={(date) => setDateFilter({ ...dateFilter, from: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-32 justify-start text-left font-normal h-9 text-xs">
+                        <CalendarIcon className="mr-1 h-3 w-3" />
+                        {dateFilter.to ? format(new Date(dateFilter.to), "dd/MM/yy") : "To"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={dateFilter.to ? new Date(dateFilter.to) : undefined} onSelect={(date) => setDateFilter({ ...dateFilter, to: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1297,12 +1316,31 @@ function BandwidthManagementContent() {
                 <CardTitle>Sales Invoices</CardTitle>
                 <CardDescription>Invoices to bandwidth clients</CardDescription>
               </div>
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-2 items-center flex-wrap">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <Input type="date" value={dateFilter.from} onChange={(e) => setDateFilter({ ...dateFilter, from: e.target.value })} className="w-36" />
-                  <span className="text-muted-foreground">to</span>
-                  <Input type="date" value={dateFilter.to} onChange={(e) => setDateFilter({ ...dateFilter, to: e.target.value })} className="w-36" />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-32 justify-start text-left font-normal h-9 text-xs">
+                        <CalendarIcon className="mr-1 h-3 w-3" />
+                        {dateFilter.from ? format(new Date(dateFilter.from), "dd/MM/yy") : "From"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={dateFilter.from ? new Date(dateFilter.from) : undefined} onSelect={(date) => setDateFilter({ ...dateFilter, from: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                  <span className="text-muted-foreground text-sm">to</span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-32 justify-start text-left font-normal h-9 text-xs">
+                        <CalendarIcon className="mr-1 h-3 w-3" />
+                        {dateFilter.to ? format(new Date(dateFilter.to), "dd/MM/yy") : "To"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={dateFilter.to ? new Date(dateFilter.to) : undefined} onSelect={(date) => setDateFilter({ ...dateFilter, to: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1853,7 +1891,17 @@ function BandwidthManagementContent() {
               </div>
               <div className="grid gap-2">
                 <Label>Billing Date</Label>
-                <Input type="date" value={purchaseBillForm.billing_date} onChange={(e) => setPurchaseBillForm({ ...purchaseBillForm, billing_date: e.target.value })} />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-10", !purchaseBillForm.billing_date && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {purchaseBillForm.billing_date ? format(new Date(purchaseBillForm.billing_date), "dd MMM yyyy") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={purchaseBillForm.billing_date ? new Date(purchaseBillForm.billing_date) : undefined} onSelect={(date) => setPurchaseBillForm({ ...purchaseBillForm, billing_date: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="grid gap-2">
                 <Label>Payment Method</Label>
@@ -1878,14 +1926,14 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-[minmax(150px,1.5fr)_60px_50px_80px_50px_100px_100px_50px_90px_36px] gap-2 px-3 py-3 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-3 border">
+              <div className="hidden lg:grid lg:grid-cols-[minmax(180px,2fr)_55px_45px_75px_45px_90px_90px_40px_85px_32px] gap-1 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
                 <div>Item Name</div>
                 <div className="text-center">Unit</div>
                 <div className="text-center">Qty</div>
                 <div className="text-center">Rate/Mo</div>
                 <div className="text-center">VAT%</div>
-                <div className="text-center">From Date</div>
-                <div className="text-center">To Date</div>
+                <div className="text-center">From</div>
+                <div className="text-center">To</div>
                 <div className="text-center">Days</div>
                 <div className="text-right">Total</div>
                 <div></div>
@@ -1893,9 +1941,9 @@ function BandwidthManagementContent() {
 
               <div className="space-y-2">
                 {purchaseBillItems.map((item, index) => (
-                  <div key={index} className="border rounded-lg p-3 bg-background hover:bg-muted/30 transition-colors">
+                  <div key={index} className="border rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-[minmax(150px,1.5fr)_60px_50px_80px_50px_100px_100px_50px_90px_36px] gap-2 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[minmax(180px,2fr)_55px_45px_75px_45px_90px_90px_40px_85px_32px] gap-1 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -1906,7 +1954,7 @@ function BandwidthManagementContent() {
                             updatePurchaseBillItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select Item" /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -1915,22 +1963,21 @@ function BandwidthManagementContent() {
                         </Select>
                       </div>
                       <div>
-                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-9 text-sm text-center px-2" />
+                        <Input value={item.unit} onChange={(e) => updatePurchaseBillItem(index, 'unit', e.target.value)} className="h-8 text-xs text-center px-1" />
                       </div>
                       <div>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-9 text-sm text-center px-2" />
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updatePurchaseBillItem(index, 'quantity', Number(e.target.value))} className="h-8 text-xs text-center px-1" />
                       </div>
                       <div>
-                        <Input type="number" min="0" step="0.01" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-9 text-sm text-center px-2" />
+                        <Input type="number" min="0" step="0.01" value={item.rate} onChange={(e) => updatePurchaseBillItem(index, 'rate', Number(e.target.value))} className="h-8 text-xs text-center px-1" />
                       </div>
                       <div>
-                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-sm text-center px-1" />
+                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updatePurchaseBillItem(index, 'vat_percent', Number(e.target.value))} className="h-8 text-xs text-center px-1" />
                       </div>
                       <div>
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" className={cn("h-9 w-full justify-start text-left font-normal text-xs px-2", !item.from_date && "text-muted-foreground")}>
-                              <CalendarIcon className="mr-1 h-3 w-3" />
+                            <Button variant="outline" className={cn("h-8 w-full justify-center text-left font-normal text-[10px] px-1", !item.from_date && "text-muted-foreground")}>
                               {item.from_date ? format(new Date(item.from_date), "dd/MM/yy") : "From"}
                             </Button>
                           </PopoverTrigger>
@@ -1942,8 +1989,7 @@ function BandwidthManagementContent() {
                       <div>
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" className={cn("h-9 w-full justify-start text-left font-normal text-xs px-2", !item.to_date && "text-muted-foreground")}>
-                              <CalendarIcon className="mr-1 h-3 w-3" />
+                            <Button variant="outline" className={cn("h-8 w-full justify-center text-left font-normal text-[10px] px-1", !item.to_date && "text-muted-foreground")}>
                               {item.to_date ? format(new Date(item.to_date), "dd/MM/yy") : "To"}
                             </Button>
                           </PopoverTrigger>
@@ -1953,14 +1999,14 @@ function BandwidthManagementContent() {
                         </Popover>
                       </div>
                       <div>
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-sm bg-muted text-center px-1 font-medium" />
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-8 text-xs bg-muted text-center px-1 font-medium" />
                       </div>
                       <div>
-                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-sm bg-primary/10 font-bold text-right px-2" />
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-8 text-xs bg-primary/10 font-bold text-right px-1" />
                       </div>
                       <div className="flex justify-center">
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10" onClick={() => removePurchaseBillItem(index)} disabled={purchaseBillItems.length === 1}>
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
                         </Button>
                       </div>
                     </div>
@@ -2151,14 +2197,14 @@ function BandwidthManagementContent() {
               </div>
               
               {/* Header Row - Desktop Only */}
-              <div className="hidden lg:grid lg:grid-cols-[minmax(150px,1.5fr)_60px_50px_80px_50px_100px_100px_50px_90px_36px] gap-2 px-3 py-3 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-3 border">
+              <div className="hidden lg:grid lg:grid-cols-[minmax(180px,2fr)_55px_45px_75px_45px_90px_90px_40px_85px_32px] gap-1 px-2 py-2 bg-primary/5 rounded-lg text-xs font-semibold text-foreground mb-2 border">
                 <div>Item Name</div>
                 <div className="text-center">Unit</div>
                 <div className="text-center">Qty</div>
                 <div className="text-center">Rate/Mo</div>
                 <div className="text-center">VAT%</div>
-                <div className="text-center">From Date</div>
-                <div className="text-center">To Date</div>
+                <div className="text-center">From</div>
+                <div className="text-center">To</div>
                 <div className="text-center">Days</div>
                 <div className="text-right">Total</div>
                 <div></div>
@@ -2166,9 +2212,9 @@ function BandwidthManagementContent() {
 
               <div className="space-y-2">
                 {salesInvoiceItems.map((item, index) => (
-                  <div key={index} className="border rounded-lg p-3 bg-background hover:bg-muted/30 transition-colors">
+                  <div key={index} className="border rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors">
                     {/* Desktop: Single Row */}
-                    <div className="hidden lg:grid lg:grid-cols-[minmax(150px,1.5fr)_60px_50px_80px_50px_100px_100px_50px_90px_36px] gap-2 items-center">
+                    <div className="hidden lg:grid lg:grid-cols-[minmax(180px,2fr)_55px_45px_75px_45px_90px_90px_40px_85px_32px] gap-1 items-center">
                       <div>
                         <Select value={item.item_id || ''} onValueChange={(v) => {
                           const selectedItem = items.find(i => i.id === v);
@@ -2179,7 +2225,7 @@ function BandwidthManagementContent() {
                             updateSalesInvoiceItem(index, 'rate', selectedItem.unit_price);
                           }
                         }}>
-                          <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select Item" /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Item" /></SelectTrigger>
                           <SelectContent>
                             {items.map((i) => (
                               <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -2188,22 +2234,21 @@ function BandwidthManagementContent() {
                         </Select>
                       </div>
                       <div>
-                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-9 text-sm text-center px-2" />
+                        <Input value={item.unit} onChange={(e) => updateSalesInvoiceItem(index, 'unit', e.target.value)} className="h-8 text-xs text-center px-1" />
                       </div>
                       <div>
-                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-9 text-sm text-center px-2" />
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => updateSalesInvoiceItem(index, 'quantity', Number(e.target.value))} className="h-8 text-xs text-center px-1" />
                       </div>
                       <div>
-                        <Input type="number" min="0" step="0.01" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-9 text-sm text-center px-2" />
+                        <Input type="number" min="0" step="0.01" value={item.rate} onChange={(e) => updateSalesInvoiceItem(index, 'rate', Number(e.target.value))} className="h-8 text-xs text-center px-1" />
                       </div>
                       <div>
-                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-9 text-sm text-center px-1" />
+                        <Input type="number" min="0" max="100" value={item.vat_percent} onChange={(e) => updateSalesInvoiceItem(index, 'vat_percent', Number(e.target.value))} className="h-8 text-xs text-center px-1" />
                       </div>
                       <div>
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" className={cn("h-9 w-full justify-start text-left font-normal text-xs px-2", !item.from_date && "text-muted-foreground")}>
-                              <CalendarIcon className="mr-1 h-3 w-3" />
+                            <Button variant="outline" className={cn("h-8 w-full justify-center text-left font-normal text-[10px] px-1", !item.from_date && "text-muted-foreground")}>
                               {item.from_date ? format(new Date(item.from_date), "dd/MM/yy") : "From"}
                             </Button>
                           </PopoverTrigger>
@@ -2215,8 +2260,7 @@ function BandwidthManagementContent() {
                       <div>
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" className={cn("h-9 w-full justify-start text-left font-normal text-xs px-2", !item.to_date && "text-muted-foreground")}>
-                              <CalendarIcon className="mr-1 h-3 w-3" />
+                            <Button variant="outline" className={cn("h-8 w-full justify-center text-left font-normal text-[10px] px-1", !item.to_date && "text-muted-foreground")}>
                               {item.to_date ? format(new Date(item.to_date), "dd/MM/yy") : "To"}
                             </Button>
                           </PopoverTrigger>
@@ -2226,14 +2270,14 @@ function BandwidthManagementContent() {
                         </Popover>
                       </div>
                       <div>
-                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-9 text-sm bg-muted text-center px-1 font-medium" />
+                        <Input value={item.from_date && item.to_date ? getDaysCount(item.from_date, item.to_date) : 0} readOnly className="h-8 text-xs bg-muted text-center px-1 font-medium" />
                       </div>
                       <div>
-                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-9 text-sm bg-primary/10 font-bold text-right px-2" />
+                        <Input value={item.total.toLocaleString('en-US', { minimumFractionDigits: 2 })} readOnly className="h-8 text-xs bg-primary/10 font-bold text-right px-1" />
                       </div>
                       <div className="flex justify-center">
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10" onClick={() => removeSalesInvoiceItem(index)} disabled={salesInvoiceItems.length === 1}>
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
                         </Button>
                       </div>
                     </div>
@@ -2392,7 +2436,17 @@ function BandwidthManagementContent() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Collection Date</Label>
-                <Input type="date" value={collectionForm.collection_date} onChange={(e) => setCollectionForm({ ...collectionForm, collection_date: e.target.value })} />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-10", !collectionForm.collection_date && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {collectionForm.collection_date ? format(new Date(collectionForm.collection_date), "dd MMM yyyy") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={collectionForm.collection_date ? new Date(collectionForm.collection_date) : undefined} onSelect={(date) => setCollectionForm({ ...collectionForm, collection_date: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="grid gap-2">
                 <Label>Amount *</Label>
@@ -2462,7 +2516,17 @@ function BandwidthManagementContent() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Payment Date</Label>
-                <Input type="date" value={providerPaymentForm.payment_date} onChange={(e) => setProviderPaymentForm({ ...providerPaymentForm, payment_date: e.target.value })} />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-10", !providerPaymentForm.payment_date && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {providerPaymentForm.payment_date ? format(new Date(providerPaymentForm.payment_date), "dd MMM yyyy") : "Select date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={providerPaymentForm.payment_date ? new Date(providerPaymentForm.payment_date) : undefined} onSelect={(date) => setProviderPaymentForm({ ...providerPaymentForm, payment_date: date ? format(date, 'yyyy-MM-dd') : '' })} initialFocus />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="grid gap-2">
                 <Label>Amount *</Label>
