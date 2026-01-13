@@ -72,6 +72,7 @@ export default function CustomerLocation() {
     is_active: true,
     popup_title: 'Please provide your details',
     popup_description: 'Enter your name and phone number for verification',
+    popup_enabled: false,
     require_name: false,
     require_phone: false,
   });
@@ -83,6 +84,7 @@ export default function CustomerLocation() {
         is_active: settings.is_active,
         popup_title: settings.popup_title,
         popup_description: settings.popup_description,
+        popup_enabled: (settings as any).popup_enabled ?? (settings.require_name || settings.require_phone),
         require_name: settings.require_name,
         require_phone: settings.require_phone,
       });
@@ -623,9 +625,22 @@ export default function CustomerLocation() {
 
                   <div className="flex items-center justify-between">
                     <div>
+                      <Label>Enable Details Popup</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Show name/phone form (optional unless required)
+                      </p>
+                    </div>
+                    <Switch
+                      checked={(settingsForm as any).popup_enabled}
+                      onCheckedChange={(checked) => setSettingsForm(f => ({ ...(f as any), popup_enabled: checked }))}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
                       <Label>Require Name</Label>
                       <p className="text-sm text-muted-foreground">
-                        Make name field mandatory (shows form)
+                        Make name field mandatory
                       </p>
                     </div>
                     <Switch
@@ -638,7 +653,7 @@ export default function CustomerLocation() {
                     <div>
                       <Label>Require Phone</Label>
                       <p className="text-sm text-muted-foreground">
-                        Make phone field mandatory (shows form)
+                        Make phone field mandatory
                       </p>
                     </div>
                     <Switch
@@ -650,7 +665,7 @@ export default function CustomerLocation() {
                   <div className="rounded-lg bg-muted p-3 text-sm">
                     <p className="font-medium mb-1">💡 Auto-Submit Mode</p>
                     <p className="text-muted-foreground">
-                      If both "Require Name" and "Require Phone" are OFF, location will be captured and submitted automatically without showing any form.
+                      If "Enable Details Popup" is OFF, location will be captured and submitted automatically.
                     </p>
                   </div>
 

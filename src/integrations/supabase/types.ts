@@ -7059,6 +7059,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           popup_description: string
+          popup_enabled: boolean
           popup_title: string
           require_name: boolean
           require_phone: boolean
@@ -7071,6 +7072,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           popup_description?: string
+          popup_enabled?: boolean
           popup_title?: string
           require_name?: boolean
           require_phone?: boolean
@@ -7083,6 +7085,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           popup_description?: string
+          popup_enabled?: boolean
           popup_title?: string
           require_name?: boolean
           require_phone?: boolean
