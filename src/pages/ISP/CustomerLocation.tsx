@@ -759,12 +759,34 @@ export default function CustomerLocation() {
                     </div>
                     <div>
                       <span className="text-muted-foreground">IP Address:</span>
-                      <p>{selectedVisit.ip_address || 'Unknown'}</p>
+                      <p className="font-mono">{selectedVisit.ip_address || 'Unknown'}</p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">ISP:</span>
                       <p>{selectedVisit.isp_name || 'Unknown'}</p>
                     </div>
+                    {selectedVisit.asn && (
+                      <div>
+                        <span className="text-muted-foreground">ASN:</span>
+                        <p className="font-mono">{selectedVisit.asn}</p>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-muted-foreground">Submit Date:</span>
+                      <p>{format(new Date(selectedVisit.visited_at), 'dd MMM yyyy, hh:mm a')}</p>
+                    </div>
+                    {selectedVisit.name && (
+                      <div>
+                        <span className="text-muted-foreground">Name:</span>
+                        <p>{selectedVisit.name}</p>
+                      </div>
+                    )}
+                    {selectedVisit.phone && (
+                      <div>
+                        <span className="text-muted-foreground">Phone:</span>
+                        <p>{selectedVisit.phone}</p>
+                      </div>
+                    )}
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button
