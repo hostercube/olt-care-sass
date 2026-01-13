@@ -10,6 +10,11 @@ export interface TenantBranding {
   favicon_url: string;
   theme_color: string;
   dashboard_theme: string;
+  // Customer portal settings
+  customer_portal_enabled: boolean;
+  customer_registration_enabled: boolean;
+  customer_registration_auto_approve: boolean;
+  customer_registration_auto_pppoe: boolean;
 }
 
 const defaultBranding: TenantBranding = {
@@ -19,6 +24,10 @@ const defaultBranding: TenantBranding = {
   favicon_url: '',
   theme_color: 'cyan',
   dashboard_theme: 'dark-default',
+  customer_portal_enabled: true,
+  customer_registration_enabled: false,
+  customer_registration_auto_approve: false,
+  customer_registration_auto_pppoe: false,
 };
 
 // Prebuilt dashboard themes
@@ -126,7 +135,7 @@ export function useTenantBranding() {
       setLoading(true);
       const { data, error } = await supabase
         .from('tenants')
-        .select('company_name, subtitle, logo_url, favicon_url, theme_color, dashboard_theme')
+        .select('company_name, subtitle, logo_url, favicon_url, theme_color, dashboard_theme, customer_portal_enabled, customer_registration_enabled, customer_registration_auto_approve, customer_registration_auto_pppoe')
         .eq('id', tenantId)
         .single();
 
@@ -140,6 +149,10 @@ export function useTenantBranding() {
           favicon_url: data.favicon_url || '',
           theme_color: data.theme_color || defaultBranding.theme_color,
           dashboard_theme: data.dashboard_theme || defaultBranding.dashboard_theme,
+          customer_portal_enabled: data.customer_portal_enabled ?? defaultBranding.customer_portal_enabled,
+          customer_registration_enabled: data.customer_registration_enabled ?? defaultBranding.customer_registration_enabled,
+          customer_registration_auto_approve: data.customer_registration_auto_approve ?? defaultBranding.customer_registration_auto_approve,
+          customer_registration_auto_pppoe: data.customer_registration_auto_pppoe ?? defaultBranding.customer_registration_auto_pppoe,
         });
       }
     } catch (error) {
@@ -333,7 +346,7 @@ export function useTenantBrandingById(tenantId: string | null) {
         setLoading(true);
       const { data, error } = await supabase
           .from('tenants')
-          .select('company_name, subtitle, logo_url, favicon_url, theme_color, dashboard_theme')
+          .select('company_name, subtitle, logo_url, favicon_url, theme_color, dashboard_theme, customer_portal_enabled, customer_registration_enabled, customer_registration_auto_approve, customer_registration_auto_pppoe')
           .eq('id', tenantId)
           .single();
 
@@ -347,6 +360,10 @@ export function useTenantBrandingById(tenantId: string | null) {
             favicon_url: data.favicon_url || '',
             theme_color: data.theme_color || defaultBranding.theme_color,
             dashboard_theme: data.dashboard_theme || defaultBranding.dashboard_theme,
+            customer_portal_enabled: data.customer_portal_enabled ?? defaultBranding.customer_portal_enabled,
+            customer_registration_enabled: data.customer_registration_enabled ?? defaultBranding.customer_registration_enabled,
+            customer_registration_auto_approve: data.customer_registration_auto_approve ?? defaultBranding.customer_registration_auto_approve,
+            customer_registration_auto_pppoe: data.customer_registration_auto_pppoe ?? defaultBranding.customer_registration_auto_pppoe,
           });
         }
       } catch (error) {

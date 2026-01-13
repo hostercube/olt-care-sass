@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload, Globe, DollarSign, Palette, CheckCircle, Paintbrush, Monitor, Sun, Moon } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload, Globe, DollarSign, Palette, CheckCircle, Paintbrush, Monitor, Sun, Moon, Users } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useTenantBackup } from '@/hooks/useTenantBackup';
@@ -590,6 +590,113 @@ function ThemeSettingsCard() {
   );
 }
 
+// Customer Portal Settings Component
+function CustomerPortalSettingsCard() {
+  const { branding, saving, updateBranding } = useTenantBranding();
+
+  return (
+    <Card variant="glass">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary" />
+          Customer Portal Settings
+        </CardTitle>
+        <CardDescription>
+          Configure customer portal access, registration, and self-service options
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Portal Access */}
+        <div className="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/20">
+          <div className="space-y-0.5">
+            <Label className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Enable Customer Portal
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Allow customers to login and access their dashboard
+            </p>
+          </div>
+          <Switch
+            checked={branding.customer_portal_enabled}
+            onCheckedChange={(checked) => updateBranding({ customer_portal_enabled: checked } as any)}
+            disabled={saving}
+          />
+        </div>
+
+        <Separator />
+
+        {/* Registration Settings */}
+        <div className="space-y-4">
+          <h4 className="font-medium flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-primary" />
+            Customer Registration
+          </h4>
+
+          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
+            <div className="space-y-0.5">
+              <Label>Allow Public Registration</Label>
+              <p className="text-sm text-muted-foreground">
+                Customers can register themselves from the login page
+              </p>
+            </div>
+            <Switch
+              checked={branding.customer_registration_enabled}
+              onCheckedChange={(checked) => updateBranding({ customer_registration_enabled: checked } as any)}
+              disabled={saving || !branding.customer_portal_enabled}
+            />
+          </div>
+
+          {branding.customer_registration_enabled && (
+            <>
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border ml-4">
+                <div className="space-y-0.5">
+                  <Label>Auto-Approve Registrations</Label>
+                  <p className="text-sm text-muted-foreground">
+                    New registrations are immediately active (no pending status)
+                  </p>
+                </div>
+                <Switch
+                  checked={branding.customer_registration_auto_approve}
+                  onCheckedChange={(checked) => updateBranding({ customer_registration_auto_approve: checked } as any)}
+                  disabled={saving}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border ml-4">
+                <div className="space-y-0.5">
+                  <Label>Auto-Create PPPoE Credentials</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically generate PPPoE username/password on registration
+                  </p>
+                </div>
+                <Switch
+                  checked={branding.customer_registration_auto_pppoe}
+                  onCheckedChange={(checked) => updateBranding({ customer_registration_auto_pppoe: checked } as any)}
+                  disabled={saving}
+                />
+              </div>
+
+              {!branding.customer_registration_auto_approve && (
+                <div className="ml-4 p-3 rounded-lg bg-warning/10 border border-warning/20 text-sm text-warning">
+                  ⚠ New registrations will be in "pending" status and require manual approval
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Info Box */}
+        <div className="p-4 rounded-lg bg-info/10 border border-info/20">
+          <p className="text-sm text-info">
+            <strong>Customer Portal URL:</strong> Customers can access their portal at <code className="bg-muted px-1 rounded">/portal/login</code>
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Language & Currency Settings Component
 function LocalizationSettingsCard() {
   const { 
@@ -765,6 +872,10 @@ export default function Settings() {
               <Paintbrush className="h-4 w-4" />
               Themes
             </TabsTrigger>
+            <TabsTrigger value="portal" className="gap-2">
+              <Users className="h-4 w-4" />
+              Customer Portal
+            </TabsTrigger>
             <TabsTrigger value="general" className="gap-2">
               <SettingsIcon className="h-4 w-4" />
               General
@@ -798,6 +909,11 @@ export default function Settings() {
           {/* Themes Settings */}
           <TabsContent value="themes" className="space-y-6">
             <ThemeSettingsCard />
+          </TabsContent>
+
+          {/* Customer Portal Settings */}
+          <TabsContent value="portal" className="space-y-6">
+            <CustomerPortalSettingsCard />
           </TabsContent>
 
           {/* General Settings */}
