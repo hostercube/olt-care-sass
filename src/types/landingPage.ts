@@ -46,7 +46,7 @@ export interface SectionLayoutOptions {
 // Enhanced custom section with advanced options
 export interface CustomSection {
   id: string;
-  type: 'hero' | 'text' | 'image' | 'cta' | 'features' | 'custom' | 'gallery' | 'video' | 'testimonial' | 'faq' | 'stats' | 'pricing' | 'team' | 'contact' | 'slider' | 'banner';
+  type: 'hero' | 'text' | 'image' | 'cta' | 'features' | 'custom' | 'gallery' | 'video' | 'testimonial' | 'faq' | 'stats' | 'pricing' | 'team' | 'contact' | 'slider' | 'banner' | 'timeline' | 'partners' | 'comparison' | 'services' | 'download' | 'newsletter' | 'map';
   title: string;
   subtitle?: string;
   content?: string;
@@ -723,6 +723,14 @@ export const SECTION_TYPES = [
   { id: 'team', label: 'Team', labelBn: 'টিম', iconName: 'Users', description: 'Team members' },
   { id: 'slider', label: 'Slider', labelBn: 'স্লাইডার', iconName: 'Image', description: 'Image slider' },
   { id: 'banner', label: 'Banner', labelBn: 'ব্যানার', iconName: 'Layout', description: 'Full-width banner' },
+  { id: 'pricing', label: 'Pricing', labelBn: 'প্রাইসিং', iconName: 'DollarSign', description: 'Pricing comparison' },
+  { id: 'timeline', label: 'Timeline', labelBn: 'টাইমলাইন', iconName: 'Clock', description: 'Timeline or milestones' },
+  { id: 'partners', label: 'Partners', labelBn: 'পার্টনার', iconName: 'Building', description: 'Partner/client logos' },
+  { id: 'comparison', label: 'Comparison', labelBn: 'তুলনা', iconName: 'GitCompare', description: 'Feature comparison table' },
+  { id: 'services', label: 'Services', labelBn: 'সার্ভিস', iconName: 'Star', description: 'Services we offer' },
+  { id: 'download', label: 'Download', labelBn: 'ডাউনলোড', iconName: 'Download', description: 'App download section' },
+  { id: 'newsletter', label: 'Newsletter', labelBn: 'নিউজলেটার', iconName: 'Mail', description: 'Newsletter signup' },
+  { id: 'map', label: 'Map', labelBn: 'ম্যাপ', iconName: 'MapPin', description: 'Location map' },
   { id: 'custom', label: 'Custom', labelBn: 'কাস্টম', iconName: 'PenTool', description: 'Custom content' },
 ];
 
