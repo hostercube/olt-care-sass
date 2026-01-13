@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ interface IpData {
 interface DeviceData {
   device_type: 'mobile' | 'tablet' | 'desktop';
   user_agent: string;
+  fingerprint: string;
 }
 
 interface SettingsData {
@@ -40,16 +41,14 @@ interface SettingsData {
   require_phone: boolean;
 }
 
-// Storage key for deduplication
-const getStorageKey = (token: string) => `loc_visit_${token}`;
-
 export default function LocationCapture() {
   const { token } = useParams<{ token: string }>();
   const { toast } = useToast();
   const hasSubmittedRef = useRef(false);
   const captureStartTime = useRef<number>(Date.now());
+  const existingVisitIdRef = useRef<string | null>(null);
 
-  const [step, setStep] = useState<'loading' | 'already-submitted' | 'desktop-warning' | 'capturing' | 'form' | 'submitting' | 'success' | 'error'>('loading');
+  const [step, setStep] = useState<'loading' | 'desktop-warning' | 'capturing' | 'form' | 'submitting' | 'success' | 'error'>('loading');
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [locationData, setLocationData] = useState<LocationData>({
     latitude: null,
@@ -67,6 +66,7 @@ export default function LocationCapture() {
   const [deviceData, setDeviceData] = useState<DeviceData>({
     device_type: 'mobile',
     user_agent: '',
+    fingerprint: '',
   });
   const [formData, setFormData] = useState({ name: '', phone: '' });
   const [error, setError] = useState<string | null>(null);
@@ -74,28 +74,54 @@ export default function LocationCapture() {
   const [captureTime, setCaptureTime] = useState<number | null>(null);
   const [captureProgress, setCaptureProgress] = useState<string>('Initializing...');
 
-  // Robust device detection - detects true mobile vs desktop emulation
+  // Generate device fingerprint for identifying same device
+  const generateFingerprint = useCallback((): string => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.textBaseline = 'top';
+      ctx.font = '14px Arial';
+      ctx.fillText('fingerprint', 2, 2);
+    }
+    const canvasData = canvas.toDataURL();
+    
+    const components = [
+      navigator.userAgent,
+      navigator.language,
+      screen.width + 'x' + screen.height,
+      screen.colorDepth,
+      new Date().getTimezoneOffset(),
+      navigator.hardwareConcurrency || 0,
+      (navigator as any).deviceMemory || 0,
+      canvasData.slice(-50),
+    ];
+    
+    // Simple hash
+    const str = components.join('|');
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(36);
+  }, []);
+
+  // Robust device detection
   const detectDeviceType = useCallback((): DeviceData => {
     const ua = navigator.userAgent;
+    const fingerprint = generateFingerprint();
     
-    // Primary mobile detection - look for actual mobile OS
     const isAndroid = /Android/i.test(ua);
     const isIOS = /iPhone|iPad|iPod/i.test(ua);
     const isMobileOS = isAndroid || isIOS || /webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    
-    // Detect if it's a tablet
     const isTablet = /iPad|Android.*Tablet|Tablet/i.test(ua) && !/Mobile/i.test(ua);
-    
-    // Desktop OS detection - strong indicators this is NOT a real mobile
     const isWindowsDesktop = /Windows NT/i.test(ua) && !/Windows Phone/i.test(ua);
     const isMacDesktop = /Macintosh/i.test(ua) && !('ontouchend' in document);
     const isLinuxDesktop = /Linux/i.test(ua) && !/Android/i.test(ua);
     const isDesktopOS = isWindowsDesktop || isMacDesktop || isLinuxDesktop;
-    
-    // Additional check: Chrome DevTools emulation has large outerWidth
     const isDevToolsEmulation = window.outerWidth > 1000 && window.innerWidth < 600;
     
-    // Use UserAgentData API if available for more accurate detection
     const uaData = (navigator as any).userAgentData;
     if (uaData) {
       const isMobileFromUA = uaData.mobile === true;
@@ -103,109 +129,113 @@ export default function LocationCapture() {
       const isRealDesktop = ['windows', 'macos', 'linux', 'chromeos'].includes(platform);
       
       if (isRealDesktop && !isMobileFromUA) {
-        return { device_type: 'desktop', user_agent: ua };
+        return { device_type: 'desktop', user_agent: ua, fingerprint };
       }
       if (isMobileFromUA) {
-        return { device_type: isTablet ? 'tablet' : 'mobile', user_agent: ua };
+        return { device_type: isTablet ? 'tablet' : 'mobile', user_agent: ua, fingerprint };
       }
     }
     
-    // Final determination
     if (isDesktopOS || isDevToolsEmulation) {
-      return { device_type: 'desktop', user_agent: ua };
+      return { device_type: 'desktop', user_agent: ua, fingerprint };
     }
     
     if (isTablet) {
-      return { device_type: 'tablet', user_agent: ua };
+      return { device_type: 'tablet', user_agent: ua, fingerprint };
     }
     
     if (isMobileOS) {
-      return { device_type: 'mobile', user_agent: ua };
+      return { device_type: 'mobile', user_agent: ua, fingerprint };
     }
     
-    // Default to mobile if touch is available and no desktop indicators
     const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     if (hasTouch && !isDesktopOS) {
-      return { device_type: 'mobile', user_agent: ua };
+      return { device_type: 'mobile', user_agent: ua, fingerprint };
     }
     
-    return { device_type: 'desktop', user_agent: ua };
-  }, []);
+    return { device_type: 'desktop', user_agent: ua, fingerprint };
+  }, [generateFingerprint]);
   
-  // Check if this is truly a mobile device
   const isTrulyMobile = useCallback(() => {
     const device = detectDeviceType();
     return device.device_type === 'mobile' || device.device_type === 'tablet';
   }, [detectDeviceType]);
 
-  // Check if already submitted from this browser
-  const hasAlreadySubmitted = useCallback(() => {
-    if (!token) return false;
-    try {
-      const stored = localStorage.getItem(getStorageKey(token));
-      if (stored) {
-        const data = JSON.parse(stored);
-        // Expire after 24 hours
-        if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
-          return true;
-        }
-        localStorage.removeItem(getStorageKey(token));
-      }
-    } catch {
-      // Ignore storage errors
-    }
-    return false;
-  }, [token]);
-
-  // Mark as submitted in localStorage
-  const markAsSubmitted = useCallback(() => {
-    if (!token) return;
-    try {
-      localStorage.setItem(getStorageKey(token), JSON.stringify({
-        timestamp: Date.now(),
-        submitted: true,
-      }));
-    } catch {
-      // Ignore storage errors
-    }
-  }, [token]);
-
-  // Get IP info - optimized (HTTPS-only fallbacks to avoid mixed-content blocking)
+  // SUPER FAST IP fetch with multiple parallel APIs
   const fetchIpInfo = useCallback(async (): Promise<IpData> => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500); // 2.5s timeout
+    const timeout = setTimeout(() => controller.abort(), 4000);
 
-    // 1) ipapi.co (good signal, https)
+    // Helper to fetch with timeout
+    const fetchWithFallback = async (url: string, parser: (d: any) => IpData | null): Promise<IpData | null> => {
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (res.ok) {
+          const d = await res.json();
+          return parser(d);
+        }
+      } catch {
+        // ignore
+      }
+      return null;
+    };
+
+    // Race multiple APIs for fastest response
+    const apis = [
+      fetchWithFallback('https://ipwho.is/', (d) => {
+        if (!d?.ip) return null;
+        return {
+          ip_address: d.ip,
+          isp_name: d.connection?.isp || d.connection?.org || d.org || null,
+          asn: d.connection?.asn ? `AS${d.connection.asn}` : null,
+        };
+      }),
+      fetchWithFallback('https://ipapi.co/json/', (d) => {
+        if (!d?.ip) return null;
+        return {
+          ip_address: d.ip,
+          isp_name: d.org || null,
+          asn: d.asn || null,
+        };
+      }),
+      fetchWithFallback('https://api.ipify.org?format=json', (d) => {
+        if (!d?.ip) return null;
+        return {
+          ip_address: d.ip,
+          isp_name: null,
+          asn: null,
+        };
+      }),
+      fetchWithFallback('https://api.db-ip.com/v2/free/self', (d) => {
+        if (!d?.ipAddress) return null;
+        return {
+          ip_address: d.ipAddress,
+          isp_name: d.isp || null,
+          asn: d.asNumber ? `AS${d.asNumber}` : null,
+        };
+      }),
+    ];
+
     try {
-      const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
-      if (res.ok) {
-        const d = await res.json();
-        if (d?.ip) {
-          clearTimeout(timeout);
-          return {
-            ip_address: d.ip,
-            isp_name: d.org || null,
-            asn: d.asn || null,
-          };
+      // Race all APIs - first one with IP + ISP wins
+      const results = await Promise.allSettled(apis);
+      
+      let bestResult: IpData | null = null;
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+          if (result.value.ip_address && result.value.isp_name) {
+            clearTimeout(timeout);
+            return result.value;
+          }
+          if (!bestResult && result.value.ip_address) {
+            bestResult = result.value;
+          }
         }
       }
-    } catch {
-      // fall through
-    }
-
-    // 2) ipwho.is (https + provides ISP/ASN in many cases)
-    try {
-      const res = await fetch('https://ipwho.is/', { signal: controller.signal });
-      if (res.ok) {
-        const d = await res.json();
-        if (d?.ip) {
-          clearTimeout(timeout);
-          return {
-            ip_address: d.ip || null,
-            isp_name: d.connection?.isp || d.connection?.org || null,
-            asn: d.connection?.asn ? `AS${d.connection.asn}` : null,
-          };
-        }
+      
+      if (bestResult) {
+        clearTimeout(timeout);
+        return bestResult;
       }
     } catch {
       // ignore
@@ -269,7 +299,7 @@ export default function LocationCapture() {
     });
   }, []);
 
-  // Submit location to database
+  // Submit or update location in database
   const submitLocationData = useCallback(async (
     settingsData: SettingsData,
     location: LocationData,
@@ -277,14 +307,79 @@ export default function LocationCapture() {
     device: DeviceData,
     form?: { name?: string; phone?: string }
   ) => {
-    if (hasSubmittedRef.current) return; // Prevent duplicate submissions
+    if (hasSubmittedRef.current) return;
     hasSubmittedRef.current = true;
 
     setIsSubmitting(true);
     setStep('submitting');
 
     try {
-      const { error: insertError } = await supabase
+      const visitData = {
+        token: settingsData.unique_token,
+        tenant_id: settingsData.tenant_id,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        full_address: location.full_address,
+        area: location.area,
+        district: location.district,
+        thana: location.thana,
+        ip_address: ip.ip_address,
+        isp_name: ip.isp_name,
+        asn: ip.asn,
+        device_type: device.device_type,
+        user_agent: device.user_agent,
+        name: form?.name || null,
+        phone: form?.phone || null,
+        verified_status: 'pending' as const,
+        visited_at: new Date().toISOString(),
+      };
+
+      // If we have an existing visit ID (from auto-capture), update it
+      if (existingVisitIdRef.current) {
+        const { error: updateError } = await supabase
+          .from('location_visits')
+          .update({
+            ...visitData,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingVisitIdRef.current);
+
+        if (updateError) throw updateError;
+      } else {
+        // Insert new visit
+        const { error: insertError } = await supabase
+          .from('location_visits')
+          .insert(visitData);
+
+        if (insertError) throw insertError;
+      }
+
+      const elapsed = (Date.now() - captureStartTime.current) / 1000;
+      setCaptureTime(elapsed);
+      setStep('success');
+    } catch (err: any) {
+      console.error('Failed to submit location:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to submit location. Please try again.',
+        variant: 'destructive',
+      });
+      setStep('form');
+      hasSubmittedRef.current = false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [toast]);
+
+  // Auto-save location data immediately (without name/phone) if popup is enabled
+  const autoSaveLocation = useCallback(async (
+    settingsData: SettingsData,
+    location: LocationData,
+    ip: IpData,
+    device: DeviceData
+  ): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase
         .from('location_visits')
         .insert({
           token: settingsData.unique_token,
@@ -300,35 +395,24 @@ export default function LocationCapture() {
           asn: ip.asn,
           device_type: device.device_type,
           user_agent: device.user_agent,
-          name: form?.name || null,
-          phone: form?.phone || null,
+          name: null,
+          phone: null,
           verified_status: 'pending',
           visited_at: new Date().toISOString(),
-        });
+        })
+        .select('id')
+        .single();
 
-      if (insertError) throw insertError;
-
-      // Mark as submitted in localStorage to prevent duplicate visits
-      markAsSubmitted();
-
-      // Calculate capture time
-      const elapsed = (Date.now() - captureStartTime.current) / 1000;
-      setCaptureTime(elapsed);
-
-      setStep('success');
-    } catch (err: any) {
-      console.error('Failed to submit location:', err);
-      toast({
-        title: 'Error',
-        description: 'Failed to submit location. Please try again.',
-        variant: 'destructive',
-      });
-      setStep('form');
-      hasSubmittedRef.current = false;
-    } finally {
-      setIsSubmitting(false);
+      if (error) {
+        console.error('Auto-save failed:', error);
+        return null;
+      }
+      return data?.id || null;
+    } catch (err) {
+      console.error('Auto-save error:', err);
+      return null;
     }
-  }, [toast, markAsSubmitted]);
+  }, []);
 
   // Initialize on mount
   useEffect(() => {
@@ -338,12 +422,6 @@ export default function LocationCapture() {
       if (!token) {
         setStep('error');
         setError('Invalid link');
-        return;
-      }
-
-      // Check if already submitted from this browser
-      if (hasAlreadySubmitted()) {
-        setStep('already-submitted');
         return;
       }
 
@@ -382,7 +460,7 @@ export default function LocationCapture() {
     };
 
     init();
-  }, [token, isTrulyMobile, hasAlreadySubmitted]);
+  }, [token, isTrulyMobile]);
 
   // Capture location when on capturing step - optimized for speed
   useEffect(() => {
@@ -449,6 +527,12 @@ export default function LocationCapture() {
        const showPopup = !!settings.popup_enabled || settings.require_name || settings.require_phone;
 
        if (showPopup) {
+         // Auto-save location data immediately (so we have a record even if user closes popup)
+         setCaptureProgress('Saving location...');
+         const visitId = await autoSaveLocation(settings, capturedLocation, capturedIp, capturedDevice);
+         if (visitId) {
+           existingVisitIdRef.current = visitId;
+         }
          setStep('form');
        } else {
          await submitLocationData(settings, capturedLocation, capturedIp, capturedDevice);
@@ -456,9 +540,9 @@ export default function LocationCapture() {
     };
 
     captureAndProcess();
-  }, [step, settings, fetchIpInfo, getLocationFast, getLocationHighAccuracy, reverseGeocode, submitLocationData, detectDeviceType, locationData, ipData]);
+  }, [step, settings, fetchIpInfo, getLocationFast, getLocationHighAccuracy, reverseGeocode, submitLocationData, autoSaveLocation, detectDeviceType, locationData, ipData]);
 
-  // Handle form submit
+  // Handle form submit - updates existing record with name/phone
   const handleFormSubmit = async () => {
     if (!settings) return;
     
@@ -472,10 +556,44 @@ export default function LocationCapture() {
       return;
     }
 
-    await submitLocationData(settings, locationData, ipData, deviceData, {
-      name: formData.name.trim() || undefined,
-      phone: formData.phone.trim() || undefined,
-    });
+    // If we have an existing visit ID, just update name/phone
+    if (existingVisitIdRef.current) {
+      setIsSubmitting(true);
+      setStep('submitting');
+      try {
+        const { error: updateError } = await supabase
+          .from('location_visits')
+          .update({
+            name: formData.name.trim() || null,
+            phone: formData.phone.trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingVisitIdRef.current);
+
+        if (updateError) throw updateError;
+
+        const elapsed = (Date.now() - captureStartTime.current) / 1000;
+        setCaptureTime(elapsed);
+        hasSubmittedRef.current = true;
+        setStep('success');
+      } catch (err: any) {
+        console.error('Failed to update location:', err);
+        toast({
+          title: 'Error',
+          description: 'Failed to update. Please try again.',
+          variant: 'destructive',
+        });
+        setStep('form');
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      // Fallback: full submit
+      await submitLocationData(settings, locationData, ipData, deviceData, {
+        name: formData.name.trim() || undefined,
+        phone: formData.phone.trim() || undefined,
+      });
+    }
   };
 
   // Render based on step
@@ -487,29 +605,6 @@ export default function LocationCapture() {
             <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
             <p className="text-muted-foreground">
               {step === 'submitting' ? 'Submitting your location...' : captureProgress}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (step === 'already-submitted') {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 rounded-full bg-blue-100 p-4 dark:bg-blue-900/20">
-              <CheckCircle className="h-12 w-12 text-blue-600 dark:text-blue-400" />
-            </div>
-            <CardTitle>আপনার লোকেশন ইতিমধ্যে সাবমিট হয়েছে</CardTitle>
-            <CardDescription>
-              এই ডিভাইস থেকে আগেই লোকেশন পাঠানো হয়েছে
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-sm text-muted-foreground">
-              আপনি এই পেজটি বন্ধ করতে পারেন
             </p>
           </CardContent>
         </Card>
@@ -642,7 +737,13 @@ export default function LocationCapture() {
               {!settings?.require_name && !settings?.require_phone && (
                 <Button 
                   variant="ghost" 
-                  onClick={() => submitLocationData(settings!, locationData, ipData, deviceData)}
+                  onClick={() => {
+                    // Data is already saved, just show success
+                    hasSubmittedRef.current = true;
+                    const elapsed = (Date.now() - captureStartTime.current) / 1000;
+                    setCaptureTime(elapsed);
+                    setStep('success');
+                  }}
                   disabled={isSubmitting}
                 >
                   Skip
