@@ -68,6 +68,7 @@ const customerMgmtItems: NavItem[] = [
   { title: 'customer_types', href: '/isp/customer-types', icon: UserCheck },
   { title: 'packages', href: '/isp/packages', icon: Package },
   { title: 'areas', href: '/isp/areas', icon: MapPin },
+  { title: 'customer_location', href: '/isp/customer-location', icon: MapPin, requiredModule: 'customer_location' },
 ];
 
 // Billing & Finance - Financial operations
@@ -112,7 +113,6 @@ const websiteItems: NavItem[] = [
   { title: 'landing_page', href: '/isp/landing-page', icon: Globe, requiredModule: 'landing_page' },
   { title: 'custom_domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
   { title: 'connection_requests', href: '/isp/connection-requests', icon: ClipboardList },
-  { title: 'customer_location', href: '/isp/customer-location', icon: MapPin },
 ];
 
 // System Settings - Admin controls

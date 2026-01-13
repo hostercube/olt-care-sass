@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { ModuleAccessGuard } from '@/components/layout/ModuleAccessGuard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,14 +23,18 @@ import {
   Link,
   Smartphone,
   Globe,
-  Calendar,
-  Filter,
-  X
+  X,
+  Users,
+  Clock,
+  ExternalLink,
+  Radio
 } from 'lucide-react';
 import { useCustomerLocation, LocationVisit, LocationFilters } from '@/hooks/useCustomerLocation';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { LeafletMap } from '@/components/maps/LeafletMap';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function CustomerLocation() {
   const { toast } = useToast();
@@ -49,6 +54,7 @@ export default function CustomerLocation() {
     isSaving,
     isRegenerating,
     isVerifying,
+    refetchVisits,
   } = useCustomerLocation(tenantId);
 
   const [activeTab, setActiveTab] = useState('visits');
@@ -57,6 +63,7 @@ export default function CustomerLocation() {
   const [showMapDialog, setShowMapDialog] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [liveVisitorCount, setLiveVisitorCount] = useState(0);
 
   // Settings form state
   const [settingsForm, setSettingsForm] = useState({
@@ -80,6 +87,44 @@ export default function CustomerLocation() {
     }
   }, [settings]);
 
+  // Subscribe to realtime updates for location visits
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const channel = supabase
+      .channel(`location-visits-${tenantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'location_visits',
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        () => {
+          refetchVisits();
+          toast({
+            title: '📍 New Location Visit',
+            description: 'A new customer has submitted their location.',
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenantId, refetchVisits, toast]);
+
+  // Calculate live visitor count (visits in last 5 minutes)
+  useEffect(() => {
+    if (!visits) return;
+    
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const liveCount = visits.filter(v => new Date(v.visited_at) > fiveMinutesAgo).length;
+    setLiveVisitorCount(liveCount);
+  }, [visits]);
+
   // Filter and paginate visits
   const filteredVisits = useMemo(() => filterVisits(filters), [filterVisits, filters]);
   const paginatedVisits = useMemo(() => {
@@ -87,14 +132,22 @@ export default function CustomerLocation() {
     return filteredVisits.slice(start, start + pageSize);
   }, [filteredVisits, currentPage, pageSize]);
 
-  // Generate full location link
+  // Generate full location link - prioritize custom domain, then landing page slug
   const locationLink = useMemo(() => {
     if (!settings?.unique_token) return '';
-    const baseUrl = tenant?.custom_domain 
-      ? `https://${tenant.custom_domain}`
-      : window.location.origin;
+    
+    // Priority: 1. Custom Domain, 2. Landing Page Slug, 3. Current Origin
+    let baseUrl = window.location.origin;
+    
+    if (tenant?.custom_domain) {
+      baseUrl = `https://${tenant.custom_domain}`;
+    } else if (tenant?.slug) {
+      // Use the main platform with tenant's slug subdomain or path
+      baseUrl = `${window.location.origin}`;
+    }
+    
     return `${baseUrl}/l/${settings.unique_token}`;
-  }, [settings?.unique_token, tenant?.custom_domain]);
+  }, [settings?.unique_token, tenant?.custom_domain, tenant?.slug]);
 
   const copyLink = () => {
     navigator.clipboard.writeText(locationLink);
@@ -135,16 +188,88 @@ export default function CustomerLocation() {
     setCurrentPage(1);
   };
 
+  // Stats
+  const stats = useMemo(() => {
+    if (!visits) return { total: 0, pending: 0, verified: 0, completed: 0, today: 0 };
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return {
+      total: visits.length,
+      pending: visits.filter(v => v.verified_status === 'pending').length,
+      verified: visits.filter(v => v.verified_status === 'verified').length,
+      completed: visits.filter(v => v.verified_status === 'completed').length,
+      today: visits.filter(v => new Date(v.visited_at) >= today).length,
+    };
+  }, [visits]);
+
   return (
-    <DashboardLayout title="Customer Location">
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Customer Location</h1>
+    <ModuleAccessGuard module="customer_location" moduleName="Customer Location">
+      <DashboardLayout title="Customer Location">
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Customer Location</h1>
               <p className="text-muted-foreground">
                 Capture and verify customer locations via unique shareable links
               </p>
             </div>
+            {liveVisitorCount > 0 && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 animate-pulse">
+                <Radio className="h-4 w-4" />
+                <span className="font-medium">{liveVisitorCount} Live Now</span>
+              </div>
+            )}
+          </div>
+
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Total Visits</span>
+                </div>
+                <p className="text-2xl font-bold mt-1">{stats.total}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-yellow-500" />
+                  <span className="text-sm text-muted-foreground">Pending</span>
+                </div>
+                <p className="text-2xl font-bold mt-1">{stats.pending}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-blue-500" />
+                  <span className="text-sm text-muted-foreground">Verified</span>
+                </div>
+                <p className="text-2xl font-bold mt-1">{stats.verified}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span className="text-sm text-muted-foreground">Completed</span>
+                </div>
+                <p className="text-2xl font-bold mt-1">{stats.completed}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-primary" />
+                  <span className="text-sm text-muted-foreground">Today</span>
+                </div>
+                <p className="text-2xl font-bold mt-1">{stats.today}</p>
+              </CardContent>
+            </Card>
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -269,61 +394,67 @@ export default function CustomerLocation() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {paginatedVisits.map((visit) => (
-                            <TableRow key={visit.id}>
-                              <TableCell>
-                                {visit.name || <span className="text-muted-foreground">Not provided</span>}
-                              </TableCell>
-                              <TableCell>
-                                {visit.phone || <span className="text-muted-foreground">Not provided</span>}
-                              </TableCell>
-                              <TableCell className="max-w-[200px] truncate">
-                                {visit.full_address || `${visit.area || ''} ${visit.district || ''}`.trim() || 'Unknown'}
-                              </TableCell>
-                              <TableCell>
-                                <div className="text-sm">
-                                  <div>{visit.ip_address || 'Unknown'}</div>
-                                  <div className="text-muted-foreground text-xs">{visit.isp_name || ''}</div>
-                                </div>
-                              </TableCell>
-                              <TableCell>{getStatusBadge(visit.verified_status)}</TableCell>
-                              <TableCell>
-                                {format(new Date(visit.visited_at), 'dd MMM yyyy, hh:mm a')}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => openMapDialog(visit)}
-                                    disabled={!visit.latitude || !visit.longitude}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  {visit.verified_status === 'pending' && (
+                          {paginatedVisits.map((visit) => {
+                            const isRecent = new Date(visit.visited_at) > new Date(Date.now() - 5 * 60 * 1000);
+                            return (
+                              <TableRow key={visit.id} className={isRecent ? 'bg-green-50 dark:bg-green-900/10' : ''}>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    {isRecent && <Radio className="h-3 w-3 text-green-500 animate-pulse" />}
+                                    {visit.name || <span className="text-muted-foreground">Not provided</span>}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {visit.phone || <span className="text-muted-foreground">Not provided</span>}
+                                </TableCell>
+                                <TableCell className="max-w-[200px] truncate">
+                                  {visit.full_address || `${visit.area || ''} ${visit.district || ''}`.trim() || 'Unknown'}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-sm">
+                                    <div>{visit.ip_address || 'Unknown'}</div>
+                                    <div className="text-muted-foreground text-xs">{visit.isp_name || ''}</div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>{getStatusBadge(visit.verified_status)}</TableCell>
+                                <TableCell>
+                                  {format(new Date(visit.visited_at), 'dd MMM yyyy, hh:mm a')}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
                                     <Button
-                                      variant="outline"
+                                      variant="ghost"
                                       size="sm"
-                                      onClick={() => handleVerify(visit.id, 'verified')}
-                                      disabled={isVerifying}
+                                      onClick={() => openMapDialog(visit)}
+                                      disabled={!visit.latitude || !visit.longitude}
                                     >
-                                      Verify
+                                      <Eye className="h-4 w-4" />
                                     </Button>
-                                  )}
-                                  {visit.verified_status === 'verified' && (
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleVerify(visit.id, 'completed')}
-                                      disabled={isVerifying}
-                                    >
-                                      <CheckCircle className="h-4 w-4 mr-1" />
-                                      Complete
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                                    {visit.verified_status === 'pending' && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleVerify(visit.id, 'verified')}
+                                        disabled={isVerifying}
+                                      >
+                                        Verify
+                                      </Button>
+                                    )}
+                                    {visit.verified_status === 'verified' && (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleVerify(visit.id, 'completed')}
+                                        disabled={isVerifying}
+                                      >
+                                        <CheckCircle className="h-4 w-4 mr-1" />
+                                        Complete
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                       
@@ -367,6 +498,18 @@ export default function CustomerLocation() {
                         >
                           <RefreshCw className={`h-4 w-4 ${isRegenerating ? 'animate-spin' : ''}`} />
                         </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {tenant?.custom_domain && (
+                          <Badge variant="outline" className="text-xs">
+                            <Globe className="h-3 w-3 mr-1" />
+                            Custom Domain: {tenant.custom_domain}
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="text-xs">
+                          <Smartphone className="h-3 w-3 mr-1" />
+                          Mobile Only
+                        </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
                         ⚠️ Regenerating the token will invalidate the old link
@@ -508,7 +651,7 @@ export default function CustomerLocation() {
             </TabsContent>
           </Tabs>
 
-          {/* Map Dialog */}
+          {/* Map Dialog with Leaflet/OpenStreetMap */}
           <Dialog open={showMapDialog} onOpenChange={setShowMapDialog}>
             <DialogContent className="max-w-3xl">
               <DialogHeader>
@@ -520,13 +663,12 @@ export default function CustomerLocation() {
               {selectedVisit?.latitude && selectedVisit?.longitude ? (
                 <div className="space-y-4">
                   <div className="aspect-video rounded-lg overflow-hidden border">
-                    <iframe
-                      width="100%"
+                    <LeafletMap
+                      latitude={selectedVisit.latitude}
+                      longitude={selectedVisit.longitude}
+                      zoom={16}
                       height="100%"
-                      frameBorder="0"
-                      style={{ border: 0 }}
-                      src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${selectedVisit.latitude},${selectedVisit.longitude}&zoom=15`}
-                      allowFullScreen
+                      popupContent={`<b>${selectedVisit.name || 'Customer Location'}</b><br/>${selectedVisit.full_address || 'Location captured'}`}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
@@ -552,7 +694,7 @@ export default function CustomerLocation() {
                       variant="outline"
                       onClick={() => window.open(`https://www.google.com/maps?q=${selectedVisit.latitude},${selectedVisit.longitude}`, '_blank')}
                     >
-                      <Globe className="h-4 w-4 mr-2" />
+                      <ExternalLink className="h-4 w-4 mr-2" />
                       Open in Google Maps
                     </Button>
                   </div>
@@ -567,5 +709,6 @@ export default function CustomerLocation() {
           </Dialog>
         </div>
       </DashboardLayout>
+    </ModuleAccessGuard>
   );
 }

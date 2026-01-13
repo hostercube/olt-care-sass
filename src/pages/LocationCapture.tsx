@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { usePublicLocationCapture } from '@/hooks/useCustomerLocation';
-import { MapPin, Smartphone, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { MapPin, Smartphone, Loader2, CheckCircle, AlertCircle, Monitor } from 'lucide-react';
 
 interface LocationData {
   latitude: number | null;
@@ -46,9 +46,40 @@ export default function LocationCapture() {
   const [formData, setFormData] = useState({ name: '', phone: '' });
   const [error, setError] = useState<string | null>(null);
 
-  // Check if mobile device
-  const isMobile = useCallback(() => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  // Strict mobile device detection - prevents desktop browsers with mobile view
+  const isTrueMobileDevice = useCallback(() => {
+    // Check user agent for mobile devices
+    const userAgent = navigator.userAgent.toLowerCase();
+    const mobileKeywords = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i;
+    const hasMobileUA = mobileKeywords.test(userAgent);
+    
+    // Check touch capability (most mobiles have touch)
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    // Check screen size - mobile devices typically have smaller screens
+    const isSmallScreen = window.screen.width <= 768;
+    
+    // Check if running in a mobile browser (not just responsive mode)
+    const isMobileBrowser = /Mobile|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
+    // Must have mobile UA AND (touch + small screen OR be a mobile browser)
+    // This prevents desktop Chrome DevTools mobile simulation
+    return hasMobileUA && (hasTouch || isMobileBrowser) && isSmallScreen;
+  }, []);
+
+  // Additional check for desktop pretending to be mobile
+  const isDesktopPretendingMobile = useCallback(() => {
+    const ua = navigator.userAgent;
+    
+    // Check for desktop browser indicators even in mobile view
+    const hasDesktopIndicators = 
+      (ua.includes('Windows') || ua.includes('Macintosh') || ua.includes('Linux x86')) &&
+      !ua.includes('Android') && !ua.includes('iPhone') && !ua.includes('iPad');
+    
+    // Desktop browsers have larger outer dimensions
+    const hasLargeOuterWindow = window.outerWidth > 1024;
+    
+    return hasDesktopIndicators || hasLargeOuterWindow;
   }, []);
 
   // Get IP info
@@ -68,11 +99,16 @@ export default function LocationCapture() {
     }
   }, []);
 
-  // Get address from coordinates using reverse geocoding
+  // Get address from coordinates using reverse geocoding (OpenStreetMap - Free)
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+        {
+          headers: {
+            'Accept-Language': 'en',
+          }
+        }
       );
       const data = await response.json();
       
@@ -80,9 +116,9 @@ export default function LocationCapture() {
         const addr = data.address;
         return {
           full_address: data.display_name || null,
-          area: addr.suburb || addr.neighbourhood || addr.village || null,
-          district: addr.county || addr.state_district || addr.city || null,
-          thana: addr.town || addr.municipality || null,
+          area: addr.suburb || addr.neighbourhood || addr.village || addr.hamlet || null,
+          district: addr.county || addr.state_district || addr.city || addr.town || null,
+          thana: addr.town || addr.municipality || addr.city_district || null,
         };
       }
       return null;
@@ -117,8 +153,8 @@ export default function LocationCapture() {
         return;
       }
 
-      // Check if mobile
-      if (!isMobile()) {
+      // Strict mobile check - must be true mobile device
+      if (!isTrueMobileDevice() || isDesktopPretendingMobile()) {
         setStep('desktop-warning');
         return;
       }
@@ -141,7 +177,7 @@ export default function LocationCapture() {
     };
 
     init();
-  }, [token, isMobile, fetchSettingsByToken]);
+  }, [token, isTrueMobileDevice, isDesktopPretendingMobile, fetchSettingsByToken]);
 
   // Capture location when on capturing step
   useEffect(() => {
@@ -156,7 +192,7 @@ export default function LocationCapture() {
         const position = await getLocation();
         const { latitude, longitude } = position.coords;
 
-        // Reverse geocode
+        // Reverse geocode using OpenStreetMap
         const addressData = await reverseGeocode(latitude, longitude);
 
         setLocationData({
@@ -173,12 +209,7 @@ export default function LocationCapture() {
         console.error('Location capture error:', err);
         
         // Still proceed to form even if location fails
-        if (err.code === 1) {
-          // Permission denied - still show form
-          setStep('form');
-        } else {
-          setStep('form');
-        }
+        setStep('form');
       }
     };
 
@@ -237,16 +268,23 @@ export default function LocationCapture() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 rounded-full bg-yellow-100 p-4 dark:bg-yellow-900/20">
-              <Smartphone className="h-12 w-12 text-yellow-600 dark:text-yellow-400" />
+              <Monitor className="h-12 w-12 text-yellow-600 dark:text-yellow-400" />
             </div>
             <CardTitle>Mobile Device Required</CardTitle>
             <CardDescription>
-              Please open this link on your smartphone to capture your location
+              এই লিংকটি শুধুমাত্র মোবাইল ফোন থেকে ওপেন করতে হবে
             </CardDescription>
           </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-sm text-muted-foreground">
-              This link requires GPS access which is only available on mobile devices
+          <CardContent className="text-center space-y-4">
+            <div className="rounded-lg bg-muted p-4">
+              <Smartphone className="h-8 w-8 mx-auto text-primary mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Please open this link on your smartphone to capture your GPS location.
+                Desktop browsers and emulators are not supported.
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              📱 WhatsApp বা SMS এ আসা লিংকটি সরাসরি আপনার ফোনে ট্যাপ করে ওপেন করুন
             </p>
           </CardContent>
         </Card>
@@ -369,14 +407,14 @@ export default function LocationCapture() {
             <div className="mx-auto mb-4 rounded-full bg-green-100 p-4 dark:bg-green-900/20">
               <CheckCircle className="h-12 w-12 text-green-600 dark:text-green-400" />
             </div>
-            <CardTitle>Thank You!</CardTitle>
+            <CardTitle>ধন্যবাদ! Thank You!</CardTitle>
             <CardDescription>
               Your location has been submitted successfully
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-sm text-muted-foreground">
-              You can now close this page
+              আপনি এই পেজটি বন্ধ করতে পারেন
             </p>
           </CardContent>
         </Card>
