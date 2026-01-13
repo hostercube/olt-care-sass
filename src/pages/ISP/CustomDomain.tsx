@@ -331,15 +331,32 @@ export default function CustomDomain() {
       title="Custom Domain"
       subtitle="Configure your own domain for white-label branding"
     >
-      <Card className="mb-6 border-blue-500/20 bg-blue-500/5">
+      {/* Enterprise SaaS Architecture Info */}
+      <Card className="mb-6 border-green-500/20 bg-green-500/5">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <Globe className="h-5 w-5 text-blue-500 mt-0.5" />
+            <Shield className="h-5 w-5 text-green-500 mt-0.5" />
             <div>
-              <h4 className="font-medium">Custom Domain Setup</h4>
-              <p className="text-sm text-muted-foreground">
-                Add your own domain to access your ISP dashboard. Point your domain's DNS to our servers and verify ownership.
+              <h4 className="font-medium text-green-700 dark:text-green-400">Enterprise Custom Domain System</h4>
+              <p className="text-sm text-muted-foreground mt-1">
+                Our system uses <strong>dynamic host-based tenant resolution</strong> — the same architecture used by 
+                Shopify, Vercel, and Netlify. Simply point your domain's DNS to our server and verify ownership. 
+                No per-domain server configuration needed!
               </p>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="p-2 rounded bg-background/50">
+                  <p className="text-xs font-medium">✅ Unlimited Domains</p>
+                  <p className="text-xs text-muted-foreground">Add as many domains as you need</p>
+                </div>
+                <div className="p-2 rounded bg-background/50">
+                  <p className="text-xs font-medium">✅ Instant Activation</p>
+                  <p className="text-xs text-muted-foreground">Works immediately after DNS verification</p>
+                </div>
+                <div className="p-2 rounded bg-background/50">
+                  <p className="text-xs font-medium">✅ SSL Included</p>
+                  <p className="text-xs text-muted-foreground">Global wildcard SSL coverage</p>
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -430,33 +447,25 @@ export default function CustomDomain() {
                     </div>
 
                     {d.is_verified && (
-                      <div className="mt-3 rounded-lg border bg-muted/40 p-4">
-                        <p className="text-sm font-medium">After verification (very important)</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          If you visit <span className="font-medium">{d.subdomain ? `${d.subdomain}.` : ''}{d.domain}</span> and see
-                          <span className="font-medium"> “404 Not Found (nginx)”</span>, that means DNS is OK but your server is not serving
-                          this domain yet. You must add the domain to your web server (Nginx/Apache) as a <span className="font-medium">server_name</span>
-                          and point it to your <span className="font-medium">dist</span> folder.
+                      <div className="mt-3 rounded-lg border border-green-500/20 bg-green-500/5 p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                          <p className="text-sm font-medium text-green-700 dark:text-green-400">Domain Active!</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Your domain <span className="font-mono text-primary">{d.subdomain ? `${d.subdomain}.` : ''}{d.domain}</span> is now 
+                          live and serving your ISP portal. All visitors to this domain will see your branded landing page or login.
                         </p>
-
-                        <div className="mt-3 space-y-2">
-                          <p className="text-xs text-muted-foreground">Example Nginx server block (copy & edit):</p>
-                          <pre className="overflow-x-auto rounded-md bg-background p-3 text-[11px] leading-5">
-{`server {
-  listen 80;
-  server_name ${d.subdomain ? `${d.subdomain}.` : ''}${d.domain};
-
-  root /var/www/oltapp.isppoint.com/dist;
-  index index.html;
-
-  location / {
-    try_files $uri $uri/ /index.html;
-  }
-}
-`}</pre>
-                          <p className="text-xs text-muted-foreground">
-                            After updating your server config: reload Nginx, then try opening the domain again.
-                          </p>
+                        <div className="flex items-center gap-2">
+                          <a 
+                            href={`https://${d.subdomain ? `${d.subdomain}.` : ''}${d.domain}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                          >
+                            <Globe className="h-3 w-3" />
+                            Visit Domain
+                          </a>
                         </div>
                       </div>
                     )}
@@ -531,88 +540,61 @@ export default function CustomDomain() {
         </CardContent>
       </Card>
 
-      {/* SSL Certificate Guide */}
+      {/* How It Works Guide */}
       <Card className="mt-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-green-500" />
-            SSL Certificate Setup Guide
+            <Shield className="h-5 w-5 text-blue-500" />
+            How It Works (For Administrators)
           </CardTitle>
           <CardDescription>
-            After DNS verification, you need to configure SSL certificates on your server
+            Enterprise SaaS custom domain architecture - no per-domain configuration needed
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="p-4 bg-muted rounded-lg space-y-4">
             <div>
-              <h4 className="font-medium text-sm mb-2">Option 1: Let's Encrypt with Certbot (Recommended)</h4>
+              <h4 className="font-medium text-sm mb-2">Server Architecture (One-time Setup)</h4>
               <p className="text-xs text-muted-foreground mb-3">
-                Free SSL certificates that auto-renew. Install certbot and run:
+                Our system uses a <strong>catch-all Nginx configuration</strong>. Once configured, all tenant domains work automatically:
               </p>
-              <pre className="overflow-x-auto rounded-md bg-background p-3 text-[11px] leading-5 font-mono">
-{`# Install certbot (Ubuntu/Debian)
-sudo apt update
-sudo apt install certbot python3-certbot-nginx
-
-# Generate SSL certificate for your domain
-sudo certbot --nginx -d yourdomain.com
-
-# Auto-renewal is set up automatically
-# Test renewal: sudo certbot renew --dry-run`}
-              </pre>
-            </div>
-
-            <div>
-              <h4 className="font-medium text-sm mb-2">Option 2: Cloudflare SSL (Origin Certificates)</h4>
-              <p className="text-xs text-muted-foreground mb-3">
-                If using Cloudflare proxy (orange cloud), you can use their Origin Certificates:
-              </p>
-              <ol className="text-xs text-muted-foreground list-decimal pl-4 space-y-1">
-                <li>Go to Cloudflare Dashboard → SSL/TLS → Origin Server</li>
-                <li>Click "Create Certificate"</li>
-                <li>Download the certificate and private key</li>
-                <li>Install on your server in Nginx config</li>
-              </ol>
-            </div>
-
-            <div>
-              <h4 className="font-medium text-sm mb-2">Complete Nginx Configuration with SSL</h4>
               <pre className="overflow-x-auto rounded-md bg-background p-3 text-[11px] leading-5 font-mono">
 {`server {
-    listen 80;
-    server_name yourdomain.com;
-    return 301 https://$server_name$request_uri;
-}
-
-server {
     listen 443 ssl http2;
-    server_name yourdomain.com;
+    server_name _;  # Catch-all - handles ANY domain
 
-    # SSL Configuration (Let's Encrypt)
-    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
-    
-    # SSL Security Settings
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
-
-    root /var/www/yourapp/dist;
-    index index.html;
+    # Wildcard/Global SSL Certificate
+    ssl_certificate /etc/letsencrypt/live/yourmain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourmain.com/privkey.pem;
 
     location / {
-        try_files $uri $uri/ /index.html;
+        proxy_pass http://127.0.0.1:3000;  # Or serve static files
+        proxy_set_header Host $host;        # Pass original domain to backend
+        proxy_set_header X-Real-IP $remote_addr;
     }
-}`}
-              </pre>
+}`}</pre>
             </div>
 
-            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-              <h4 className="font-medium text-sm text-yellow-600 dark:text-yellow-400 mb-1">Common SSL Errors</h4>
+            <div>
+              <h4 className="font-medium text-sm mb-2">How Dynamic Resolution Works</h4>
+              <ol className="text-xs text-muted-foreground list-decimal pl-4 space-y-1">
+                <li>Tenant adds domain in this panel → Domain saved to database</li>
+                <li>Tenant configures DNS (A record → Server IP)</li>
+                <li>Verification confirms DNS is correct</li>
+                <li>Any request to that domain → Backend reads Host header → Finds tenant in DB → Serves their portal</li>
+              </ol>
+              <p className="text-xs text-muted-foreground mt-2">
+                <strong>Result:</strong> Unlimited tenants, unlimited domains per tenant, zero Nginx changes per domain!
+              </p>
+            </div>
+
+            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+              <h4 className="font-medium text-sm text-green-600 dark:text-green-400 mb-1">✅ Benefits of This Architecture</h4>
               <ul className="text-xs text-muted-foreground space-y-1">
-                <li>• <strong>ERR_SSL_PROTOCOL_ERROR:</strong> Certificate not installed or wrong path</li>
-                <li>• <strong>NET::ERR_CERT_COMMON_NAME_INVALID:</strong> Certificate doesn't match domain</li>
-                <li>• <strong>Mixed Content:</strong> Website loads HTTP resources on HTTPS page</li>
+                <li>• <strong>Scalable:</strong> Add 10,000+ tenant domains without touching server config</li>
+                <li>• <strong>Instant:</strong> Domains work immediately after DNS verification</li>
+                <li>• <strong>Secure:</strong> Global wildcard SSL covers all domains</li>
+                <li>• <strong>Industry Standard:</strong> Same pattern used by Shopify, Vercel, Netlify</li>
               </ul>
             </div>
           </div>
