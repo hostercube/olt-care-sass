@@ -16,90 +16,91 @@ import {
   MessageSquare, Settings2, Eye, Wifi, Zap, Shield, Headphones, Award,
   Star, ChevronRight, Upload, Link, PenTool, Sparkles, Smartphone,
   Monitor, FileText, BarChart3, Target, Video, Instagram, Twitter,
-  GripVertical, ChevronUp, ChevronDown, Map, Tv, FolderOpen, Plus, Trash2, Menu
+  GripVertical, ChevronUp, ChevronDown, Map, Tv, FolderOpen, Plus, Trash2, Menu,
+  Layers, Edit, PaintBucket, ImagePlus
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { toast } from 'sonner';
 
-// Advanced landing page templates with detailed configurations
+// Advanced landing page templates with unique names (no company references)
 const LANDING_TEMPLATES = [
   { 
     id: 'isp-pro-1', 
-    name: 'ISP Pro Modern',
-    description: 'আধুনিক ISP ওয়েবসাইট ডিজাইন - isppoint.com স্টাইল',
+    name: 'নেটস্ট্রিম প্রো',
+    description: 'আধুনিক ও প্রফেশনাল ISP ডিজাইন',
     preview: 'bg-gradient-to-br from-blue-600 via-indigo-700 to-purple-800',
     features: ['Animated Hero', 'Speed Showcase', 'Package Cards', 'Stats Counter'],
     category: 'professional'
   },
   { 
     id: 'isp-corporate', 
-    name: 'Corporate ISP',
-    description: 'কর্পোরেট স্টাইল - raiyans.net স্টাইল',
+    name: 'কর্পোরেট এলিট',
+    description: 'ক্লিন ও প্রফেশনাল কর্পোরেট স্টাইল',
     preview: 'bg-gradient-to-br from-slate-800 via-slate-900 to-black',
     features: ['Clean Layout', 'Trust Badges', 'Client Logos', 'Feature Grid'],
     category: 'corporate'
   },
   { 
     id: 'isp-vibrant', 
-    name: 'Vibrant Colors',
-    description: 'উজ্জ্বল রঙের থিম - trishal.net স্টাইল',
+    name: 'ভাইব্র্যান্ট ওয়েভ',
+    description: 'উজ্জ্বল ও আকর্ষণীয় রঙের থিম',
     preview: 'bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700',
     features: ['Bold Typography', 'Gradient Cards', 'Wave Animations', 'Icon Features'],
     category: 'vibrant'
   },
   { 
     id: 'isp-gaming', 
-    name: 'Gaming/Tech',
-    description: 'গেমিং স্টাইল - roarzone.info স্টাইল',
+    name: 'টার্বো গেমার',
+    description: 'গেমিং ও টেক স্টাইল ডার্ক থিম',
     preview: 'bg-gradient-to-br from-purple-900 via-violet-900 to-fuchsia-900',
     features: ['Neon Effects', 'Speed Focus', 'Gamer Friendly', 'Dark Theme'],
     category: 'gaming'
   },
   { 
     id: 'modern-blue', 
-    name: 'Classic Blue', 
-    description: 'ক্লাসিক ব্লু গ্রেডিয়েন্ট',
+    name: 'ক্লাসিক ব্লু', 
+    description: 'ক্লাসিক নীল গ্রেডিয়েন্ট',
     preview: 'bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900',
     features: ['Minimal Design', 'Professional Look', 'Easy to Read'],
     category: 'classic'
   },
   { 
     id: 'clean-white', 
-    name: 'Clean White', 
-    description: 'মিনিমাল হোয়াইট থিম',
+    name: 'পিওর হোয়াইট', 
+    description: 'মিনিমাল ও ক্লিন লাইট থিম',
     preview: 'bg-gradient-to-br from-gray-100 to-white border-2 border-gray-200',
     features: ['Light Theme', 'Clean UI', 'Modern Typography'],
     category: 'minimal'
   },
   { 
     id: 'dark-gradient', 
-    name: 'Dark Elegant', 
-    description: 'ডার্ক এলিগেন্ট থিম',
+    name: 'মিডনাইট এলিগ্যান্স', 
+    description: 'ডার্ক ও এলিগেন্ট প্রিমিয়াম থিম',
     preview: 'bg-gradient-to-br from-gray-900 via-purple-950 to-black',
     features: ['Dark Mode', 'Purple Accents', 'Premium Feel'],
     category: 'dark'
   },
   { 
     id: 'nature-green', 
-    name: 'Eco Green', 
-    description: 'ইকো ফ্রেন্ডলি গ্রিন',
+    name: 'ইকো ফ্রেশ', 
+    description: 'প্রকৃতি অনুপ্রাণিত সবুজ থিম',
     preview: 'bg-gradient-to-br from-emerald-700 via-green-800 to-teal-900',
     features: ['Fresh Colors', 'Natural Feel', 'Trust Building'],
     category: 'nature'
   },
   { 
     id: 'sunset-orange', 
-    name: 'Sunset Warm', 
-    description: 'ওয়ার্ম সানসেট থিম',
+    name: 'সানসেট গ্লো', 
+    description: 'উষ্ণ ও আকর্ষণীয় কমলা থিম',
     preview: 'bg-gradient-to-br from-orange-600 via-red-600 to-rose-700',
     features: ['Warm Colors', 'Energetic', 'Attention Grabbing'],
     category: 'warm'
   },
   { 
     id: 'ocean-teal', 
-    name: 'Ocean Teal', 
-    description: 'টিল সাগর থিম',
+    name: 'ওশান ব্রিজ', 
+    description: 'শান্ত ও পেশাদার টিল থিম',
     preview: 'bg-gradient-to-br from-teal-600 via-cyan-700 to-blue-800',
     features: ['Cool Colors', 'Calming', 'Professional'],
     category: 'cool'
@@ -130,6 +131,31 @@ const FONTS = [
   { id: 'bengali', name: 'Noto Sans Bengali', description: 'বাংলা ফন্ট' },
 ];
 
+interface FTPServer {
+  id: string;
+  name: string;
+  url: string;
+}
+
+interface LiveTVChannel {
+  id: string;
+  name: string;
+  url: string;
+}
+
+interface CustomSection {
+  id: string;
+  type: 'hero' | 'text' | 'image' | 'cta' | 'features' | 'custom';
+  title: string;
+  subtitle?: string;
+  content?: string;
+  imageUrl?: string;
+  bgColor?: string;
+  textColor?: string;
+  order: number;
+  isVisible: boolean;
+}
+
 interface LandingSettings {
   landing_page_enabled: boolean;
   landing_page_template: string;
@@ -148,15 +174,25 @@ interface LandingSettings {
   company_name: string;
   logo_url: string;
   theme_color: string;
-  // New menu settings
+  // Multiple FTP servers
   landing_page_ftp_enabled: boolean;
-  landing_page_ftp_url: string;
+  landing_page_ftp_servers: FTPServer[];
+  // Multiple Live TV channels
   landing_page_livetv_enabled: boolean;
-  landing_page_livetv_url: string;
+  landing_page_livetv_channels: LiveTVChannel[];
+  // Custom menus
   landing_page_custom_menus: CustomMenuItem[];
+  // All social media in one place
   landing_page_social_instagram: string;
   landing_page_social_twitter: string;
+  landing_page_social_linkedin: string;
+  landing_page_social_tiktok: string;
   landing_page_whatsapp: string;
+  landing_page_telegram: string;
+  // Custom sections
+  landing_page_custom_sections: CustomSection[];
+  // Registration control
+  customer_registration_enabled: boolean;
 }
 
 interface CustomMenuItem {
@@ -181,9 +217,6 @@ interface LandingConfig {
   statsUptime: string;
   statsSupport: string;
   statsSpeed: string;
-  instagramLink: string;
-  twitterLink: string;
-  whatsappNumber: string;
 }
 
 const THEME_COLORS = [
@@ -232,7 +265,6 @@ function SectionOrderManager({
 
   const [sections, setSections] = useState(defaultSections);
 
-  // Update sections when settings change
   useEffect(() => {
     setSections(prev => prev.map(section => {
       if (section.settingsKey) {
@@ -263,7 +295,6 @@ function SectionOrderManager({
         <Card key={section.id} className="overflow-hidden">
           <CardContent className="p-0">
             <div className="flex items-center gap-3 p-4">
-              {/* Drag Handle / Order Buttons */}
               <div className="flex flex-col gap-1">
                 <Button 
                   variant="ghost" 
@@ -285,17 +316,14 @@ function SectionOrderManager({
                 </Button>
               </div>
               
-              {/* Grip Handle Visual */}
               <div className="p-2 rounded bg-muted/50 cursor-grab">
                 <GripVertical className="h-5 w-5 text-muted-foreground" />
               </div>
 
-              {/* Section Icon */}
               <div className={`p-2 rounded-lg ${section.enabled ? 'bg-primary/10' : 'bg-muted'}`}>
                 <section.icon className={`h-5 w-5 ${section.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
               </div>
 
-              {/* Section Info */}
               <div className="flex-1">
                 <p className={`font-medium ${!section.enabled ? 'text-muted-foreground' : ''}`}>
                   {section.name}
@@ -303,12 +331,10 @@ function SectionOrderManager({
                 <p className="text-xs text-muted-foreground">{section.description}</p>
               </div>
 
-              {/* Order Badge */}
               <Badge variant="outline" className="font-mono">
                 #{index + 1}
               </Badge>
 
-              {/* Toggle Switch */}
               {section.alwaysEnabled ? (
                 <Badge variant="secondary" className="ml-2">Always On</Badge>
               ) : (
@@ -356,13 +382,18 @@ export default function LandingPageDashboard() {
     logo_url: '',
     theme_color: 'cyan',
     landing_page_ftp_enabled: false,
-    landing_page_ftp_url: '',
+    landing_page_ftp_servers: [],
     landing_page_livetv_enabled: false,
-    landing_page_livetv_url: '',
+    landing_page_livetv_channels: [],
     landing_page_custom_menus: [],
     landing_page_social_instagram: '',
     landing_page_social_twitter: '',
+    landing_page_social_linkedin: '',
+    landing_page_social_tiktok: '',
     landing_page_whatsapp: '',
+    landing_page_telegram: '',
+    landing_page_custom_sections: [],
+    customer_registration_enabled: true,
   });
   const [config, setConfig] = useState<LandingConfig>({
     heroStyle: 'centered',
@@ -379,9 +410,6 @@ export default function LandingPageDashboard() {
     statsUptime: '99.9%',
     statsSupport: '২৪/৭',
     statsSpeed: '১ Gbps',
-    instagramLink: '',
-    twitterLink: '',
-    whatsappNumber: '',
   });
 
   useEffect(() => {
@@ -402,6 +430,31 @@ export default function LandingPageDashboard() {
       if (error) throw error;
 
       if (data) {
+        // Parse JSON fields
+        const ftpServers = data.landing_page_ftp_servers 
+          ? (typeof data.landing_page_ftp_servers === 'string' 
+              ? JSON.parse(data.landing_page_ftp_servers) 
+              : data.landing_page_ftp_servers)
+          : [];
+        
+        const liveTvChannels = data.landing_page_livetv_channels 
+          ? (typeof data.landing_page_livetv_channels === 'string' 
+              ? JSON.parse(data.landing_page_livetv_channels) 
+              : data.landing_page_livetv_channels)
+          : [];
+        
+        const customMenus = data.landing_page_custom_menus 
+          ? (typeof data.landing_page_custom_menus === 'string' 
+              ? JSON.parse(data.landing_page_custom_menus) 
+              : data.landing_page_custom_menus)
+          : [];
+        
+        const customSections = data.landing_page_custom_sections 
+          ? (typeof data.landing_page_custom_sections === 'string' 
+              ? JSON.parse(data.landing_page_custom_sections) 
+              : data.landing_page_custom_sections)
+          : [];
+
         setSettings({
           landing_page_enabled: data.landing_page_enabled || false,
           landing_page_template: data.landing_page_template || 'isp-pro-1',
@@ -421,13 +474,18 @@ export default function LandingPageDashboard() {
           logo_url: data.logo_url || '',
           theme_color: data.theme_color || 'cyan',
           landing_page_ftp_enabled: data.landing_page_ftp_enabled || false,
-          landing_page_ftp_url: data.landing_page_ftp_url || '',
+          landing_page_ftp_servers: ftpServers,
           landing_page_livetv_enabled: data.landing_page_livetv_enabled || false,
-          landing_page_livetv_url: data.landing_page_livetv_url || '',
-          landing_page_custom_menus: (data.landing_page_custom_menus as unknown as CustomMenuItem[]) || [],
+          landing_page_livetv_channels: liveTvChannels,
+          landing_page_custom_menus: customMenus,
           landing_page_social_instagram: data.landing_page_social_instagram || '',
           landing_page_social_twitter: data.landing_page_social_twitter || '',
+          landing_page_social_linkedin: data.landing_page_social_linkedin || '',
+          landing_page_social_tiktok: data.landing_page_social_tiktok || '',
           landing_page_whatsapp: data.landing_page_whatsapp || '',
+          landing_page_telegram: data.landing_page_telegram || '',
+          landing_page_custom_sections: customSections,
+          customer_registration_enabled: data.customer_registration_enabled ?? true,
         });
       }
     } catch (err) {
@@ -441,10 +499,20 @@ export default function LandingPageDashboard() {
   const handleSave = async (updates: Partial<LandingSettings>) => {
     setSaving(true);
     try {
-      // Convert custom menus to JSON for database
       const dbUpdates: Record<string, unknown> = { ...updates };
+      
+      // Convert arrays to JSON for database
       if (updates.landing_page_custom_menus) {
         dbUpdates.landing_page_custom_menus = JSON.parse(JSON.stringify(updates.landing_page_custom_menus));
+      }
+      if (updates.landing_page_ftp_servers) {
+        dbUpdates.landing_page_ftp_servers = JSON.parse(JSON.stringify(updates.landing_page_ftp_servers));
+      }
+      if (updates.landing_page_livetv_channels) {
+        dbUpdates.landing_page_livetv_channels = JSON.parse(JSON.stringify(updates.landing_page_livetv_channels));
+      }
+      if (updates.landing_page_custom_sections) {
+        dbUpdates.landing_page_custom_sections = JSON.parse(JSON.stringify(updates.landing_page_custom_sections));
       }
       
       const { error } = await supabase
@@ -482,6 +550,87 @@ export default function LandingPageDashboard() {
 
   const handleColorSelect = async (colorId: string) => {
     await handleSave({ theme_color: colorId });
+  };
+
+  // FTP Server handlers
+  const addFTPServer = () => {
+    const newServer: FTPServer = { id: crypto.randomUUID(), name: '', url: '' };
+    setSettings(prev => ({ 
+      ...prev, 
+      landing_page_ftp_servers: [...prev.landing_page_ftp_servers, newServer] 
+    }));
+  };
+
+  const updateFTPServer = (index: number, field: keyof FTPServer, value: string) => {
+    const updated = [...settings.landing_page_ftp_servers];
+    updated[index] = { ...updated[index], [field]: value };
+    setSettings(prev => ({ ...prev, landing_page_ftp_servers: updated }));
+  };
+
+  const removeFTPServer = (index: number) => {
+    const updated = settings.landing_page_ftp_servers.filter((_, i) => i !== index);
+    setSettings(prev => ({ ...prev, landing_page_ftp_servers: updated }));
+  };
+
+  // Live TV handlers
+  const addLiveTVChannel = () => {
+    const newChannel: LiveTVChannel = { id: crypto.randomUUID(), name: '', url: '' };
+    setSettings(prev => ({ 
+      ...prev, 
+      landing_page_livetv_channels: [...prev.landing_page_livetv_channels, newChannel] 
+    }));
+  };
+
+  const updateLiveTVChannel = (index: number, field: keyof LiveTVChannel, value: string) => {
+    const updated = [...settings.landing_page_livetv_channels];
+    updated[index] = { ...updated[index], [field]: value };
+    setSettings(prev => ({ ...prev, landing_page_livetv_channels: updated }));
+  };
+
+  const removeLiveTVChannel = (index: number) => {
+    const updated = settings.landing_page_livetv_channels.filter((_, i) => i !== index);
+    setSettings(prev => ({ ...prev, landing_page_livetv_channels: updated }));
+  };
+
+  // Custom Section handlers
+  const addCustomSection = (type: CustomSection['type']) => {
+    const newSection: CustomSection = {
+      id: crypto.randomUUID(),
+      type,
+      title: '',
+      subtitle: '',
+      content: '',
+      imageUrl: '',
+      bgColor: '#ffffff',
+      textColor: '#000000',
+      order: settings.landing_page_custom_sections.length,
+      isVisible: true,
+    };
+    setSettings(prev => ({
+      ...prev,
+      landing_page_custom_sections: [...prev.landing_page_custom_sections, newSection]
+    }));
+  };
+
+  const updateCustomSection = (index: number, updates: Partial<CustomSection>) => {
+    const updated = [...settings.landing_page_custom_sections];
+    updated[index] = { ...updated[index], ...updates };
+    setSettings(prev => ({ ...prev, landing_page_custom_sections: updated }));
+  };
+
+  const removeCustomSection = (index: number) => {
+    const updated = settings.landing_page_custom_sections.filter((_, i) => i !== index);
+    setSettings(prev => ({ ...prev, landing_page_custom_sections: updated }));
+  };
+
+  const moveCustomSection = (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= settings.landing_page_custom_sections.length) return;
+    
+    const updated = [...settings.landing_page_custom_sections];
+    [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+    updated.forEach((s, i) => s.order = i);
+    setSettings(prev => ({ ...prev, landing_page_custom_sections: updated }));
   };
 
   const getPublicUrl = () => {
@@ -633,14 +782,16 @@ export default function LandingPageDashboard() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 h-auto gap-2 bg-transparent p-0">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 h-auto gap-2 bg-transparent p-0">
             {[
               { id: 'templates', icon: Layout, label: 'টেমপ্লেট' },
               { id: 'content', icon: Type, label: 'কনটেন্ট' },
               { id: 'menus', icon: Menu, label: 'মেনু' },
+              { id: 'social', icon: Users, label: 'সোশ্যাল' },
+              { id: 'sections', icon: Layers, label: 'সেকশন' },
               { id: 'branding', icon: Palette, label: 'ব্র্যান্ডিং' },
               { id: 'contact', icon: Phone, label: 'যোগাযোগ' },
-              { id: 'sections', icon: Settings2, label: 'সেকশন' },
+              { id: 'settings', icon: Settings2, label: 'সেটিংস' },
             ].map((tab) => (
               <TabsTrigger 
                 key={tab.id}
@@ -775,7 +926,7 @@ export default function LandingPageDashboard() {
                   <Textarea
                     value={settings.landing_page_hero_subtitle}
                     onChange={(e) => handleInputChange('landing_page_hero_subtitle', e.target.value)}
-                    placeholder="ফাইবার অপটিক প্রযুক্তিতে উচ্চ গতির ব্রডব্যান্ড সংযোগ। সাশ্রয়ী মূল্যে সেরা সেবা।"
+                    placeholder="ফাইবার অপটিক প্রযুক্তিতে উচ্চ গতির ব্রডব্যান্ড সংযোগ।"
                     rows={3}
                   />
                 </CardContent>
@@ -796,7 +947,7 @@ export default function LandingPageDashboard() {
                   <Textarea
                     value={settings.landing_page_about_text}
                     onChange={(e) => handleInputChange('landing_page_about_text', e.target.value)}
-                    placeholder="আমরা আধুনিক ফাইবার অপটিক প্রযুক্তি ব্যবহার করে দ্রুত এবং নির্ভরযোগ্য ইন্টারনেট সেবা প্রদান করি..."
+                    placeholder="আমরা আধুনিক ফাইবার অপটিক প্রযুক্তি ব্যবহার করে..."
                     rows={4}
                   />
                 </CardContent>
@@ -819,121 +970,136 @@ export default function LandingPageDashboard() {
             </div>
           </TabsContent>
 
-          {/* Menu Settings Tab */}
+          {/* Menu Settings Tab - Multiple FTP/LiveTV */}
           <TabsContent value="menus" className="mt-6">
             <div className="space-y-6">
-              {/* FTP / Live TV Settings */}
+              {/* Multiple FTP Servers */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FolderOpen className="h-4 w-4" />
+                    FTP সার্ভার সমূহ
+                  </CardTitle>
+                  <CardDescription>
+                    একাধিক FTP সার্ভার লিংক যোগ করুন - মেনুতে সাবমেনু হিসেবে দেখাবে
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-blue-500/10">
+                        <FolderOpen className="h-5 w-5 text-blue-500" />
+                      </div>
+                      <span className="font-medium">FTP মেনু সক্রিয় করুন</span>
+                    </div>
+                    <Switch
+                      checked={settings.landing_page_ftp_enabled}
+                      onCheckedChange={(checked) => handleSave({ landing_page_ftp_enabled: checked })}
+                      disabled={saving}
+                    />
+                  </div>
+
+                  {settings.landing_page_ftp_enabled && (
+                    <div className="space-y-3">
+                      {settings.landing_page_ftp_servers.map((server, index) => (
+                        <div key={server.id} className="flex items-center gap-2 p-3 rounded-lg border bg-muted/30">
+                          <Input
+                            value={server.name}
+                            onChange={(e) => updateFTPServer(index, 'name', e.target.value)}
+                            placeholder="সার্ভার নাম (যেমন: FTP Main)"
+                            className="flex-1"
+                          />
+                          <Input
+                            value={server.url}
+                            onChange={(e) => updateFTPServer(index, 'url', e.target.value)}
+                            placeholder="http://ftp.example.com"
+                            className="flex-1"
+                          />
+                          <Button variant="ghost" size="icon" onClick={() => removeFTPServer(index)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={addFTPServer}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          নতুন FTP সার্ভার
+                        </Button>
+                        <Button 
+                          onClick={() => handleSave({ landing_page_ftp_servers: settings.landing_page_ftp_servers })}
+                          disabled={saving}
+                        >
+                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'সেভ করুন'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Multiple Live TV Channels */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Tv className="h-4 w-4" />
-                    FTP & Live TV
+                    Live TV চ্যানেল সমূহ
                   </CardTitle>
                   <CardDescription>
-                    FTP সার্ভার এবং Live TV লিংক সেটিংস
+                    একাধিক IPTV/Live TV চ্যানেল যোগ করুন - মেনুতে সাবমেনু হিসেবে দেখাবে
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* FTP Settings */}
-                  <div className="p-4 rounded-lg border bg-muted/30">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-blue-500/10">
-                          <FolderOpen className="h-5 w-5 text-blue-500" />
-                        </div>
-                        <div>
-                          <p className="font-medium">FTP Server</p>
-                          <p className="text-sm text-muted-foreground">FTP সার্ভার লিংক মেনুতে দেখান</p>
-                        </div>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-red-500/10">
+                        <Tv className="h-5 w-5 text-red-500" />
                       </div>
-                      <Switch
-                        checked={settings.landing_page_ftp_enabled}
-                        onCheckedChange={(checked) => handleSave({ landing_page_ftp_enabled: checked })}
-                        disabled={saving}
-                      />
+                      <span className="font-medium">Live TV মেনু সক্রিয় করুন</span>
                     </div>
-                    {settings.landing_page_ftp_enabled && (
-                      <div className="flex gap-2">
-                        <Input
-                          value={settings.landing_page_ftp_url}
-                          onChange={(e) => handleInputChange('landing_page_ftp_url', e.target.value)}
-                          placeholder="http://ftp.yourcompany.com বা ftp://192.168.1.1"
-                        />
-                        <Button 
-                          onClick={() => handleSave({ landing_page_ftp_url: settings.landing_page_ftp_url })}
-                          disabled={saving}
-                        >
-                          সেভ
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Live TV Settings */}
-                  <div className="p-4 rounded-lg border bg-muted/30">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-red-500/10">
-                          <Video className="h-5 w-5 text-red-500" />
-                        </div>
-                        <div>
-                          <p className="font-medium">Live TV</p>
-                          <p className="text-sm text-muted-foreground">IPTV/Live TV লিংক মেনুতে দেখান</p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={settings.landing_page_livetv_enabled}
-                        onCheckedChange={(checked) => handleSave({ landing_page_livetv_enabled: checked })}
-                        disabled={saving}
-                      />
-                    </div>
-                    {settings.landing_page_livetv_enabled && (
-                      <div className="flex gap-2">
-                        <Input
-                          value={settings.landing_page_livetv_url}
-                          onChange={(e) => handleInputChange('landing_page_livetv_url', e.target.value)}
-                          placeholder="http://tv.yourcompany.com"
-                        />
-                        <Button 
-                          onClick={() => handleSave({ landing_page_livetv_url: settings.landing_page_livetv_url })}
-                          disabled={saving}
-                        >
-                          সেভ
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* WhatsApp Settings */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    WhatsApp
-                  </CardTitle>
-                  <CardDescription>
-                    WhatsApp চ্যাট বাটনের জন্য নম্বর সেট করুন
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2">
-                    <Input
-                      value={settings.landing_page_whatsapp}
-                      onChange={(e) => handleInputChange('landing_page_whatsapp', e.target.value)}
-                      placeholder="+8801XXXXXXXXX"
-                    />
-                    <Button 
-                      onClick={() => handleSave({ landing_page_whatsapp: settings.landing_page_whatsapp })}
+                    <Switch
+                      checked={settings.landing_page_livetv_enabled}
+                      onCheckedChange={(checked) => handleSave({ landing_page_livetv_enabled: checked })}
                       disabled={saving}
-                    >
-                      সেভ
-                    </Button>
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    দেশের কোড সহ নম্বর দিন (যেমন: +8801712345678)
-                  </p>
+
+                  {settings.landing_page_livetv_enabled && (
+                    <div className="space-y-3">
+                      {settings.landing_page_livetv_channels.map((channel, index) => (
+                        <div key={channel.id} className="flex items-center gap-2 p-3 rounded-lg border bg-muted/30">
+                          <Input
+                            value={channel.name}
+                            onChange={(e) => updateLiveTVChannel(index, 'name', e.target.value)}
+                            placeholder="চ্যানেল নাম (যেমন: BTV)"
+                            className="flex-1"
+                          />
+                          <Input
+                            value={channel.url}
+                            onChange={(e) => updateLiveTVChannel(index, 'url', e.target.value)}
+                            placeholder="http://tv.example.com/btv"
+                            className="flex-1"
+                          />
+                          <Button variant="ghost" size="icon" onClick={() => removeLiveTVChannel(index)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={addLiveTVChannel}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          নতুন চ্যানেল
+                        </Button>
+                        <Button 
+                          onClick={() => handleSave({ landing_page_livetv_channels: settings.landing_page_livetv_channels })}
+                          disabled={saving}
+                        >
+                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'সেভ করুন'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -969,7 +1135,7 @@ export default function LandingPageDashboard() {
                             updated[index] = { ...menu, url: e.target.value };
                             setSettings(prev => ({ ...prev, landing_page_custom_menus: updated }));
                           }}
-                          placeholder="https://example.com"
+                          placeholder="https://example.com (খালি রাখুন যদি সাবমেনু থাকে)"
                           className="flex-1"
                         />
                         <Button 
@@ -1075,54 +1241,358 @@ export default function LandingPageDashboard() {
                   </div>
                 </CardContent>
               </Card>
+            </div>
+          </TabsContent>
 
-              {/* Additional Social Links */}
+          {/* Social Media Tab - All in one place */}
+          <TabsContent value="social" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  সোশ্যাল মিডিয়া ও যোগাযোগ লিংক
+                </CardTitle>
+                <CardDescription>
+                  সব সোশ্যাল মিডিয়া ও মেসেজিং প্ল্যাটফর্মের লিংক এক জায়গায়
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Facebook */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Facebook className="h-4 w-4 text-blue-600" />
+                      Facebook
+                    </Label>
+                    <Input
+                      value={settings.landing_page_social_facebook}
+                      onChange={(e) => handleInputChange('landing_page_social_facebook', e.target.value)}
+                      placeholder="https://facebook.com/yourpage"
+                    />
+                  </div>
+
+                  {/* YouTube */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Youtube className="h-4 w-4 text-red-500" />
+                      YouTube
+                    </Label>
+                    <Input
+                      value={settings.landing_page_social_youtube}
+                      onChange={(e) => handleInputChange('landing_page_social_youtube', e.target.value)}
+                      placeholder="https://youtube.com/@yourchannel"
+                    />
+                  </div>
+
+                  {/* Instagram */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Instagram className="h-4 w-4 text-pink-500" />
+                      Instagram
+                    </Label>
+                    <Input
+                      value={settings.landing_page_social_instagram}
+                      onChange={(e) => handleInputChange('landing_page_social_instagram', e.target.value)}
+                      placeholder="https://instagram.com/yourpage"
+                    />
+                  </div>
+
+                  {/* Twitter */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Twitter className="h-4 w-4 text-sky-500" />
+                      Twitter / X
+                    </Label>
+                    <Input
+                      value={settings.landing_page_social_twitter}
+                      onChange={(e) => handleInputChange('landing_page_social_twitter', e.target.value)}
+                      placeholder="https://twitter.com/yourpage"
+                    />
+                  </div>
+
+                  {/* LinkedIn */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Link className="h-4 w-4 text-blue-700" />
+                      LinkedIn
+                    </Label>
+                    <Input
+                      value={settings.landing_page_social_linkedin}
+                      onChange={(e) => handleInputChange('landing_page_social_linkedin', e.target.value)}
+                      placeholder="https://linkedin.com/company/yourcompany"
+                    />
+                  </div>
+
+                  {/* TikTok */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Video className="h-4 w-4" />
+                      TikTok
+                    </Label>
+                    <Input
+                      value={settings.landing_page_social_tiktok}
+                      onChange={(e) => handleInputChange('landing_page_social_tiktok', e.target.value)}
+                      placeholder="https://tiktok.com/@yourpage"
+                    />
+                  </div>
+
+                  {/* WhatsApp */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-green-500" />
+                      WhatsApp
+                    </Label>
+                    <Input
+                      value={settings.landing_page_whatsapp}
+                      onChange={(e) => handleInputChange('landing_page_whatsapp', e.target.value)}
+                      placeholder="+8801XXXXXXXXX"
+                    />
+                    <p className="text-xs text-muted-foreground">দেশের কোড সহ নম্বর দিন</p>
+                  </div>
+
+                  {/* Telegram */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-blue-400" />
+                      Telegram
+                    </Label>
+                    <Input
+                      value={settings.landing_page_telegram}
+                      onChange={(e) => handleInputChange('landing_page_telegram', e.target.value)}
+                      placeholder="https://t.me/yourchannel"
+                    />
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={() => handleSave({ 
+                    landing_page_social_facebook: settings.landing_page_social_facebook,
+                    landing_page_social_youtube: settings.landing_page_social_youtube,
+                    landing_page_social_instagram: settings.landing_page_social_instagram,
+                    landing_page_social_twitter: settings.landing_page_social_twitter,
+                    landing_page_social_linkedin: settings.landing_page_social_linkedin,
+                    landing_page_social_tiktok: settings.landing_page_social_tiktok,
+                    landing_page_whatsapp: settings.landing_page_whatsapp,
+                    landing_page_telegram: settings.landing_page_telegram,
+                  })}
+                  disabled={saving}
+                  className="w-full md:w-auto"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                  সব সোশ্যাল লিংক সেভ করুন
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Custom Sections Tab - Add/Modify Sections */}
+          <TabsContent value="sections" className="mt-6">
+            <div className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    অতিরিক্ত সোশ্যাল লিংক
+                    <Layers className="h-4 w-4" />
+                    কাস্টম সেকশন যোগ করুন
                   </CardTitle>
                   <CardDescription>
-                    Instagram, Twitter লিংক যোগ করুন
+                    নিজের মতো সেকশন তৈরি করুন - টেক্সট, ইমেজ, হেডলাইন ইত্যাদি
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <Instagram className="h-4 w-4" />
-                        Instagram
-                      </Label>
-                      <Input
-                        value={settings.landing_page_social_instagram}
-                        onChange={(e) => handleInputChange('landing_page_social_instagram', e.target.value)}
-                        placeholder="https://instagram.com/yourpage"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <Twitter className="h-4 w-4" />
-                        Twitter / X
-                      </Label>
-                      <Input
-                        value={settings.landing_page_social_twitter}
-                        onChange={(e) => handleInputChange('landing_page_social_twitter', e.target.value)}
-                        placeholder="https://twitter.com/yourpage"
-                      />
-                    </div>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    <Button variant="outline" onClick={() => addCustomSection('text')}>
+                      <Type className="h-4 w-4 mr-2" />
+                      টেক্সট সেকশন
+                    </Button>
+                    <Button variant="outline" onClick={() => addCustomSection('image')}>
+                      <ImagePlus className="h-4 w-4 mr-2" />
+                      ইমেজ সেকশন
+                    </Button>
+                    <Button variant="outline" onClick={() => addCustomSection('cta')}>
+                      <Target className="h-4 w-4 mr-2" />
+                      CTA সেকশন
+                    </Button>
+                    <Button variant="outline" onClick={() => addCustomSection('features')}>
+                      <Zap className="h-4 w-4 mr-2" />
+                      ফিচার সেকশন
+                    </Button>
+                    <Button variant="outline" onClick={() => addCustomSection('custom')}>
+                      <PenTool className="h-4 w-4 mr-2" />
+                      কাস্টম সেকশন
+                    </Button>
                   </div>
-                  <Button 
-                    onClick={() => handleSave({ 
-                      landing_page_social_instagram: settings.landing_page_social_instagram,
-                      landing_page_social_twitter: settings.landing_page_social_twitter 
-                    })}
-                    disabled={saving}
-                    className="w-full md:w-auto"
-                  >
-                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                    সোশ্যাল লিংক সেভ করুন
-                  </Button>
+
+                  {settings.landing_page_custom_sections.length === 0 ? (
+                    <div className="text-center py-12 bg-muted/30 rounded-lg border border-dashed">
+                      <Layers className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                      <p className="text-muted-foreground">কোন কাস্টম সেকশন নেই</p>
+                      <p className="text-sm text-muted-foreground">উপরের বাটন ব্যবহার করে নতুন সেকশন যোগ করুন</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {settings.landing_page_custom_sections.map((section, index) => (
+                        <Card key={section.id} className="border-2">
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-4">
+                              {/* Move buttons */}
+                              <div className="flex flex-col gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6"
+                                  onClick={() => moveCustomSection(index, 'up')}
+                                  disabled={index === 0}
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6"
+                                  onClick={() => moveCustomSection(index, 'down')}
+                                  disabled={index === settings.landing_page_custom_sections.length - 1}
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </div>
+
+                              <div className="flex-1 space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <Badge variant="secondary">{section.type} সেকশন</Badge>
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      checked={section.isVisible}
+                                      onCheckedChange={(checked) => updateCustomSection(index, { isVisible: checked })}
+                                    />
+                                    <Button variant="ghost" size="icon" onClick={() => removeCustomSection(index)}>
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-2">
+                                  <div className="space-y-2">
+                                    <Label>শিরোনাম</Label>
+                                    <Input
+                                      value={section.title}
+                                      onChange={(e) => updateCustomSection(index, { title: e.target.value })}
+                                      placeholder="সেকশন শিরোনাম"
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>সাবটাইটেল</Label>
+                                    <Input
+                                      value={section.subtitle || ''}
+                                      onChange={(e) => updateCustomSection(index, { subtitle: e.target.value })}
+                                      placeholder="সেকশন সাবটাইটেল"
+                                    />
+                                  </div>
+                                </div>
+
+                                {(section.type === 'text' || section.type === 'cta' || section.type === 'custom') && (
+                                  <div className="space-y-2">
+                                    <Label>কনটেন্ট</Label>
+                                    <Textarea
+                                      value={section.content || ''}
+                                      onChange={(e) => updateCustomSection(index, { content: e.target.value })}
+                                      placeholder="সেকশন কনটেন্ট লিখুন..."
+                                      rows={3}
+                                    />
+                                  </div>
+                                )}
+
+                                {(section.type === 'image' || section.type === 'custom') && (
+                                  <div className="space-y-2">
+                                    <Label>ইমেজ URL</Label>
+                                    <Input
+                                      value={section.imageUrl || ''}
+                                      onChange={(e) => updateCustomSection(index, { imageUrl: e.target.value })}
+                                      placeholder="https://example.com/image.jpg"
+                                    />
+                                  </div>
+                                )}
+
+                                <div className="grid gap-4 md:grid-cols-2">
+                                  <div className="space-y-2">
+                                    <Label className="flex items-center gap-2">
+                                      <PaintBucket className="h-4 w-4" />
+                                      ব্যাকগ্রাউন্ড কালার
+                                    </Label>
+                                    <div className="flex gap-2">
+                                      <Input
+                                        type="color"
+                                        value={section.bgColor || '#ffffff'}
+                                        onChange={(e) => updateCustomSection(index, { bgColor: e.target.value })}
+                                        className="w-16 h-10 p-1"
+                                      />
+                                      <Input
+                                        value={section.bgColor || '#ffffff'}
+                                        onChange={(e) => updateCustomSection(index, { bgColor: e.target.value })}
+                                        placeholder="#ffffff"
+                                        className="flex-1"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label className="flex items-center gap-2">
+                                      <Type className="h-4 w-4" />
+                                      টেক্সট কালার
+                                    </Label>
+                                    <div className="flex gap-2">
+                                      <Input
+                                        type="color"
+                                        value={section.textColor || '#000000'}
+                                        onChange={(e) => updateCustomSection(index, { textColor: e.target.value })}
+                                        className="w-16 h-10 p-1"
+                                      />
+                                      <Input
+                                        value={section.textColor || '#000000'}
+                                        onChange={(e) => updateCustomSection(index, { textColor: e.target.value })}
+                                        placeholder="#000000"
+                                        className="flex-1"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {settings.landing_page_custom_sections.length > 0 && (
+                    <div className="mt-6 flex justify-end">
+                      <Button 
+                        onClick={() => handleSave({ landing_page_custom_sections: settings.landing_page_custom_sections })}
+                        disabled={saving}
+                      >
+                        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                        সব সেকশন সেভ করুন
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Default Section Manager */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Settings2 className="h-4 w-4" />
+                    ডিফল্ট সেকশন ম্যানেজমেন্ট
+                  </CardTitle>
+                  <CardDescription>
+                    বিল্ট-ইন সেকশনগুলো অন/অফ করুন এবং অর্ডার পরিবর্তন করুন
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SectionOrderManager 
+                    settings={settings} 
+                    saving={saving} 
+                    onToggle={handleToggle} 
+                  />
                 </CardContent>
               </Card>
             </div>
@@ -1180,13 +1650,15 @@ export default function LandingPageDashboard() {
                         className="h-16 w-auto max-w-[200px] object-contain"
                       />
                     ) : (
-                      <div className={`h-16 w-16 rounded-xl bg-gradient-to-br from-${settings.theme_color}-500 to-${settings.theme_color}-600 flex items-center justify-center`}>
+                      <div className={`h-16 w-16 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center`}>
                         <Wifi className="h-8 w-8 text-white" />
                       </div>
                     )}
                     <div>
-                      <p className="font-semibold">{settings.company_name || 'Company Name'}</p>
-                      <p className="text-sm text-muted-foreground">Internet Service Provider</p>
+                      <p className="font-medium">{settings.company_name || 'Company Name'}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {settings.logo_url ? 'লোগো সেট আছে' : 'ডিফল্ট আইকন ব্যবহার হচ্ছে'}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -1196,124 +1668,130 @@ export default function LandingPageDashboard() {
 
           {/* Contact Tab */}
           <TabsContent value="contact" className="mt-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Phone className="h-4 w-4" />
-                    ফোন নম্বর
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Input
-                    value={settings.landing_page_contact_phone}
-                    onChange={(e) => handleInputChange('landing_page_contact_phone', e.target.value)}
-                    placeholder="+880 1XXX-XXXXXX"
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    ইমেইল
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Input
-                    value={settings.landing_page_contact_email}
-                    onChange={(e) => handleInputChange('landing_page_contact_email', e.target.value)}
-                    placeholder="info@yourcompany.com"
-                  />
-                </CardContent>
-              </Card>
-
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Phone className="h-4 w-4" />
+                  যোগাযোগের তথ্য
+                </CardTitle>
+                <CardDescription>
+                  গ্রাহকদের জন্য যোগাযোগের তথ্য
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Phone className="h-4 w-4" />
+                      ফোন নম্বর
+                    </Label>
+                    <Input
+                      value={settings.landing_page_contact_phone}
+                      onChange={(e) => handleInputChange('landing_page_contact_phone', e.target.value)}
+                      placeholder="+880 1XXX-XXXXXX"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      ইমেইল
+                    </Label>
+                    <Input
+                      value={settings.landing_page_contact_email}
+                      onChange={(e) => handleInputChange('landing_page_contact_email', e.target.value)}
+                      placeholder="info@yourcompany.com"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
                     ঠিকানা
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+                  </Label>
                   <Textarea
                     value={settings.landing_page_contact_address}
                     onChange={(e) => handleInputChange('landing_page_contact_address', e.target.value)}
-                    placeholder="আপনার অফিসের সম্পূর্ণ ঠিকানা..."
+                    placeholder="আপনার অফিসের ঠিকানা..."
                     rows={2}
                   />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Facebook className="h-4 w-4" />
-                    Facebook
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Input
-                    value={settings.landing_page_social_facebook}
-                    onChange={(e) => handleInputChange('landing_page_social_facebook', e.target.value)}
-                    placeholder="https://facebook.com/yourpage"
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Youtube className="h-4 w-4" />
-                    YouTube
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Input
-                    value={settings.landing_page_social_youtube}
-                    onChange={(e) => handleInputChange('landing_page_social_youtube', e.target.value)}
-                    placeholder="https://youtube.com/@yourchannel"
-                  />
-                </CardContent>
-              </Card>
-
-              <div className="lg:col-span-2 flex justify-end">
+                </div>
                 <Button 
-                  onClick={() => handleSave({
+                  onClick={() => handleSave({ 
                     landing_page_contact_phone: settings.landing_page_contact_phone,
                     landing_page_contact_email: settings.landing_page_contact_email,
                     landing_page_contact_address: settings.landing_page_contact_address,
-                    landing_page_social_facebook: settings.landing_page_social_facebook,
-                    landing_page_social_youtube: settings.landing_page_social_youtube,
                   })}
                   disabled={saving}
-                  className="min-w-[150px]"
                 >
                   {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                  যোগাযোগ সেভ করুন
+                  যোগাযোগ তথ্য সেভ করুন
                 </Button>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* Sections Tab - Drag and Drop Ordering */}
-          <TabsContent value="sections" className="mt-6">
+          {/* Settings Tab - Registration Control */}
+          <TabsContent value="settings" className="mt-6">
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold">সেকশন ম্যানেজমেন্ট</h3>
-                  <p className="text-sm text-muted-foreground">
-                    সেকশনগুলো ড্র্যাগ করে অর্ডার পরিবর্তন করুন বা শো/হাইড করুন
-                  </p>
-                </div>
-              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    রেজিস্ট্রেশন সেটিংস
+                  </CardTitle>
+                  <CardDescription>
+                    গ্রাহক রেজিস্ট্রেশন অপশন নিয়ন্ত্রণ করুন
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                    <div>
+                      <p className="font-medium">গ্রাহক রেজিস্ট্রেশন</p>
+                      <p className="text-sm text-muted-foreground">
+                        এটি বন্ধ করলে ওয়েবসাইটে রেজিস্টার বাটন দেখাবে না
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.customer_registration_enabled}
+                      onCheckedChange={(checked) => handleSave({ customer_registration_enabled: checked })}
+                      disabled={saving}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
 
-              <SectionOrderManager 
-                settings={settings}
-                saving={saving}
-                onToggle={handleToggle}
-              />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    প্যাকেজ ও কন্টাক্ট সেকশন
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                    <div>
+                      <p className="font-medium">প্যাকেজ সেকশন দেখান</p>
+                      <p className="text-sm text-muted-foreground">ISP প্যাকেজ তালিকা</p>
+                    </div>
+                    <Switch
+                      checked={settings.landing_page_show_packages}
+                      onCheckedChange={(checked) => handleSave({ landing_page_show_packages: checked })}
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                    <div>
+                      <p className="font-medium">কন্টাক্ট ফর্ম দেখান</p>
+                      <p className="text-sm text-muted-foreground">যোগাযোগ ফর্ম ও তথ্য</p>
+                    </div>
+                    <Switch
+                      checked={settings.landing_page_show_contact}
+                      onCheckedChange={(checked) => handleSave({ landing_page_show_contact: checked })}
+                      disabled={saving}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>
