@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
-import { Globe, Plus, Loader2, CheckCircle, XCircle, Clock, Copy, RefreshCw, Trash2 } from 'lucide-react';
+import { Globe, Plus, Loader2, CheckCircle, XCircle, Clock, Copy, RefreshCw, Trash2, Shield, Link } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -528,6 +528,151 @@ export default function CustomDomain() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* SSL Certificate Guide */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-green-500" />
+            SSL Certificate Setup Guide
+          </CardTitle>
+          <CardDescription>
+            After DNS verification, you need to configure SSL certificates on your server
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="p-4 bg-muted rounded-lg space-y-4">
+            <div>
+              <h4 className="font-medium text-sm mb-2">Option 1: Let's Encrypt with Certbot (Recommended)</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                Free SSL certificates that auto-renew. Install certbot and run:
+              </p>
+              <pre className="overflow-x-auto rounded-md bg-background p-3 text-[11px] leading-5 font-mono">
+{`# Install certbot (Ubuntu/Debian)
+sudo apt update
+sudo apt install certbot python3-certbot-nginx
+
+# Generate SSL certificate for your domain
+sudo certbot --nginx -d yourdomain.com
+
+# Auto-renewal is set up automatically
+# Test renewal: sudo certbot renew --dry-run`}
+              </pre>
+            </div>
+
+            <div>
+              <h4 className="font-medium text-sm mb-2">Option 2: Cloudflare SSL (Origin Certificates)</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                If using Cloudflare proxy (orange cloud), you can use their Origin Certificates:
+              </p>
+              <ol className="text-xs text-muted-foreground list-decimal pl-4 space-y-1">
+                <li>Go to Cloudflare Dashboard → SSL/TLS → Origin Server</li>
+                <li>Click "Create Certificate"</li>
+                <li>Download the certificate and private key</li>
+                <li>Install on your server in Nginx config</li>
+              </ol>
+            </div>
+
+            <div>
+              <h4 className="font-medium text-sm mb-2">Complete Nginx Configuration with SSL</h4>
+              <pre className="overflow-x-auto rounded-md bg-background p-3 text-[11px] leading-5 font-mono">
+{`server {
+    listen 80;
+    server_name yourdomain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name yourdomain.com;
+
+    # SSL Configuration (Let's Encrypt)
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+    
+    # SSL Security Settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+
+    root /var/www/yourapp/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}`}
+              </pre>
+            </div>
+
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+              <h4 className="font-medium text-sm text-yellow-600 dark:text-yellow-400 mb-1">Common SSL Errors</h4>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <li>• <strong>ERR_SSL_PROTOCOL_ERROR:</strong> Certificate not installed or wrong path</li>
+                <li>• <strong>NET::ERR_CERT_COMMON_NAME_INVALID:</strong> Certificate doesn't match domain</li>
+                <li>• <strong>Mixed Content:</strong> Website loads HTTP resources on HTTPS page</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tenant Portal URLs Info */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Link className="h-5 w-5 text-primary" />
+            Portal Login URLs
+          </CardTitle>
+          <CardDescription>
+            Share these login page URLs with your customers, resellers, and staff
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {tenant?.subdomain && (
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div>
+                  <p className="text-sm font-medium">Tenant Portal URL</p>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {window.location.origin}/t/{tenant.subdomain}
+                  </p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => copyToClipboard(`${window.location.origin}/t/${tenant.subdomain}`)}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+            
+            {domains.filter(d => d.is_verified).map((d) => (
+              <div key={d.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div>
+                  <p className="text-sm font-medium">Custom Domain Portal</p>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    https://{d.subdomain ? `${d.subdomain}.` : ''}{d.domain}
+                  </p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => copyToClipboard(`https://${d.subdomain ? `${d.subdomain}.` : ''}${d.domain}`)}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+
+            <p className="text-xs text-muted-foreground">
+              These portal URLs allow customers, resellers, and staff to login with your custom branding.
+              Configure your branding in <strong>Settings → Branding</strong> to customize the login page appearance.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
