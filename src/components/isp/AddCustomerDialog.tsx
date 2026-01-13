@@ -296,7 +296,9 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         email: formData.email || null,
         nid_number: formData.nid_number || null,
         address: formData.address || null,
-        area_id: formData.area_id && formData.area_id !== 'none' ? formData.area_id : null,
+        // IMPORTANT: customers.area_id references public.areas(id). Villages are a different table.
+        // So we only send area_id when an AREA is selected, otherwise null (prevents FK violation).
+        area_id: formData.area_id?.startsWith('area_') ? formData.area_id.replace('area_', '') : null,
         reseller_id: formData.reseller_id && formData.reseller_id !== 'none' ? formData.reseller_id : null,
         mikrotik_id: formData.mikrotik_id && formData.mikrotik_id !== 'none' ? formData.mikrotik_id : null,
         pppoe_username: formData.pppoe_username || null,
@@ -426,15 +428,13 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
     return [...villageLocations, ...areaLocations];
   }, [villages, areas, unions, upazilas, districts]);
 
-  const selectedLocation = allLocations.find(l => 
-    l.id === formData.area_id || 
-    l.originalId === formData.area_id
-  );
+  const selectedLocation = allLocations.find((l) => l.id === formData.area_id);
 
   const isLastStep = currentStep === STEPS.length - 1;
   const selectedPackage = packages.find(p => p.id === formData.package_id);
   const selectedRouter = routers.find(r => r.id === formData.mikrotik_id);
-  const selectedArea = areas.find(a => a.id === formData.area_id);
+
+  const selectedAreaId = formData.area_id?.startsWith('area_') ? formData.area_id.replace('area_', '') : null;
 
   // Group resellers by level for better display
   const resellersByLevel = useMemo(() => {
@@ -448,26 +448,11 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
 
   // Searchable options for Area/Location
   const locationOptions = useMemo<SearchableSelectOption[]>(() => {
-    const options: SearchableSelectOption[] = [];
-    
-    // Add villages
-    villages.forEach((village) => {
-      options.push({
-        value: village.id,
-        label: getVillageDisplayLabel(village),
-      });
-    });
-    
-    // Add areas
-    areas.forEach((area) => {
-      options.push({
-        value: area.id,
-        label: getAreaDisplayLabel(area),
-      });
-    });
-    
-    return options;
-  }, [villages, areas, unions, upazilas, districts]);
+    return allLocations.map((loc) => ({
+      value: loc.id, // 'village_<uuid>' | 'area_<uuid>'
+      label: loc.type === 'village' ? `Village: ${loc.label}` : `Area: ${loc.label}`,
+    }));
+  }, [allLocations]);
 
   // Searchable options for Reseller
   const resellerOptions = useMemo<SearchableSelectOption[]>(() => {
@@ -952,7 +937,12 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                     <div><span className="text-muted-foreground">Package:</span> <span className="font-medium">{selectedPackage?.name || 'N/A'}</span></div>
                     <div><span className="text-muted-foreground">Router:</span> <span className="font-medium">{selectedRouter?.name || 'None'}</span></div>
                     <div><span className="text-muted-foreground">Monthly:</span> <span className="font-medium">৳{formData.monthly_bill || '0'}</span></div>
-                    {selectedArea && <div className="col-span-2"><span className="text-muted-foreground">Area:</span> <span className="font-medium">{getAreaDisplayLabel(selectedArea)}</span></div>}
+                    {selectedLocation && (
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground">Location:</span>{' '}
+                        <span className="font-medium">{selectedLocation.label}</span>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
