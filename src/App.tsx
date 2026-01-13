@@ -83,8 +83,14 @@ import ISPEmailTemplates from "./pages/ISP/EmailTemplates";
 
 // Customer Portal Pages
 import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
-import CustomerDashboard from "./pages/CustomerPortal/CustomerDashboard";
 import CustomerPayBill from "./pages/CustomerPortal/CustomerPayBill";
+import CustomerPortalLayout from "./components/customer-portal/CustomerPortalLayout";
+import CustomerDashboardContent from "./pages/CustomerPortal/CustomerDashboardContent";
+import CustomerBills from "./pages/CustomerPortal/CustomerBills";
+import CustomerRecharges from "./pages/CustomerPortal/CustomerRecharges";
+import CustomerUsage from "./pages/CustomerPortal/CustomerUsage";
+import CustomerProfilePage from "./pages/CustomerPortal/CustomerProfile";
+import CustomerSupport from "./pages/CustomerPortal/CustomerSupport";
 
 // Reseller Portal Pages
 import ResellerLogin from "./pages/ResellerPortal/ResellerLogin";
@@ -545,9 +551,17 @@ const App = () => (
                 </ProtectedRoute>
               } />
 
+              {/* Customer Portal Routes */}
               <Route path="/portal/login" element={<CustomerLogin />} />
-              <Route path="/portal/dashboard" element={<CustomerDashboard />} />
-              <Route path="/portal/pay" element={<CustomerPayBill />} />
+              <Route path="/portal" element={<CustomerPortalLayout />}>
+                <Route path="dashboard" element={<CustomerDashboardContent />} />
+                <Route path="pay" element={<CustomerPayBill />} />
+                <Route path="bills" element={<CustomerBills />} />
+                <Route path="recharges" element={<CustomerRecharges />} />
+                <Route path="usage" element={<CustomerUsage />} />
+                <Route path="profile" element={<CustomerProfilePage />} />
+                <Route path="support" element={<CustomerSupport />} />
+              </Route>
 
               {/* Reseller Portal Routes */}
               <Route path="/reseller/login" element={<ResellerLogin />} />
