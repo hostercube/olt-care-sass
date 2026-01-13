@@ -8,6 +8,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Wifi, User, Lock, Loader2, Eye, EyeOff, Shield, Zap, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTenantBrandingById } from '@/hooks/useTenantBranding';
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
+import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
@@ -15,6 +17,9 @@ export default function CustomerLogin() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const { settings: platformSettings, loading: settingsLoading } = usePlatformSettings();
   
   const { branding, loading: brandingLoading } = useTenantBrandingById(tenantId);
 
@@ -25,6 +30,10 @@ export default function CustomerLogin() {
 
   const tenantSlug = searchParams.get('tenant');
 
+  // Use platform-level CAPTCHA settings
+  const captchaSiteKey = platformSettings.captchaSiteKey?.trim() || '';
+  const captchaEnabled = platformSettings.enableCaptcha === true && captchaSiteKey.length > 10;
+
   useEffect(() => {
     // Check if already logged in
     const session = localStorage.getItem('customer_session');
@@ -34,7 +43,7 @@ export default function CustomerLogin() {
     }
 
     // Fetch tenant ID from slug if provided
-    const fetchTenantId = async () => {
+    const fetchTenantData = async () => {
       if (tenantSlug) {
         const { data } = await supabase
           .from('tenants')
@@ -47,7 +56,7 @@ export default function CustomerLogin() {
       }
     };
 
-    fetchTenantId();
+    fetchTenantData();
   }, [tenantSlug, navigate]);
 
   // Apply favicon if available
@@ -63,20 +72,30 @@ export default function CustomerLogin() {
     }
   }, [branding]);
 
+  const resetCaptcha = () => {
+    setCaptchaToken(null);
+    setCaptchaReset(v => v + 1);
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const usernameInput = credentials.username.trim();
+    const passwordInput = credentials.password.trim();
+
+    if (!usernameInput || !passwordInput) {
+      toast.error('Please enter both username and password');
+      return;
+    }
+
+    if (captchaEnabled && !captchaToken) {
+      toast.error('Please complete the CAPTCHA verification');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const usernameInput = credentials.username.trim();
-      const passwordInput = credentials.password.trim();
-
-      if (!usernameInput || !passwordInput) {
-        toast.error('Please enter both username and password');
-        setLoading(false);
-        return;
-      }
-
       // Find customer by PPPoE username (case-insensitive)
       let query = supabase
         .from('customers')
@@ -111,6 +130,7 @@ export default function CustomerLogin() {
       if (error) {
         console.error('Login query error:', error);
         toast.error('Login failed. Please try again.');
+        resetCaptcha();
         return;
       }
 
@@ -122,6 +142,7 @@ export default function CustomerLogin() {
 
       if (!customer) {
         toast.error('Invalid PPPoE username or password');
+        resetCaptcha();
         return;
       }
 
@@ -138,6 +159,7 @@ export default function CustomerLogin() {
     } catch (err) {
       console.error('Login error:', err);
       toast.error('Login failed. Please try again.');
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
@@ -215,10 +237,20 @@ export default function CustomerLogin() {
                   </div>
                 </div>
 
+                {captchaEnabled && (
+                  <div className="pt-2">
+                    <TurnstileWidget
+                      siteKey={captchaSiteKey}
+                      onToken={(token) => setCaptchaToken(token)}
+                      resetKey={captchaReset}
+                    />
+                  </div>
+                )}
+
                 <Button 
                   type="submit" 
                   className="w-full h-11 text-base font-medium shadow-lg shadow-primary/20" 
-                  disabled={loading}
+                  disabled={loading || (captchaEnabled && !captchaToken)}
                 >
                   {loading ? (
                     <>
@@ -234,10 +266,16 @@ export default function CustomerLogin() {
                 </Button>
               </form>
             </CardContent>
-            <CardFooter className="border-t bg-muted/30 flex justify-center py-4">
+            <CardFooter className="border-t bg-muted/30 flex flex-col gap-2 py-4">
               <p className="text-sm text-muted-foreground text-center">
                 Use your PPPoE credentials provided by your ISP
               </p>
+              {captchaEnabled && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Shield className="h-3 w-3" />
+                  Protected by Cloudflare Turnstile
+                </div>
+              )}
             </CardFooter>
           </Card>
 
