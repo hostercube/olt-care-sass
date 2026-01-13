@@ -14,6 +14,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Grid3X3, Rows, Columns, Move
 } from 'lucide-react';
 import { CustomSection, LAYOUT_OPTIONS, SECTION_TYPES, SectionLayoutOptions } from '@/types/landingPage';
+import { ImageUploader } from './ImageUploader';
 
 interface AdvancedSectionEditorProps {
   section: CustomSection;
@@ -159,19 +160,14 @@ export function AdvancedSectionEditor({
               </div>
             )}
             
-            {/* Image URL */}
+            {/* Image Upload/URL */}
             {['image', 'custom', 'banner', 'cta'].includes(section.type) && (
-              <div className="space-y-2">
-                <Label>ইমেজ URL</Label>
-                <Input
-                  value={section.imageUrl || ''}
-                  onChange={(e) => onUpdate(index, { imageUrl: e.target.value })}
-                  placeholder="https://example.com/image.jpg"
-                />
-                {section.imageUrl && (
-                  <img src={section.imageUrl} alt="Preview" className="mt-2 h-32 w-auto rounded-lg object-cover" />
-                )}
-              </div>
+              <ImageUploader
+                label="ইমেজ"
+                value={section.imageUrl || ''}
+                onChange={(url) => onUpdate(index, { imageUrl: url })}
+                folderPath={`sections/${section.id}`}
+              />
             )}
             
             {/* Video URL */}

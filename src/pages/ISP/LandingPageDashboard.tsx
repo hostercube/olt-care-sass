@@ -164,6 +164,7 @@ interface LandingSettings {
   subdomain: string;
   company_name: string;
   logo_url: string;
+  favicon_url: string;
   theme_color: string;
   // Multiple FTP servers
   landing_page_ftp_enabled: boolean;
@@ -184,6 +185,11 @@ interface LandingSettings {
   landing_page_custom_sections: CustomSectionType[];
   // Registration control
   customer_registration_enabled: boolean;
+  // SEO fields
+  landing_page_meta_title: string;
+  landing_page_meta_description: string;
+  landing_page_og_image_url: string;
+  landing_page_canonical_url: string;
 }
 
 interface CustomMenuItem {
@@ -371,6 +377,7 @@ export default function LandingPageDashboard() {
     subdomain: '',
     company_name: '',
     logo_url: '',
+    favicon_url: '',
     theme_color: 'cyan',
     landing_page_ftp_enabled: false,
     landing_page_ftp_servers: [],
@@ -385,6 +392,10 @@ export default function LandingPageDashboard() {
     landing_page_telegram: '',
     landing_page_custom_sections: [],
     customer_registration_enabled: true,
+    landing_page_meta_title: '',
+    landing_page_meta_description: '',
+    landing_page_og_image_url: '',
+    landing_page_canonical_url: '',
   });
   const [config, setConfig] = useState<LandingConfig>({
     heroStyle: 'centered',
@@ -466,6 +477,7 @@ export default function LandingPageDashboard() {
           subdomain: tenantData.subdomain || '',
           company_name: tenantData.company_name || '',
           logo_url: tenantData.logo_url || '',
+          favicon_url: tenantData.favicon_url || '',
           theme_color: tenantData.theme_color || 'cyan',
           landing_page_ftp_enabled: tenantData.landing_page_ftp_enabled || false,
           landing_page_ftp_servers: ftpServers,
@@ -480,6 +492,10 @@ export default function LandingPageDashboard() {
           landing_page_telegram: tenantData.landing_page_telegram || '',
           landing_page_custom_sections: customSections,
           customer_registration_enabled: tenantData.customer_registration_enabled ?? true,
+          landing_page_meta_title: tenantData.landing_page_meta_title || '',
+          landing_page_meta_description: tenantData.landing_page_meta_description || '',
+          landing_page_og_image_url: tenantData.landing_page_og_image_url || '',
+          landing_page_canonical_url: tenantData.landing_page_canonical_url || '',
         });
       }
     } catch (err) {
@@ -616,9 +632,11 @@ export default function LandingPageDashboard() {
     setSettings(prev => ({ ...prev, landing_page_custom_sections: updated }));
   };
 
-  const removeCustomSection = (index: number) => {
+  const removeCustomSection = async (index: number) => {
     const updated = settings.landing_page_custom_sections.filter((_, i) => i !== index);
     setSettings(prev => ({ ...prev, landing_page_custom_sections: updated }));
+    // Auto-save after deletion
+    await handleSave({ landing_page_custom_sections: updated });
   };
 
   const moveCustomSection = (index: number, direction: 'up' | 'down') => {
@@ -1635,9 +1653,89 @@ export default function LandingPageDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Settings Tab - Registration Control */}
+          {/* Settings Tab - Registration Control + SEO */}
           <TabsContent value="settings" className="mt-6">
             <div className="space-y-6">
+              {/* SEO Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    SEO সেটিংস
+                  </CardTitle>
+                  <CardDescription>
+                    সার্চ ইঞ্জিন অপ্টিমাইজেশন ও সোশ্যাল শেয়ারিং
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Meta Title (সর্বোচ্চ ৬০ অক্ষর)</Label>
+                      <Input
+                        value={settings.landing_page_meta_title}
+                        onChange={(e) => handleInputChange('landing_page_meta_title', e.target.value)}
+                        placeholder="আপনার কোম্পানি - দ্রুত ইন্টারনেট সেবা"
+                        maxLength={60}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {settings.landing_page_meta_title.length}/60 অক্ষর
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Canonical URL (ঐচ্ছিক)</Label>
+                      <Input
+                        value={settings.landing_page_canonical_url}
+                        onChange={(e) => handleInputChange('landing_page_canonical_url', e.target.value)}
+                        placeholder="https://yourdomain.com"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Meta Description (সর্বোচ্চ ১৬০ অক্ষর)</Label>
+                    <Textarea
+                      value={settings.landing_page_meta_description}
+                      onChange={(e) => handleInputChange('landing_page_meta_description', e.target.value)}
+                      placeholder="আপনার ISP সম্পর্কে সংক্ষিপ্ত বিবরণ যা সার্চ রেজাল্টে দেখাবে..."
+                      maxLength={160}
+                      rows={2}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {settings.landing_page_meta_description.length}/160 অক্ষর
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>OG Image URL (সোশ্যাল শেয়ার ইমেজ)</Label>
+                    <Input
+                      value={settings.landing_page_og_image_url}
+                      onChange={(e) => handleInputChange('landing_page_og_image_url', e.target.value)}
+                      placeholder="https://example.com/og-image.jpg"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      সুপারিশকৃত সাইজ: 1200x630 পিক্সেল
+                    </p>
+                    {settings.landing_page_og_image_url && (
+                      <img 
+                        src={settings.landing_page_og_image_url} 
+                        alt="OG Preview" 
+                        className="mt-2 h-24 rounded-lg object-cover"
+                      />
+                    )}
+                  </div>
+                  <Button 
+                    onClick={() => handleSave({ 
+                      landing_page_meta_title: settings.landing_page_meta_title,
+                      landing_page_meta_description: settings.landing_page_meta_description,
+                      landing_page_og_image_url: settings.landing_page_og_image_url,
+                      landing_page_canonical_url: settings.landing_page_canonical_url,
+                    })}
+                    disabled={saving}
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                    SEO সেটিংস সেভ করুন
+                  </Button>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
