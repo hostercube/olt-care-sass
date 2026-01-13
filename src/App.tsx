@@ -78,6 +78,7 @@ import ISPCampaignManagement from "./pages/ISP/CampaignManagement";
 import CustomerTypes from "./pages/ISP/CustomerTypes";
 import RechargeHistory from "./pages/ISP/RechargeHistory";
 import BandwidthManagement from "./pages/ISP/BandwidthManagement";
+import SupportTickets from "./pages/ISP/SupportTickets";
 import ISPSMSTemplates from "./pages/ISP/SMSTemplates";
 import ISPEmailTemplates from "./pages/ISP/EmailTemplates";
 
@@ -491,6 +492,13 @@ const App = () => (
                     <ModuleAccessGuard module="isp_inventory" moduleName="Inventory Management">
                       <POSInventory />
                     </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/tickets" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <SupportTickets />
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
