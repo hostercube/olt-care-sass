@@ -18,25 +18,34 @@ import { logger } from '../utils/logger.js';
  */
 export function setupDomainRoutes(app, supabase) {
   
-  // Get server IP from system settings
+  // Get server IP from platform_settings (within system_settings)
   const getServerIP = async () => {
     try {
+      // Try platform_settings format first
       const { data, error } = await supabase
+        .from('system_settings')
+        .select('platform_settings')
+        .eq('id', 'global')
+        .maybeSingle();
+      
+      if (!error && data?.platform_settings?.customDomainServerIP) {
+        return data.platform_settings.customDomainServerIP;
+      }
+
+      // Fallback to key-value format
+      const { data: data2, error: error2 } = await supabase
         .from('system_settings')
         .select('value')
         .eq('key', 'customDomainServerIP')
         .maybeSingle();
       
-      if (error || !data?.value) {
-        logger.warn('Server IP not configured in system_settings');
-        return null;
+      if (!error2 && data2?.value) {
+        if (typeof data2.value === 'string') return data2.value;
+        if (typeof data2.value === 'object' && data2.value.value) return data2.value.value;
+        if (typeof data2.value === 'object' && data2.value.ip) return data2.value.ip;
       }
       
-      // Handle both formats
-      if (typeof data.value === 'string') return data.value;
-      if (typeof data.value === 'object' && data.value.value) return data.value.value;
-      if (typeof data.value === 'object' && data.value.ip) return data.value.ip;
-      
+      logger.warn('Server IP not configured in system_settings.platform_settings.customDomainServerIP');
       return null;
     } catch (err) {
       logger.error('Error fetching server IP:', err);

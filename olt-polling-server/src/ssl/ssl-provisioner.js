@@ -5,6 +5,12 @@
  * and dynamic Nginx configuration generation for tenant custom domains.
  * 
  * This is a production-grade SaaS custom domain solution.
+ * 
+ * ARCHITECTURE:
+ * - Each tenant custom domain gets its own Nginx config + SSL certificate
+ * - Nginx configs serve the React SPA (same as main domain)
+ * - Backend API proxied to olt-polling-server
+ * - No wildcard SSL - each domain has dedicated certificate
  */
 
 import { exec, spawn } from 'child_process';
@@ -22,9 +28,13 @@ const CERTBOT_PATH = process.env.CERTBOT_PATH || '/usr/bin/certbot';
 const WEBROOT_PATH = process.env.CERTBOT_WEBROOT || '/var/www/html';
 const CERTBOT_EMAIL = process.env.CERTBOT_EMAIL || 'admin@isppoint.com';
 
+// SPA Frontend path (same as main oltapp.isppoint.com)
+const FRONTEND_ROOT = process.env.FRONTEND_ROOT || '/var/www/oltapp.isppoint.com/dist';
+const OLT_SERVER_ROOT = process.env.OLT_SERVER_ROOT || '/var/www/oltapp.isppoint.com/olt-polling-server';
+
 // Backend proxy configuration
 const BACKEND_HOST = process.env.BACKEND_PROXY_HOST || '127.0.0.1';
-const BACKEND_PORT = process.env.BACKEND_PROXY_PORT || '3000';
+const BACKEND_PORT = process.env.BACKEND_PROXY_PORT || '3001';
 
 /**
  * Check if a domain's DNS A record points to the server IP
@@ -44,27 +54,32 @@ export async function verifyDNS(domain, expectedIP) {
 }
 
 /**
- * Generate Nginx configuration for a domain
+ * Generate Nginx configuration for a tenant custom domain
+ * 
+ * This config mirrors the main oltapp.isppoint.com config:
+ * - Serves React SPA
+ * - Proxies /olt-polling-server/ to backend
+ * - Handles static assets
+ * - Has same security headers
  */
 export function generateNginxConfig(domain, options = {}) {
   const {
-    proxyHost = BACKEND_HOST,
-    proxyPort = BACKEND_PORT,
     sslEnabled = false,
     certPath = null,
     keyPath = null,
   } = options;
 
-  // HTTP-only config (before SSL is issued)
-  let config = `# Auto-generated config for ${domain}
+  // HTTP server block (always needed for ACME challenge + redirect)
+  let config = `# Auto-generated config for tenant custom domain: ${domain}
 # Generated at: ${new Date().toISOString()}
+# DO NOT EDIT MANUALLY - managed by SSL Provisioner
 
 server {
     listen 80;
     listen [::]:80;
     server_name ${domain} www.${domain};
 
-    # Let's Encrypt challenge
+    # Let's Encrypt ACME challenge
     location /.well-known/acme-challenge/ {
         root ${WEBROOT_PATH};
         allow all;
@@ -72,15 +87,15 @@ server {
 `;
 
   if (sslEnabled && certPath && keyPath) {
-    // Add redirect to HTTPS
+    // HTTP redirects to HTTPS when SSL is enabled
     config += `
-    # Redirect HTTP to HTTPS
+    # Redirect all HTTP to HTTPS
     location / {
         return 301 https://$host$request_uri;
     }
 }
 
-# HTTPS Server Block
+# HTTPS Server Block - Serves tenant landing page
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
@@ -90,57 +105,101 @@ server {
     ssl_certificate ${certPath};
     ssl_certificate_key ${keyPath};
     ssl_session_timeout 1d;
-    ssl_session_cache shared:SSL:50m;
+    ssl_session_cache shared:TenantSSL:10m;
     ssl_session_tickets off;
 
-    # Modern SSL configuration
+    # Modern SSL protocols
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
     ssl_prefer_server_ciphers off;
 
-    # HSTS
-    add_header Strict-Transport-Security "max-age=63072000" always;
+    # HSTS - strict transport security
+    add_header Strict-Transport-Security "max-age=31536000" always;
 
-    # Proxy headers
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Host $host;
+    # Security Headers (same as main domain)
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
 
-    # Backend proxy
-    location / {
-        proxy_pass http://${proxyHost}:${proxyPort};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
+    # Frontend - React SPA (same build as main domain)
+    root ${FRONTEND_ROOT};
+    index index.html;
+
+    # Gzip Compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types text/plain text/css text/xml text/javascript application/javascript application/json;
+
+    # =========================
+    # UPLOADS (STATIC FILES)
+    # =========================
+    location ^~ /uploads/ {
+        root ${OLT_SERVER_ROOT};
+        try_files $uri =404;
+        access_log off;
+        expires 30d;
     }
 
-    # Static files (if any)
-    location /uploads/ {
-        alias /var/www/oltapp.isppoint.com/olt-polling-server/uploads/;
-        try_files $uri =404;
+    location ~* ^/uploads/.*\\.(php|sh|py|pl|cgi)$ {
+        deny all;
+    }
+
+    # Backend API Proxy (same as main domain)
+    location /olt-polling-server/ {
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT}/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
+
+    # Frontend SPA routing - serves React app
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Static assets cache
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Deny hidden files
+    location ~ /\\. {
+        deny all;
     }
 }
 `;
   } else {
-    // HTTP only - proxy directly (before SSL)
+    // HTTP-only before SSL is issued - serve SPA directly
     config += `
-    # Proxy headers
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Host $host;
+    # Serve React SPA directly (before SSL)
+    root ${FRONTEND_ROOT};
+    index index.html;
 
-    # Backend proxy
-    location / {
-        proxy_pass http://${proxyHost}:${proxyPort};
+    # Backend API Proxy
+    location /olt-polling-server/ {
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT}/;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # SPA routing
+    location / {
+        try_files $uri $uri/ /index.html;
     }
 }
 `;
