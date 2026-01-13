@@ -957,28 +957,30 @@ export default function LandingPageDashboard() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5 lg:grid-cols-9 h-auto gap-2 bg-transparent p-0">
-            {[
-              { id: 'templates', icon: Layout, label: 'টেমপ্লেট' },
-              { id: 'appearance', icon: PaintBucket, label: 'অ্যাপিয়ারেন্স' },
-              { id: 'content', icon: Type, label: 'কনটেন্ট' },
-              { id: 'menus', icon: Menu, label: 'মেনু' },
-              { id: 'social', icon: Users, label: 'সোশ্যাল' },
-              { id: 'sections', icon: Layers, label: 'সেকশন' },
-              { id: 'branding', icon: Palette, label: 'ব্র্যান্ডিং' },
-              { id: 'contact', icon: Phone, label: 'যোগাযোগ' },
-              { id: 'settings', icon: Settings2, label: 'সেটিংস' },
-            ].map((tab) => (
-              <TabsTrigger 
-                key={tab.id}
-                value={tab.id}
-                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground flex items-center gap-2 py-3"
-              >
-                <tab.icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{tab.label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md py-3 -mx-4 px-4 border-b border-border mb-4">
+            <TabsList className="flex flex-wrap gap-2 h-auto bg-muted/50 p-2 rounded-xl">
+              {[
+                { id: 'templates', icon: Layout, label: 'টেমপ্লেট' },
+                { id: 'appearance', icon: PaintBucket, label: 'অ্যাপিয়ারেন্স' },
+                { id: 'content', icon: Type, label: 'কনটেন্ট' },
+                { id: 'menus', icon: Menu, label: 'মেনু' },
+                { id: 'social', icon: Users, label: 'সোশ্যাল' },
+                { id: 'sections', icon: Layers, label: 'সেকশন' },
+                { id: 'branding', icon: Palette, label: 'ব্র্যান্ডিং' },
+                { id: 'contact', icon: Phone, label: 'যোগাযোগ' },
+                { id: 'settings', icon: Settings2, label: 'সেটিংস' },
+              ].map((tab) => (
+                <TabsTrigger 
+                  key={tab.id}
+                  value={tab.id}
+                  className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:bg-muted"
+                >
+                  <tab.icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
           {/* Templates Tab */}
           <TabsContent value="templates" className="mt-6">
@@ -1686,37 +1688,93 @@ export default function LandingPageDashboard() {
                 </CardContent>
               </Card>
 
-              {/* Logo Preview */}
+              {/* Logo Upload - New Section */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Image className="h-4 w-4" />
-                    লোগো প্রিভিউ
+                    কোম্পানি লোগো
                   </CardTitle>
                   <CardDescription>
-                    ব্র্যান্ডিং সেটিংস থেকে লোগো আপডেট করুন
+                    ওয়েবসাইটে দেখানোর জন্য লোগো আপলোড করুন (হেডার ও অন্যান্য জায়গায় দেখাবে)
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-4 p-4 rounded-lg bg-muted/50">
-                    {settings.logo_url ? (
-                      <img 
-                        src={settings.logo_url} 
-                        alt="Logo" 
-                        className="h-16 w-auto max-w-[200px] object-contain"
-                      />
-                    ) : (
-                      <div className={`h-16 w-16 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center`}>
-                        <Wifi className="h-8 w-8 text-white" />
+                <CardContent className="space-y-4">
+                  <ImageUploader
+                    label="লোগো ইমেজ"
+                    value={settings.logo_url}
+                    onChange={(url) => handleInputChange('logo_url', url)}
+                    folderPath="logos"
+                    aspectRatio="auto"
+                    placeholder="https://example.com/logo.png"
+                    maxSizeMB={2}
+                  />
+                  
+                  {/* Live Preview */}
+                  <div className="p-4 rounded-lg bg-muted/50 border">
+                    <p className="text-sm font-medium mb-3">প্রিভিউ:</p>
+                    <div className="flex items-center gap-4">
+                      {settings.logo_url ? (
+                        <img 
+                          src={settings.logo_url} 
+                          alt="Logo Preview" 
+                          className="h-16 w-auto max-w-[200px] object-contain rounded"
+                        />
+                      ) : (
+                        <div className={`h-16 w-16 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center`}>
+                          <Globe className="h-8 w-8 text-white" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-lg">{settings.company_name || 'Company Name'}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {settings.logo_url ? '✓ লোগো সেট আছে' : '⚠️ ডিফল্ট আইকন ব্যবহার হচ্ছে'}
+                        </p>
                       </div>
-                    )}
-                    <div>
-                      <p className="font-medium">{settings.company_name || 'Company Name'}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {settings.logo_url ? 'লোগো সেট আছে' : 'ডিফল্ট আইকন ব্যবহার হচ্ছে'}
-                      </p>
                     </div>
                   </div>
+
+                  <Button 
+                    onClick={() => handleSave({ logo_url: settings.logo_url })}
+                    disabled={saving}
+                    className="w-full"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                    লোগো সেভ করুন
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Favicon Upload */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    ফেভিকন
+                  </CardTitle>
+                  <CardDescription>
+                    ব্রাউজার ট্যাবে দেখানোর জন্য ফেভিকন (ছোট আইকন)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <ImageUploader
+                    label="ফেভিকন ইমেজ (সর্বোত্তম সাইজ: 32x32 বা 64x64)"
+                    value={settings.favicon_url}
+                    onChange={(url) => handleInputChange('favicon_url', url)}
+                    folderPath="favicons"
+                    aspectRatio="1/1"
+                    placeholder="https://example.com/favicon.png"
+                    maxSizeMB={1}
+                  />
+
+                  <Button 
+                    onClick={() => handleSave({ favicon_url: settings.favicon_url })}
+                    disabled={saving}
+                    className="w-full"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                    ফেভিকন সেভ করুন
+                  </Button>
                 </CardContent>
               </Card>
             </div>

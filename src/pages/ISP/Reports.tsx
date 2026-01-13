@@ -508,6 +508,136 @@ export default function Reports() {
         );
 
       case 'financial':
+        const printFinancialReport = () => {
+          const printWindow = window.open('', '_blank');
+          if (!printWindow) {
+            toast.error('Please allow pop-ups to print');
+            return;
+          }
+
+          const monthName = format(parseISO(selectedMonth + '-01'), 'MMMM yyyy');
+          const totalIncome = reportData?.totalIncome || 0;
+          const totalExpense = reportData?.totalExpense || 0;
+          const netProfit = totalIncome - totalExpense;
+
+          const incomeRows = [
+            `<tr class="income-row"><td>Bill Collection</td><td class="amount income">+৳${(reportData?.monthlyCollection || 0).toLocaleString()}</td></tr>`,
+            ...(reportData?.incomeByCategory?.map((cat: any) => 
+              `<tr class="income-row indent"><td>${cat.name}</td><td class="amount income">+৳${cat.amount.toLocaleString()}</td></tr>`
+            ) || [])
+          ].join('');
+
+          const expenseRows = [
+            `<tr class="expense-row"><td>Staff Salary</td><td class="amount expense">-৳${(reportData?.totalSalary || 0).toLocaleString()}</td></tr>`,
+            ...(reportData?.expenseByCategory?.map((cat: any) => 
+              `<tr class="expense-row indent"><td>${cat.name}</td><td class="amount expense">-৳${cat.amount.toLocaleString()}</td></tr>`
+            ) || [])
+          ].join('');
+
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Income & Expense Report - ${monthName}</title>
+              <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: 'Segoe UI', sans-serif; padding: 30px; background: #fff; color: #333; }
+                .header { text-align: center; margin-bottom: 40px; padding-bottom: 25px; border-bottom: 3px solid #3b82f6; }
+                .header h1 { font-size: 28px; color: #1e40af; margin-bottom: 8px; }
+                .header p { color: #64748b; font-size: 14px; }
+                .company { font-size: 20px; font-weight: 600; color: #1a1a1a; margin-bottom: 5px; }
+                .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 25px; margin-bottom: 40px; }
+                .summary-card { padding: 25px; border-radius: 16px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+                .summary-card.income { background: linear-gradient(145deg, #d1fae5, #a7f3d0); border: 2px solid #10b981; }
+                .summary-card.expense { background: linear-gradient(145deg, #fee2e2, #fecaca); border: 2px solid #ef4444; }
+                .summary-card.profit { background: linear-gradient(145deg, #dbeafe, #bfdbfe); border: 2px solid #3b82f6; }
+                .summary-card .label { font-size: 13px; color: #475569; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
+                .summary-card .value { font-size: 32px; font-weight: bold; margin-top: 8px; }
+                .summary-card.income .value { color: #059669; }
+                .summary-card.expense .value { color: #dc2626; }
+                .summary-card.profit .value { color: #2563eb; }
+                .summary-card .sub { font-size: 11px; color: #64748b; margin-top: 5px; }
+                .section { margin-bottom: 35px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+                .section-title { font-size: 16px; font-weight: 700; padding: 15px 20px; background: #f8fafc; border-bottom: 2px solid #e2e8f0; }
+                table { width: 100%; border-collapse: collapse; font-size: 14px; }
+                th { background: #f1f5f9; padding: 14px 20px; text-align: left; font-weight: 600; color: #475569; }
+                td { padding: 12px 20px; border-bottom: 1px solid #f1f5f9; }
+                tr:hover { background: #f8fafc; }
+                .amount { text-align: right; font-family: 'Courier New', monospace; font-weight: 700; font-size: 15px; }
+                .amount.income { color: #059669; }
+                .amount.expense { color: #dc2626; }
+                .indent td:first-child { padding-left: 45px; color: #64748b; }
+                .total-row { background: #f8fafc; font-weight: bold; }
+                .total-row td { border-top: 2px solid #e2e8f0; font-size: 15px; }
+                .grand-total { background: linear-gradient(135deg, #eff6ff, #dbeafe); }
+                .grand-total td { border-top: 3px solid #3b82f6; font-size: 16px; }
+                .footer { margin-top: 50px; padding-top: 20px; border-top: 2px solid #e2e8f0; text-align: center; color: #64748b; font-size: 12px; }
+                @media print { 
+                  body { padding: 15px; } 
+                  .summary-card, .section { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="header">
+                <p class="company">${tenant?.name || 'ISP Management'}</p>
+                <h1>📊 Income, Expense & Profit/Loss Report</h1>
+                <p>Report Period: ${monthName}</p>
+              </div>
+
+              <div class="summary-grid">
+                <div class="summary-card income">
+                  <div class="label">Total Income</div>
+                  <div class="value">৳${totalIncome.toLocaleString()}</div>
+                  <div class="sub">Collection + Other Income</div>
+                </div>
+                <div class="summary-card expense">
+                  <div class="label">Total Expense</div>
+                  <div class="value">৳${totalExpense.toLocaleString()}</div>
+                  <div class="sub">Salary + Other Expenses</div>
+                </div>
+                <div class="summary-card profit">
+                  <div class="label">Net ${netProfit >= 0 ? 'Profit' : 'Loss'}</div>
+                  <div class="value" style="color: ${netProfit >= 0 ? '#059669' : '#dc2626'};">${netProfit >= 0 ? '+' : ''}৳${netProfit.toLocaleString()}</div>
+                  <div class="sub">${netProfit >= 0 ? 'Positive Balance' : 'Negative Balance'}</div>
+                </div>
+              </div>
+
+              <div class="section">
+                <h3 class="section-title">📈 Detailed Breakdown</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Category / Item</th>
+                      <th style="text-align: right; width: 200px;">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style="background: #ecfdf5;"><td><strong>💰 Income Sources</strong></td><td></td></tr>
+                    ${incomeRows}
+                    <tr class="total-row" style="background: #d1fae5;"><td>Subtotal Income</td><td class="amount income">৳${totalIncome.toLocaleString()}</td></tr>
+                    
+                    <tr style="background: #fef2f2;"><td><strong>💸 Expense Items</strong></td><td></td></tr>
+                    ${expenseRows}
+                    <tr class="total-row" style="background: #fee2e2;"><td>Subtotal Expense</td><td class="amount expense">৳${totalExpense.toLocaleString()}</td></tr>
+                    
+                    <tr class="grand-total"><td><strong>📊 Net ${netProfit >= 0 ? 'Profit' : 'Loss'}</strong></td><td class="amount" style="color: ${netProfit >= 0 ? '#059669' : '#dc2626'}; font-size: 18px;"><strong>${netProfit >= 0 ? '+' : ''}৳${netProfit.toLocaleString()}</strong></td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="footer">
+                <p>Report generated on ${format(new Date(), 'dd MMMM yyyy, hh:mm a')}</p>
+                <p style="margin-top: 5px;">This is a computer-generated report.</p>
+              </div>
+            </body>
+            </html>
+          `);
+          printWindow.document.close();
+          printWindow.focus();
+          setTimeout(() => printWindow.print(), 250);
+        };
+
         return (
           <Card>
             <CardHeader className="flex flex-col sm:flex-row items-start justify-between gap-4">
@@ -517,10 +647,16 @@ export default function Reports() {
                   Income, Expense & Profit/Loss Report
                 </CardTitle>
               </div>
-              <Button variant="outline" size="sm" onClick={() => downloadReport('Financial')}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                CSV
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => downloadReport('Financial')}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  CSV
+                </Button>
+                <Button size="sm" onClick={printFinancialReport}>
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">

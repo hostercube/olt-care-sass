@@ -304,6 +304,157 @@ export default function Transactions() {
     toast.success('CSV exported successfully');
   };
 
+  // Print Report Function
+  const printReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print');
+      return;
+    }
+
+    const monthName = format(parseISO(selectedMonth + '-01'), 'MMMM yyyy');
+    
+    const incomeRows = Object.entries(incomeSummary).map(([catId, amount]) => {
+      const cat = categories.find(c => c.id === catId);
+      return `<tr class="income-row"><td>${cat?.name || 'Uncategorized'}</td><td class="amount income">+৳${amount.toLocaleString()}</td></tr>`;
+    }).join('');
+
+    const expenseRows = Object.entries(expenseSummary).map(([catId, amount]) => {
+      const cat = categories.find(c => c.id === catId);
+      return `<tr class="expense-row"><td>${cat?.name || 'Uncategorized'}</td><td class="amount expense">-৳${amount.toLocaleString()}</td></tr>`;
+    }).join('');
+
+    const transactionRows = filteredTransactions.map(tx => `
+      <tr>
+        <td>${format(new Date(tx.date), 'dd/MM/yyyy')}</td>
+        <td><span class="badge ${tx.type}">${tx.type === 'income' ? 'Income' : 'Expense'}</span></td>
+        <td>${getCategoryName(tx.category_id)}</td>
+        <td>${tx.description || '-'}</td>
+        <td>${tx.payment_method || '-'}</td>
+        <td class="amount ${tx.type}">${tx.type === 'income' ? '+' : '-'}৳${tx.amount.toLocaleString()}</td>
+      </tr>
+    `).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Income & Expense Report - ${monthName}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #fff; color: #333; }
+          .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #eee; }
+          .header h1 { font-size: 24px; color: #1a1a1a; margin-bottom: 5px; }
+          .header p { color: #666; font-size: 14px; }
+          .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+          .summary-card { padding: 20px; border-radius: 12px; text-align: center; }
+          .summary-card.income { background: linear-gradient(135deg, #d1fae5, #a7f3d0); }
+          .summary-card.expense { background: linear-gradient(135deg, #fee2e2, #fecaca); }
+          .summary-card.profit { background: linear-gradient(135deg, #dbeafe, #bfdbfe); }
+          .summary-card .label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+          .summary-card .value { font-size: 28px; font-weight: bold; margin-top: 5px; }
+          .summary-card.income .value { color: #059669; }
+          .summary-card.expense .value { color: #dc2626; }
+          .summary-card.profit .value { color: #2563eb; }
+          .section { margin-bottom: 30px; }
+          .section-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px; }
+          .section-title::before { content: ''; width: 4px; height: 20px; border-radius: 2px; }
+          .section-title.income::before { background: #10b981; }
+          .section-title.expense::before { background: #ef4444; }
+          table { width: 100%; border-collapse: collapse; font-size: 13px; }
+          th { background: #f8fafc; padding: 12px 15px; text-align: left; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
+          td { padding: 10px 15px; border-bottom: 1px solid #f1f5f9; }
+          tr:hover { background: #f8fafc; }
+          .amount { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
+          .amount.income { color: #059669; }
+          .amount.expense { color: #dc2626; }
+          .income-row td:first-child { padding-left: 30px; }
+          .expense-row td:first-child { padding-left: 30px; }
+          .total-row { background: #f1f5f9; font-weight: bold; }
+          .total-row td { border-top: 2px solid #e2e8f0; }
+          .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+          .badge.income { background: #d1fae5; color: #059669; }
+          .badge.expense { background: #fee2e2; color: #dc2626; }
+          .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px; }
+          @media print { 
+            body { padding: 0; } 
+            .summary-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>📊 Income & Expense Report</h1>
+          <p>Period: ${monthName}</p>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card income">
+            <div class="label">Total Income</div>
+            <div class="value">৳${totalIncome.toLocaleString()}</div>
+          </div>
+          <div class="summary-card expense">
+            <div class="label">Total Expense</div>
+            <div class="value">৳${totalExpense.toLocaleString()}</div>
+          </div>
+          <div class="summary-card profit">
+            <div class="label">Net ${netProfit >= 0 ? 'Profit' : 'Loss'}</div>
+            <div class="value">${netProfit >= 0 ? '+' : ''}৳${netProfit.toLocaleString()}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title income">Category-wise Summary</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th style="text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="background: #f0fdf4;"><td><strong>📈 Income Categories</strong></td><td></td></tr>
+              ${incomeRows || '<tr><td colspan="2" style="text-align: center; color: #999;">No income this month</td></tr>'}
+              <tr style="background: #f0fdf4;" class="total-row"><td>Total Income</td><td class="amount income">৳${totalIncome.toLocaleString()}</td></tr>
+              <tr style="background: #fef2f2;"><td><strong>📉 Expense Categories</strong></td><td></td></tr>
+              ${expenseRows || '<tr><td colspan="2" style="text-align: center; color: #999;">No expenses this month</td></tr>'}
+              <tr style="background: #fef2f2;" class="total-row"><td>Total Expense</td><td class="amount expense">৳${totalExpense.toLocaleString()}</td></tr>
+              <tr class="total-row" style="background: #eff6ff;"><td><strong>Net ${netProfit >= 0 ? 'Profit' : 'Loss'}</strong></td><td class="amount" style="color: ${netProfit >= 0 ? '#059669' : '#dc2626'};">${netProfit >= 0 ? '+' : ''}৳${netProfit.toLocaleString()}</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">All Transactions (${filteredTransactions.length})</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Method</th>
+                <th style="text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${transactionRows || '<tr><td colspan="6" style="text-align: center; color: #999;">No transactions found</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="footer">
+          <p>Generated on ${format(new Date(), 'dd MMMM yyyy, hh:mm a')}</p>
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 250);
+  };
+
   return (
     <DashboardLayout
       title="Income & Expense"
@@ -614,11 +765,11 @@ export default function Transactions() {
               </Select>
               <Button variant="outline" size="sm" onClick={exportToCSV}>
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Export Report
+                Export CSV
               </Button>
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
+              <Button variant="outline" size="sm" onClick={printReport}>
                 <Printer className="h-4 w-4 mr-2" />
-                Print
+                Print Report
               </Button>
             </div>
 
