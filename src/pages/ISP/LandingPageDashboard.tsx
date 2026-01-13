@@ -831,6 +831,130 @@ export default function LandingPageDashboard() {
           </CardContent>
         </Card>
 
+        {/* URL Slug Section - Prominent & Separate */}
+        <Card className="border-2 border-primary/10">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Link className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    URL Slug
+                    {slugLocked && (
+                      <Badge variant="secondary">
+                        <Shield className="h-3 w-3 mr-1" />
+                        লক করা
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {slugLocked 
+                      ? 'স্লাগ লক করা আছে। পরিবর্তন করতে সুপার এডমিনের সাথে যোগাযোগ করুন।'
+                      : 'আপনার ওয়েবসাইটের ইউনিক URL ঠিকানা সেট করুন'
+                    }
+                  </CardDescription>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {slugLocked ? (
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <div className="flex items-start gap-3">
+                  <Shield className="h-5 w-5 text-amber-500 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-medium text-amber-700 dark:text-amber-400">স্লাগ সেভ করা হয়েছে</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      স্লাগ একবার সেভ করার পর আর পরিবর্তন করা যায় না। এটি আপনার ওয়েবসাইটের স্থায়ী ঠিকানা।
+                      যদি পরিবর্তন করতে চান তাহলে সুপার এডমিনের সাথে যোগাযোগ করুন।
+                    </p>
+                    <div className="mt-3 p-3 rounded-lg bg-background border flex items-center justify-between gap-2 flex-wrap">
+                      <code className="font-mono text-primary text-sm">{publicUrl}</code>
+                      <div className="flex items-center gap-2">
+                        {publicUrl && (
+                          <>
+                            <Button variant="outline" size="sm" onClick={() => copyToClipboard(publicUrl)}>
+                              <Copy className="h-4 w-4 mr-1" />
+                              কপি
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => window.open(publicUrl, '_blank')}>
+                              <ExternalLink className="h-4 w-4 mr-1" />
+                              দেখুন
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <SlugVerificationInput
+                    value={settings.slug}
+                    onChange={(value) => handleInputChange('slug', value)}
+                    disabled={saving}
+                  />
+                  <div className="flex items-end">
+                    <Button 
+                      onClick={async () => {
+                        // Save slug and lock it
+                        await handleSave({ slug: settings.slug });
+                        // Lock the slug after first save
+                        const { error } = await supabase
+                          .from('tenants')
+                          .update({ landing_page_slug_locked: true } as any)
+                          .eq('id', tenantId);
+                        if (!error) {
+                          setSlugLocked(true);
+                          toast.success('স্লাগ সেভ ও লক করা হয়েছে');
+                        }
+                      }}
+                      disabled={saving || !settings.slug || settings.slug.length < 3}
+                      className="w-full md:w-auto"
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                      স্লাগ সেভ করুন
+                    </Button>
+                  </div>
+                </div>
+                {publicUrl && (
+                  <div className="p-3 rounded-lg bg-muted/50 border">
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">প্রিভিউ: </span>
+                      <code className="font-mono text-primary">{publicUrl}</code>
+                    </p>
+                  </div>
+                )}
+                <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    ⚠️ স্লাগ সেভ করার পর আর পরিবর্তন করা যাবে না। সতর্কতার সাথে বেছে নিন।
+                  </p>
+                </div>
+              </>
+            )}
+            
+            {/* Custom Domain Info */}
+            <Separator className="my-4" />
+            <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/20">
+              <div className="flex items-start gap-3">
+                <Globe className="h-5 w-5 text-blue-500 mt-0.5" />
+                <div>
+                  <p className="font-medium text-blue-700 dark:text-blue-400">কাস্টম ডোমেইন</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    আপনার নিজস্ব ডোমেইন (যেমন: yourisp.com) কানেক্ট করতে সুপার এডমিনের সাথে যোগাযোগ করুন।
+                    কাস্টম ডোমেইন যোগ করলে এই একই ল্যান্ডিং পেজ আপনার ডোমেইনে দেখা যাবে।
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-5 lg:grid-cols-9 h-auto gap-2 bg-transparent p-0">
@@ -935,93 +1059,6 @@ export default function LandingPageDashboard() {
           {/* Content Tab */}
           <TabsContent value="content" className="mt-6">
             <div className="space-y-6">
-              {/* URL Slug with verification and locking */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Link className="h-4 w-4" />
-                    URL Slug
-                    {slugLocked && (
-                      <Badge variant="secondary" className="ml-2">
-                        <Shield className="h-3 w-3 mr-1" />
-                        লক করা
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <CardDescription>
-                    {slugLocked 
-                      ? 'স্লাগ লক করা আছে। পরিবর্তন করতে সুপার এডমিনের সাথে যোগাযোগ করুন।'
-                      : 'আপনার ওয়েবসাইটের ইউনিক URL অ্যাড্রেস'
-                    }
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {slugLocked ? (
-                    <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                      <div className="flex items-start gap-3">
-                        <Shield className="h-5 w-5 text-amber-500 mt-0.5" />
-                        <div>
-                          <p className="font-medium text-amber-700 dark:text-amber-400">স্লাগ সেভ করা হয়েছে</p>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            স্লাগ একবার সেভ করার পর আর পরিবর্তন করা যায় না। এটি আপনার ওয়েবসাইটের স্থায়ী ঠিকানা।
-                            যদি পরিবর্তন করতে চান তাহলে সুপার এডমিনের সাথে যোগাযোগ করুন।
-                          </p>
-                          <div className="mt-3 p-2 rounded bg-background">
-                            <code className="font-mono text-primary">{publicUrl}</code>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <SlugVerificationInput
-                          value={settings.slug}
-                          onChange={(value) => handleInputChange('slug', value)}
-                          disabled={saving}
-                        />
-                        <div className="flex items-end">
-                          <Button 
-                            onClick={async () => {
-                              // Save slug and lock it
-                              await handleSave({ slug: settings.slug });
-                              // Lock the slug after first save
-                              const { error } = await supabase
-                                .from('tenants')
-                                .update({ landing_page_slug_locked: true } as any)
-                                .eq('id', tenantId);
-                              if (!error) {
-                                setSlugLocked(true);
-                                toast.success('স্লাগ সেভ ও লক করা হয়েছে');
-                              }
-                            }}
-                            disabled={saving || !settings.slug || settings.slug.length < 3}
-                            className="w-full md:w-auto"
-                          >
-                            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                            স্লাগ সেভ করুন
-                          </Button>
-                        </div>
-                      </div>
-                      {publicUrl && (
-                        <div className="p-3 rounded-lg bg-muted/50 border">
-                          <p className="text-sm">
-                            <span className="text-muted-foreground">প্রিভিউ: </span>
-                            <code className="font-mono text-primary">{publicUrl}</code>
-                          </p>
-                        </div>
-                      )}
-                      <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
-                        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                          <Shield className="h-4 w-4" />
-                          ⚠️ স্লাগ সেভ করার পর আর পরিবর্তন করা যাবে না। সতর্কতার সাথে বেছে নিন।
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
               {/* Hero Section Editor */}
               <HeroSectionEditor
                 settings={{
