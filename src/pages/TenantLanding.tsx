@@ -348,11 +348,57 @@ export default function TenantLanding() {
 
   useEffect(() => {
     if (tenant) {
+      // Set favicon
       if (tenant.favicon_url) {
-        const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
-        if (link) link.href = tenant.favicon_url;
+        let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+        if (!link) {
+          link = document.createElement('link');
+          link.rel = 'icon';
+          document.head.appendChild(link);
+        }
+        link.href = tenant.favicon_url;
       }
-      document.title = tenant.company_name || 'Internet Service Provider';
+      
+      // Set title (SEO meta title takes priority)
+      const rawData = tenant as any;
+      document.title = rawData.landing_page_meta_title || tenant.company_name || 'Internet Service Provider';
+      
+      // Set meta description
+      let metaDesc = document.querySelector('meta[name="description"]') as HTMLMetaElement;
+      if (!metaDesc) {
+        metaDesc = document.createElement('meta');
+        metaDesc.name = 'description';
+        document.head.appendChild(metaDesc);
+      }
+      metaDesc.content = rawData.landing_page_meta_description || tenant.landing_page_hero_subtitle || '';
+      
+      // Set OG tags
+      const setOgTag = (property: string, content: string) => {
+        if (!content) return;
+        let tag = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement;
+        if (!tag) {
+          tag = document.createElement('meta');
+          tag.setAttribute('property', property);
+          document.head.appendChild(tag);
+        }
+        tag.content = content;
+      };
+      
+      setOgTag('og:title', rawData.landing_page_meta_title || tenant.company_name);
+      setOgTag('og:description', rawData.landing_page_meta_description || tenant.landing_page_hero_subtitle);
+      setOgTag('og:image', rawData.landing_page_og_image_url || tenant.logo_url);
+      setOgTag('og:type', 'website');
+      
+      // Set canonical URL
+      if (rawData.landing_page_canonical_url) {
+        let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement;
+        if (!canonical) {
+          canonical = document.createElement('link');
+          canonical.rel = 'canonical';
+          document.head.appendChild(canonical);
+        }
+        canonical.href = rawData.landing_page_canonical_url;
+      }
     }
   }, [tenant]);
 
