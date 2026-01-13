@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/tooltip';
 
 export const ThemeToggle = forwardRef<HTMLButtonElement, React.ComponentPropsWithoutRef<'button'>>(
-  function ThemeToggle(props, ref) {
+  (props, ref) => {
     const { theme, toggleTheme } = useTheme();
 
     return (
@@ -37,3 +37,5 @@ export const ThemeToggle = forwardRef<HTMLButtonElement, React.ComponentPropsWit
     );
   }
 );
+
+ThemeToggle.displayName = 'ThemeToggle';
