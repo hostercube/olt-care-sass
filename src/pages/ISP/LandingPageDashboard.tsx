@@ -145,13 +145,17 @@ interface LiveTVChannel {
 
 interface CustomSection {
   id: string;
-  type: 'hero' | 'text' | 'image' | 'cta' | 'features' | 'custom';
+  type: 'hero' | 'text' | 'image' | 'cta' | 'features' | 'custom' | 'gallery' | 'video' | 'testimonial' | 'faq';
   title: string;
   subtitle?: string;
   content?: string;
   imageUrl?: string;
+  videoUrl?: string;
+  buttonText?: string;
+  buttonUrl?: string;
   bgColor?: string;
   textColor?: string;
+  items?: { title: string; description: string; icon?: string; imageUrl?: string }[];
   order: number;
   isVisible: boolean;
 }
@@ -604,8 +608,12 @@ export default function LandingPageDashboard() {
       subtitle: '',
       content: '',
       imageUrl: '',
+      videoUrl: '',
+      buttonText: '',
+      buttonUrl: '',
       bgColor: '#ffffff',
       textColor: '#000000',
+      items: [],
       order: settings.landing_page_custom_sections.length,
       isVisible: true,
     };
@@ -1405,23 +1413,39 @@ export default function LandingPageDashboard() {
                   <div className="flex flex-wrap gap-2 mb-6">
                     <Button variant="outline" onClick={() => addCustomSection('text')}>
                       <Type className="h-4 w-4 mr-2" />
-                      টেক্সট সেকশন
+                      টেক্সট
                     </Button>
                     <Button variant="outline" onClick={() => addCustomSection('image')}>
                       <ImagePlus className="h-4 w-4 mr-2" />
-                      ইমেজ সেকশন
+                      ইমেজ
                     </Button>
                     <Button variant="outline" onClick={() => addCustomSection('cta')}>
                       <Target className="h-4 w-4 mr-2" />
-                      CTA সেকশন
+                      CTA
                     </Button>
                     <Button variant="outline" onClick={() => addCustomSection('features')}>
                       <Zap className="h-4 w-4 mr-2" />
-                      ফিচার সেকশন
+                      ফিচার
+                    </Button>
+                    <Button variant="outline" onClick={() => addCustomSection('gallery')}>
+                      <Image className="h-4 w-4 mr-2" />
+                      গ্যালারি
+                    </Button>
+                    <Button variant="outline" onClick={() => addCustomSection('video')}>
+                      <Video className="h-4 w-4 mr-2" />
+                      ভিডিও
+                    </Button>
+                    <Button variant="outline" onClick={() => addCustomSection('testimonial')}>
+                      <Users className="h-4 w-4 mr-2" />
+                      টেস্টিমোনিয়াল
+                    </Button>
+                    <Button variant="outline" onClick={() => addCustomSection('faq')}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      FAQ
                     </Button>
                     <Button variant="outline" onClick={() => addCustomSection('custom')}>
                       <PenTool className="h-4 w-4 mr-2" />
-                      কাস্টম সেকশন
+                      কাস্টম
                     </Button>
                   </div>
 
@@ -1461,8 +1485,9 @@ export default function LandingPageDashboard() {
 
                               <div className="flex-1 space-y-4">
                                 <div className="flex items-center justify-between">
-                                  <Badge variant="secondary">{section.type} সেকশন</Badge>
+                                  <Badge variant="secondary" className="capitalize">{section.type} সেকশন</Badge>
                                   <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">দৃশ্যমান</span>
                                     <Switch
                                       checked={section.isVisible}
                                       onCheckedChange={(checked) => updateCustomSection(index, { isVisible: checked })}
@@ -1492,6 +1517,7 @@ export default function LandingPageDashboard() {
                                   </div>
                                 </div>
 
+                                {/* Content for text/cta/custom */}
                                 {(section.type === 'text' || section.type === 'cta' || section.type === 'custom') && (
                                   <div className="space-y-2">
                                     <Label>কনটেন্ট</Label>
@@ -1504,6 +1530,7 @@ export default function LandingPageDashboard() {
                                   </div>
                                 )}
 
+                                {/* Image URL for image/custom */}
                                 {(section.type === 'image' || section.type === 'custom') && (
                                   <div className="space-y-2">
                                     <Label>ইমেজ URL</Label>
@@ -1512,6 +1539,112 @@ export default function LandingPageDashboard() {
                                       onChange={(e) => updateCustomSection(index, { imageUrl: e.target.value })}
                                       placeholder="https://example.com/image.jpg"
                                     />
+                                  </div>
+                                )}
+
+                                {/* Video URL for video section */}
+                                {section.type === 'video' && (
+                                  <div className="space-y-2">
+                                    <Label>ভিডিও URL (YouTube/Vimeo)</Label>
+                                    <Input
+                                      value={section.videoUrl || ''}
+                                      onChange={(e) => updateCustomSection(index, { videoUrl: e.target.value })}
+                                      placeholder="https://youtube.com/watch?v=..."
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Button fields for CTA/Custom */}
+                                {(section.type === 'cta' || section.type === 'custom') && (
+                                  <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                      <Label>বাটন টেক্সট</Label>
+                                      <Input
+                                        value={section.buttonText || ''}
+                                        onChange={(e) => updateCustomSection(index, { buttonText: e.target.value })}
+                                        placeholder="এখনই শুরু করুন"
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>বাটন লিংক</Label>
+                                      <Input
+                                        value={section.buttonUrl || ''}
+                                        onChange={(e) => updateCustomSection(index, { buttonUrl: e.target.value })}
+                                        placeholder="https://example.com/signup"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Items for features/gallery/testimonial/faq */}
+                                {(section.type === 'features' || section.type === 'gallery' || section.type === 'testimonial' || section.type === 'faq') && (
+                                  <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <Label>
+                                        {section.type === 'features' && 'ফিচার আইটেম'}
+                                        {section.type === 'gallery' && 'গ্যালারি আইটেম'}
+                                        {section.type === 'testimonial' && 'টেস্টিমোনিয়াল আইটেম'}
+                                        {section.type === 'faq' && 'FAQ আইটেম'}
+                                      </Label>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          const newItems = [...(section.items || []), { title: '', description: '', imageUrl: '' }];
+                                          updateCustomSection(index, { items: newItems });
+                                        }}
+                                      >
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        আইটেম যোগ
+                                      </Button>
+                                    </div>
+                                    {(section.items || []).map((item, itemIndex) => (
+                                      <div key={itemIndex} className="p-3 rounded-lg border bg-muted/30 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            value={item.title}
+                                            onChange={(e) => {
+                                              const newItems = [...(section.items || [])];
+                                              newItems[itemIndex] = { ...item, title: e.target.value };
+                                              updateCustomSection(index, { items: newItems });
+                                            }}
+                                            placeholder={section.type === 'faq' ? 'প্রশ্ন' : 'শিরোনাম'}
+                                            className="flex-1"
+                                          />
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => {
+                                              const newItems = (section.items || []).filter((_, i) => i !== itemIndex);
+                                              updateCustomSection(index, { items: newItems });
+                                            }}
+                                          >
+                                            <Trash2 className="h-3 w-3 text-destructive" />
+                                          </Button>
+                                        </div>
+                                        <Textarea
+                                          value={item.description}
+                                          onChange={(e) => {
+                                            const newItems = [...(section.items || [])];
+                                            newItems[itemIndex] = { ...item, description: e.target.value };
+                                            updateCustomSection(index, { items: newItems });
+                                          }}
+                                          placeholder={section.type === 'faq' ? 'উত্তর' : 'বিবরণ'}
+                                          rows={2}
+                                        />
+                                        {(section.type === 'gallery' || section.type === 'testimonial') && (
+                                          <Input
+                                            value={item.imageUrl || ''}
+                                            onChange={(e) => {
+                                              const newItems = [...(section.items || [])];
+                                              newItems[itemIndex] = { ...item, imageUrl: e.target.value };
+                                              updateCustomSection(index, { items: newItems });
+                                            }}
+                                            placeholder="ইমেজ URL"
+                                          />
+                                        )}
+                                      </div>
+                                    ))}
                                   </div>
                                 )}
 
