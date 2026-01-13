@@ -139,6 +139,7 @@ const getTemplateConfig = (templateId: string) => {
   const enhanced = ENHANCED_TEMPLATES[templateId];
   if (enhanced) {
     return {
+      id: enhanced.id,
       name: enhanced.name,
       headerClass: enhanced.headerClass,
       heroClass: enhanced.heroClass,
@@ -148,9 +149,13 @@ const getTemplateConfig = (templateId: string) => {
       heroAnimation: enhanced.heroAnimation,
       sectionBgClass: enhanced.sectionBgClass,
       sectionAltBgClass: enhanced.sectionAltBgClass,
+      sectionTextClass: enhanced.sectionTextClass || 'text-gray-600',
+      sectionHeadingClass: enhanced.sectionHeadingClass || 'text-gray-900',
       cardClass: enhanced.cardClass,
       cardHoverClass: enhanced.cardHoverClass,
       cardBorderClass: enhanced.cardBorderClass,
+      cardTextClass: enhanced.cardTextClass || 'text-gray-600',
+      cardTitleClass: enhanced.cardTitleClass || 'text-gray-900',
       primaryButtonClass: enhanced.primaryButtonClass,
       secondaryButtonClass: enhanced.secondaryButtonClass,
       badgeClass: enhanced.badgeClass,
@@ -162,11 +167,14 @@ const getTemplateConfig = (templateId: string) => {
       hasGradientText: enhanced.hasGradientText,
       hasAnimatedBg: enhanced.hasAnimatedBg,
       patternOverlay: enhanced.patternOverlay,
+      sectionStyle: enhanced.sectionStyle || 'default',
+      cardStyle: enhanced.cardStyle || 'flat',
     };
   }
   
   // Fallback for any unknown templates
   return {
+    id: 'default',
     name: 'Default Template',
     headerClass: 'bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-sm',
     heroClass: 'bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950',
@@ -176,9 +184,13 @@ const getTemplateConfig = (templateId: string) => {
     heroAnimation: 'animate-fade-in',
     sectionBgClass: 'bg-gray-50',
     sectionAltBgClass: 'bg-white',
+    sectionTextClass: 'text-gray-600',
+    sectionHeadingClass: 'text-gray-900',
     cardClass: 'bg-white shadow-xl hover:shadow-2xl transition-shadow border-0',
     cardHoverClass: 'hover:-translate-y-2',
     cardBorderClass: 'border-t-4 border-t-blue-500',
+    cardTextClass: 'text-gray-600',
+    cardTitleClass: 'text-gray-900',
     primaryButtonClass: 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg',
     secondaryButtonClass: 'border-blue-500 text-blue-600 hover:bg-blue-50',
     badgeClass: 'bg-blue-500/10 text-blue-600 border-0',
@@ -190,6 +202,8 @@ const getTemplateConfig = (templateId: string) => {
     hasGradientText: false,
     hasAnimatedBg: false,
     patternOverlay: undefined,
+    sectionStyle: 'default' as const,
+    cardStyle: 'flat' as const,
   };
 };
 
@@ -1601,250 +1615,501 @@ export default function TenantLanding() {
         </>
       )}
 
-      {/* Contact Section */}
+      {/* Contact Section - Unique designs per template */}
       {tenant.landing_page_show_contact && (
-        <section id="contact" className={`${template.sectionBgClass} py-20 lg:py-28`}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <Badge className={`mb-4 ${themeColors.lightBg} ${themeColors.text} border-0`}>
+        <section id="contact" className={`py-20 lg:py-28 relative overflow-hidden ${
+          template.isDark ? 'bg-gray-950' : 
+          template.id === 'isp-vibrant' ? 'bg-gradient-to-br from-cyan-50 via-blue-50 to-white' :
+          template.id === 'nature-green' ? 'bg-gradient-to-br from-emerald-50 via-green-50 to-white' :
+          template.id === 'sunset-orange' ? 'bg-gradient-to-br from-orange-50 via-amber-50 to-white' :
+          template.id === 'ocean-teal' ? 'bg-gradient-to-br from-teal-50 via-cyan-50 to-white' :
+          template.id === 'isp-gaming' ? 'bg-purple-950' :
+          template.id === 'isp-corporate' ? 'bg-slate-900' :
+          template.sectionBgClass
+        }`}>
+          {/* Background Pattern based on template */}
+          {template.id === 'isp-pro-1' && (
+            <div className="absolute inset-0">
+              <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl" />
+              <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
+            </div>
+          )}
+          {template.id === 'isp-vibrant' && (
+            <div className="absolute inset-0">
+              <svg className="absolute bottom-0 w-full" viewBox="0 0 1440 120" fill="none">
+                <path d="M0,60 C360,120 720,0 1080,60 C1260,90 1380,45 1440,60 L1440,120 L0,120 Z" fill="rgba(6,182,212,0.1)"/>
+              </svg>
+            </div>
+          )}
+          {template.id === 'isp-gaming' && (
+            <div className="absolute inset-0">
+              <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-fuchsia-500/20 rounded-full blur-3xl animate-pulse" />
+              <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
+            </div>
+          )}
+
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div className={`text-center mb-16 ${
+              template.id === 'sunset-orange' ? 'skew-y-0' : ''
+            }`}>
+              <Badge className={`mb-4 ${
+                template.isDark ? 'bg-white/10 text-white border-white/20' :
+                template.id === 'isp-vibrant' ? 'bg-cyan-500/20 text-cyan-700' :
+                template.id === 'nature-green' ? 'bg-emerald-500/20 text-emerald-700' :
+                template.id === 'sunset-orange' ? 'bg-orange-500/20 text-orange-700' :
+                template.id === 'ocean-teal' ? 'bg-teal-500/20 text-teal-700' :
+                `${themeColors.lightBg} ${themeColors.text}`
+              } border-0 px-4 py-2`}>
+                <MapPin className="h-4 w-4 mr-2" />
                 যোগাযোগ
               </Badge>
-              <h2 className={`text-3xl md:text-4xl lg:text-5xl font-bold ${template.isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
+              <h2 className={`text-3xl md:text-4xl lg:text-5xl font-bold mb-4 ${
+                template.isDark ? 'text-white' : 
+                template.id === 'nature-green' ? 'text-emerald-900' :
+                template.id === 'sunset-orange' ? 'bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent' :
+                template.id === 'ocean-teal' ? 'text-teal-900' :
+                'text-gray-900'
+              }`}>
                 আমাদের সাথে যোগাযোগ করুন
               </h2>
-              <p className={`text-lg ${template.isDark ? 'text-gray-400' : 'text-gray-600'} max-w-2xl mx-auto`}>
+              <p className={`text-lg max-w-2xl mx-auto ${
+                template.isDark ? 'text-gray-400' : 'text-gray-600'
+              }`}>
                 যেকোনো প্রশ্ন বা সাহায্যের জন্য আমাদের সাথে যোগাযোগ করুন
               </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-              {/* Contact Info */}
-              <div className="space-y-6">
-                {tenant.landing_page_contact_phone && (
-                  <a 
-                    href={`tel:${tenant.landing_page_contact_phone}`}
-                    className={`flex items-center gap-4 p-6 rounded-2xl ${template.cardClass} group`}
-                  >
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg`}>
-                      <Phone className="h-6 w-6 text-white" />
+            {/* Layout varies by template */}
+            <div className={`grid gap-8 ${
+              template.id === 'isp-corporate' || template.id === 'isp-gaming' ? 'lg:grid-cols-5' :
+              template.id === 'clean-white' ? 'lg:grid-cols-1 max-w-4xl mx-auto' :
+              'lg:grid-cols-2'
+            }`}>
+              
+              {/* Google Map / Location Section */}
+              <div className={`${
+                template.id === 'isp-corporate' || template.id === 'isp-gaming' ? 'lg:col-span-2' :
+                template.id === 'clean-white' ? 'order-2' : ''
+              } ${
+                template.id === 'sunset-orange' ? 'order-2 lg:order-1' : ''
+              }`}>
+                {/* Map Container with unique styling per template */}
+                <div className={`h-full min-h-[400px] rounded-2xl overflow-hidden relative ${
+                  template.id === 'isp-pro-1' ? 'shadow-2xl shadow-blue-500/20 ring-1 ring-blue-500/20' :
+                  template.id === 'isp-corporate' ? 'border border-white/10 bg-white/5 backdrop-blur-md' :
+                  template.id === 'isp-vibrant' ? 'shadow-2xl shadow-cyan-500/30 ring-4 ring-cyan-500/20' :
+                  template.id === 'isp-gaming' ? 'border-2 border-fuchsia-500/30 shadow-lg shadow-fuchsia-500/20' :
+                  template.id === 'nature-green' ? 'shadow-xl shadow-emerald-500/20 ring-2 ring-emerald-500/20' :
+                  template.id === 'sunset-orange' ? 'shadow-xl shadow-orange-500/20 -rotate-1 hover:rotate-0 transition-transform' :
+                  template.id === 'ocean-teal' ? 'shadow-xl shadow-teal-500/20 border-b-4 border-teal-500' :
+                  template.id === 'dark-gradient' ? 'border border-white/10 bg-white/5 backdrop-blur-md' :
+                  'shadow-xl'
+                }`}>
+                  {/* Map Embed */}
+                  <iframe 
+                    src={`https://maps.google.com/maps?q=${encodeURIComponent(tenant.landing_page_contact_address || tenant.company_name)}&output=embed`}
+                    width="100%" 
+                    height="100%" 
+                    style={{ border: 0, minHeight: '400px' }} 
+                    allowFullScreen 
+                    loading="lazy"
+                    className={template.isDark ? 'grayscale brightness-75' : ''}
+                  />
+                  
+                  {/* Overlay with contact info for some templates */}
+                  {(template.id === 'isp-corporate' || template.id === 'dark-gradient') && (
+                    <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/90 via-black/70 to-transparent">
+                      <div className="flex items-center gap-3 text-white">
+                        <MapPin className="h-5 w-5" />
+                        <span className="text-sm">{tenant.landing_page_contact_address || 'ঠিকানা পাওয়া যায়নি'}</span>
+                      </div>
                     </div>
-                    <div>
-                      <p className={`text-sm ${template.isDark ? 'text-gray-400' : 'text-gray-500'}`}>ফোন</p>
-                      <p className={`text-lg font-semibold ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {tenant.landing_page_contact_phone}
-                      </p>
-                    </div>
-                  </a>
-                )}
+                  )}
+                </div>
 
-                {tenant.landing_page_contact_email && (
-                  <a 
-                    href={`mailto:${tenant.landing_page_contact_email}`}
-                    className={`flex items-center gap-4 p-6 rounded-2xl ${template.cardClass} group`}
-                  >
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg`}>
-                      <Mail className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <p className={`text-sm ${template.isDark ? 'text-gray-400' : 'text-gray-500'}`}>ইমেইল</p>
-                      <p className={`text-lg font-semibold ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {tenant.landing_page_contact_email}
-                      </p>
-                    </div>
-                  </a>
-                )}
-
-                {tenant.landing_page_contact_address && (
-                  <div className={`flex items-start gap-4 p-6 rounded-2xl ${template.cardClass}`}>
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                      <MapPin className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <p className={`text-sm ${template.isDark ? 'text-gray-400' : 'text-gray-500'}`}>ঠিকানা</p>
-                      <p className={`text-lg font-semibold ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {tenant.landing_page_contact_address}
-                      </p>
-                    </div>
+                {/* Contact Info Cards - Below map for some templates */}
+                {template.id !== 'isp-corporate' && template.id !== 'isp-gaming' && (
+                  <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6`}>
+                    {tenant.landing_page_contact_phone && (
+                      <a 
+                        href={`tel:${tenant.landing_page_contact_phone}`}
+                        className={`flex items-center gap-3 p-4 rounded-xl transition-all group ${
+                          template.isDark ? 'bg-white/5 border border-white/10 hover:bg-white/10' :
+                          template.id === 'isp-vibrant' ? 'bg-white shadow-lg hover:shadow-xl border border-cyan-100' :
+                          template.id === 'nature-green' ? 'bg-white shadow-lg border border-emerald-100 hover:border-emerald-300' :
+                          template.id === 'sunset-orange' ? 'bg-white shadow-lg border border-orange-100 hover:-rotate-1' :
+                          template.id === 'ocean-teal' ? 'bg-white shadow-lg border-b-2 border-teal-500' :
+                          'bg-white shadow-lg hover:shadow-xl'
+                        }`}
+                      >
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform ${
+                          template.id === 'isp-vibrant' ? 'bg-gradient-to-br from-cyan-500 to-blue-500' :
+                          template.id === 'nature-green' ? 'bg-gradient-to-br from-emerald-500 to-green-500' :
+                          template.id === 'sunset-orange' ? 'bg-gradient-to-br from-orange-500 to-red-500' :
+                          template.id === 'ocean-teal' ? 'bg-gradient-to-br from-teal-500 to-cyan-500' :
+                          `bg-gradient-to-br ${themeColors.gradient}`
+                        }`}>
+                          <Phone className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <p className={`text-xs ${template.isDark ? 'text-gray-400' : 'text-gray-500'}`}>ফোন</p>
+                          <p className={`font-medium ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {tenant.landing_page_contact_phone}
+                          </p>
+                        </div>
+                      </a>
+                    )}
+                    {tenant.landing_page_contact_email && (
+                      <a 
+                        href={`mailto:${tenant.landing_page_contact_email}`}
+                        className={`flex items-center gap-3 p-4 rounded-xl transition-all group ${
+                          template.isDark ? 'bg-white/5 border border-white/10 hover:bg-white/10' :
+                          template.id === 'isp-vibrant' ? 'bg-white shadow-lg hover:shadow-xl border border-cyan-100' :
+                          template.id === 'nature-green' ? 'bg-white shadow-lg border border-emerald-100 hover:border-emerald-300' :
+                          template.id === 'sunset-orange' ? 'bg-white shadow-lg border border-orange-100 hover:rotate-1' :
+                          template.id === 'ocean-teal' ? 'bg-white shadow-lg border-b-2 border-teal-500' :
+                          'bg-white shadow-lg hover:shadow-xl'
+                        }`}
+                      >
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform bg-gradient-to-br from-blue-500 to-indigo-500`}>
+                          <Mail className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <p className={`text-xs ${template.isDark ? 'text-gray-400' : 'text-gray-500'}`}>ইমেইল</p>
+                          <p className={`font-medium ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {tenant.landing_page_contact_email}
+                          </p>
+                        </div>
+                      </a>
+                    )}
+                    {tenant.landing_page_contact_address && (
+                      <div className={`flex items-center gap-3 p-4 rounded-xl ${
+                        template.isDark ? 'bg-white/5 border border-white/10' :
+                        template.id === 'isp-vibrant' ? 'bg-white shadow-lg border border-cyan-100' :
+                        template.id === 'nature-green' ? 'bg-white shadow-lg border border-emerald-100' :
+                        template.id === 'sunset-orange' ? 'bg-white shadow-lg border border-orange-100' :
+                        template.id === 'ocean-teal' ? 'bg-white shadow-lg border-b-2 border-teal-500' :
+                        'bg-white shadow-lg'
+                      }`}>
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center bg-gradient-to-br from-green-500 to-emerald-500`}>
+                          <MapPin className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <p className={`text-xs ${template.isDark ? 'text-gray-400' : 'text-gray-500'}`}>ঠিকানা</p>
+                          <p className={`font-medium text-sm ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {tenant.landing_page_contact_address.substring(0, 30)}...
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Social Links - Enhanced */}
-                <div className="flex gap-4 pt-4">
+                {/* Social Links */}
+                <div className={`flex flex-wrap gap-3 mt-6 ${
+                  template.id === 'clean-white' ? 'justify-center' : ''
+                }`}>
                   {tenant.landing_page_social_facebook && (
-                    <a 
-                      href={tenant.landing_page_social_facebook} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
-                    >
+                    <a href={tenant.landing_page_social_facebook} target="_blank" rel="noopener noreferrer"
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all hover:scale-110 ${
+                        template.isDark ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gradient-to-br from-blue-600 to-blue-700'
+                      } shadow-lg`}>
                       <Facebook className="h-5 w-5 text-white" />
                     </a>
                   )}
                   {tenant.landing_page_social_youtube && (
-                    <a 
-                      href={tenant.landing_page_social_youtube} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
-                    >
+                    <a href={tenant.landing_page_social_youtube} target="_blank" rel="noopener noreferrer"
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all hover:scale-110 bg-gradient-to-br from-red-500 to-red-600 shadow-lg`}>
                       <Youtube className="h-5 w-5 text-white" />
                     </a>
                   )}
                   {tenant.landing_page_social_instagram && (
-                    <a 
-                      href={tenant.landing_page_social_instagram} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 via-purple-500 to-orange-400 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
-                    >
+                    <a href={tenant.landing_page_social_instagram} target="_blank" rel="noopener noreferrer"
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all hover:scale-110 bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-500 shadow-lg`}>
                       <Instagram className="h-5 w-5 text-white" />
                     </a>
                   )}
-                  {tenant.landing_page_social_twitter && (
-                    <a 
-                      href={tenant.landing_page_social_twitter} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
-                    >
-                      <Twitter className="h-5 w-5 text-white" />
-                    </a>
-                  )}
                   {tenant.landing_page_whatsapp && (
-                    <a 
-                      href={`https://wa.me/${tenant.landing_page_whatsapp.replace(/[^0-9]/g, '')}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
-                    >
+                    <a href={`https://wa.me/${tenant.landing_page_whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer"
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all hover:scale-110 bg-gradient-to-br from-green-500 to-green-600 shadow-lg`}>
                       <MessageCircle className="h-5 w-5 text-white" />
                     </a>
                   )}
+                  {tenant.landing_page_telegram && (
+                    <a href={tenant.landing_page_telegram.startsWith('http') ? tenant.landing_page_telegram : `https://t.me/${tenant.landing_page_telegram.replace('@', '')}`} target="_blank" rel="noopener noreferrer"
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all hover:scale-110 bg-gradient-to-br from-sky-500 to-blue-600 shadow-lg`}>
+                      <Send className="h-5 w-5 text-white" />
+                    </a>
+                  )}
                   {tenant.landing_page_social_linkedin && (
-                    <a 
-                      href={tenant.landing_page_social_linkedin} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-blue-700 to-blue-800 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
-                    >
+                    <a href={tenant.landing_page_social_linkedin} target="_blank" rel="noopener noreferrer"
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all hover:scale-110 bg-gradient-to-br from-blue-700 to-blue-800 shadow-lg`}>
                       <Linkedin className="h-5 w-5 text-white" />
                     </a>
                   )}
                   {tenant.landing_page_social_tiktok && (
-                    <a 
-                      href={tenant.landing_page_social_tiktok} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-gray-900 to-black flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
-                    >
+                    <a href={tenant.landing_page_social_tiktok} target="_blank" rel="noopener noreferrer"
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all hover:scale-110 bg-gradient-to-br from-gray-900 to-black shadow-lg`}>
                       <Music className="h-5 w-5 text-white" />
                     </a>
                   )}
-                  {tenant.landing_page_telegram && (
-                    <a 
-                      href={tenant.landing_page_telegram.startsWith('http') ? tenant.landing_page_telegram : `https://t.me/${tenant.landing_page_telegram.replace('@', '')}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
-                    >
-                      <Send className="h-5 w-5 text-white" />
+                  {tenant.landing_page_social_twitter && (
+                    <a href={tenant.landing_page_social_twitter} target="_blank" rel="noopener noreferrer"
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all hover:scale-110 bg-gradient-to-br from-sky-400 to-blue-500 shadow-lg`}>
+                      <Twitter className="h-5 w-5 text-white" />
                     </a>
                   )}
                 </div>
               </div>
 
-              {/* Contact Form */}
-              <Card className={template.cardClass}>
-                <CardHeader>
-                  <CardTitle className={template.isDark ? 'text-white' : ''}>
-                    মেসেজ পাঠান
-                  </CardTitle>
-                  <CardDescription className={template.isDark ? 'text-gray-400' : ''}>
-                    ফর্মটি পূরণ করুন, আমরা শীঘ্রই যোগাযোগ করব
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleContactSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Contact Form - Unique styling per template */}
+              <div className={`${
+                template.id === 'isp-corporate' || template.id === 'isp-gaming' ? 'lg:col-span-3' :
+                template.id === 'sunset-orange' ? 'order-1 lg:order-2' : ''
+              }`}>
+                <Card className={`h-full ${
+                  template.id === 'isp-pro-1' ? 'bg-white shadow-2xl shadow-blue-500/10 border-0 rounded-3xl' :
+                  template.id === 'isp-corporate' ? 'bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl' :
+                  template.id === 'isp-vibrant' ? 'bg-white shadow-2xl shadow-cyan-500/20 border-2 border-cyan-200 rounded-3xl' :
+                  template.id === 'isp-gaming' ? 'bg-purple-900/50 backdrop-blur-xl border-2 border-fuchsia-500/30 rounded-2xl' :
+                  template.id === 'modern-blue' ? 'bg-white shadow-xl border-0 rounded-xl' :
+                  template.id === 'clean-white' ? 'bg-white shadow-lg border border-gray-200 rounded-xl' :
+                  template.id === 'dark-gradient' ? 'bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl' :
+                  template.id === 'nature-green' ? 'bg-gradient-to-br from-white to-emerald-50 shadow-xl border border-emerald-200 rounded-2xl' :
+                  template.id === 'sunset-orange' ? 'bg-white shadow-xl border border-orange-200 rounded-2xl rotate-1 hover:rotate-0 transition-transform' :
+                  template.id === 'ocean-teal' ? 'bg-white shadow-xl border-t-4 border-teal-500 rounded-2xl' :
+                  template.cardClass
+                }`}>
+                  <CardHeader className="pb-4">
+                    <CardTitle className={`text-xl font-bold ${
+                      template.isDark ? 'text-white' :
+                      template.id === 'isp-vibrant' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent' :
+                      template.id === 'nature-green' ? 'text-emerald-800' :
+                      template.id === 'sunset-orange' ? 'bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent' :
+                      template.id === 'ocean-teal' ? 'text-teal-800' :
+                      'text-gray-900'
+                    }`}>
+                      মেসেজ পাঠান
+                    </CardTitle>
+                    <CardDescription className={template.isDark ? 'text-gray-400' : 'text-gray-500'}>
+                      ফর্মটি পূরণ করুন, আমরা শীঘ্রই যোগাযোগ করব
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleContactSubmit} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="contact-name" className={template.isDark ? 'text-gray-200' : 'text-gray-700'}>নাম *</Label>
+                          <Input
+                            id="contact-name"
+                            placeholder="আপনার নাম লিখুন"
+                            value={contactForm.name}
+                            onChange={(e) => setContactForm(prev => ({ ...prev, name: e.target.value }))}
+                            required
+                            className={`h-11 ${
+                              template.isDark 
+                                ? 'bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-white/40' 
+                                : template.id === 'isp-vibrant' 
+                                  ? 'border-cyan-200 focus:border-cyan-500 focus:ring-cyan-500/20 placeholder:text-gray-400'
+                                  : template.id === 'nature-green'
+                                    ? 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20 placeholder:text-gray-400'
+                                    : template.id === 'sunset-orange'
+                                      ? 'border-orange-200 focus:border-orange-500 focus:ring-orange-500/20 placeholder:text-gray-400'
+                                      : template.id === 'ocean-teal'
+                                        ? 'border-teal-200 focus:border-teal-500 focus:ring-teal-500/20 placeholder:text-gray-400'
+                                        : 'border-gray-200 focus:border-blue-500 placeholder:text-gray-400'
+                            }`}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="contact-phone" className={template.isDark ? 'text-gray-200' : 'text-gray-700'}>ফোন *</Label>
+                          <Input
+                            id="contact-phone"
+                            placeholder="আপনার ফোন নম্বর"
+                            value={contactForm.phone}
+                            onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))}
+                            required
+                            className={`h-11 ${
+                              template.isDark 
+                                ? 'bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-white/40' 
+                                : template.id === 'isp-vibrant' 
+                                  ? 'border-cyan-200 focus:border-cyan-500 focus:ring-cyan-500/20 placeholder:text-gray-400'
+                                  : template.id === 'nature-green'
+                                    ? 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20 placeholder:text-gray-400'
+                                    : template.id === 'sunset-orange'
+                                      ? 'border-orange-200 focus:border-orange-500 focus:ring-orange-500/20 placeholder:text-gray-400'
+                                      : template.id === 'ocean-teal'
+                                        ? 'border-teal-200 focus:border-teal-500 focus:ring-teal-500/20 placeholder:text-gray-400'
+                                        : 'border-gray-200 focus:border-blue-500 placeholder:text-gray-400'
+                            }`}
+                          />
+                        </div>
+                      </div>
                       <div className="space-y-2">
-                        <Label htmlFor="contact-name" className={template.isDark ? 'text-white' : ''}>নাম *</Label>
+                        <Label htmlFor="contact-email" className={template.isDark ? 'text-gray-200' : 'text-gray-700'}>ইমেইল</Label>
                         <Input
-                          id="contact-name"
-                          value={contactForm.name}
-                          onChange={(e) => setContactForm(prev => ({ ...prev, name: e.target.value }))}
-                          required
-                          className={template.isDark ? 'bg-white/5 border-white/20 text-white' : ''}
+                          id="contact-email"
+                          type="email"
+                          placeholder="example@email.com"
+                          value={contactForm.email}
+                          onChange={(e) => setContactForm(prev => ({ ...prev, email: e.target.value }))}
+                          className={`h-11 ${
+                            template.isDark 
+                              ? 'bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-white/40' 
+                              : template.id === 'isp-vibrant' 
+                                ? 'border-cyan-200 focus:border-cyan-500 focus:ring-cyan-500/20 placeholder:text-gray-400'
+                                : template.id === 'nature-green'
+                                  ? 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20 placeholder:text-gray-400'
+                                  : template.id === 'sunset-orange'
+                                    ? 'border-orange-200 focus:border-orange-500 focus:ring-orange-500/20 placeholder:text-gray-400'
+                                    : template.id === 'ocean-teal'
+                                      ? 'border-teal-200 focus:border-teal-500 focus:ring-teal-500/20 placeholder:text-gray-400'
+                                      : 'border-gray-200 focus:border-blue-500 placeholder:text-gray-400'
+                          }`}
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="contact-phone" className={template.isDark ? 'text-white' : ''}>ফোন *</Label>
+                        <Label htmlFor="contact-address" className={template.isDark ? 'text-gray-200' : 'text-gray-700'}>ঠিকানা</Label>
                         <Input
-                          id="contact-phone"
-                          value={contactForm.phone}
-                          onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))}
-                          required
-                          className={template.isDark ? 'bg-white/5 border-white/20 text-white' : ''}
+                          id="contact-address"
+                          placeholder="আপনার ঠিকানা"
+                          value={contactForm.address}
+                          onChange={(e) => setContactForm(prev => ({ ...prev, address: e.target.value }))}
+                          className={`h-11 ${
+                            template.isDark 
+                              ? 'bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-white/40' 
+                              : template.id === 'isp-vibrant' 
+                                ? 'border-cyan-200 focus:border-cyan-500 focus:ring-cyan-500/20 placeholder:text-gray-400'
+                                : template.id === 'nature-green'
+                                  ? 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20 placeholder:text-gray-400'
+                                  : template.id === 'sunset-orange'
+                                    ? 'border-orange-200 focus:border-orange-500 focus:ring-orange-500/20 placeholder:text-gray-400'
+                                    : template.id === 'ocean-teal'
+                                      ? 'border-teal-200 focus:border-teal-500 focus:ring-teal-500/20 placeholder:text-gray-400'
+                                      : 'border-gray-200 focus:border-blue-500 placeholder:text-gray-400'
+                          }`}
                         />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="contact-email" className={template.isDark ? 'text-white' : ''}>ইমেইল</Label>
-                      <Input
-                        id="contact-email"
-                        type="email"
-                        value={contactForm.email}
-                        onChange={(e) => setContactForm(prev => ({ ...prev, email: e.target.value }))}
-                        className={template.isDark ? 'bg-white/5 border-white/20 text-white' : ''}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="contact-address" className={template.isDark ? 'text-white' : ''}>ঠিকানা</Label>
-                      <Input
-                        id="contact-address"
-                        value={contactForm.address}
-                        onChange={(e) => setContactForm(prev => ({ ...prev, address: e.target.value }))}
-                        className={template.isDark ? 'bg-white/5 border-white/20 text-white' : ''}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="contact-message" className={template.isDark ? 'text-white' : ''}>মেসেজ</Label>
-                      <Textarea
-                        id="contact-message"
-                        value={contactForm.message}
-                        onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
-                        rows={4}
-                        className={template.isDark ? 'bg-white/5 border-white/20 text-white' : ''}
-                      />
-                    </div>
-                    
-                    {/* Turnstile Widget */}
-                    {tenant.turnstile_enabled && tenant.turnstile_site_key && (
-                      <TurnstileWidget
-                        siteKey={tenant.turnstile_site_key}
-                        onToken={setContactTurnstileToken}
-                      />
-                    )}
-                    
-                    <Button 
-                      type="submit" 
-                      className={`w-full bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white shadow-lg`}
-                      disabled={submitting}
-                    >
-                      {submitting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          পাঠানো হচ্ছে...
-                        </>
-                      ) : (
-                        <>
-                          মেসেজ পাঠান
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </>
+                      <div className="space-y-2">
+                        <Label htmlFor="contact-message" className={template.isDark ? 'text-gray-200' : 'text-gray-700'}>মেসেজ</Label>
+                        <Textarea
+                          id="contact-message"
+                          placeholder="আপনার মেসেজ লিখুন..."
+                          value={contactForm.message}
+                          onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
+                          rows={4}
+                          className={`resize-none ${
+                            template.isDark 
+                              ? 'bg-white/10 border-white/20 text-white placeholder:text-gray-400 focus:border-white/40' 
+                              : template.id === 'isp-vibrant' 
+                                ? 'border-cyan-200 focus:border-cyan-500 focus:ring-cyan-500/20 placeholder:text-gray-400'
+                                : template.id === 'nature-green'
+                                  ? 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20 placeholder:text-gray-400'
+                                  : template.id === 'sunset-orange'
+                                    ? 'border-orange-200 focus:border-orange-500 focus:ring-orange-500/20 placeholder:text-gray-400'
+                                    : template.id === 'ocean-teal'
+                                      ? 'border-teal-200 focus:border-teal-500 focus:ring-teal-500/20 placeholder:text-gray-400'
+                                      : 'border-gray-200 focus:border-blue-500 placeholder:text-gray-400'
+                          }`}
+                        />
+                      </div>
+                      
+                      {/* Turnstile Widget */}
+                      {tenant.turnstile_enabled && tenant.turnstile_site_key && (
+                        <TurnstileWidget
+                          siteKey={tenant.turnstile_site_key}
+                          onToken={setContactTurnstileToken}
+                        />
                       )}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
+                      
+                      <Button 
+                        type="submit" 
+                        className={`w-full h-12 text-base font-semibold ${
+                          template.id === 'isp-pro-1' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/30 rounded-xl' :
+                          template.id === 'isp-corporate' ? 'bg-white text-slate-900 hover:bg-gray-100 shadow-lg rounded-lg' :
+                          template.id === 'isp-vibrant' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-lg shadow-cyan-500/30 rounded-full' :
+                          template.id === 'isp-gaming' ? 'bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-600 hover:to-fuchsia-600 text-white shadow-lg shadow-purple-500/40 rounded-xl' :
+                          template.id === 'modern-blue' ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg' :
+                          template.id === 'clean-white' ? 'bg-gray-900 hover:bg-gray-800 text-white rounded-lg' :
+                          template.id === 'dark-gradient' ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg shadow-purple-500/30 rounded-xl' :
+                          template.id === 'nature-green' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-lg shadow-emerald-500/30 rounded-xl' :
+                          template.id === 'sunset-orange' ? 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-lg shadow-orange-500/30 rounded-full' :
+                          template.id === 'ocean-teal' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-lg shadow-teal-500/30 rounded-xl' :
+                          `bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white shadow-lg`
+                        }`}
+                        disabled={submitting}
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            পাঠানো হচ্ছে...
+                          </>
+                        ) : (
+                          <>
+                            মেসেজ পাঠান
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                          </>
+                        )}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Extra Contact Info for Corporate/Gaming templates */}
+              {(template.id === 'isp-corporate' || template.id === 'isp-gaming') && (
+                <div className="lg:col-span-5 mt-8">
+                  <div className={`grid grid-cols-1 md:grid-cols-3 gap-6`}>
+                    {tenant.landing_page_contact_phone && (
+                      <a href={`tel:${tenant.landing_page_contact_phone}`}
+                        className={`flex items-center gap-4 p-6 rounded-2xl transition-all group ${
+                          template.id === 'isp-corporate' ? 'bg-white/5 border border-white/10 hover:bg-white/10' :
+                          'bg-purple-900/30 border border-fuchsia-500/20 hover:border-fuchsia-500/50'
+                        }`}>
+                        <div className={`w-14 h-14 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${
+                          template.id === 'isp-corporate' ? 'bg-gradient-to-br from-cyan-500 to-blue-500' :
+                          'bg-gradient-to-br from-purple-500 to-fuchsia-500'
+                        }`}>
+                          <Phone className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">ফোন</p>
+                          <p className="text-lg font-semibold text-white">{tenant.landing_page_contact_phone}</p>
+                        </div>
+                      </a>
+                    )}
+                    {tenant.landing_page_contact_email && (
+                      <a href={`mailto:${tenant.landing_page_contact_email}`}
+                        className={`flex items-center gap-4 p-6 rounded-2xl transition-all group ${
+                          template.id === 'isp-corporate' ? 'bg-white/5 border border-white/10 hover:bg-white/10' :
+                          'bg-purple-900/30 border border-fuchsia-500/20 hover:border-fuchsia-500/50'
+                        }`}>
+                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Mail className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">ইমেইল</p>
+                          <p className="text-lg font-semibold text-white">{tenant.landing_page_contact_email}</p>
+                        </div>
+                      </a>
+                    )}
+                    {tenant.landing_page_contact_address && (
+                      <div className={`flex items-center gap-4 p-6 rounded-2xl ${
+                        template.id === 'isp-corporate' ? 'bg-white/5 border border-white/10' :
+                        'bg-purple-900/30 border border-fuchsia-500/20'
+                      }`}>
+                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
+                          <MapPin className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-400">ঠিকানা</p>
+                          <p className="text-lg font-semibold text-white">{tenant.landing_page_contact_address}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </section>
