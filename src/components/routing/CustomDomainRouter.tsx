@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, createContext, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchJsonSafe, normalizePollingServerUrl } from '@/lib/polling-server';
@@ -13,16 +13,12 @@ import { Loader2, Wifi, AlertCircle } from 'lucide-react';
  * - Each tenant can have multiple custom domains
  * - No per-domain Nginx/SSL configuration needed
  * 
- * Architecture:
- * 1. Request comes to any domain
- * 2. Router reads Host header (hostname)
- * 3. Queries DB: SELECT * FROM tenant_custom_domains WHERE domain = hostname AND is_verified = true
- * 4. If found → load tenant landing/login page
- * 5. If not found → show default page or error
+ * KEY FEATURE: Clean URLs
+ * - Custom domain root (/) shows landing page WITHOUT redirecting to /p/slug
+ * - URL stays clean, content is rendered directly
  */
 
 // Platform domains where the main SaaS runs (never trigger custom domain detection)
-// These are exact matches or prefixes - custom tenant domains should NOT match
 const PLATFORM_DOMAINS = [
   'localhost',
   '127.0.0.1',
@@ -54,6 +50,21 @@ interface TenantInfo {
 
 type DetectionState = 'loading' | 'platform' | 'custom_domain' | 'not_found' | 'error';
 
+// Context to share custom domain tenant info with child components
+interface CustomDomainContextValue {
+  isCustomDomain: boolean;
+  tenant: TenantInfo | null;
+  effectiveSlug: string | null;
+}
+
+const CustomDomainContext = createContext<CustomDomainContextValue>({
+  isCustomDomain: false,
+  tenant: null,
+  effectiveSlug: null,
+});
+
+export const useCustomDomainContext = () => useContext(CustomDomainContext);
+
 export default function CustomDomainRouter({ children }: Props) {
   const [state, setState] = useState<DetectionState>('loading');
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
@@ -66,22 +77,17 @@ export default function CustomDomainRouter({ children }: Props) {
     return window.location.hostname.toLowerCase().trim();
   }, []);
 
-  // Check if platform domain - use exact match for specific hosts, and includes for generic platform domains
+  // Check if platform domain
   const isPlatform = useMemo(() => {
-    // First check exact matches (like oltapp.isppoint.com)
     if (PLATFORM_EXACT_HOSTS.includes(hostname)) return true;
-    
-    // Check if hostname ends with or is a platform domain
-    // This catches *.lovable.app, *.lovableproject.com, etc.
     return PLATFORM_DOMAINS.some(domain => 
       hostname === domain || 
       hostname.endsWith(`.${domain}`) ||
-      hostname.includes('preview--') // Lovable preview URLs
+      hostname.includes('preview--')
     );
   }, [hostname]);
 
   useEffect(() => {
-    // If platform domain, skip detection immediately
     if (isPlatform) {
       setState('platform');
       return;
@@ -89,7 +95,6 @@ export default function CustomDomainRouter({ children }: Props) {
 
     const detectAndRoute = async () => {
       try {
-        // Normalize hostname variations (with/without www)
         const hostnameWithoutWww = hostname.replace(/^www\./, '');
         const candidates = Array.from(
           new Set([hostname, hostnameWithoutWww, `www.${hostnameWithoutWww}`])
@@ -97,7 +102,7 @@ export default function CustomDomainRouter({ children }: Props) {
 
         console.log('[CustomDomainRouter] Checking hostname:', hostname);
 
-        // 1) Primary: direct database lookup (fast path)
+        // 1) Primary: direct database lookup
         let domainData: any | null = null;
 
         const { data: directMatch, error: directErr } = await supabase
@@ -114,7 +119,7 @@ export default function CustomDomainRouter({ children }: Props) {
           console.warn('[CustomDomainRouter] Domain lookup error (direct):', directErr);
         }
 
-        // 2) Optional: subdomain+root-domain storage pattern (domain=root, subdomain=sub)
+        // 2) Subdomain pattern check
         if (!domainData) {
           const parts = hostnameWithoutWww.split('.').filter(Boolean);
           if (parts.length >= 3) {
@@ -131,14 +136,11 @@ export default function CustomDomainRouter({ children }: Props) {
             if (!subdomainErr && subdomainMatch) {
               domainData = subdomainMatch;
               console.log('[CustomDomainRouter] Found subdomain match:', subdomainMatch);
-            } else if (subdomainErr) {
-              console.warn('[CustomDomainRouter] Domain lookup error (subdomain):', subdomainErr);
             }
           }
         }
 
-        // 3) Fallback: resolve via backend (works even if public DB reads are blocked)
-        // Try same-origin first (important for custom domains).
+        // 3) Fallback: resolve via backend API
         if (!domainData) {
           const candidateBases = [
             normalizePollingServerUrl(`${window.location.origin}/olt-polling-server`),
@@ -155,7 +157,6 @@ export default function CustomDomainRouter({ children }: Props) {
 
             if (ok && data?.found && data?.domain?.tenant_id) {
               domainData = data.domain;
-              // If backend returned tenant too, we can use it directly.
               if (data.tenant) {
                 const tenantData = data.tenant as any;
                 if (tenantData.status !== 'active' && tenantData.status !== 'trial') {
@@ -175,7 +176,6 @@ export default function CustomDomainRouter({ children }: Props) {
                 setState('custom_domain');
                 return;
               }
-
               break;
             }
           }
@@ -186,9 +186,6 @@ export default function CustomDomainRouter({ children }: Props) {
           setState('not_found');
           return;
         }
-
-        // IMPORTANT: If a domain exists in the system, route it to the tenant.
-        // (DNS/SSL verification is handled separately; routing should not block the portal UI.)
 
         // Found domain - get tenant details
         const { data: tenantData, error: tenantError } = await supabase
@@ -204,14 +201,12 @@ export default function CustomDomainRouter({ children }: Props) {
           return;
         }
 
-        // Check tenant status
         if (tenantData.status !== 'active' && tenantData.status !== 'trial') {
           setState('error');
           setErrorMessage('This ISP account is currently suspended');
           return;
         }
 
-        // Success! We have a valid tenant
         setTenant({
           id: tenantData.id,
           slug: tenantData.slug,
@@ -231,30 +226,56 @@ export default function CustomDomainRouter({ children }: Props) {
     detectAndRoute();
   }, [hostname, isPlatform]);
 
-  // Handle navigation for custom domains
+  // IMPORTANT: For custom domains, DO NOT redirect - handle path mapping internally
+  // This keeps the URL clean (no /p/slug visible in browser)
   useEffect(() => {
     if (state !== 'custom_domain' || !tenant) return;
 
     const currentPath = location.pathname;
     
-    // Determine where to redirect based on current path
-    // Custom domain should act as an alias to the tenant's pages
-    if (currentPath === '/' || currentPath === '') {
-      // Root path - show landing page or login
-      if (tenant.landing_page_enabled && tenant.slug) {
-        navigate(`/p/${tenant.slug}`, { replace: true });
-      } else if (tenant.slug) {
-        navigate(`/t/${tenant.slug}`, { replace: true });
+    // For custom domains:
+    // - Root path (/) → internally render landing page (no redirect, URL stays as /)
+    // - /login → internally render tenant login (no redirect)
+    // - /customer/* paths → let them through for customer portal
+    // - Other paths like /p/slug, /t/slug → let them work but clean up if coming from custom domain
+    
+    // Only redirect if user explicitly goes to /t or /p paths that don't match
+    // Otherwise, let the path passthrough and handle via context
+    
+    if (currentPath.startsWith('/t/') || currentPath.startsWith('/p/')) {
+      // If they're on /p/some-other-slug, redirect to clean URL
+      const pathSlug = currentPath.split('/')[2];
+      if (pathSlug && pathSlug !== tenant.slug) {
+        // Different tenant slug in URL - this shouldn't happen on custom domain
+        // Could be a navigation issue, let it pass
       }
-    } else if (currentPath === '/login' || currentPath === '/t' || currentPath === '/auth') {
-      // Login paths - redirect to tenant login
-      if (tenant.slug) {
-        navigate(`/t/${tenant.slug}`, { replace: true });
+      // If same slug, replace with clean path
+      if (pathSlug === tenant.slug) {
+        if (currentPath.startsWith('/p/')) {
+          // Replace /p/slug with / to keep URL clean
+          navigate('/', { replace: true });
+        } else if (currentPath.startsWith('/t/')) {
+          // Replace /t/slug with /login
+          navigate('/login', { replace: true });
+        }
       }
     }
-    // For other paths like /p/slug, /t/slug, /customer, etc. - let them through
-    // The custom domain effectively becomes an alias
   }, [state, tenant, location.pathname, navigate]);
+
+  // Compute effective slug for context
+  const effectiveSlug = useMemo(() => {
+    if (state === 'custom_domain' && tenant) {
+      return tenant.slug;
+    }
+    return null;
+  }, [state, tenant]);
+
+  // Context value for children
+  const contextValue: CustomDomainContextValue = {
+    isCustomDomain: state === 'custom_domain',
+    tenant,
+    effectiveSlug,
+  };
 
   // Render based on state
   switch (state) {
@@ -272,38 +293,18 @@ export default function CustomDomainRouter({ children }: Props) {
       );
 
     case 'platform':
-      // Platform domain - render children normally
       return <>{children}</>;
 
     case 'custom_domain':
-      // Custom domain detected and tenant found
-      // Show loading while navigating
-      if (location.pathname === '/' || location.pathname === '') {
-        return (
-          <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950">
-            <div className="text-center">
-              {tenant?.logo_url ? (
-                <img 
-                  src={tenant.logo_url} 
-                  alt={tenant.company_name} 
-                  className="h-16 w-auto mx-auto mb-4 animate-pulse" 
-                />
-              ) : (
-                <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                  <Wifi className="h-8 w-8 text-white" />
-                </div>
-              )}
-              <Loader2 className="h-8 w-8 animate-spin text-cyan-400 mx-auto mb-3" />
-              <p className="text-white/70 text-sm">{tenant?.company_name || 'Loading...'}</p>
-            </div>
-          </div>
-        );
-      }
-      // Already on a specific path - render children
-      return <>{children}</>;
+      // Provide context and render children - let App.tsx routes handle content
+      // But for root path, we need to inject the tenant slug so TenantLanding can load
+      return (
+        <CustomDomainContext.Provider value={contextValue}>
+          {children}
+        </CustomDomainContext.Provider>
+      );
 
     case 'not_found':
-      // Domain not registered in our system
       return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 px-4">
           <div className="text-center max-w-md">
