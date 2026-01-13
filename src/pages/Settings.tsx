@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload, Globe, DollarSign } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload, Globe, DollarSign, Palette, CheckCircle } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useTenantBackup } from '@/hooks/useTenantBackup';
@@ -152,16 +152,31 @@ function BrandingSettingsCard() {
   const [subtitle, setSubtitle] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
   const [faviconUrl, setFaviconUrl] = useState('');
+  const [themeColor, setThemeColor] = useState('cyan');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingFavicon, setUploadingFavicon] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const faviconInputRef = useRef<HTMLInputElement>(null);
+
+  const THEME_COLORS = [
+    { name: 'Cyan', value: 'cyan', class: 'bg-cyan-500' },
+    { name: 'Blue', value: 'blue', class: 'bg-blue-500' },
+    { name: 'Purple', value: 'purple', class: 'bg-purple-500' },
+    { name: 'Green', value: 'green', class: 'bg-green-500' },
+    { name: 'Orange', value: 'orange', class: 'bg-orange-500' },
+    { name: 'Red', value: 'red', class: 'bg-red-500' },
+    { name: 'Pink', value: 'pink', class: 'bg-pink-500' },
+    { name: 'Indigo', value: 'indigo', class: 'bg-indigo-500' },
+    { name: 'Teal', value: 'teal', class: 'bg-teal-500' },
+    { name: 'Amber', value: 'amber', class: 'bg-amber-500' },
+  ];
 
   useEffect(() => {
     setCompanyName(branding.company_name);
     setSubtitle(branding.subtitle);
     setLogoUrl(branding.logo_url);
     setFaviconUrl(branding.favicon_url);
+    setThemeColor(branding.theme_color || 'cyan');
   }, [branding]);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -198,7 +213,13 @@ function BrandingSettingsCard() {
       subtitle: subtitle,
       logo_url: logoUrl,
       favicon_url: faviconUrl,
-    });
+      theme_color: themeColor,
+    } as any);
+  };
+
+  const handleThemeColorChange = async (color: string) => {
+    setThemeColor(color);
+    await updateBranding({ theme_color: color } as any);
   };
 
   return (
@@ -372,6 +393,45 @@ function BrandingSettingsCard() {
 
         <Separator />
 
+        {/* Theme Color Picker */}
+        <div className="space-y-4">
+          <div>
+            <Label className="flex items-center gap-2 mb-3">
+              <Palette className="h-4 w-4" />
+              Dashboard Theme Color
+            </Label>
+            <p className="text-xs text-muted-foreground mb-4">
+              Choose a primary color theme for your dashboard and customer portal
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {THEME_COLORS.map((color) => (
+              <button
+                key={color.value}
+                onClick={() => handleThemeColorChange(color.value)}
+                className={`
+                  group relative w-12 h-12 rounded-xl transition-all duration-200
+                  ${color.class}
+                  ${themeColor === color.value 
+                    ? 'ring-2 ring-offset-2 ring-offset-background ring-primary scale-110 shadow-lg' 
+                    : 'hover:scale-105 hover:shadow-md'
+                  }
+                `}
+                title={color.name}
+              >
+                {themeColor === color.value && (
+                  <CheckCircle className="absolute inset-0 m-auto h-5 w-5 text-white drop-shadow" />
+                )}
+                <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                  {color.name}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Separator />
+
         {/* Preview */}
         <div className="p-4 rounded-lg bg-muted/30 border border-border">
           <Label className="mb-3 block">Preview</Label>
@@ -394,6 +454,9 @@ function BrandingSettingsCard() {
             <div>
               <p className="font-semibold">{companyName || 'Your Company Name'}</p>
               <p className="text-xs text-muted-foreground">{subtitle || 'Your tagline here'}</p>
+            </div>
+            <div className="ml-auto">
+              <div className={`w-8 h-8 rounded-lg ${THEME_COLORS.find(c => c.value === themeColor)?.class || 'bg-cyan-500'}`} />
             </div>
           </div>
         </div>

@@ -8,6 +8,7 @@ export interface TenantBranding {
   subtitle: string;
   logo_url: string;
   favicon_url: string;
+  theme_color: string;
 }
 
 const defaultBranding: TenantBranding = {
@@ -15,7 +16,21 @@ const defaultBranding: TenantBranding = {
   subtitle: 'Internet Service Provider',
   logo_url: '',
   favicon_url: '',
+  theme_color: 'cyan',
 };
+
+export const THEME_COLORS = [
+  { name: 'Cyan', value: 'cyan', class: 'bg-cyan-500' },
+  { name: 'Blue', value: 'blue', class: 'bg-blue-500' },
+  { name: 'Purple', value: 'purple', class: 'bg-purple-500' },
+  { name: 'Green', value: 'green', class: 'bg-green-500' },
+  { name: 'Orange', value: 'orange', class: 'bg-orange-500' },
+  { name: 'Red', value: 'red', class: 'bg-red-500' },
+  { name: 'Pink', value: 'pink', class: 'bg-pink-500' },
+  { name: 'Indigo', value: 'indigo', class: 'bg-indigo-500' },
+  { name: 'Teal', value: 'teal', class: 'bg-teal-500' },
+  { name: 'Amber', value: 'amber', class: 'bg-amber-500' },
+];
 
 export function useTenantBranding() {
   const { tenantId } = useTenantContext();
@@ -33,7 +48,7 @@ export function useTenantBranding() {
       setLoading(true);
       const { data, error } = await supabase
         .from('tenants')
-        .select('company_name, subtitle, logo_url, favicon_url')
+        .select('company_name, subtitle, logo_url, favicon_url, theme_color')
         .eq('id', tenantId)
         .single();
 
@@ -45,6 +60,7 @@ export function useTenantBranding() {
           subtitle: data.subtitle || defaultBranding.subtitle,
           logo_url: data.logo_url || '',
           favicon_url: data.favicon_url || '',
+          theme_color: data.theme_color || defaultBranding.theme_color,
         });
       }
     } catch (error) {
@@ -226,9 +242,9 @@ export function useTenantBrandingById(tenantId: string | null) {
 
       try {
         setLoading(true);
-        const { data, error } = await supabase
+      const { data, error } = await supabase
           .from('tenants')
-          .select('company_name, subtitle, logo_url, favicon_url')
+          .select('company_name, subtitle, logo_url, favicon_url, theme_color')
           .eq('id', tenantId)
           .single();
 
@@ -240,6 +256,7 @@ export function useTenantBrandingById(tenantId: string | null) {
             subtitle: data.subtitle || defaultBranding.subtitle,
             logo_url: data.logo_url || '',
             favicon_url: data.favicon_url || '',
+            theme_color: data.theme_color || defaultBranding.theme_color,
           });
         }
       } catch (error) {
