@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-import { Wifi, User, Lock, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Wifi, User, Lock, Loader2, Eye, EyeOff, Shield, Zap, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTenantBrandingById } from '@/hooks/useTenantBranding';
 
@@ -68,7 +68,16 @@ export default function CustomerLogin() {
     setLoading(true);
 
     try {
-      // Find customer by PPPoE username and password
+      const usernameInput = credentials.username.trim();
+      const passwordInput = credentials.password.trim();
+
+      if (!usernameInput || !passwordInput) {
+        toast.error('Please enter both username and password');
+        setLoading(false);
+        return;
+      }
+
+      // Find customer by PPPoE username (case-insensitive)
       let query = supabase
         .from('customers')
         .select(`
@@ -90,17 +99,28 @@ export default function CustomerLogin() {
           onu_id,
           customer_code
         `)
-        .eq('pppoe_username', credentials.username.trim())
-        .eq('pppoe_password', credentials.password);
+        .ilike('pppoe_username', usernameInput);
 
       // Filter by tenant if specified
       if (tenantId) {
         query = query.eq('tenant_id', tenantId);
       }
 
-      const { data: customer, error } = await query.single();
+      const { data: customers, error } = await query;
 
-      if (error || !customer) {
+      if (error) {
+        console.error('Login query error:', error);
+        toast.error('Login failed. Please try again.');
+        return;
+      }
+
+      // Find customer with matching password
+      const customer = customers?.find(c => 
+        c.pppoe_password === passwordInput ||
+        c.pppoe_password?.trim() === passwordInput
+      );
+
+      if (!customer) {
         toast.error('Invalid PPPoE username or password');
         return;
       }
@@ -113,7 +133,7 @@ export default function CustomerLogin() {
         pppoe_username: customer.pppoe_username,
       }));
 
-      toast.success('Login successful');
+      toast.success('Login successful!');
       navigate('/portal/dashboard');
     } catch (err) {
       console.error('Login error:', err);
@@ -124,74 +144,131 @@ export default function CustomerLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-primary/5 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center space-y-4">
-          <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-            {branding.logo_url ? (
-              <img src={branding.logo_url} alt="Logo" className="h-12 w-12 object-contain" />
-            ) : (
-              <Wifi className="h-8 w-8 text-primary" />
-            )}
-          </div>
-          <div>
-            <CardTitle className="text-2xl">{branding.company_name || 'Customer Portal'}</CardTitle>
-            <CardDescription>{branding.subtitle || 'Sign in with your PPPoE credentials'}</CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">PPPoE Username</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="username"
-                  value={credentials.username}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-                  placeholder="Enter your PPPoE username"
-                  className="pl-10"
-                  required
-                  autoComplete="username"
-                />
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-primary/20 via-background to-accent/10 flex flex-col">
+      {/* Top accent bar */}
+      <div className="h-1 bg-gradient-to-r from-primary via-primary/60 to-primary/30" />
+      
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-6">
+          {/* Logo and branding */}
+          <div className="text-center space-y-4">
+            <div className="mx-auto h-20 w-20 rounded-2xl bg-gradient-to-br from-primary to-primary/60 shadow-lg shadow-primary/20 flex items-center justify-center overflow-hidden">
+              {branding.logo_url ? (
+                <img src={branding.logo_url} alt="Logo" className="h-14 w-14 object-contain" />
+              ) : (
+                <Wifi className="h-10 w-10 text-primary-foreground" />
+              )}
             </div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+                {branding.company_name || 'Customer Portal'}
+              </h1>
+              <p className="text-muted-foreground mt-1">{branding.subtitle || 'Access your account dashboard'}</p>
+            </div>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">PPPoE Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={credentials.password}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                  placeholder="Enter your PPPoE password"
-                  className="pl-10 pr-10"
-                  required
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          {/* Login Card */}
+          <Card className="border-border/50 shadow-xl">
+            <CardHeader className="space-y-1 pb-4">
+              <CardTitle className="text-xl">Sign In</CardTitle>
+              <CardDescription>Enter your PPPoE credentials to continue</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username" className="text-sm font-medium">PPPoE Username</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="username"
+                      value={credentials.username}
+                      onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
+                      placeholder="Enter your username"
+                      className="pl-10 h-11"
+                      required
+                      autoComplete="username"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-sm font-medium">PPPoE Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={credentials.password}
+                      onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
+                      placeholder="Enter your password"
+                      className="pl-10 pr-10 h-11"
+                      required
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <Button 
+                  type="submit" 
+                  className="w-full h-11 text-base font-medium shadow-lg shadow-primary/20" 
+                  disabled={loading}
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Signing In...
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="h-4 w-4 mr-2" />
+                      Sign In
+                    </>
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+            <CardFooter className="border-t bg-muted/30 flex justify-center py-4">
+              <p className="text-sm text-muted-foreground text-center">
+                Use your PPPoE credentials provided by your ISP
+              </p>
+            </CardFooter>
+          </Card>
+
+          {/* Features */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-3 rounded-lg bg-card border border-border/50">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
+                <Zap className="h-5 w-5 text-primary" />
               </div>
+              <p className="text-xs font-medium">Check Speed</p>
             </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Sign In
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Use your PPPoE credentials provided by your ISP</p>
+            <div className="text-center p-3 rounded-lg bg-card border border-border/50">
+              <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-2">
+                <Clock className="h-5 w-5 text-green-500" />
+              </div>
+              <p className="text-xs font-medium">View Bills</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-card border border-border/50">
+              <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center mx-auto mb-2">
+                <Shield className="h-5 w-5 text-blue-500" />
+              </div>
+              <p className="text-xs font-medium">Pay Online</p>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="text-center py-4 text-sm text-muted-foreground border-t bg-card/50">
+        <p>© {new Date().getFullYear()} {branding.company_name || 'ISP Portal'}. All rights reserved.</p>
+      </div>
     </div>
   );
 }
