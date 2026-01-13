@@ -27,7 +27,8 @@ import {
   Users,
   Clock,
   ExternalLink,
-  Radio
+  Radio,
+  AlertTriangle
 } from 'lucide-react';
 import { useCustomerLocation, LocationVisit, LocationFilters } from '@/hooks/useCustomerLocation';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
@@ -51,6 +52,7 @@ export default function CustomerLocation() {
     filterVisits,
     uniqueAreas,
     uniqueDistricts,
+    liveVisitorCount,
     isSaving,
     isRegenerating,
     isVerifying,
@@ -63,19 +65,18 @@ export default function CustomerLocation() {
   const [showMapDialog, setShowMapDialog] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [liveVisitorCount, setLiveVisitorCount] = useState(0);
 
   // Settings form state
   const [settingsForm, setSettingsForm] = useState({
-    is_active: settings?.is_active ?? true,
-    popup_title: settings?.popup_title ?? 'Please provide your details',
-    popup_description: settings?.popup_description ?? 'Enter your name and phone number for verification',
-    require_name: settings?.require_name ?? false,
-    require_phone: settings?.require_phone ?? false,
+    is_active: true,
+    popup_title: 'Please provide your details',
+    popup_description: 'Enter your name and phone number for verification',
+    require_name: false,
+    require_phone: false,
   });
 
   // Update form when settings load
-  useMemo(() => {
+  useEffect(() => {
     if (settings) {
       setSettingsForm({
         is_active: settings.is_active,
@@ -116,15 +117,6 @@ export default function CustomerLocation() {
     };
   }, [tenantId, refetchVisits, toast]);
 
-  // Calculate live visitor count (visits in last 5 minutes)
-  useEffect(() => {
-    if (!visits) return;
-    
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const liveCount = visits.filter(v => new Date(v.visited_at) > fiveMinutesAgo).length;
-    setLiveVisitorCount(liveCount);
-  }, [visits]);
-
   // Filter and paginate visits
   const filteredVisits = useMemo(() => filterVisits(filters), [filterVisits, filters]);
   const paginatedVisits = useMemo(() => {
@@ -139,17 +131,20 @@ export default function CustomerLocation() {
     // Priority: 1. Custom Domain, 2. Landing Page Slug, 3. Current Origin
     let baseUrl = window.location.origin;
     
+    // Check if tenant has custom domain
     if (tenant?.custom_domain) {
       baseUrl = `https://${tenant.custom_domain}`;
     } else if (tenant?.slug) {
-      // Use the main platform with tenant's slug subdomain or path
-      baseUrl = `${window.location.origin}`;
+      // If tenant has a landing page slug, use the main platform URL
+      // The link format remains /l/:token
+      baseUrl = window.location.origin;
     }
     
     return `${baseUrl}/l/${settings.unique_token}`;
   }, [settings?.unique_token, tenant?.custom_domain, tenant?.slug]);
 
   const copyLink = () => {
+    if (!locationLink) return;
     navigator.clipboard.writeText(locationLink);
     toast({
       title: 'Link copied!',
@@ -215,12 +210,17 @@ export default function CustomerLocation() {
                 Capture and verify customer locations via unique shareable links
               </p>
             </div>
-            {liveVisitorCount > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 animate-pulse">
-                <Radio className="h-4 w-4" />
+            <div className="flex items-center gap-3">
+              {/* Live visitor indicator - always show */}
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${
+                liveVisitorCount > 0 
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                  : 'bg-muted text-muted-foreground'
+              }`}>
+                <Radio className={`h-4 w-4 ${liveVisitorCount > 0 ? 'animate-pulse' : ''}`} />
                 <span className="font-medium">{liveVisitorCount} Live Now</span>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Stats Cards */}
@@ -500,10 +500,15 @@ export default function CustomerLocation() {
                         </Button>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {tenant?.custom_domain && (
-                          <Badge variant="outline" className="text-xs">
+                        {tenant?.custom_domain ? (
+                          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
                             <Globe className="h-3 w-3 mr-1" />
                             Custom Domain: {tenant.custom_domain}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            No Custom Domain - Using Platform URL
                           </Badge>
                         )}
                         <Badge variant="secondary" className="text-xs">
@@ -517,7 +522,14 @@ export default function CustomerLocation() {
                     </>
                   ) : (
                     <Button onClick={() => saveSettings({ is_active: true })} disabled={isSaving}>
-                      Generate Location Link
+                      {isSaving ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        'Generate Location Link'
+                      )}
                     </Button>
                   )}
                 </CardContent>
@@ -570,7 +582,7 @@ export default function CustomerLocation() {
                     <div>
                       <Label>Require Name</Label>
                       <p className="text-sm text-muted-foreground">
-                        Make name field mandatory
+                        Make name field mandatory (shows form)
                       </p>
                     </div>
                     <Switch
@@ -583,13 +595,20 @@ export default function CustomerLocation() {
                     <div>
                       <Label>Require Phone</Label>
                       <p className="text-sm text-muted-foreground">
-                        Make phone field mandatory
+                        Make phone field mandatory (shows form)
                       </p>
                     </div>
                     <Switch
                       checked={settingsForm.require_phone}
                       onCheckedChange={(checked) => setSettingsForm(f => ({ ...f, require_phone: checked }))}
                     />
+                  </div>
+
+                  <div className="rounded-lg bg-muted p-3 text-sm">
+                    <p className="font-medium mb-1">💡 Auto-Submit Mode</p>
+                    <p className="text-muted-foreground">
+                      If both "Require Name" and "Require Phone" are OFF, location will be captured and submitted automatically without showing any form.
+                    </p>
                   </div>
 
                   <Button onClick={handleSaveSettings} disabled={isSaving}>

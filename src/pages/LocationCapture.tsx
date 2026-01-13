@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { usePublicLocationCapture } from '@/hooks/useCustomerLocation';
 import { MapPin, Smartphone, Loader2, CheckCircle, AlertCircle, Monitor } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface LocationData {
   latitude: number | null;
@@ -23,13 +23,24 @@ interface IpData {
   asn: string | null;
 }
 
+interface SettingsData {
+  id: string;
+  tenant_id: string;
+  unique_token: string;
+  is_active: boolean;
+  popup_title: string;
+  popup_description: string;
+  require_name: boolean;
+  require_phone: boolean;
+}
+
 export default function LocationCapture() {
   const { token } = useParams<{ token: string }>();
   const { toast } = useToast();
-  const { fetchSettingsByToken, submitLocation, isSubmitting } = usePublicLocationCapture();
+  const hasSubmittedRef = useRef(false);
 
-  const [step, setStep] = useState<'loading' | 'desktop-warning' | 'capturing' | 'form' | 'success' | 'error'>('loading');
-  const [settings, setSettings] = useState<any>(null);
+  const [step, setStep] = useState<'loading' | 'desktop-warning' | 'capturing' | 'form' | 'submitting' | 'success' | 'error'>('loading');
+  const [settings, setSettings] = useState<SettingsData | null>(null);
   const [locationData, setLocationData] = useState<LocationData>({
     latitude: null,
     longitude: null,
@@ -45,70 +56,61 @@ export default function LocationCapture() {
   });
   const [formData, setFormData] = useState({ name: '', phone: '' });
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Strict mobile device detection - prevents desktop browsers with mobile view
-  const isTrueMobileDevice = useCallback(() => {
-    // Check user agent for mobile devices
+  // Mobile device detection - checks for real mobile hardware
+  const isMobileDevice = useCallback(() => {
     const userAgent = navigator.userAgent.toLowerCase();
-    const mobileKeywords = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i;
-    const hasMobileUA = mobileKeywords.test(userAgent);
     
-    // Check touch capability (most mobiles have touch)
+    // Check for mobile OS indicators
+    const hasMobileOS = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i.test(userAgent);
+    
+    // Check touch capability
     const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     
-    // Check screen size - mobile devices typically have smaller screens
-    const isSmallScreen = window.screen.width <= 768;
+    // Check for mobile-specific features
+    const isMobileBrowser = /mobi|android|touch|mini/i.test(navigator.userAgent);
     
-    // Check if running in a mobile browser (not just responsive mode)
-    const isMobileBrowser = /Mobile|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    
-    // Must have mobile UA AND (touch + small screen OR be a mobile browser)
-    // This prevents desktop Chrome DevTools mobile simulation
-    return hasMobileUA && (hasTouch || isMobileBrowser) && isSmallScreen;
+    // Must have mobile indicators
+    return hasMobileOS || (hasTouch && isMobileBrowser);
   }, []);
 
-  // Additional check for desktop pretending to be mobile
-  const isDesktopPretendingMobile = useCallback(() => {
+  // Check if running on desktop pretending to be mobile
+  const isDesktopDevice = useCallback(() => {
     const ua = navigator.userAgent;
     
-    // Check for desktop browser indicators even in mobile view
-    const hasDesktopIndicators = 
-      (ua.includes('Windows') || ua.includes('Macintosh') || ua.includes('Linux x86')) &&
-      !ua.includes('Android') && !ua.includes('iPhone') && !ua.includes('iPad');
+    // Clear desktop OS indicators without mobile
+    const isDesktopOS = (ua.includes('Windows NT') || ua.includes('Macintosh') || ua.includes('Linux x86_64')) 
+      && !ua.includes('Android') && !ua.includes('iPhone') && !ua.includes('iPad');
     
-    // Desktop browsers have larger outer dimensions
-    const hasLargeOuterWindow = window.outerWidth > 1024;
+    // Check window dimensions - desktop DevTools typically has large outer window
+    const hasLargeOuterWindow = window.outerWidth > 1200 && window.innerWidth < 500;
     
-    return hasDesktopIndicators || hasLargeOuterWindow;
+    return isDesktopOS || hasLargeOuterWindow;
   }, []);
 
   // Get IP info
-  const fetchIpInfo = useCallback(async () => {
+  const fetchIpInfo = useCallback(async (): Promise<IpData> => {
     try {
       const response = await fetch('https://ipapi.co/json/');
       const data = await response.json();
-      setIpData({
+      return {
         ip_address: data.ip || null,
         isp_name: data.org || null,
         asn: data.asn || null,
-      });
-      return data;
+      };
     } catch (error) {
       console.error('Failed to fetch IP info:', error);
-      return null;
+      return { ip_address: null, isp_name: null, asn: null };
     }
   }, []);
 
-  // Get address from coordinates using reverse geocoding (OpenStreetMap - Free)
+  // Get address from coordinates using OpenStreetMap
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
     try {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
-        {
-          headers: {
-            'Accept-Language': 'en',
-          }
-        }
+        { headers: { 'Accept-Language': 'en' } }
       );
       const data = await response.json();
       
@@ -129,13 +131,12 @@ export default function LocationCapture() {
   }, []);
 
   // Get GPS location
-  const getLocation = useCallback(() => {
-    return new Promise<GeolocationPosition>((resolve, reject) => {
+  const getLocation = useCallback((): Promise<GeolocationPosition> => {
+    return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error('Geolocation is not supported by your browser'));
         return;
       }
-
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         enableHighAccuracy: true,
         timeout: 30000,
@@ -143,6 +144,57 @@ export default function LocationCapture() {
       });
     });
   }, []);
+
+  // Submit location to database
+  const submitLocationData = useCallback(async (
+    settingsData: SettingsData,
+    location: LocationData,
+    ip: IpData,
+    form?: { name?: string; phone?: string }
+  ) => {
+    if (hasSubmittedRef.current) return; // Prevent duplicate submissions
+    hasSubmittedRef.current = true;
+    
+    setIsSubmitting(true);
+    setStep('submitting');
+    
+    try {
+      const { error: insertError } = await supabase
+        .from('location_visits')
+        .insert({
+          token: settingsData.unique_token,
+          tenant_id: settingsData.tenant_id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          full_address: location.full_address,
+          area: location.area,
+          district: location.district,
+          thana: location.thana,
+          ip_address: ip.ip_address,
+          isp_name: ip.isp_name,
+          asn: ip.asn,
+          device_type: 'mobile',
+          name: form?.name || null,
+          phone: form?.phone || null,
+          verified_status: 'pending',
+          visited_at: new Date().toISOString(),
+        });
+
+      if (insertError) throw insertError;
+      setStep('success');
+    } catch (err: any) {
+      console.error('Failed to submit location:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to submit location. Please try again.',
+        variant: 'destructive',
+      });
+      setStep('form');
+      hasSubmittedRef.current = false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [toast]);
 
   // Initialize on mount
   useEffect(() => {
@@ -153,109 +205,127 @@ export default function LocationCapture() {
         return;
       }
 
-      // Strict mobile check - must be true mobile device
-      if (!isTrueMobileDevice() || isDesktopPretendingMobile()) {
+      // Check device type
+      if (!isMobileDevice() || isDesktopDevice()) {
         setStep('desktop-warning');
         return;
       }
 
-      // Fetch settings
+      // Fetch settings directly from Supabase
       try {
-        const data = await fetchSettingsByToken(token);
+        const { data, error: fetchError } = await supabase
+          .from('tenant_location_settings')
+          .select('*')
+          .eq('unique_token', token)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (fetchError) throw fetchError;
+        
         if (!data) {
           setStep('error');
           setError('This link is invalid or has been disabled');
           return;
         }
-        setSettings(data);
+        
+        setSettings(data as SettingsData);
         setStep('capturing');
       } catch (err) {
+        console.error('Settings fetch error:', err);
         setStep('error');
         setError('Failed to load. Please try again.');
-        return;
       }
     };
 
     init();
-  }, [token, isTrueMobileDevice, isDesktopPretendingMobile, fetchSettingsByToken]);
+  }, [token, isMobileDevice, isDesktopDevice]);
 
   // Capture location when on capturing step
   useEffect(() => {
     if (step !== 'capturing' || !settings) return;
 
-    const captureLocation = async () => {
+    const captureAndProcess = async () => {
+      let capturedLocation: LocationData = { ...locationData };
+      let capturedIp: IpData = { ...ipData };
+
       try {
-        // Fetch IP info in parallel
-        fetchIpInfo();
+        // Fetch IP info and GPS in parallel
+        const [ipResult, position] = await Promise.all([
+          fetchIpInfo(),
+          getLocation().catch(err => {
+            console.warn('GPS failed:', err);
+            return null;
+          })
+        ]);
 
-        // Get GPS location
-        const position = await getLocation();
-        const { latitude, longitude } = position.coords;
+        capturedIp = ipResult;
+        setIpData(ipResult);
 
-        // Reverse geocode using OpenStreetMap
-        const addressData = await reverseGeocode(latitude, longitude);
+        if (position) {
+          const { latitude, longitude } = position.coords;
+          
+          // Reverse geocode
+          const addressData = await reverseGeocode(latitude, longitude);
 
-        setLocationData({
-          latitude,
-          longitude,
-          full_address: addressData?.full_address || null,
-          area: addressData?.area || null,
-          district: addressData?.district || null,
-          thana: addressData?.thana || null,
-        });
-
-        setStep('form');
-      } catch (err: any) {
+          capturedLocation = {
+            latitude,
+            longitude,
+            full_address: addressData?.full_address || null,
+            area: addressData?.area || null,
+            district: addressData?.district || null,
+            thana: addressData?.thana || null,
+          };
+          setLocationData(capturedLocation);
+        }
+      } catch (err) {
         console.error('Location capture error:', err);
-        
-        // Still proceed to form even if location fails
+      }
+
+      // Check if form is required
+      const needsForm = settings.require_name || settings.require_phone;
+      
+      if (needsForm) {
+        // Show form for user to fill
         setStep('form');
+      } else {
+        // Auto-submit immediately
+        await submitLocationData(settings, capturedLocation, capturedIp);
       }
     };
 
-    captureLocation();
-  }, [step, settings, getLocation, reverseGeocode, fetchIpInfo]);
+    captureAndProcess();
+  }, [step, settings, fetchIpInfo, getLocation, reverseGeocode, submitLocationData, locationData, ipData]);
 
-  // Submit location data
-  const handleSubmit = async (skipForm: boolean = false) => {
-    if (!settings || !token) return;
-
-    try {
-      await submitLocation({
-        token,
-        tenant_id: settings.tenant_id,
-        latitude: locationData.latitude,
-        longitude: locationData.longitude,
-        full_address: locationData.full_address,
-        area: locationData.area,
-        district: locationData.district,
-        thana: locationData.thana,
-        ip_address: ipData.ip_address,
-        isp_name: ipData.isp_name,
-        asn: ipData.asn,
-        device_type: 'mobile',
-        name: skipForm ? undefined : formData.name || undefined,
-        phone: skipForm ? undefined : formData.phone || undefined,
-      });
-
-      setStep('success');
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: 'Failed to submit location. Please try again.',
-        variant: 'destructive',
-      });
+  // Handle form submit
+  const handleFormSubmit = async () => {
+    if (!settings) return;
+    
+    // Validate required fields
+    if (settings.require_name && !formData.name.trim()) {
+      toast({ title: 'Error', description: 'Name is required', variant: 'destructive' });
+      return;
     }
+    if (settings.require_phone && !formData.phone.trim()) {
+      toast({ title: 'Error', description: 'Phone is required', variant: 'destructive' });
+      return;
+    }
+
+    await submitLocationData(settings, locationData, ipData, {
+      name: formData.name.trim() || undefined,
+      phone: formData.phone.trim() || undefined,
+    });
   };
 
   // Render based on step
-  if (step === 'loading') {
+  if (step === 'loading' || step === 'submitting') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-            <p className="text-muted-foreground">Loading...</p>
+            <p className="text-muted-foreground">
+              {step === 'submitting' ? 'Submitting your location...' : 'Loading...'}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -270,7 +340,7 @@ export default function LocationCapture() {
             <div className="mx-auto mb-4 rounded-full bg-yellow-100 p-4 dark:bg-yellow-900/20">
               <Monitor className="h-12 w-12 text-yellow-600 dark:text-yellow-400" />
             </div>
-            <CardTitle>Mobile Device Required</CardTitle>
+            <CardTitle>মোবাইল ফোন প্রয়োজন</CardTitle>
             <CardDescription>
               এই লিংকটি শুধুমাত্র মোবাইল ফোন থেকে ওপেন করতে হবে
             </CardDescription>
@@ -280,7 +350,6 @@ export default function LocationCapture() {
               <Smartphone className="h-8 w-8 mx-auto text-primary mb-2" />
               <p className="text-sm text-muted-foreground">
                 Please open this link on your smartphone to capture your GPS location.
-                Desktop browsers and emulators are not supported.
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -300,9 +369,9 @@ export default function LocationCapture() {
             <div className="mx-auto mb-4 rounded-full bg-primary/10 p-4">
               <MapPin className="h-12 w-12 text-primary animate-pulse" />
             </div>
-            <CardTitle>Capturing Location</CardTitle>
+            <CardTitle>লোকেশন সংগ্রহ করা হচ্ছে</CardTitle>
             <CardDescription>
-              Please allow location access when prompted
+              অনুগ্রহ করে লোকেশন পারমিশন দিন
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center py-4">
@@ -317,9 +386,6 @@ export default function LocationCapture() {
   }
 
   if (step === 'form') {
-    const requiresName = settings?.require_name;
-    const requiresPhone = settings?.require_phone;
-
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -327,9 +393,9 @@ export default function LocationCapture() {
             <div className="mx-auto mb-4 rounded-full bg-green-100 p-4 dark:bg-green-900/20">
               <MapPin className="h-12 w-12 text-green-600 dark:text-green-400" />
             </div>
-            <CardTitle>{settings?.popup_title || 'Location Captured!'}</CardTitle>
+            <CardTitle>{settings?.popup_title || 'লোকেশন সংগ্রহ হয়েছে!'}</CardTitle>
             <CardDescription>
-              {settings?.popup_description || 'Please provide your details (optional)'}
+              {settings?.popup_description || 'Please provide your details'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -344,11 +410,11 @@ export default function LocationCapture() {
             <div className="space-y-3">
               <div>
                 <Label htmlFor="name">
-                  Name {requiresName && <span className="text-destructive">*</span>}
+                  নাম {settings?.require_name && <span className="text-destructive">*</span>}
                 </Label>
                 <Input
                   id="name"
-                  placeholder="Enter your name"
+                  placeholder="আপনার নাম লিখুন"
                   value={formData.name}
                   onChange={(e) => setFormData(f => ({ ...f, name: e.target.value }))}
                 />
@@ -356,12 +422,12 @@ export default function LocationCapture() {
 
               <div>
                 <Label htmlFor="phone">
-                  Phone Number {requiresPhone && <span className="text-destructive">*</span>}
+                  মোবাইল নম্বর {settings?.require_phone && <span className="text-destructive">*</span>}
                 </Label>
                 <Input
                   id="phone"
                   type="tel"
-                  placeholder="Enter your phone number"
+                  placeholder="আপনার মোবাইল নম্বর লিখুন"
                   value={formData.phone}
                   onChange={(e) => setFormData(f => ({ ...f, phone: e.target.value }))}
                 />
@@ -370,23 +436,24 @@ export default function LocationCapture() {
 
             <div className="flex flex-col gap-2 pt-2">
               <Button 
-                onClick={() => handleSubmit(false)} 
-                disabled={isSubmitting || (requiresName && !formData.name) || (requiresPhone && !formData.phone)}
+                onClick={handleFormSubmit} 
+                disabled={isSubmitting}
+                className="w-full"
               >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Submitting...
+                    সাবমিট হচ্ছে...
                   </>
                 ) : (
-                  'Submit'
+                  'সাবমিট করুন'
                 )}
               </Button>
               
-              {!requiresName && !requiresPhone && (
+              {!settings?.require_name && !settings?.require_phone && (
                 <Button 
                   variant="ghost" 
-                  onClick={() => handleSubmit(true)}
+                  onClick={() => submitLocationData(settings!, locationData, ipData)}
                   disabled={isSubmitting}
                 >
                   Skip
@@ -407,9 +474,9 @@ export default function LocationCapture() {
             <div className="mx-auto mb-4 rounded-full bg-green-100 p-4 dark:bg-green-900/20">
               <CheckCircle className="h-12 w-12 text-green-600 dark:text-green-400" />
             </div>
-            <CardTitle>ধন্যবাদ! Thank You!</CardTitle>
+            <CardTitle>ধন্যবাদ!</CardTitle>
             <CardDescription>
-              Your location has been submitted successfully
+              আপনার লোকেশন সফলভাবে সাবমিট হয়েছে
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
@@ -430,7 +497,7 @@ export default function LocationCapture() {
           <div className="mx-auto mb-4 rounded-full bg-red-100 p-4 dark:bg-red-900/20">
             <AlertCircle className="h-12 w-12 text-red-600 dark:text-red-400" />
           </div>
-          <CardTitle>Error</CardTitle>
+          <CardTitle>ত্রুটি হয়েছে</CardTitle>
           <CardDescription>
             {error || 'Something went wrong'}
           </CardDescription>
