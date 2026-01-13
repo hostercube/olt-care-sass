@@ -192,22 +192,22 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   };
 
   const createPPPoEOnMikroTik = async (): Promise<boolean> => {
-    // If user doesn't want to create MikroTik user, skip silently
+    // If user doesn't want to create MikroTik user or no router selected, skip silently
     if (!formData.create_mikrotik_user || !formData.mikrotik_id || formData.mikrotik_id === 'none') {
       return true;
     }
 
-    // If no polling server URL, warn but allow creation (PPPoE on MikroTik is optional)
+    // If no polling server URL, warn but allow customer creation (PPPoE on MikroTik is optional)
     if (!apiBase) {
       console.warn('Polling server URL not configured - skipping MikroTik PPPoE creation');
-      toast.warning('MikroTik PPPoE user not created (polling server not configured)');
+      toast.info('Customer will be created without MikroTik PPPoE user (VPS/Polling server not configured)');
       return true; // Allow customer creation anyway
     }
 
     const router = routers.find((r) => r.id === formData.mikrotik_id);
     if (!router) {
-      toast.error('Selected MikroTik router not found');
-      return false;
+      toast.warning('Selected MikroTik router not found - customer will be created without PPPoE user');
+      return true; // Allow customer creation anyway
     }
 
     try {
@@ -255,14 +255,15 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         return true;
       }
 
+      // MikroTik creation failed - warn but allow customer creation
       const fallback = !ok ? `Request failed (HTTP ${status})` : 'PPPoE user was not created on MikroTik';
       const msg = String(result?.error || '').trim() || (data ? fallback : summarizeHttpError(status, text));
-      toast.error(msg);
-      return false;
+      toast.warning(`MikroTik: ${msg} - Customer will be created without PPPoE user`);
+      return true; // Allow customer creation anyway - can sync later
     } catch (err) {
       console.warn('MikroTik PPPoE creation failed:', err);
-      toast.error('Could not create PPPoE user on MikroTik');
-      return false;
+      toast.warning('MikroTik PPPoE creation failed - Customer will be created without PPPoE user (can sync later)');
+      return true; // Allow customer creation anyway - can sync later
     } finally {
       setCreatingPPPoE(false);
     }

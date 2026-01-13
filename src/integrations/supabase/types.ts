@@ -7104,6 +7104,7 @@ export type Database = {
           subtitle: string | null
           suspended_at: string | null
           suspended_reason: string | null
+          theme_color: string | null
           thermal_printer_enabled: boolean | null
           timezone: string | null
           trial_ends_at: string | null
@@ -7149,6 +7150,7 @@ export type Database = {
           subtitle?: string | null
           suspended_at?: string | null
           suspended_reason?: string | null
+          theme_color?: string | null
           thermal_printer_enabled?: boolean | null
           timezone?: string | null
           trial_ends_at?: string | null
@@ -7194,6 +7196,7 @@ export type Database = {
           subtitle?: string | null
           suspended_at?: string | null
           suspended_reason?: string | null
+          theme_color?: string | null
           thermal_printer_enabled?: boolean | null
           timezone?: string | null
           trial_ends_at?: string | null
