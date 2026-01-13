@@ -98,6 +98,20 @@ interface TenantData {
   customer_registration_auto_approve?: boolean;
   turnstile_enabled?: boolean;
   turnstile_site_key?: string;
+  // New fields for enhanced settings
+  landing_page_map_embed_code?: string;
+  landing_page_map_link?: string;
+  landing_page_show_features?: boolean;
+  landing_page_show_about?: boolean;
+  landing_page_show_coverage?: boolean;
+  landing_page_show_register_button?: boolean;
+  landing_page_show_login_button?: boolean;
+  landing_page_show_pay_bill_button?: boolean;
+  landing_page_header_style?: string;
+  landing_page_footer_style?: string;
+  landing_page_show_footer_social?: boolean;
+  landing_page_show_footer_contact?: boolean;
+  landing_page_show_footer_links?: boolean;
 }
 
 interface ISPPackage {
@@ -846,15 +860,17 @@ export default function TenantLanding() {
             {/* Right Section - Action Buttons */}
             <div className="hidden md:flex items-center gap-2 lg:gap-3">
               {/* Pay Bill Button - Green with icon */}
-              <Button 
-                onClick={() => navigate(`/t/${tenantSlug}`)}
-                variant="outline"
-                size="sm"
-                className={`h-9 border-2 border-green-500 text-green-600 hover:bg-green-500 hover:text-white font-bold transition-all ${template.isDark ? 'border-green-400 text-green-400' : ''}`}
-              >
-                <DollarSign className="h-4 w-4 mr-1" />
-                Pay Bill
-              </Button>
+              {tenant.landing_page_show_pay_bill_button !== false && (
+                <Button 
+                  onClick={() => navigate(`/t/${tenantSlug}`)}
+                  variant="outline"
+                  size="sm"
+                  className={`h-9 border-2 border-green-500 text-green-600 hover:bg-green-500 hover:text-white font-bold transition-all ${template.isDark ? 'border-green-400 text-green-400' : ''}`}
+                >
+                  <DollarSign className="h-4 w-4 mr-1" />
+                  Pay Bill
+                </Button>
+              )}
 
               {/* Phone Number */}
               {tenant.landing_page_contact_phone && (
@@ -874,7 +890,7 @@ export default function TenantLanding() {
               )}
               
               {/* Register Button */}
-              {tenant.customer_registration_enabled && (
+              {tenant.customer_registration_enabled && tenant.landing_page_show_register_button !== false && (
                 <Button 
                   variant="outline" 
                   size="sm"
@@ -891,14 +907,16 @@ export default function TenantLanding() {
               )}
 
               {/* Login Button - Primary CTA */}
-              <Button 
-                onClick={() => navigate(`/t/${tenantSlug}`)}
-                size="sm"
-                className={`h-9 bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white shadow-lg font-bold px-5`}
-              >
-                লগইন করুন
-                <ArrowRight className="ml-1.5 h-4 w-4" />
-              </Button>
+              {tenant.landing_page_show_login_button !== false && (
+                <Button 
+                  onClick={() => navigate(`/t/${tenantSlug}`)}
+                  size="sm"
+                  className={`h-9 bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white shadow-lg font-bold px-5`}
+                >
+                  লগইন করুন
+                  <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Button>
+              )}
             </div>
 
             {/* Mobile Menu Button */}
@@ -1705,17 +1723,29 @@ export default function TenantLanding() {
                   template.id === 'dark-gradient' ? 'border border-white/10 bg-white/5 backdrop-blur-md' :
                   'shadow-xl'
                 }`}>
-                  {/* Map Embed */}
-                  <iframe 
-                    src={`https://maps.google.com/maps?q=${encodeURIComponent(tenant.landing_page_contact_address || tenant.company_name)}&output=embed`}
-                    width="100%" 
-                    height="100%" 
-                    style={{ border: 0, minHeight: '400px' }} 
-                    allowFullScreen 
-                    loading="lazy"
-                    className={template.isDark ? 'grayscale brightness-75' : ''}
-                  />
-                  
+                  {/* Map Embed - Supports custom embed code, link, or auto-generated from address */}
+                  {tenant.landing_page_map_embed_code ? (
+                    <div 
+                      className={`w-full h-full min-h-[400px] ${template.isDark ? '[&_iframe]:grayscale [&_iframe]:brightness-75' : ''}`}
+                      dangerouslySetInnerHTML={{ __html: tenant.landing_page_map_embed_code }}
+                    />
+                  ) : (
+                    <iframe 
+                      src={
+                        tenant.landing_page_map_link 
+                          ? (tenant.landing_page_map_link.includes('embed') 
+                              ? tenant.landing_page_map_link 
+                              : `https://maps.google.com/maps?q=${encodeURIComponent(tenant.landing_page_map_link)}&output=embed`)
+                          : `https://maps.google.com/maps?q=${encodeURIComponent(tenant.landing_page_contact_address || tenant.company_name)}&output=embed`
+                      }
+                      width="100%" 
+                      height="100%" 
+                      style={{ border: 0, minHeight: '400px' }} 
+                      allowFullScreen 
+                      loading="lazy"
+                      className={template.isDark ? 'grayscale brightness-75' : ''}
+                    />
+                  )}
                   {/* Overlay with contact info for some templates */}
                   {(template.id === 'isp-corporate' || template.id === 'dark-gradient') && (
                     <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/90 via-black/70 to-transparent">
@@ -2115,27 +2145,100 @@ export default function TenantLanding() {
         </section>
       )}
 
-      {/* Footer */}
-      <footer className={`${template.isDark ? 'bg-gray-950 border-t border-white/10' : 'bg-gray-900'} py-12`}>
+      {/* Enhanced Footer */}
+      <footer className={`${
+        tenant.landing_page_footer_style === 'minimal' ? 'py-8' :
+        tenant.landing_page_footer_style === 'detailed' ? 'py-16' :
+        'py-12'
+      } ${template.isDark ? 'bg-gray-950 border-t border-white/10' : 'bg-gray-900'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-              {tenant.logo_url ? (
-                <img src={tenant.logo_url} alt="Logo" className="h-10 w-auto" />
-              ) : (
-                <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center shadow-lg`}>
-                  <Wifi className="h-7 w-7 text-white" />
-                </div>
-              )}
-              <div>
-                <h3 className="font-bold text-white">{tenant.company_name}</h3>
-                {tenant.subtitle && (
-                  <p className="text-sm text-gray-400">{tenant.subtitle}</p>
+          {/* Main Footer Content */}
+          <div className={`${
+            tenant.landing_page_footer_style === 'detailed' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8' :
+            'flex flex-col md:flex-row items-center justify-between gap-6'
+          }`}>
+            {/* Logo & Company Info */}
+            <div className={tenant.landing_page_footer_style === 'detailed' ? 'lg:col-span-1' : ''}>
+              <div className="flex items-center gap-3">
+                {tenant.logo_url ? (
+                  <img src={tenant.logo_url} alt="Logo" className="h-10 w-auto" />
+                ) : (
+                  <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center shadow-lg`}>
+                    <Wifi className="h-7 w-7 text-white" />
+                  </div>
                 )}
+                <div>
+                  <h3 className="font-bold text-white">{tenant.company_name}</h3>
+                  {tenant.subtitle && (
+                    <p className="text-sm text-gray-400">{tenant.subtitle}</p>
+                  )}
+                </div>
               </div>
+              {tenant.landing_page_footer_style === 'detailed' && tenant.landing_page_about_text && (
+                <p className="text-gray-400 text-sm mt-4 line-clamp-3">
+                  {tenant.landing_page_about_text}
+                </p>
+              )}
             </div>
-            
-            <p className="text-gray-400 text-sm">
+
+            {/* Contact Info - for detailed footer */}
+            {tenant.landing_page_footer_style === 'detailed' && tenant.landing_page_show_footer_contact !== false && (
+              <div>
+                <h4 className="font-semibold text-white mb-4">যোগাযোগ</h4>
+                <div className="space-y-3 text-gray-400 text-sm">
+                  {tenant.landing_page_contact_phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4" />
+                      <span>{tenant.landing_page_contact_phone}</span>
+                    </div>
+                  )}
+                  {tenant.landing_page_contact_email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      <span>{tenant.landing_page_contact_email}</span>
+                    </div>
+                  )}
+                  {tenant.landing_page_contact_address && (
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      <span className="line-clamp-2">{tenant.landing_page_contact_address}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Social Links */}
+            {tenant.landing_page_show_footer_social !== false && (
+              <div className={tenant.landing_page_footer_style === 'social' ? 'flex-1' : ''}>
+                {tenant.landing_page_footer_style === 'detailed' && (
+                  <h4 className="font-semibold text-white mb-4">সামাজিক মাধ্যম</h4>
+                )}
+                <div className={`flex ${tenant.landing_page_footer_style === 'social' ? 'gap-4 justify-center' : 'gap-3'}`}>
+                  {tenant.landing_page_social_facebook && (
+                    <a href={tenant.landing_page_social_facebook} target="_blank" rel="noopener noreferrer"
+                      className={`${tenant.landing_page_footer_style === 'social' ? 'w-12 h-12' : 'w-10 h-10'} rounded-lg flex items-center justify-center bg-blue-600 hover:bg-blue-500 transition-colors`}>
+                      <Facebook className={tenant.landing_page_footer_style === 'social' ? 'h-6 w-6 text-white' : 'h-5 w-5 text-white'} />
+                    </a>
+                  )}
+                  {tenant.landing_page_social_youtube && (
+                    <a href={tenant.landing_page_social_youtube} target="_blank" rel="noopener noreferrer"
+                      className={`${tenant.landing_page_footer_style === 'social' ? 'w-12 h-12' : 'w-10 h-10'} rounded-lg flex items-center justify-center bg-red-600 hover:bg-red-500 transition-colors`}>
+                      <Youtube className={tenant.landing_page_footer_style === 'social' ? 'h-6 w-6 text-white' : 'h-5 w-5 text-white'} />
+                    </a>
+                  )}
+                  {tenant.landing_page_whatsapp && (
+                    <a href={`https://wa.me/${tenant.landing_page_whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer"
+                      className={`${tenant.landing_page_footer_style === 'social' ? 'w-12 h-12' : 'w-10 h-10'} rounded-lg flex items-center justify-center bg-green-600 hover:bg-green-500 transition-colors`}>
+                      <MessageCircle className={tenant.landing_page_footer_style === 'social' ? 'h-6 w-6 text-white' : 'h-5 w-5 text-white'} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Copyright */}
+            <p className={`text-gray-400 text-sm ${tenant.landing_page_footer_style === 'detailed' ? 'lg:text-right' : ''}`}>
               © {new Date().getFullYear()} {tenant.company_name}. সর্বস্বত্ব সংরক্ষিত।
             </p>
           </div>
