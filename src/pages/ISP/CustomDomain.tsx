@@ -50,29 +50,40 @@ export default function CustomDomain() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Fetch server IP from system settings
+  // Fetch server IP from platform_settings (within system_settings)
   const fetchServerIP = useCallback(async () => {
     try {
+      // Primary: Get from platform_settings (global system_settings)
       const { data, error } = await supabase
         .from('system_settings')
-        .select('value')
+        .select('*')
+        .eq('id', 'global')
+        .maybeSingle();
+      
+      if (!error && data) {
+        const anyData = data as any;
+        if (anyData.platform_settings?.customDomainServerIP) {
+          setServerIP(anyData.platform_settings.customDomainServerIP);
+          return;
+        }
+      }
+      
+      // Fallback: Try key-value format
+      const { data: data2, error: error2 } = await supabase
+        .from('system_settings')
+        .select('*')
         .eq('key', 'customDomainServerIP')
         .maybeSingle();
       
-      if (error) {
-        console.error('Error fetching server IP setting:', error);
-        return;
-      }
-      
-      if (data?.value) {
+      if (!error2 && data2) {
+        const anyData2 = data2 as any;
         let ipValue: string = '';
-        if (typeof data.value === 'string') {
-          ipValue = data.value;
-        } else if (typeof data.value === 'object' && data.value !== null) {
-          const valueObj = data.value as Record<string, any>;
-          ipValue = valueObj.value || valueObj.ip || '';
+        if (typeof anyData2.value === 'string') {
+          ipValue = anyData2.value;
+        } else if (typeof anyData2.value === 'object' && anyData2.value !== null) {
+          ipValue = anyData2.value.value || anyData2.value.ip || '';
         }
-        setServerIP(ipValue);
+        if (ipValue) setServerIP(ipValue);
       }
     } catch (err) {
       console.error('Error fetching server IP:', err);
