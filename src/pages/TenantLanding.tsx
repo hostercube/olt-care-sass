@@ -17,9 +17,19 @@ import {
   Signal, Activity, ThumbsUp, Gauge, Router, UserPlus, Play, 
   Download, Upload, CheckCircle, PhoneCall, MessageCircle, Instagram,
   Twitter, Smartphone, Monitor, Tv, Gamepad2, Video, Music, ChevronLeft,
-  Map, Building, Home, Navigation
+  Map, Building, Home, Navigation, DollarSign, Radio, ExternalLink,
+  Sparkles, MousePointer2, Waves
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface CustomMenuItem {
+  id: string;
+  label: string;
+  url: string;
+  icon?: string;
+  openNewTab?: boolean;
+  subMenus?: { label: string; url: string }[];
+}
 
 interface TenantData {
   id: string;
@@ -37,9 +47,17 @@ interface TenantData {
   landing_page_contact_address: string;
   landing_page_social_facebook: string;
   landing_page_social_youtube: string;
+  landing_page_social_instagram?: string;
+  landing_page_social_twitter?: string;
   landing_page_hero_title: string;
   landing_page_hero_subtitle: string;
   landing_page_about_text: string;
+  landing_page_ftp_enabled?: boolean;
+  landing_page_ftp_url?: string;
+  landing_page_livetv_enabled?: boolean;
+  landing_page_livetv_url?: string;
+  landing_page_custom_menus?: CustomMenuItem[];
+  landing_page_whatsapp?: string;
   slug: string;
   customer_registration_enabled?: boolean;
   customer_registration_auto_approve?: boolean;
@@ -67,21 +85,21 @@ interface Area {
   village?: string;
 }
 
-// Theme color configurations
-const THEME_COLORS: Record<string, { primary: string; gradient: string; lightBg: string; text: string; ring: string }> = {
-  cyan: { primary: '#06b6d4', gradient: 'from-cyan-500 to-cyan-600', lightBg: 'bg-cyan-500/10', text: 'text-cyan-500', ring: 'ring-cyan-500' },
-  blue: { primary: '#3b82f6', gradient: 'from-blue-500 to-blue-600', lightBg: 'bg-blue-500/10', text: 'text-blue-500', ring: 'ring-blue-500' },
-  purple: { primary: '#8b5cf6', gradient: 'from-purple-500 to-purple-600', lightBg: 'bg-purple-500/10', text: 'text-purple-500', ring: 'ring-purple-500' },
-  green: { primary: '#22c55e', gradient: 'from-green-500 to-green-600', lightBg: 'bg-green-500/10', text: 'text-green-500', ring: 'ring-green-500' },
-  orange: { primary: '#f97316', gradient: 'from-orange-500 to-orange-600', lightBg: 'bg-orange-500/10', text: 'text-orange-500', ring: 'ring-orange-500' },
-  red: { primary: '#ef4444', gradient: 'from-red-500 to-red-600', lightBg: 'bg-red-500/10', text: 'text-red-500', ring: 'ring-red-500' },
-  pink: { primary: '#ec4899', gradient: 'from-pink-500 to-pink-600', lightBg: 'bg-pink-500/10', text: 'text-pink-500', ring: 'ring-pink-500' },
-  indigo: { primary: '#6366f1', gradient: 'from-indigo-500 to-indigo-600', lightBg: 'bg-indigo-500/10', text: 'text-indigo-500', ring: 'ring-indigo-500' },
-  teal: { primary: '#14b8a6', gradient: 'from-teal-500 to-teal-600', lightBg: 'bg-teal-500/10', text: 'text-teal-500', ring: 'ring-teal-500' },
-  amber: { primary: '#f59e0b', gradient: 'from-amber-500 to-amber-600', lightBg: 'bg-amber-500/10', text: 'text-amber-500', ring: 'ring-amber-500' },
+// Enhanced Theme color configurations with more vibrant options
+const THEME_COLORS: Record<string, { primary: string; gradient: string; lightBg: string; text: string; ring: string; glow: string }> = {
+  cyan: { primary: '#06b6d4', gradient: 'from-cyan-500 via-cyan-400 to-teal-500', lightBg: 'bg-cyan-500/10', text: 'text-cyan-500', ring: 'ring-cyan-500', glow: 'shadow-cyan-500/30' },
+  blue: { primary: '#3b82f6', gradient: 'from-blue-500 via-blue-400 to-indigo-500', lightBg: 'bg-blue-500/10', text: 'text-blue-500', ring: 'ring-blue-500', glow: 'shadow-blue-500/30' },
+  purple: { primary: '#8b5cf6', gradient: 'from-purple-500 via-violet-400 to-fuchsia-500', lightBg: 'bg-purple-500/10', text: 'text-purple-500', ring: 'ring-purple-500', glow: 'shadow-purple-500/30' },
+  green: { primary: '#22c55e', gradient: 'from-green-500 via-emerald-400 to-teal-500', lightBg: 'bg-green-500/10', text: 'text-green-500', ring: 'ring-green-500', glow: 'shadow-green-500/30' },
+  orange: { primary: '#f97316', gradient: 'from-orange-500 via-amber-400 to-yellow-500', lightBg: 'bg-orange-500/10', text: 'text-orange-500', ring: 'ring-orange-500', glow: 'shadow-orange-500/30' },
+  red: { primary: '#ef4444', gradient: 'from-red-500 via-rose-400 to-pink-500', lightBg: 'bg-red-500/10', text: 'text-red-500', ring: 'ring-red-500', glow: 'shadow-red-500/30' },
+  pink: { primary: '#ec4899', gradient: 'from-pink-500 via-rose-400 to-fuchsia-500', lightBg: 'bg-pink-500/10', text: 'text-pink-500', ring: 'ring-pink-500', glow: 'shadow-pink-500/30' },
+  indigo: { primary: '#6366f1', gradient: 'from-indigo-500 via-violet-400 to-purple-500', lightBg: 'bg-indigo-500/10', text: 'text-indigo-500', ring: 'ring-indigo-500', glow: 'shadow-indigo-500/30' },
+  teal: { primary: '#14b8a6', gradient: 'from-teal-500 via-cyan-400 to-emerald-500', lightBg: 'bg-teal-500/10', text: 'text-teal-500', ring: 'ring-teal-500', glow: 'shadow-teal-500/30' },
+  amber: { primary: '#f59e0b', gradient: 'from-amber-500 via-yellow-400 to-orange-500', lightBg: 'bg-amber-500/10', text: 'text-amber-500', ring: 'ring-amber-500', glow: 'shadow-amber-500/30' },
 };
 
-// Template configurations
+// Template configurations with enhanced visual styles
 const TEMPLATES: Record<string, {
   name: string;
   headerClass: string;
@@ -196,26 +214,26 @@ const TEMPLATES: Record<string, {
 
 // Features with icons
 const FEATURES = [
-  { icon: Zap, title: 'উচ্চ গতি', desc: 'সুপার ফাস্ট ব্রডব্যান্ড', en: 'High Speed Internet' },
-  { icon: Shield, title: 'নিরাপদ নেটওয়ার্ক', desc: 'সম্পূর্ণ সুরক্ষিত', en: 'Secure Network' },
-  { icon: Headphones, title: '২৪/৭ সাপোর্ট', desc: 'যেকোনো সময় সহায়তা', en: '24/7 Support' },
-  { icon: Network, title: 'ফাইবার অপটিক', desc: 'আধুনিক প্রযুক্তি', en: 'Fiber Optic' },
+  { icon: Zap, title: 'উচ্চ গতি', desc: 'সুপার ফাস্ট ব্রডব্যান্ড', en: 'High Speed Internet', color: 'from-yellow-500 to-orange-500' },
+  { icon: Shield, title: 'নিরাপদ নেটওয়ার্ক', desc: 'সম্পূর্ণ সুরক্ষিত', en: 'Secure Network', color: 'from-green-500 to-emerald-500' },
+  { icon: Headphones, title: '২৪/৭ সাপোর্ট', desc: 'যেকোনো সময় সহায়তা', en: '24/7 Support', color: 'from-blue-500 to-cyan-500' },
+  { icon: Network, title: 'ফাইবার অপটিক', desc: 'আধুনিক প্রযুক্তি', en: 'Fiber Optic', color: 'from-purple-500 to-pink-500' },
 ];
 
 // Speed showcase items
 const SPEED_SHOWCASE = [
-  { icon: Video, title: '4K Streaming', desc: 'বিনা বাফারিং' },
-  { icon: Gamepad2, title: 'Online Gaming', desc: 'লো লেটেন্সি' },
-  { icon: Monitor, title: 'Work from Home', desc: 'স্মুথ ভিডিও কল' },
-  { icon: Download, title: 'Fast Downloads', desc: 'দ্রুত ডাউনলোড' },
+  { icon: Video, title: '4K Streaming', desc: 'বিনা বাফারিং', color: 'from-red-500 to-pink-500' },
+  { icon: Gamepad2, title: 'Online Gaming', desc: 'লো লেটেন্সি', color: 'from-purple-500 to-violet-500' },
+  { icon: Monitor, title: 'Work from Home', desc: 'স্মুথ ভিডিও কল', color: 'from-blue-500 to-cyan-500' },
+  { icon: Download, title: 'Fast Downloads', desc: 'দ্রুত ডাউনলোড', color: 'from-green-500 to-emerald-500' },
 ];
 
 // Why choose us items
 const WHY_CHOOSE_US = [
-  { icon: Gauge, title: 'সর্বোচ্চ গতি', desc: 'বাজারে সবচেয়ে দ্রুত ইন্টারনেট সেবা' },
-  { icon: ThumbsUp, title: '৯৯.৯% আপটাইম', desc: 'নিরবচ্ছিন্ন সেবা নিশ্চিত' },
-  { icon: Award, title: 'সেরা মান', desc: 'সাশ্রয়ী মূল্যে সেরা সেবা' },
-  { icon: Router, title: 'ফ্রি রাউটার সেটআপ', desc: 'বিনামূল্যে ইনস্টলেশন' },
+  { icon: Gauge, title: 'সর্বোচ্চ গতি', desc: 'বাজারে সবচেয়ে দ্রুত ইন্টারনেট সেবা', color: 'from-orange-500 to-red-500' },
+  { icon: ThumbsUp, title: '৯৯.৯% আপটাইম', desc: 'নিরবচ্ছিন্ন সেবা নিশ্চিত', color: 'from-green-500 to-teal-500' },
+  { icon: Award, title: 'সেরা মান', desc: 'সাশ্রয়ী মূল্যে সেরা সেবা', color: 'from-yellow-500 to-amber-500' },
+  { icon: Router, title: 'ফ্রি রাউটার সেটআপ', desc: 'বিনামূল্যে ইনস্টলেশন', color: 'from-blue-500 to-indigo-500' },
 ];
 
 // Slider images
@@ -251,6 +269,9 @@ export default function TenantLanding() {
   
   // Slider state
   const [currentSlide, setCurrentSlide] = useState(0);
+  
+  // Dropdown menu state
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTenant = async () => {
@@ -278,7 +299,17 @@ export default function TenantLanding() {
           return;
         }
 
-        setTenant(data as TenantData);
+        // Parse custom menus if exists
+        const tenantData = {
+          ...data,
+          landing_page_custom_menus: data.landing_page_custom_menus 
+            ? (typeof data.landing_page_custom_menus === 'string' 
+                ? JSON.parse(data.landing_page_custom_menus) 
+                : data.landing_page_custom_menus)
+            : []
+        } as TenantData;
+
+        setTenant(tenantData);
 
         // Fetch packages
         if (data.landing_page_show_packages) {
@@ -506,6 +537,69 @@ export default function TenantLanding() {
     return acc;
   }, {} as Record<string, Area[]>);
 
+  // Build dynamic navigation items
+  const buildNavItems = () => {
+    const items: { id: string; label: string; url?: string; isExternal?: boolean; subItems?: { label: string; url: string }[] }[] = [
+      { id: 'home', label: 'হোম' },
+      { id: 'features', label: 'সুবিধা' },
+    ];
+
+    // Add packages if enabled
+    if (tenant.landing_page_show_packages && packages.length > 0) {
+      items.push({ id: 'packages', label: 'প্যাকেজ' });
+    }
+
+    // Add coverage if areas exist
+    if (areas.length > 0) {
+      items.push({ id: 'coverage', label: 'কভারেজ' });
+    }
+
+    // Add FTP if enabled
+    if (tenant.landing_page_ftp_enabled && tenant.landing_page_ftp_url) {
+      items.push({ 
+        id: 'ftp', 
+        label: 'FTP Server', 
+        url: tenant.landing_page_ftp_url,
+        isExternal: true 
+      });
+    }
+
+    // Add Live TV if enabled
+    if (tenant.landing_page_livetv_enabled && tenant.landing_page_livetv_url) {
+      items.push({ 
+        id: 'livetv', 
+        label: 'Live TV', 
+        url: tenant.landing_page_livetv_url,
+        isExternal: true 
+      });
+    }
+
+    // Add custom menus
+    if (tenant.landing_page_custom_menus && tenant.landing_page_custom_menus.length > 0) {
+      tenant.landing_page_custom_menus.forEach(menu => {
+        items.push({
+          id: menu.id,
+          label: menu.label,
+          url: menu.url,
+          isExternal: menu.openNewTab,
+          subItems: menu.subMenus
+        });
+      });
+    }
+
+    // Add about
+    items.push({ id: 'about', label: 'আমাদের সম্পর্কে' });
+
+    // Add contact if enabled
+    if (tenant.landing_page_show_contact) {
+      items.push({ id: 'contact', label: 'যোগাযোগ' });
+    }
+
+    return items;
+  };
+
+  const navItems = buildNavItems();
+
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -517,7 +611,7 @@ export default function TenantLanding() {
               {tenant.logo_url ? (
                 <img src={tenant.logo_url} alt="Logo" className="h-10 w-auto max-w-[160px] object-contain" />
               ) : (
-                <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center shadow-lg`}>
+                <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center shadow-lg ${themeColors.glow}`}>
                   <Wifi className="h-7 w-7 text-white" />
                 </div>
               )}
@@ -534,34 +628,75 @@ export default function TenantLanding() {
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex items-center gap-8">
-              {[
-                { id: 'home', label: 'হোম' },
-                { id: 'features', label: 'সুবিধা' },
-                ...(tenant.landing_page_show_packages && packages.length > 0 ? [{ id: 'packages', label: 'প্যাকেজ' }] : []),
-                ...(areas.length > 0 ? [{ id: 'coverage', label: 'কভারেজ' }] : []),
-                { id: 'about', label: 'আমাদের সম্পর্কে' },
-                ...(tenant.landing_page_show_contact ? [{ id: 'contact', label: 'যোগাযোগ' }] : []),
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => scrollToSection(item.id)}
-                  className={`text-sm font-medium transition-colors relative ${
-                    activeSection === item.id
-                      ? themeColors.text
-                      : template.isDark ? 'text-white/70 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  {item.label}
-                  {activeSection === item.id && (
-                    <span className={`absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r ${themeColors.gradient} rounded-full`} />
+            <nav className="hidden lg:flex items-center gap-6">
+              {navItems.map((item) => (
+                <div key={item.id} className="relative group">
+                  {item.url ? (
+                    <a
+                      href={item.url}
+                      target={item.isExternal ? '_blank' : '_self'}
+                      rel={item.isExternal ? 'noopener noreferrer' : undefined}
+                      className={`text-sm font-medium transition-colors flex items-center gap-1 ${
+                        template.isDark ? 'text-white/70 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      {item.label}
+                      {item.isExternal && <ExternalLink className="h-3 w-3" />}
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        if (item.subItems && item.subItems.length > 0) {
+                          setOpenDropdown(openDropdown === item.id ? null : item.id);
+                        } else {
+                          scrollToSection(item.id);
+                        }
+                      }}
+                      className={`text-sm font-medium transition-colors relative ${
+                        activeSection === item.id
+                          ? themeColors.text
+                          : template.isDark ? 'text-white/70 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      {item.label}
+                      {activeSection === item.id && (
+                        <span className={`absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r ${themeColors.gradient} rounded-full`} />
+                      )}
+                    </button>
                   )}
-                </button>
+                  
+                  {/* Dropdown for submenus */}
+                  {item.subItems && item.subItems.length > 0 && openDropdown === item.id && (
+                    <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-xl border py-2 z-50">
+                      {item.subItems.map((sub, idx) => (
+                        <a
+                          key={idx}
+                          href={sub.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          {sub.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </nav>
 
             {/* CTA Buttons */}
             <div className="hidden md:flex items-center gap-3">
+              {/* Pay Bill Button */}
+              <Button 
+                onClick={() => navigate(`/t/${tenantSlug}`)}
+                variant="outline"
+                className={`${template.isDark ? 'border-green-500/50 text-green-400 hover:bg-green-500/20' : 'border-green-500 text-green-600 hover:bg-green-50'} font-semibold`}
+              >
+                <DollarSign className="h-4 w-4 mr-1" />
+                Pay Bill
+              </Button>
+
               {tenant.landing_page_contact_phone && (
                 <a 
                   href={`tel:${tenant.landing_page_contact_phone}`}
@@ -571,6 +706,7 @@ export default function TenantLanding() {
                   <span className="hidden xl:inline">{tenant.landing_page_contact_phone}</span>
                 </a>
               )}
+              
               {tenant.customer_registration_enabled && (
                 <Button 
                   variant="outline" 
@@ -583,7 +719,7 @@ export default function TenantLanding() {
               )}
               <Button 
                 onClick={() => navigate(`/t/${tenantSlug}`)}
-                className={`bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white shadow-lg`}
+                className={`bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white shadow-lg ${themeColors.glow}`}
               >
                 লগইন করুন
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -607,23 +743,40 @@ export default function TenantLanding() {
         {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className={`lg:hidden ${template.isDark ? 'bg-gray-900 border-t border-white/10' : 'bg-white border-t'} px-4 py-6 space-y-4`}>
-            {[
-              { id: 'home', label: 'হোম' },
-              { id: 'features', label: 'সুবিধা' },
-              ...(tenant.landing_page_show_packages && packages.length > 0 ? [{ id: 'packages', label: 'প্যাকেজ' }] : []),
-              ...(areas.length > 0 ? [{ id: 'coverage', label: 'কভারেজ' }] : []),
-              { id: 'about', label: 'আমাদের সম্পর্কে' },
-              ...(tenant.landing_page_show_contact ? [{ id: 'contact', label: 'যোগাযোগ' }] : []),
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={() => scrollToSection(item.id)}
-                className={`block w-full text-left py-2 ${template.isDark ? 'text-white' : 'text-gray-900'}`}
-              >
-                {item.label}
-              </button>
+            {navItems.map((item) => (
+              <div key={item.id}>
+                {item.url ? (
+                  <a
+                    href={item.url}
+                    target={item.isExternal ? '_blank' : '_self'}
+                    rel={item.isExternal ? 'noopener noreferrer' : undefined}
+                    className={`flex items-center gap-2 w-full text-left py-2 ${template.isDark ? 'text-white' : 'text-gray-900'}`}
+                  >
+                    {item.label}
+                    {item.isExternal && <ExternalLink className="h-4 w-4" />}
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => scrollToSection(item.id)}
+                    className={`block w-full text-left py-2 ${template.isDark ? 'text-white' : 'text-gray-900'}`}
+                  >
+                    {item.label}
+                  </button>
+                )}
+              </div>
             ))}
+            
             <div className="pt-4 space-y-3 border-t border-gray-200 dark:border-white/10">
+              {/* Pay Bill Button - Mobile */}
+              <Button 
+                onClick={() => navigate(`/t/${tenantSlug}`)}
+                variant="outline"
+                className="w-full border-green-500 text-green-600"
+              >
+                <DollarSign className="h-4 w-4 mr-2" />
+                Pay Bill / বিল পরিশোধ
+              </Button>
+              
               {tenant.customer_registration_enabled && (
                 <Button 
                   variant="outline" 
@@ -647,8 +800,9 @@ export default function TenantLanding() {
 
       {/* Hero Section with Slider */}
       <section id="home" className={`${template.heroClass} relative overflow-hidden`}>
-        {/* Slider Background */}
+        {/* Animated Background Effects */}
         <div className="absolute inset-0">
+          {/* Slider Background */}
           {SLIDER_IMAGES.map((slide, index) => (
             <div
               key={index}
@@ -662,12 +816,27 @@ export default function TenantLanding() {
               }}
             />
           ))}
+          
+          {/* Animated Gradient Orbs */}
+          <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-white/10 to-transparent rounded-full blur-3xl animate-pulse" />
+          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-br from-white/5 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-radial from-white/5 to-transparent rounded-full blur-3xl" />
         </div>
 
-        {/* Background Effects */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
+        {/* Floating Particles Effect */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {[...Array(20)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-2 h-2 bg-white/20 rounded-full animate-float"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 5}s`,
+                animationDuration: `${5 + Math.random() * 5}s`,
+              }}
+            />
+          ))}
         </div>
 
         {/* Slider Controls */}
@@ -715,13 +884,25 @@ export default function TenantLanding() {
               {tenant.landing_page_show_packages && packages.length > 0 && (
                 <Button 
                   size="lg" 
-                  className={`bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white text-lg px-8 py-6 shadow-2xl`}
+                  className={`bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white text-lg px-8 py-6 shadow-2xl ${themeColors.glow}`}
                   onClick={() => scrollToSection('packages')}
                 >
                   প্যাকেজ দেখুন
                   <ChevronRight className="ml-2 h-5 w-5" />
                 </Button>
               )}
+              
+              {/* Pay Bill Button - Hero */}
+              <Button 
+                size="lg" 
+                variant="outline" 
+                className={`${template.heroTextClass} border-2 border-green-400/50 hover:bg-green-500/20 text-lg px-8 py-6 backdrop-blur-sm`}
+                onClick={() => navigate(`/t/${tenantSlug}`)}
+              >
+                <DollarSign className="mr-2 h-5 w-5" />
+                বিল পরিশোধ করুন
+              </Button>
+              
               {tenant.customer_registration_enabled && (
                 <Button 
                   size="lg" 
@@ -735,14 +916,17 @@ export default function TenantLanding() {
               )}
             </div>
 
-            {/* Speed Showcase */}
+            {/* Speed Showcase with Unique Colorful Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
               {SPEED_SHOWCASE.map((item, index) => (
                 <div 
                   key={index} 
-                  className="group bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-6 hover:bg-white/15 transition-all duration-300 hover:-translate-y-1"
+                  className="group relative bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-6 hover:bg-white/15 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl overflow-hidden"
                 >
-                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg`}>
+                  {/* Colorful gradient background on hover */}
+                  <div className={`absolute inset-0 bg-gradient-to-br ${item.color} opacity-0 group-hover:opacity-20 transition-opacity duration-500`} />
+                  
+                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-lg`}>
                     <item.icon className="h-7 w-7 text-white" />
                   </div>
                   <h3 className={`font-semibold ${template.heroTextClass} mb-1`}>{item.title}</h3>
@@ -753,23 +937,30 @@ export default function TenantLanding() {
           </div>
         </div>
 
-        {/* Wave Divider */}
+        {/* Wave Divider with Gradient */}
         <div className="absolute bottom-0 left-0 right-0">
           <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full">
+            <defs>
+              <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor={template.isDark ? '#1f2937' : '#f9fafb'} />
+                <stop offset="50%" stopColor={template.isDark ? '#374151' : '#f3f4f6'} />
+                <stop offset="100%" stopColor={template.isDark ? '#1f2937' : '#f9fafb'} />
+              </linearGradient>
+            </defs>
             <path 
               d="M0 120L60 105C120 90 240 60 360 45C480 30 600 30 720 37.5C840 45 960 60 1080 67.5C1200 75 1320 75 1380 75L1440 75V120H1380C1320 120 1200 120 1080 120C960 120 840 120 720 120C600 120 480 120 360 120C240 120 120 120 60 120H0Z" 
-              fill={template.isDark ? '#1f2937' : '#f9fafb'}
+              fill="url(#waveGradient)"
             />
           </svg>
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* Features Section with Colorful Cards */}
       <section id="features" className={`${template.sectionBgClass} py-20 lg:py-28`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <Badge className={`mb-4 ${themeColors.lightBg} ${themeColors.text} border-0`}>
-              <Zap className="h-3 w-3 mr-1" />
+              <Sparkles className="h-3 w-3 mr-1" />
               আমাদের সুবিধা
             </Badge>
             <h2 className={`text-3xl md:text-4xl lg:text-5xl font-bold ${template.isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
@@ -782,40 +973,80 @@ export default function TenantLanding() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {FEATURES.map((feature, index) => (
-              <Card key={index} className={`${template.cardClass} group`}>
-                <CardContent className="p-8 text-center">
-                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform shadow-lg`}>
+              <Card key={index} className={`${template.cardClass} group relative overflow-hidden`}>
+                {/* Animated gradient border */}
+                <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
+                
+                <CardContent className="p-8 text-center relative z-10">
+                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.color} flex items-center justify-center mx-auto mb-6 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 shadow-lg`}>
                     <feature.icon className="h-8 w-8 text-white" />
                   </div>
                   <h3 className={`text-xl font-bold ${template.isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
                     {feature.title}
                   </h3>
-                  <p className={template.isDark ? 'text-gray-400' : 'text-gray-600'}>
+                  <p className={`${template.isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                     {feature.desc}
                   </p>
                 </CardContent>
               </Card>
             ))}
           </div>
+        </div>
+      </section>
 
-          {/* Why Choose Us */}
-          <div className="mt-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Stats Section with Animated Counters */}
+      <section className={`${template.isDark ? 'bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-r from-gray-900 via-blue-900 to-gray-900'} py-16`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {[
+              { value: '১০০০+', label: 'সন্তুষ্ট গ্রাহক', icon: Users, color: 'from-blue-500 to-cyan-500' },
+              { value: '৯৯.৯%', label: 'আপটাইম গ্যারান্টি', icon: Activity, color: 'from-green-500 to-emerald-500' },
+              { value: '২৪/৭', label: 'সাপোর্ট সেবা', icon: Headphones, color: 'from-purple-500 to-pink-500' },
+              { value: '১ Gbps', label: 'সর্বোচ্চ গতি', icon: Zap, color: 'from-orange-500 to-red-500' },
+            ].map((stat, index) => (
+              <div key={index} className="text-center group">
+                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${stat.color} flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-lg`}>
+                  <stat.icon className="h-8 w-8 text-white" />
+                </div>
+                <div className={`text-4xl md:text-5xl font-bold text-white mb-2`}>
+                  {stat.value}
+                </div>
+                <p className="text-gray-400">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Why Choose Us Section */}
+      <section className={`${template.sectionBgClass} py-20 lg:py-28`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <Badge className={`mb-4 ${themeColors.lightBg} ${themeColors.text} border-0`}>
+              <Award className="h-3 w-3 mr-1" />
+              কেন আমরা সেরা
+            </Badge>
+            <h2 className={`text-3xl md:text-4xl lg:text-5xl font-bold ${template.isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
+              আমাদের বিশেষত্ব
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {WHY_CHOOSE_US.map((item, index) => (
               <div 
-                key={index}
-                className={`flex items-center gap-4 p-6 rounded-2xl ${template.isDark ? 'bg-white/5 border border-white/10' : 'bg-white shadow-lg'}`}
+                key={index} 
+                className={`p-6 rounded-2xl ${template.isDark ? 'bg-white/5 border border-white/10' : 'bg-white shadow-xl border border-gray-100'} group hover:-translate-y-2 transition-all duration-500 relative overflow-hidden`}
               >
-                <div className={`w-12 h-12 rounded-xl ${themeColors.lightBg} flex items-center justify-center flex-shrink-0`}>
-                  <item.icon className={`h-6 w-6 ${themeColors.text}`} />
+                <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${item.color}`} />
+                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg`}>
+                  <item.icon className="h-7 w-7 text-white" />
                 </div>
-                <div>
-                  <h4 className={`font-semibold ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {item.title}
-                  </h4>
-                  <p className={`text-sm ${template.isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {item.desc}
-                  </p>
-                </div>
+                <h3 className={`text-lg font-bold ${template.isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
+                  {item.title}
+                </h3>
+                <p className={`text-sm ${template.isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {item.desc}
+                </p>
               </div>
             ))}
           </div>
@@ -824,7 +1055,7 @@ export default function TenantLanding() {
 
       {/* Packages Section */}
       {tenant.landing_page_show_packages && packages.length > 0 && (
-        <section id="packages" className={`${template.isDark ? 'bg-gray-950' : 'bg-white'} py-20 lg:py-28`}>
+        <section id="packages" className={`${template.isDark ? 'bg-gradient-to-b from-gray-900 to-gray-950' : 'bg-gradient-to-b from-white to-gray-50'} py-20 lg:py-28`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
               <Badge className={`mb-4 ${themeColors.lightBg} ${themeColors.text} border-0`}>
@@ -832,179 +1063,237 @@ export default function TenantLanding() {
                 প্যাকেজ সমূহ
               </Badge>
               <h2 className={`text-3xl md:text-4xl lg:text-5xl font-bold ${template.isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
-                আপনার জন্য সেরা প্যাকেজ বেছে নিন
+                আপনার জন্য সেরা প্যাকেজ
               </h2>
               <p className={`text-lg ${template.isDark ? 'text-gray-400' : 'text-gray-600'} max-w-2xl mx-auto`}>
-                সাশ্রয়ী মূল্যে উচ্চ গতির ইন্টারনেট সংযোগ
+                আপনার প্রয়োজন অনুযায়ী সঠিক প্যাকেজ বেছে নিন
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {packages.map((pkg, index) => (
-                <Card 
-                  key={pkg.id} 
-                  className={`${template.cardClass} relative overflow-hidden ${index === 1 ? 'ring-2 ' + themeColors.ring + ' scale-105' : ''}`}
-                >
-                  {index === 1 && (
-                    <div className={`absolute top-0 right-0 px-4 py-1 bg-gradient-to-r ${themeColors.gradient} text-white text-sm font-medium rounded-bl-lg`}>
-                      জনপ্রিয়
-                    </div>
-                  )}
-                  <CardHeader className="text-center pb-4">
-                    <CardTitle className={`text-2xl ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
-                      {pkg.name}
-                    </CardTitle>
-                    <div className="mt-4">
-                      <span className={`text-5xl font-bold bg-gradient-to-r ${themeColors.gradient} bg-clip-text text-transparent`}>
-                        ৳{pkg.price}
-                      </span>
-                      <span className={template.isDark ? 'text-gray-400' : 'text-gray-600'}>/মাস</span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pb-6">
-                    <div className="space-y-4">
-                      <div className={`flex items-center justify-center gap-2 p-4 rounded-xl ${template.isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
-                        <Download className={`h-5 w-5 ${themeColors.text}`} />
-                        <span className={`text-2xl font-bold ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
-                          {pkg.download_speed}
-                        </span>
-                        <span className={template.isDark ? 'text-gray-400' : 'text-gray-600'}>
-                          {pkg.speed_unit}
-                        </span>
+              {packages.map((pkg, index) => {
+                const isPopular = index === Math.floor(packages.length / 2);
+                const colors = ['from-blue-500 to-cyan-500', 'from-purple-500 to-pink-500', 'from-orange-500 to-red-500', 'from-green-500 to-teal-500'];
+                const cardColor = colors[index % colors.length];
+                
+                return (
+                  <Card 
+                    key={pkg.id} 
+                    className={`relative overflow-hidden ${template.cardClass} group hover:-translate-y-3 transition-all duration-500 ${isPopular ? 'ring-2 ring-primary shadow-2xl scale-105' : ''}`}
+                  >
+                    {/* Gradient Top Border */}
+                    <div className={`absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r ${cardColor}`} />
+                    
+                    {isPopular && (
+                      <div className="absolute -top-0 -right-12 w-32 h-8 bg-gradient-to-r from-yellow-500 to-orange-500 transform rotate-45 translate-y-4">
+                        <span className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold">জনপ্রিয়</span>
                       </div>
-                      <div className="space-y-3">
-                        {[
-                          'আনলিমিটেড ডাটা',
-                          'ফ্রি রাউটার সেটআপ',
-                          '২৪/৭ টেকনিক্যাল সাপোর্ট',
-                          'কোন হিডেন চার্জ নেই',
-                        ].map((feature, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <CheckCircle className={`h-5 w-5 ${themeColors.text}`} />
-                            <span className={template.isDark ? 'text-gray-300' : 'text-gray-600'}>
-                              {feature}
-                            </span>
-                          </div>
+                    )}
+                    
+                    <CardHeader className="text-center pb-2">
+                      <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${cardColor} flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 shadow-lg`}>
+                        <Wifi className="h-8 w-8 text-white" />
+                      </div>
+                      <CardTitle className={`text-2xl ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {pkg.name}
+                      </CardTitle>
+                      {pkg.description && (
+                        <CardDescription className={template.isDark ? 'text-gray-400' : ''}>
+                          {pkg.description}
+                        </CardDescription>
+                      )}
+                    </CardHeader>
+                    
+                    <CardContent className="text-center pt-4">
+                      <div className="mb-6">
+                        <span className={`text-5xl font-bold bg-gradient-to-r ${cardColor} bg-clip-text text-transparent`}>
+                          ৳{pkg.price}
+                        </span>
+                        <span className={template.isDark ? 'text-gray-400' : 'text-gray-500'}>/মাস</span>
+                      </div>
+                      
+                      <div className="space-y-4 mb-6">
+                        <div className={`flex items-center justify-center gap-3 p-3 rounded-xl ${template.isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
+                          <Download className={`h-5 w-5 ${themeColors.text}`} />
+                          <span className={template.isDark ? 'text-white' : 'text-gray-900'}>
+                            ডাউনলোড: <strong>{pkg.download_speed} {pkg.speed_unit}</strong>
+                          </span>
+                        </div>
+                        <div className={`flex items-center justify-center gap-3 p-3 rounded-xl ${template.isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
+                          <Upload className={`h-5 w-5 ${themeColors.text}`} />
+                          <span className={template.isDark ? 'text-white' : 'text-gray-900'}>
+                            আপলোড: <strong>{pkg.upload_speed} {pkg.speed_unit}</strong>
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <ul className="space-y-2 mb-6 text-left">
+                        {['আনলিমিটেড ডেটা', 'ফ্রি রাউটার সেটআপ', '২৪/৭ সাপোর্ট', 'রিয়েল আইপি অপশন'].map((feature, i) => (
+                          <li key={i} className={`flex items-center gap-2 ${template.isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                            <CheckCircle className={`h-4 w-4 ${themeColors.text}`} />
+                            {feature}
+                          </li>
                         ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter>
-                    <Button 
-                      className={`w-full bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white`}
-                      onClick={() => {
-                        setRegisterForm(prev => ({ ...prev, package_id: pkg.id }));
-                        setRegisterModalOpen(true);
-                      }}
-                    >
-                      এই প্যাকেজ নিন
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
+                      </ul>
+                    </CardContent>
+                    
+                    <CardFooter>
+                      <Button 
+                        className={`w-full bg-gradient-to-r ${cardColor} hover:opacity-90 text-white shadow-lg`}
+                        onClick={() => setRegisterModalOpen(true)}
+                      >
+                        এই প্যাকেজ নিন
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                );
+              })}
             </div>
           </div>
         </section>
       )}
 
-      {/* Coverage Map Section */}
+      {/* Enhanced Coverage Map Section - ISPpoint Style */}
       {areas.length > 0 && (
-        <section id="coverage" className={`${template.sectionBgClass} py-20 lg:py-28`}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <section id="coverage" className={`${template.sectionBgClass} py-20 lg:py-28 relative overflow-hidden`}>
+          {/* Decorative Background Elements */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className={`absolute top-20 left-10 w-72 h-72 bg-gradient-to-br ${themeColors.gradient} opacity-10 rounded-full blur-3xl`} />
+            <div className={`absolute bottom-20 right-10 w-96 h-96 bg-gradient-to-br ${themeColors.gradient} opacity-10 rounded-full blur-3xl`} />
+          </div>
+          
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
             <div className="text-center mb-16">
-              <Badge className={`mb-4 ${themeColors.lightBg} ${themeColors.text} border-0`}>
-                <Map className="h-3 w-3 mr-1" />
+              <Badge className={`mb-4 ${themeColors.lightBg} ${themeColors.text} border-0 px-4 py-2`}>
+                <Map className="h-4 w-4 mr-2" />
                 কভারেজ এলাকা
               </Badge>
               <h2 className={`text-3xl md:text-4xl lg:text-5xl font-bold ${template.isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
                 আমাদের সেবা এলাকা
               </h2>
               <p className={`text-lg ${template.isDark ? 'text-gray-400' : 'text-gray-600'} max-w-2xl mx-auto`}>
-                নিচের এলাকাগুলোতে আমাদের সেবা পাওয়া যায়
+                নিচের এলাকাগুলোতে আমাদের উচ্চ গতির ফাইবার অপটিক সেবা পাওয়া যায়
               </p>
             </div>
 
-            {/* Coverage Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
-              <div className={`text-center p-6 rounded-2xl ${template.isDark ? 'bg-white/5 border border-white/10' : 'bg-white shadow-lg'}`}>
-                <div className={`text-4xl font-bold bg-gradient-to-r ${themeColors.gradient} bg-clip-text text-transparent`}>
-                  {Object.keys(areasByDistrict).length}
-                </div>
-                <p className={template.isDark ? 'text-gray-400' : 'text-gray-600'}>জেলা</p>
-              </div>
-              <div className={`text-center p-6 rounded-2xl ${template.isDark ? 'bg-white/5 border border-white/10' : 'bg-white shadow-lg'}`}>
-                <div className={`text-4xl font-bold bg-gradient-to-r ${themeColors.gradient} bg-clip-text text-transparent`}>
-                  {areas.length}
-                </div>
-                <p className={template.isDark ? 'text-gray-400' : 'text-gray-600'}>এলাকা</p>
-              </div>
-              <div className={`text-center p-6 rounded-2xl ${template.isDark ? 'bg-white/5 border border-white/10' : 'bg-white shadow-lg'}`}>
-                <div className={`text-4xl font-bold bg-gradient-to-r ${themeColors.gradient} bg-clip-text text-transparent`}>
-                  ২৪/৭
-                </div>
-                <p className={template.isDark ? 'text-gray-400' : 'text-gray-600'}>সাপোর্ট</p>
-              </div>
-              <div className={`text-center p-6 rounded-2xl ${template.isDark ? 'bg-white/5 border border-white/10' : 'bg-white shadow-lg'}`}>
-                <div className={`text-4xl font-bold bg-gradient-to-r ${themeColors.gradient} bg-clip-text text-transparent`}>
-                  ৯৯.৯%
-                </div>
-                <p className={template.isDark ? 'text-gray-400' : 'text-gray-600'}>আপটাইম</p>
-              </div>
-            </div>
-
-            {/* Coverage Areas Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Object.entries(areasByDistrict).map(([district, districtAreas]) => (
-                <Card key={district} className={template.cardClass}>
-                  <CardHeader className="pb-3">
-                    <CardTitle className={`flex items-center gap-2 ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
-                      <Building className={`h-5 w-5 ${themeColors.text}`} />
-                      {district}
-                    </CardTitle>
-                    <CardDescription className={template.isDark ? 'text-gray-400' : ''}>
-                      {districtAreas.length} টি এলাকা
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {districtAreas.slice(0, 8).map((area) => (
-                        <Badge 
-                          key={area.id} 
-                          variant="secondary"
-                          className={`${template.isDark ? 'bg-white/10 text-white border-white/20' : ''}`}
-                        >
-                          <MapPin className="h-3 w-3 mr-1" />
-                          {area.name}
-                        </Badge>
-                      ))}
-                      {districtAreas.length > 8 && (
-                        <Badge variant="outline" className={template.isDark ? 'border-white/30 text-white' : ''}>
-                          +{districtAreas.length - 8} আরও
-                        </Badge>
-                      )}
+            {/* Coverage Stats - ISPpoint Style Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-12">
+              {[
+                { value: Object.keys(areasByDistrict).length, label: 'জেলা', icon: Building, color: 'from-blue-500 to-indigo-500' },
+                { value: areas.length, label: 'এলাকা', icon: MapPin, color: 'from-green-500 to-emerald-500' },
+                { value: '২৪/৭', label: 'সাপোর্ট', icon: Headphones, color: 'from-purple-500 to-pink-500' },
+                { value: '৯৯.৯%', label: 'আপটাইম', icon: Activity, color: 'from-orange-500 to-red-500' },
+              ].map((stat, index) => (
+                <div 
+                  key={index}
+                  className={`group relative p-6 rounded-2xl ${template.isDark ? 'bg-white/5 border border-white/10' : 'bg-white shadow-xl'} hover:-translate-y-2 transition-all duration-500 overflow-hidden`}
+                >
+                  {/* Gradient Overlay on Hover */}
+                  <div className={`absolute inset-0 bg-gradient-to-br ${stat.color} opacity-0 group-hover:opacity-10 transition-opacity duration-500`} />
+                  
+                  <div className="text-center relative z-10">
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform shadow-lg`}>
+                      <stat.icon className="h-7 w-7 text-white" />
                     </div>
-                  </CardContent>
-                </Card>
+                    <div className={`text-3xl md:text-4xl font-bold bg-gradient-to-r ${stat.color} bg-clip-text text-transparent`}>
+                      {stat.value}
+                    </div>
+                    <p className={template.isDark ? 'text-gray-400 text-sm' : 'text-gray-600 text-sm'}>{stat.label}</p>
+                  </div>
+                </div>
               ))}
             </div>
 
-            {/* CTA for areas not listed */}
-            <div className={`mt-12 text-center p-8 rounded-2xl ${template.isDark ? 'bg-white/5 border border-white/10' : 'bg-gradient-to-br from-gray-50 to-white shadow-lg border border-gray-100'}`}>
-              <Navigation className={`h-12 w-12 ${themeColors.text} mx-auto mb-4`} />
-              <h3 className={`text-xl font-bold ${template.isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
-                আপনার এলাকা খুঁজে পাননি?
-              </h3>
-              <p className={`${template.isDark ? 'text-gray-400' : 'text-gray-600'} mb-4`}>
-                আমরা দ্রুত সম্প্রসারণ করছি। আপনার এলাকায় সেবা পেতে যোগাযোগ করুন।
-              </p>
-              <Button 
-                className={`bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white`}
-                onClick={() => scrollToSection('contact')}
-              >
-                যোগাযোগ করুন
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+            {/* Coverage Areas Grid - Enhanced Design */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Object.entries(areasByDistrict).map(([district, districtAreas], index) => {
+                const colors = ['from-blue-500 to-cyan-500', 'from-purple-500 to-pink-500', 'from-green-500 to-emerald-500', 'from-orange-500 to-red-500', 'from-indigo-500 to-violet-500', 'from-teal-500 to-cyan-500'];
+                const cardColor = colors[index % colors.length];
+                
+                return (
+                  <Card key={district} className={`${template.cardClass} group hover:-translate-y-2 transition-all duration-500 overflow-hidden`}>
+                    {/* Gradient Top Border */}
+                    <div className={`h-1 bg-gradient-to-r ${cardColor}`} />
+                    
+                    <CardHeader className="pb-3">
+                      <CardTitle className={`flex items-center gap-3 ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
+                        <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${cardColor} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
+                          <Building className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <span className="block">{district}</span>
+                          <span className={`text-sm font-normal ${template.isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {districtAreas.length} টি এলাকা
+                          </span>
+                        </div>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {districtAreas.slice(0, 8).map((area) => (
+                          <Badge 
+                            key={area.id} 
+                            variant="secondary"
+                            className={`${template.isDark ? 'bg-white/10 text-white border-white/20 hover:bg-white/20' : 'hover:bg-gray-200'} transition-colors cursor-default`}
+                          >
+                            <MapPin className="h-3 w-3 mr-1" />
+                            {area.name}
+                          </Badge>
+                        ))}
+                        {districtAreas.length > 8 && (
+                          <Badge variant="outline" className={`${template.isDark ? 'border-white/30 text-white' : ''} bg-gradient-to-r ${cardColor} text-white border-0`}>
+                            +{districtAreas.length - 8} আরও
+                          </Badge>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* CTA for areas not listed - Enhanced Design */}
+            <div className={`mt-12 text-center p-8 md:p-12 rounded-3xl relative overflow-hidden ${template.isDark ? 'bg-gradient-to-br from-white/5 to-white/10 border border-white/10' : 'bg-gradient-to-br from-gray-50 to-white shadow-2xl border border-gray-100'}`}>
+              {/* Decorative Elements */}
+              <div className={`absolute top-0 left-0 w-40 h-40 bg-gradient-to-br ${themeColors.gradient} opacity-20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2`} />
+              <div className={`absolute bottom-0 right-0 w-40 h-40 bg-gradient-to-br ${themeColors.gradient} opacity-20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2`} />
+              
+              <div className="relative z-10">
+                <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center mx-auto mb-6 shadow-lg ${themeColors.glow}`}>
+                  <Navigation className="h-10 w-10 text-white" />
+                </div>
+                <h3 className={`text-2xl md:text-3xl font-bold ${template.isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
+                  আপনার এলাকা খুঁজে পাননি?
+                </h3>
+                <p className={`${template.isDark ? 'text-gray-400' : 'text-gray-600'} mb-6 max-w-lg mx-auto`}>
+                  আমরা দ্রুত সম্প্রসারণ করছি। আপনার এলাকায় সেবা পেতে আজই যোগাযোগ করুন।
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Button 
+                    className={`bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white shadow-lg ${themeColors.glow}`}
+                    onClick={() => scrollToSection('contact')}
+                  >
+                    <MessageCircle className="mr-2 h-4 w-4" />
+                    যোগাযোগ করুন
+                  </Button>
+                  {tenant.landing_page_whatsapp && (
+                    <a
+                      href={`https://wa.me/${tenant.landing_page_whatsapp.replace(/[^0-9]/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button 
+                        variant="outline"
+                        className={template.isDark ? 'border-green-500/50 text-green-400 hover:bg-green-500/20' : 'border-green-500 text-green-600 hover:bg-green-50'}
+                      >
+                        <MessageCircle className="mr-2 h-4 w-4" />
+                        WhatsApp
+                      </Button>
+                    </a>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -1036,7 +1325,7 @@ export default function TenantLanding() {
               </div>
             </div>
             <div className="relative">
-              <div className={`aspect-square rounded-3xl bg-gradient-to-br ${themeColors.gradient} p-1`}>
+              <div className={`aspect-square rounded-3xl bg-gradient-to-br ${themeColors.gradient} p-1 shadow-2xl ${themeColors.glow}`}>
                 <div className={`w-full h-full rounded-3xl ${template.isDark ? 'bg-gray-900' : 'bg-white'} flex items-center justify-center`}>
                   <div className="text-center p-8">
                     <Wifi className={`h-24 w-24 ${themeColors.text} mx-auto mb-6`} />
@@ -1049,8 +1338,8 @@ export default function TenantLanding() {
                   </div>
                 </div>
               </div>
-              <div className={`absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br ${themeColors.gradient} rounded-2xl opacity-20 blur-xl`} />
-              <div className={`absolute -bottom-4 -left-4 w-32 h-32 bg-gradient-to-br ${themeColors.gradient} rounded-2xl opacity-20 blur-xl`} />
+              <div className={`absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br ${themeColors.gradient} rounded-2xl opacity-30 blur-xl`} />
+              <div className={`absolute -bottom-4 -left-4 w-32 h-32 bg-gradient-to-br ${themeColors.gradient} rounded-2xl opacity-30 blur-xl`} />
             </div>
           </div>
         </div>
@@ -1074,13 +1363,13 @@ export default function TenantLanding() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
               {/* Contact Info */}
-              <div className="space-y-8">
+              <div className="space-y-6">
                 {tenant.landing_page_contact_phone && (
                   <a 
                     href={`tel:${tenant.landing_page_contact_phone}`}
                     className={`flex items-center gap-4 p-6 rounded-2xl ${template.cardClass} group`}
                   >
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg`}>
                       <Phone className="h-6 w-6 text-white" />
                     </div>
                     <div>
@@ -1097,7 +1386,7 @@ export default function TenantLanding() {
                     href={`mailto:${tenant.landing_page_contact_email}`}
                     className={`flex items-center gap-4 p-6 rounded-2xl ${template.cardClass} group`}
                   >
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg`}>
                       <Mail className="h-6 w-6 text-white" />
                     </div>
                     <div>
@@ -1111,7 +1400,7 @@ export default function TenantLanding() {
 
                 {tenant.landing_page_contact_address && (
                   <div className={`flex items-start gap-4 p-6 rounded-2xl ${template.cardClass}`}>
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center flex-shrink-0`}>
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center flex-shrink-0 shadow-lg`}>
                       <MapPin className="h-6 w-6 text-white" />
                     </div>
                     <div>
@@ -1123,16 +1412,16 @@ export default function TenantLanding() {
                   </div>
                 )}
 
-                {/* Social Links */}
-                <div className="flex gap-4">
+                {/* Social Links - Enhanced */}
+                <div className="flex gap-4 pt-4">
                   {tenant.landing_page_social_facebook && (
                     <a 
                       href={tenant.landing_page_social_facebook} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl ${template.isDark ? 'bg-white/10 hover:bg-white/20' : 'bg-gray-100 hover:bg-gray-200'} flex items-center justify-center transition-colors`}
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
                     >
-                      <Facebook className={`h-5 w-5 ${template.isDark ? 'text-white' : 'text-gray-600'}`} />
+                      <Facebook className="h-5 w-5 text-white" />
                     </a>
                   )}
                   {tenant.landing_page_social_youtube && (
@@ -1140,9 +1429,39 @@ export default function TenantLanding() {
                       href={tenant.landing_page_social_youtube} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className={`w-12 h-12 rounded-xl ${template.isDark ? 'bg-white/10 hover:bg-white/20' : 'bg-gray-100 hover:bg-gray-200'} flex items-center justify-center transition-colors`}
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
                     >
-                      <Youtube className={`h-5 w-5 ${template.isDark ? 'text-white' : 'text-gray-600'}`} />
+                      <Youtube className="h-5 w-5 text-white" />
+                    </a>
+                  )}
+                  {tenant.landing_page_social_instagram && (
+                    <a 
+                      href={tenant.landing_page_social_instagram} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 via-purple-500 to-orange-400 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
+                    >
+                      <Instagram className="h-5 w-5 text-white" />
+                    </a>
+                  )}
+                  {tenant.landing_page_social_twitter && (
+                    <a 
+                      href={tenant.landing_page_social_twitter} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
+                    >
+                      <Twitter className="h-5 w-5 text-white" />
+                    </a>
+                  )}
+                  {tenant.landing_page_whatsapp && (
+                    <a 
+                      href={`https://wa.me/${tenant.landing_page_whatsapp.replace(/[^0-9]/g, '')}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
+                    >
+                      <MessageCircle className="h-5 w-5 text-white" />
                     </a>
                   )}
                 </div>
@@ -1202,29 +1521,29 @@ export default function TenantLanding() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="contact-message" className={template.isDark ? 'text-white' : ''}>বার্তা *</Label>
+                      <Label htmlFor="contact-message" className={template.isDark ? 'text-white' : ''}>মেসেজ</Label>
                       <Textarea
                         id="contact-message"
                         value={contactForm.message}
                         onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
                         rows={4}
-                        required
                         className={template.isDark ? 'bg-white/5 border-white/20 text-white' : ''}
                       />
                     </div>
-
+                    
                     {/* Turnstile Widget */}
                     {tenant.turnstile_enabled && tenant.turnstile_site_key && (
                       <TurnstileWidget
                         siteKey={tenant.turnstile_site_key}
-                        onToken={setContactTurnstileToken}
+                        onVerify={setContactTurnstileToken}
+                        onError={() => setContactTurnstileToken(null)}
                       />
                     )}
-
+                    
                     <Button 
                       type="submit" 
-                      className={`w-full bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white`}
-                      disabled={submitting || (tenant.turnstile_enabled && !contactTurnstileToken)}
+                      className={`w-full bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white shadow-lg`}
+                      disabled={submitting}
                     >
                       {submitting ? (
                         <>
@@ -1233,7 +1552,7 @@ export default function TenantLanding() {
                         </>
                       ) : (
                         <>
-                          বার্তা পাঠান
+                          মেসেজ পাঠান
                           <ArrowRight className="ml-2 h-4 w-4" />
                         </>
                       )}
@@ -1247,210 +1566,184 @@ export default function TenantLanding() {
       )}
 
       {/* Footer */}
-      <footer className={`${template.isDark ? 'bg-black' : 'bg-gray-900'} text-white py-12`}>
+      <footer className={`${template.isDark ? 'bg-gray-950 border-t border-white/10' : 'bg-gray-900'} py-12`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center gap-3 mb-4">
-                {tenant.logo_url ? (
-                  <img src={tenant.logo_url} alt="Logo" className="h-10 w-auto" />
-                ) : (
-                  <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center`}>
-                    <Wifi className="h-5 w-5 text-white" />
-                  </div>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-3">
+              {tenant.logo_url ? (
+                <img src={tenant.logo_url} alt="Logo" className="h-10 w-auto" />
+              ) : (
+                <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center shadow-lg`}>
+                  <Wifi className="h-7 w-7 text-white" />
+                </div>
+              )}
+              <div>
+                <h3 className="font-bold text-white">{tenant.company_name}</h3>
+                {tenant.subtitle && (
+                  <p className="text-sm text-gray-400">{tenant.subtitle}</p>
                 )}
-                <span className="font-bold text-xl">{tenant.company_name}</span>
               </div>
-              <p className="text-gray-400 max-w-md">
-                {tenant.landing_page_about_text?.slice(0, 150) || 'আমরা সেরা মানের ইন্টারনেট সেবা প্রদানে প্রতিশ্রুতিবদ্ধ। ফাইবার অপটিক প্রযুক্তিতে উচ্চ গতির সংযোগ।'}...
-              </p>
             </div>
-            <div>
-              <h4 className="font-semibold mb-4">দ্রুত লিংক</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li><button onClick={() => scrollToSection('home')} className="hover:text-white transition-colors">হোম</button></li>
-                <li><button onClick={() => scrollToSection('packages')} className="hover:text-white transition-colors">প্যাকেজ</button></li>
-                <li><button onClick={() => scrollToSection('coverage')} className="hover:text-white transition-colors">কভারেজ</button></li>
-                <li><button onClick={() => scrollToSection('contact')} className="hover:text-white transition-colors">যোগাযোগ</button></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">যোগাযোগ</h4>
-              <ul className="space-y-2 text-gray-400">
-                {tenant.landing_page_contact_phone && <li>{tenant.landing_page_contact_phone}</li>}
-                {tenant.landing_page_contact_email && <li>{tenant.landing_page_contact_email}</li>}
-                {tenant.landing_page_contact_address && <li>{tenant.landing_page_contact_address}</li>}
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>© {new Date().getFullYear()} {tenant.company_name}. সর্বস্বত্ব সংরক্ষিত।</p>
+            
+            <p className="text-gray-400 text-sm">
+              © {new Date().getFullYear()} {tenant.company_name}. সর্বস্বত্ব সংরক্ষিত।
+            </p>
           </div>
         </div>
       </footer>
 
       {/* Registration Modal */}
       <Dialog open={registerModalOpen} onOpenChange={setRegisterModalOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5" />
-              নতুন সংযোগের জন্য রেজিস্টার করুন
-            </DialogTitle>
+            <DialogTitle>নতুন সংযোগের জন্য আবেদন</DialogTitle>
             <DialogDescription>
-              ফর্মটি পূরণ করুন। আমরা শীঘ্রই আপনার সাথে যোগাযোগ করব।
+              আপনার তথ্য দিন। আমরা শীঘ্রই যোগাযোগ করব।
             </DialogDescription>
           </DialogHeader>
           
-          <form onSubmit={handleRegisterSubmit} className="space-y-4 mt-4">
+          <form onSubmit={handleRegisterSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="reg-name">নাম *</Label>
+                <Label htmlFor="register-name">নাম *</Label>
                 <Input
-                  id="reg-name"
+                  id="register-name"
                   value={registerForm.name}
                   onChange={(e) => setRegisterForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="আপনার পূর্ণ নাম"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="reg-phone">ফোন নম্বর *</Label>
+                <Label htmlFor="register-phone">ফোন *</Label>
                 <Input
-                  id="reg-phone"
+                  id="register-phone"
                   value={registerForm.phone}
                   onChange={(e) => setRegisterForm(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="01XXXXXXXXX"
                   required
                 />
               </div>
             </div>
-
+            
             <div className="space-y-2">
-              <Label htmlFor="reg-email">ইমেইল</Label>
+              <Label htmlFor="register-email">ইমেইল</Label>
               <Input
-                id="reg-email"
+                id="register-email"
                 type="email"
                 value={registerForm.email}
                 onChange={(e) => setRegisterForm(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="example@email.com"
               />
             </div>
-
+            
             <div className="space-y-2">
-              <Label htmlFor="reg-nid">জাতীয় পরিচয়পত্র নম্বর</Label>
+              <Label htmlFor="register-address">ঠিকানা</Label>
               <Input
-                id="reg-nid"
-                value={registerForm.nid_number}
-                onChange={(e) => setRegisterForm(prev => ({ ...prev, nid_number: e.target.value }))}
-                placeholder="NID নম্বর"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="reg-address">ঠিকানা</Label>
-              <Textarea
-                id="reg-address"
+                id="register-address"
                 value={registerForm.address}
                 onChange={(e) => setRegisterForm(prev => ({ ...prev, address: e.target.value }))}
-                placeholder="আপনার সম্পূর্ণ ঠিকানা"
-                rows={2}
               />
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {packages.length > 0 && (
-                <div className="space-y-2">
-                  <Label>প্যাকেজ নির্বাচন</Label>
-                  <Select
-                    value={registerForm.package_id}
-                    onValueChange={(value) => setRegisterForm(prev => ({ ...prev, package_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="প্যাকেজ বাছুন" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {packages.map((pkg) => (
-                        <SelectItem key={pkg.id} value={pkg.id}>
-                          {pkg.name} - ৳{pkg.price}/মাস
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {areas.length > 0 && (
-                <div className="space-y-2">
-                  <Label>এলাকা নির্বাচন</Label>
-                  <Select
-                    value={registerForm.area_id}
-                    onValueChange={(value) => setRegisterForm(prev => ({ ...prev, area_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="এলাকা বাছুন" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {areas.map((area) => (
-                        <SelectItem key={area.id} value={area.id}>
-                          {area.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-
+            
             <div className="space-y-2">
-              <Label htmlFor="reg-notes">অতিরিক্ত তথ্য</Label>
+              <Label htmlFor="register-nid">NID নম্বর</Label>
+              <Input
+                id="register-nid"
+                value={registerForm.nid_number}
+                onChange={(e) => setRegisterForm(prev => ({ ...prev, nid_number: e.target.value }))}
+              />
+            </div>
+            
+            {packages.length > 0 && (
+              <div className="space-y-2">
+                <Label>প্যাকেজ নির্বাচন করুন</Label>
+                <Select
+                  value={registerForm.package_id}
+                  onValueChange={(value) => setRegisterForm(prev => ({ ...prev, package_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="প্যাকেজ বেছে নিন" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {packages.map(pkg => (
+                      <SelectItem key={pkg.id} value={pkg.id}>
+                        {pkg.name} - ৳{pkg.price}/মাস ({pkg.download_speed} {pkg.speed_unit})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {areas.length > 0 && (
+              <div className="space-y-2">
+                <Label>এলাকা নির্বাচন করুন</Label>
+                <Select
+                  value={registerForm.area_id}
+                  onValueChange={(value) => setRegisterForm(prev => ({ ...prev, area_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="এলাকা বেছে নিন" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {areas.map(area => (
+                      <SelectItem key={area.id} value={area.id}>
+                        {area.name} {area.district ? `(${area.district})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="register-notes">মন্তব্য</Label>
               <Textarea
-                id="reg-notes"
+                id="register-notes"
                 value={registerForm.notes}
                 onChange={(e) => setRegisterForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="কোন বিশেষ তথ্য থাকলে লিখুন"
-                rows={2}
+                rows={3}
               />
             </div>
-
+            
             {/* Turnstile Widget */}
             {tenant.turnstile_enabled && tenant.turnstile_site_key && (
               <TurnstileWidget
                 siteKey={tenant.turnstile_site_key}
-                onToken={setTurnstileToken}
+                onVerify={setTurnstileToken}
+                onError={() => setTurnstileToken(null)}
               />
             )}
-
-            <div className="flex gap-3 pt-4">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setRegisterModalOpen(false)}
-                className="flex-1"
-              >
-                বাতিল
-              </Button>
-              <Button 
-                type="submit" 
-                className={`flex-1 bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white`}
-                disabled={registerSubmitting || (tenant.turnstile_enabled && !turnstileToken)}
-              >
-                {registerSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    জমা দেওয়া হচ্ছে...
-                  </>
-                ) : (
-                  <>
-                    রেজিস্টার করুন
-                    <CheckCircle className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </div>
+            
+            <Button 
+              type="submit" 
+              className={`w-full bg-gradient-to-r ${themeColors.gradient} hover:opacity-90`}
+              disabled={registerSubmitting}
+            >
+              {registerSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  জমা হচ্ছে...
+                </>
+              ) : (
+                <>
+                  আবেদন জমা দিন
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
+            </Button>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Add floating animation styles */}
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-20px) rotate(180deg); }
+        }
+        .animate-float {
+          animation: float linear infinite;
+        }
+      `}</style>
     </div>
   );
 }
