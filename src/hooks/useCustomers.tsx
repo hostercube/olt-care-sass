@@ -106,10 +106,32 @@ export function useCustomers() {
         .single();
 
       if (error) {
+        // Workaround: if PostgREST schema cache is temporarily out of sync for nid_number,
+        // retry without sending that field so customer creation doesn't block.
+        if (error.message?.includes("nid_number") && 'nid_number' in customerData) {
+          console.warn('Retrying customer creation without nid_number due to schema cache error');
+          const retryPayload = { ...customerData };
+          delete retryPayload.nid_number;
+
+          const { data: retryCustomer, error: retryError } = await supabase
+            .from('customers')
+            .insert(retryPayload)
+            .select()
+            .single();
+
+          if (retryError) {
+            console.error('Supabase error creating customer (retry):', retryError);
+            throw new Error(retryError.message || 'Database error while creating customer');
+          }
+
+          toast.success('Customer created successfully');
+          return retryCustomer;
+        }
+
         console.error('Supabase error creating customer:', error);
         throw new Error(error.message || 'Database error while creating customer');
       }
-      
+
       toast.success('Customer created successfully');
       return newCustomer;
     } catch (err: any) {

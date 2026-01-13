@@ -178,6 +178,16 @@ export function useTenantBranding() {
     }
   }, [branding.company_name]);
 
+  // Apply selected dashboard theme globally (CSS variable overrides in index.css)
+  useEffect(() => {
+    const root = document.documentElement;
+    if (branding.dashboard_theme) {
+      root.dataset.dashboardTheme = branding.dashboard_theme;
+    } else {
+      delete (root as any).dataset.dashboardTheme;
+    }
+  }, [branding.dashboard_theme]);
+
   const updateBranding = async (updates: Partial<TenantBranding>) => {
     if (!tenantId) {
       toast.error('No tenant context available');

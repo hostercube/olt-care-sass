@@ -392,46 +392,7 @@ function BrandingSettingsCard() {
           </div>
         </div>
 
-        <Separator />
-
-        {/* Theme Color Picker */}
-        <div className="space-y-4">
-          <div>
-            <Label className="flex items-center gap-2 mb-3">
-              <Palette className="h-4 w-4" />
-              Dashboard Theme Color
-            </Label>
-            <p className="text-xs text-muted-foreground mb-4">
-              Choose a primary color theme for your dashboard and customer portal
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {THEME_COLORS.map((color) => (
-              <button
-                key={color.value}
-                onClick={() => handleThemeColorChange(color.value)}
-                className={`
-                  group relative w-12 h-12 rounded-xl transition-all duration-200
-                  ${color.class}
-                  ${themeColor === color.value 
-                    ? 'ring-2 ring-offset-2 ring-offset-background ring-primary scale-110 shadow-lg' 
-                    : 'hover:scale-105 hover:shadow-md'
-                  }
-                `}
-                title={color.name}
-              >
-                {themeColor === color.value && (
-                  <CheckCircle className="absolute inset-0 m-auto h-5 w-5 text-white drop-shadow" />
-                )}
-                <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  {color.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <Separator />
+        {/* Dashboard Theme Color Picker removed (use Themes tab instead) */}
 
         {/* Preview */}
         <div className="p-4 rounded-lg bg-muted/30 border border-border">
