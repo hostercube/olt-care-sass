@@ -16,20 +16,26 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { toast } from 'sonner';
 
-// Header styles
+// Header styles - Multiple unique options
 const HEADER_STYLES = [
-  { id: 'default', name: 'Default', description: 'Clean modern header' },
-  { id: 'transparent', name: 'Transparent', description: 'Glass effect header' },
-  { id: 'minimal', name: 'Minimal', description: 'Simple compact header' },
-  { id: 'centered', name: 'Centered Logo', description: 'Logo at center' },
+  { id: 'default', name: 'Default', nameBn: 'ডিফল্ট', description: 'Clean modern header with full navigation' },
+  { id: 'transparent', name: 'Transparent', nameBn: 'ট্রান্সপারেন্ট', description: 'Glass effect with blur backdrop' },
+  { id: 'minimal', name: 'Minimal', nameBn: 'মিনিমাল', description: 'Simple compact header with essentials only' },
+  { id: 'centered', name: 'Centered Logo', nameBn: 'সেন্টার লোগো', description: 'Logo at center with balanced nav' },
+  { id: 'bold', name: 'Bold', nameBn: 'বোল্ড', description: 'Large header with prominent branding' },
+  { id: 'floating', name: 'Floating', nameBn: 'ফ্লোটিং', description: 'Rounded floating header with shadow' },
+  { id: 'gradient', name: 'Gradient', nameBn: 'গ্রেডিয়েন্ট', description: 'Colorful gradient background header' },
+  { id: 'split', name: 'Split', nameBn: 'স্প্লিট', description: 'Two-tone split header design' },
 ];
 
 // Footer styles
 const FOOTER_STYLES = [
-  { id: 'default', name: 'Default', description: 'Standard footer' },
-  { id: 'minimal', name: 'Minimal', description: 'Compact footer' },
-  { id: 'detailed', name: 'Detailed', description: 'Full contact info footer' },
-  { id: 'social', name: 'Social Focus', description: 'Large social links' },
+  { id: 'default', name: 'Default', nameBn: 'ডিফল্ট', description: 'Standard footer with all sections' },
+  { id: 'minimal', name: 'Minimal', nameBn: 'মিনিমাল', description: 'Compact single-line footer' },
+  { id: 'detailed', name: 'Detailed', nameBn: 'বিস্তারিত', description: 'Full contact info with maps' },
+  { id: 'social', name: 'Social Focus', nameBn: 'সোশ্যাল', description: 'Large social links emphasized' },
+  { id: 'mega', name: 'Mega Footer', nameBn: 'মেগা', description: 'Multi-column comprehensive footer' },
+  { id: 'wave', name: 'Wave', nameBn: 'ওয়েভ', description: 'Footer with wave design on top' },
 ];
 
 interface EnhancedSettings {
@@ -331,48 +337,47 @@ export function EnhancedLandingSettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>হেডার স্টাইল</Label>
-              <Select
-                value={settings.landing_page_header_style}
-                onValueChange={(value) => handleSave({ landing_page_header_style: value })}
-              >
-                <SelectTrigger className="bg-secondary">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {HEADER_STYLES.map(style => (
-                    <SelectItem key={style.id} value={style.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{style.name}</span>
-                        <span className="text-xs text-muted-foreground">{style.description}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Header Styles Grid */}
+          <div className="space-y-3">
+            <Label className="text-base font-medium">হেডার স্টাইল নির্বাচন করুন</Label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {HEADER_STYLES.map(style => (
+                <button
+                  key={style.id}
+                  onClick={() => handleSave({ landing_page_header_style: style.id })}
+                  className={`p-3 rounded-xl border-2 transition-all text-left ${
+                    settings.landing_page_header_style === style.id 
+                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20' 
+                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="font-medium text-sm">{style.nameBn}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{style.description}</div>
+                </button>
+              ))}
             </div>
-            <div className="space-y-2">
-              <Label>ফুটার স্টাইল</Label>
-              <Select
-                value={settings.landing_page_footer_style}
-                onValueChange={(value) => handleSave({ landing_page_footer_style: value })}
-              >
-                <SelectTrigger className="bg-secondary">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FOOTER_STYLES.map(style => (
-                    <SelectItem key={style.id} value={style.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{style.name}</span>
-                        <span className="text-xs text-muted-foreground">{style.description}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          </div>
+
+          <Separator />
+
+          {/* Footer Styles Grid */}
+          <div className="space-y-3">
+            <Label className="text-base font-medium">ফুটার স্টাইল নির্বাচন করুন</Label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {FOOTER_STYLES.map(style => (
+                <button
+                  key={style.id}
+                  onClick={() => handleSave({ landing_page_footer_style: style.id })}
+                  className={`p-3 rounded-xl border-2 transition-all text-left ${
+                    settings.landing_page_footer_style === style.id 
+                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20' 
+                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="font-medium text-sm">{style.nameBn}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{style.description}</div>
+                </button>
+              ))}
             </div>
           </div>
 
