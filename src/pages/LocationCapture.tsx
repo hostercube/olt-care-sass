@@ -456,7 +456,7 @@ export default function LocationCapture() {
     };
 
     captureAndProcess();
-  }, [step, settings, fetchIpInfo, getLocation, reverseGeocode, submitLocationData, detectDeviceType, locationData, ipData]);
+  }, [step, settings, fetchIpInfo, getLocationFast, getLocationHighAccuracy, reverseGeocode, submitLocationData, detectDeviceType, locationData, ipData]);
 
   // Handle form submit
   const handleFormSubmit = async () => {
