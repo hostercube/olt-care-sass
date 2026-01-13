@@ -89,7 +89,6 @@ const resellerItems: NavItem[] = [
 const networkInfraItems: NavItem[] = [
   { title: 'mikrotik', href: '/isp/mikrotik', icon: Wifi, requiredModule: 'isp_mikrotik' },
   { title: 'bandwidth_mgmt', href: '/isp/bandwidth', icon: Gauge, requiredModule: 'isp_bandwidth_management' },
-  { title: 'custom_domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
 ];
 
 // Communication & Marketing
@@ -108,9 +107,10 @@ const operationsHRItems: NavItem[] = [
   { title: 'reports', href: '/isp/reports', icon: FileText },
 ];
 
-// Website & Landing Page - Separate section
+// Website & Landing Page - Separate section (includes Custom Domain)
 const websiteItems: NavItem[] = [
   { title: 'landing_page', href: '/isp/landing-page', icon: Globe, requiredModule: 'landing_page' },
+  { title: 'custom_domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
   { title: 'connection_requests', href: '/isp/connection-requests', icon: ClipboardList },
 ];
 
@@ -223,8 +223,10 @@ export function Sidebar() {
     } else if (location.pathname.startsWith('/isp')) {
       if (location.pathname.includes('/recharge') || location.pathname.includes('/bkash') || location.pathname.includes('/transactions') || location.pathname.includes('/automation')) {
         setBillingExpanded(true);
-      } else if (location.pathname.includes('/mikrotik') || location.pathname.includes('/bandwidth') || location.pathname.includes('/domain')) {
+      } else if (location.pathname.includes('/mikrotik') || location.pathname.includes('/bandwidth')) {
         setNetworkExpanded(true);
+      } else if (location.pathname.includes('/landing') || location.pathname.includes('/domain') || location.pathname.includes('/connection-requests')) {
+        setWebsiteExpanded(true);
       } else if (location.pathname.includes('/sms') || location.pathname.includes('/email') || location.pathname.includes('/campaigns') || location.pathname.includes('/gateways')) {
         setCommunicationExpanded(true);
       } else if (location.pathname.includes('/staff') || location.pathname.includes('/pos') || location.pathname.includes('/reports')) {
