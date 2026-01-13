@@ -93,25 +93,31 @@ export default function CustomerLocation() {
   useEffect(() => {
     const fetchCustomDomain = async () => {
       if (!tenantId) return;
-      
+
       try {
-        // Use raw query to avoid type recursion issues
-        const { data } = await (supabase as any)
+        const { data, error } = await supabase
           .from('tenant_custom_domains')
-          .select('domain')
+          .select('domain, subdomain, is_verified, ssl_status, ssl_provisioning_status, updated_at')
           .eq('tenant_id', tenantId)
-          .eq('status', 'active')
-          .eq('is_primary', true)
+          .eq('is_verified', true)
+          .order('updated_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
-        
+
+        if (error) throw error;
+
         if (data?.domain) {
-          setVerifiedCustomDomain(data.domain);
+          const fullDomain = data.subdomain ? `${data.subdomain}.${data.domain}` : data.domain;
+          setVerifiedCustomDomain(fullDomain);
+        } else {
+          setVerifiedCustomDomain(null);
         }
       } catch (err) {
         console.error('Failed to fetch custom domain:', err);
+        setVerifiedCustomDomain(null);
       }
     };
-    
+
     fetchCustomDomain();
   }, [tenantId]);
 
@@ -151,24 +157,23 @@ export default function CustomerLocation() {
     return filteredVisits.slice(start, start + pageSize);
   }, [filteredVisits, currentPage, pageSize]);
 
-  // Generate full location link - prioritize verified custom domain
+  // Get display domain for UI
+  const displayDomain = verifiedCustomDomain || tenant?.custom_domain || null;
+
+  // Generate full location link - prioritize tenant custom domain(s)
   const locationLink = useMemo(() => {
     if (!settings?.unique_token) return '';
-    
-    // Priority: 1. Verified Custom Domain, 2. Tenant's custom_domain field, 3. Current Origin
+
     let baseUrl = window.location.origin;
-    
+
     if (verifiedCustomDomain) {
       baseUrl = `https://${verifiedCustomDomain}`;
     } else if (tenant?.custom_domain) {
       baseUrl = `https://${tenant.custom_domain}`;
     }
-    
+
     return `${baseUrl}/l/${settings.unique_token}`;
   }, [settings?.unique_token, verifiedCustomDomain, tenant?.custom_domain]);
-  
-  // Get display domain for UI
-  const displayDomain = verifiedCustomDomain || tenant?.custom_domain || null;
 
   const copyLink = () => {
     if (!locationLink) return;
@@ -538,10 +543,10 @@ export default function CustomerLocation() {
                         </Button>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {tenant?.custom_domain ? (
+                        {displayDomain ? (
                           <Badge variant="outline" className="text-xs bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
                             <Globe className="h-3 w-3 mr-1" />
-                            Custom Domain: {tenant.custom_domain}
+                            Domain: {displayDomain}
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
