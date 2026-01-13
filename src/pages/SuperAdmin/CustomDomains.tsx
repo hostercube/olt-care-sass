@@ -256,9 +256,7 @@ export default function SuperAdminCustomDomains() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(d.is_verified, d.ssl_status)}
-                        <span className="font-medium">
-                          {d.subdomain ? `${d.subdomain}.` : ''}{d.domain}
-                        </span>
+                        <span className="font-medium font-mono">{d.domain}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -353,7 +351,7 @@ export default function SuperAdminCustomDomains() {
           <DialogHeader>
             <DialogTitle>Edit Domain</DialogTitle>
             <DialogDescription>
-              Update domain settings for {editDomain?.subdomain ? `${editDomain.subdomain}.` : ''}{editDomain?.domain}
+              Update domain settings for <span className="font-mono">{editDomain?.domain}</span>
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
