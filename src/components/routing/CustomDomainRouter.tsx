@@ -21,16 +21,21 @@ import { Loader2, Wifi, AlertCircle } from 'lucide-react';
  */
 
 // Platform domains where the main SaaS runs (never trigger custom domain detection)
+// These are exact matches or prefixes - custom tenant domains should NOT match
 const PLATFORM_DOMAINS = [
   'localhost',
   '127.0.0.1',
   'lovable.app',
   'lovableproject.com',
   'lovable.dev',
-  'preview--',
   'gptengineer.app',
-  'oltapp.isppoint.com',
   'webcontainer.io',
+];
+
+// Specific platform subdomains that should NOT trigger custom domain detection
+const PLATFORM_EXACT_HOSTS = [
+  'oltapp.isppoint.com',
+  'www.oltapp.isppoint.com',
 ];
 
 interface Props {
@@ -60,10 +65,17 @@ export default function CustomDomainRouter({ children }: Props) {
     return window.location.hostname.toLowerCase().trim();
   }, []);
 
-  // Check if platform domain
+  // Check if platform domain - use exact match for specific hosts, and includes for generic platform domains
   const isPlatform = useMemo(() => {
+    // First check exact matches (like oltapp.isppoint.com)
+    if (PLATFORM_EXACT_HOSTS.includes(hostname)) return true;
+    
+    // Check if hostname ends with or is a platform domain
+    // This catches *.lovable.app, *.lovableproject.com, etc.
     return PLATFORM_DOMAINS.some(domain => 
-      hostname.includes(domain) || hostname === domain
+      hostname === domain || 
+      hostname.endsWith(`.${domain}`) ||
+      hostname.includes('preview--') // Lovable preview URLs
     );
   }, [hostname]);
 
@@ -78,27 +90,65 @@ export default function CustomDomainRouter({ children }: Props) {
       try {
         // Normalize hostname variations (with/without www)
         const hostnameWithoutWww = hostname.replace(/^www\./, '');
-        const hostnameWithWww = hostname.startsWith('www.') ? hostname : `www.${hostname}`;
+        
+        console.log('[CustomDomainRouter] Checking hostname:', hostname);
+        
+        // Query for domain that matches the hostname (any status first for debugging)
+        let domainData = null;
 
-        // Query for verified domain that matches the hostname
-        // This supports multiple domains per tenant - any can be used
-        const { data: domainData, error: domainError } = await supabase
+        // Try exact match first
+        const { data: exactMatch, error: err1 } = await supabase
           .from('tenant_custom_domains')
-          .select('tenant_id, domain, subdomain, is_verified')
-          .eq('is_verified', true)
-          .or(`domain.eq.${hostname},domain.eq.${hostnameWithoutWww},domain.eq.${hostnameWithWww}`)
-          .limit(1)
+          .select('tenant_id, domain, subdomain, is_verified, ssl_status, ssl_provisioning_status')
+          .eq('domain', hostname)
           .maybeSingle();
 
-        if (domainError) {
-          console.error('Custom domain DB error:', domainError);
-          setState('error');
-          setErrorMessage('Database connection failed');
+        if (!err1 && exactMatch) {
+          console.log('[CustomDomainRouter] Found exact match:', exactMatch);
+          domainData = exactMatch;
+        } else {
+          // Try without www
+          const { data: noWwwMatch, error: err2 } = await supabase
+            .from('tenant_custom_domains')
+            .select('tenant_id, domain, subdomain, is_verified, ssl_status, ssl_provisioning_status')
+            .eq('domain', hostnameWithoutWww)
+            .maybeSingle();
+
+          if (!err2 && noWwwMatch) {
+            console.log('[CustomDomainRouter] Found no-www match:', noWwwMatch);
+            domainData = noWwwMatch;
+          } else {
+            // Try with www prefix
+            const { data: wwwMatch, error: err3 } = await supabase
+              .from('tenant_custom_domains')
+              .select('tenant_id, domain, subdomain, is_verified, ssl_status, ssl_provisioning_status')
+              .eq('domain', `www.${hostnameWithoutWww}`)
+              .maybeSingle();
+
+            if (!err3 && wwwMatch) {
+              console.log('[CustomDomainRouter] Found www match:', wwwMatch);
+              domainData = wwwMatch;
+            } else {
+              console.log('[CustomDomainRouter] No domain match found for:', hostname);
+            }
+          }
+        }
+
+        // Check if we found a domain
+        if (!domainData) {
+          console.log('[CustomDomainRouter] Domain not found in database:', hostname);
+          setState('not_found');
           return;
         }
 
-        if (!domainData) {
-          // Domain not registered in our system
+        // Domain found - check if it's verified and SSL is active
+        // Allow domains that are verified OR have active SSL
+        const isReady = domainData.is_verified === true || 
+                        domainData.ssl_status === 'active' || 
+                        domainData.ssl_provisioning_status === 'active';
+
+        if (!isReady) {
+          console.log('[CustomDomainRouter] Domain found but not verified/active:', domainData);
           setState('not_found');
           return;
         }
