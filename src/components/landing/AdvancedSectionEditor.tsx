@@ -271,10 +271,12 @@ export function AdvancedSectionEditor({
                       />
                       
                       {['gallery', 'testimonial', 'team', 'slider', 'features'].includes(section.type) && (
-                        <Input
+                        <ImageUploader
+                          label="ইমেজ"
                           value={item.imageUrl || ''}
-                          onChange={(e) => updateItem(itemIndex, 'imageUrl', e.target.value)}
-                          placeholder="ইমেজ URL"
+                          onChange={(url) => updateItem(itemIndex, 'imageUrl', url)}
+                          folderPath={`sections/${section.id}/items/${itemIndex}`}
+                          className=""
                         />
                       )}
                       

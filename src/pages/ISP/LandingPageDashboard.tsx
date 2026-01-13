@@ -159,6 +159,13 @@ interface LandingSettings {
   landing_page_social_youtube: string;
   landing_page_hero_title: string;
   landing_page_hero_subtitle: string;
+  landing_page_hero_badge_text: string;
+  landing_page_hero_primary_button_text: string;
+  landing_page_hero_primary_button_url: string;
+  landing_page_hero_secondary_button_text: string;
+  landing_page_hero_secondary_button_url: string;
+  landing_page_hero_background_url: string;
+  landing_page_hero_slides: { url: string; title?: string; subtitle?: string }[];
   landing_page_about_text: string;
   slug: string;
   subdomain: string;
@@ -372,6 +379,13 @@ export default function LandingPageDashboard() {
     landing_page_social_youtube: '',
     landing_page_hero_title: '',
     landing_page_hero_subtitle: '',
+    landing_page_hero_badge_text: '',
+    landing_page_hero_primary_button_text: '',
+    landing_page_hero_primary_button_url: '',
+    landing_page_hero_secondary_button_text: '',
+    landing_page_hero_secondary_button_url: '',
+    landing_page_hero_background_url: '',
+    landing_page_hero_slides: [],
     landing_page_about_text: '',
     slug: '',
     subdomain: '',
@@ -460,6 +474,12 @@ export default function LandingPageDashboard() {
               : tenantData.landing_page_custom_sections)
           : [];
 
+        const heroSlides = tenantData.landing_page_hero_slides
+          ? (typeof tenantData.landing_page_hero_slides === 'string'
+              ? JSON.parse(tenantData.landing_page_hero_slides)
+              : tenantData.landing_page_hero_slides)
+          : [];
+
         setSettings({
           landing_page_enabled: tenantData.landing_page_enabled || false,
           landing_page_template: tenantData.landing_page_template || 'isp-pro-1',
@@ -472,6 +492,13 @@ export default function LandingPageDashboard() {
           landing_page_social_youtube: tenantData.landing_page_social_youtube || '',
           landing_page_hero_title: tenantData.landing_page_hero_title || '',
           landing_page_hero_subtitle: tenantData.landing_page_hero_subtitle || '',
+          landing_page_hero_badge_text: tenantData.landing_page_hero_badge_text || '',
+          landing_page_hero_primary_button_text: tenantData.landing_page_hero_primary_button_text || '',
+          landing_page_hero_primary_button_url: tenantData.landing_page_hero_primary_button_url || '',
+          landing_page_hero_secondary_button_text: tenantData.landing_page_hero_secondary_button_text || '',
+          landing_page_hero_secondary_button_url: tenantData.landing_page_hero_secondary_button_url || '',
+          landing_page_hero_background_url: tenantData.landing_page_hero_background_url || '',
+          landing_page_hero_slides: heroSlides,
           landing_page_about_text: tenantData.landing_page_about_text || '',
           slug: tenantData.slug || '',
           subdomain: tenantData.subdomain || '',
