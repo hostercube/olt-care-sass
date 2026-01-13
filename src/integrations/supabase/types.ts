@@ -7172,6 +7172,7 @@ export type Database = {
           invoice_prefix: string | null
           invoice_terms: string | null
           landing_page_about_text: string | null
+          landing_page_canonical_url: string | null
           landing_page_contact_address: string | null
           landing_page_contact_email: string | null
           landing_page_contact_phone: string | null
@@ -7186,6 +7187,9 @@ export type Database = {
           landing_page_livetv_channels: Json | null
           landing_page_livetv_enabled: boolean | null
           landing_page_livetv_url: string | null
+          landing_page_meta_description: string | null
+          landing_page_meta_title: string | null
+          landing_page_og_image_url: string | null
           landing_page_section_order: Json | null
           landing_page_show_contact: boolean | null
           landing_page_show_packages: boolean | null
@@ -7251,6 +7255,7 @@ export type Database = {
           invoice_prefix?: string | null
           invoice_terms?: string | null
           landing_page_about_text?: string | null
+          landing_page_canonical_url?: string | null
           landing_page_contact_address?: string | null
           landing_page_contact_email?: string | null
           landing_page_contact_phone?: string | null
@@ -7265,6 +7270,9 @@ export type Database = {
           landing_page_livetv_channels?: Json | null
           landing_page_livetv_enabled?: boolean | null
           landing_page_livetv_url?: string | null
+          landing_page_meta_description?: string | null
+          landing_page_meta_title?: string | null
+          landing_page_og_image_url?: string | null
           landing_page_section_order?: Json | null
           landing_page_show_contact?: boolean | null
           landing_page_show_packages?: boolean | null
@@ -7330,6 +7338,7 @@ export type Database = {
           invoice_prefix?: string | null
           invoice_terms?: string | null
           landing_page_about_text?: string | null
+          landing_page_canonical_url?: string | null
           landing_page_contact_address?: string | null
           landing_page_contact_email?: string | null
           landing_page_contact_phone?: string | null
@@ -7344,6 +7353,9 @@ export type Database = {
           landing_page_livetv_channels?: Json | null
           landing_page_livetv_enabled?: boolean | null
           landing_page_livetv_url?: string | null
+          landing_page_meta_description?: string | null
+          landing_page_meta_title?: string | null
+          landing_page_og_image_url?: string | null
           landing_page_section_order?: Json | null
           landing_page_show_contact?: boolean | null
           landing_page_show_packages?: boolean | null
