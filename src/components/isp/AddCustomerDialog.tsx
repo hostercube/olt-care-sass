@@ -192,13 +192,16 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
   };
 
   const createPPPoEOnMikroTik = async (): Promise<boolean> => {
+    // If user doesn't want to create MikroTik user, skip silently
     if (!formData.create_mikrotik_user || !formData.mikrotik_id || formData.mikrotik_id === 'none') {
       return true;
     }
 
+    // If no polling server URL, warn but allow creation (PPPoE on MikroTik is optional)
     if (!apiBase) {
-      toast.error('Polling server URL not configured. Configure it in Super Admin → Settings → Infrastructure.');
-      return false;
+      console.warn('Polling server URL not configured - skipping MikroTik PPPoE creation');
+      toast.warning('MikroTik PPPoE user not created (polling server not configured)');
+      return true; // Allow customer creation anyway
     }
 
     const router = routers.find((r) => r.id === formData.mikrotik_id);
