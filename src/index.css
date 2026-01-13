@@ -130,6 +130,76 @@
   }
 }
 
+/* =====================================================
+   Tenant Dashboard Themes (applied via data-dashboard-theme)
+   NOTE: All values are HSL components (no hsl() wrapper)
+   ===================================================== */
+@layer base {
+  :root[data-dashboard-theme="dark-default"] {
+    /* uses base tokens */
+  }
+
+  :root[data-dashboard-theme="light-default"] {
+    /* uses base tokens */
+  }
+
+  :root[data-dashboard-theme="admin-lte"] {
+    --primary: 217 91% 60%;
+    --accent: 217 85% 55%;
+    --ring: 217 91% 60%;
+    --sidebar-background: 217 88% 45%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 217 88% 45%;
+    --sidebar-accent: 217 75% 40%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 217 70% 40%;
+    --sidebar-ring: 0 0% 100%;
+  }
+
+  :root[data-dashboard-theme="dark-fixed"] {
+    --primary: 234 89% 74%;
+    --accent: 234 80% 68%;
+    --ring: 234 89% 74%;
+    --sidebar-primary: 234 89% 74%;
+    --sidebar-ring: 234 89% 74%;
+  }
+
+  :root[data-dashboard-theme="light-fixed"] {
+    --primary: 234 89% 60%;
+    --accent: 234 80% 55%;
+    --ring: 234 89% 60%;
+    --sidebar-primary: 234 89% 60%;
+    --sidebar-ring: 234 89% 60%;
+  }
+
+  :root[data-dashboard-theme="dark-scrollable"] {
+    --primary: 271 91% 65%;
+    --accent: 271 80% 60%;
+    --ring: 271 91% 65%;
+    --sidebar-primary: 271 91% 65%;
+    --sidebar-ring: 271 91% 65%;
+  }
+
+  :root[data-dashboard-theme="magenta-modern"] {
+    --primary: 330 81% 60%;
+    --accent: 330 75% 55%;
+    --ring: 330 81% 60%;
+    --sidebar-background: 332 65% 32%;
+    --sidebar-primary: 330 81% 60%;
+    --sidebar-ring: 330 81% 60%;
+  }
+
+  :root[data-dashboard-theme="green-nature"] {
+    --primary: 142 76% 40%;
+    --accent: 142 72% 36%;
+    --ring: 142 76% 40%;
+    --sidebar-background: 152 60% 22%;
+    --sidebar-primary: 142 76% 40%;
+    --sidebar-ring: 142 76% 40%;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
