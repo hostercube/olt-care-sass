@@ -18,7 +18,7 @@ import {
   Download, Upload, CheckCircle, PhoneCall, MessageCircle, Instagram,
   Twitter, Smartphone, Monitor, Tv, Gamepad2, Video, Music, ChevronLeft,
   Map, Building, Home, Navigation, DollarSign, Radio, ExternalLink,
-  Sparkles, MousePointer2, Waves
+  Sparkles, MousePointer2, Waves, Linkedin, Send
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -29,6 +29,18 @@ interface CustomMenuItem {
   icon?: string;
   openNewTab?: boolean;
   subMenus?: { label: string; url: string }[];
+}
+
+interface FTPServer {
+  id: string;
+  name: string;
+  url: string;
+}
+
+interface LiveTVChannel {
+  id: string;
+  name: string;
+  url: string;
 }
 
 interface TenantData {
@@ -49,15 +61,20 @@ interface TenantData {
   landing_page_social_youtube: string;
   landing_page_social_instagram?: string;
   landing_page_social_twitter?: string;
+  landing_page_social_linkedin?: string;
+  landing_page_social_tiktok?: string;
   landing_page_hero_title: string;
   landing_page_hero_subtitle: string;
   landing_page_about_text: string;
   landing_page_ftp_enabled?: boolean;
   landing_page_ftp_url?: string;
+  landing_page_ftp_servers?: FTPServer[];
   landing_page_livetv_enabled?: boolean;
   landing_page_livetv_url?: string;
+  landing_page_livetv_channels?: LiveTVChannel[];
   landing_page_custom_menus?: CustomMenuItem[];
   landing_page_whatsapp?: string;
+  landing_page_telegram?: string;
   slug: string;
   customer_registration_enabled?: boolean;
   customer_registration_auto_approve?: boolean;
@@ -299,15 +316,53 @@ export default function TenantLanding() {
           return;
         }
 
-        // Parse custom menus if exists
-        const tenantData = {
-          ...data,
-          landing_page_custom_menus: data.landing_page_custom_menus 
-            ? (typeof data.landing_page_custom_menus === 'string' 
-                ? JSON.parse(data.landing_page_custom_menus) 
-                : data.landing_page_custom_menus)
-            : []
-        } as TenantData;
+        // Parse JSON fields - cast to any to access new columns
+        const rawData = data as any;
+        
+        const parseJsonField = (field: any, defaultVal: any[] = []) => {
+          if (!field) return defaultVal;
+          if (typeof field === 'string') return JSON.parse(field);
+          return field;
+        };
+
+        const tenantData: TenantData = {
+          id: rawData.id,
+          company_name: rawData.company_name || '',
+          subtitle: rawData.subtitle || '',
+          logo_url: rawData.logo_url || '',
+          favicon_url: rawData.favicon_url || '',
+          theme_color: rawData.theme_color || 'cyan',
+          landing_page_enabled: rawData.landing_page_enabled || false,
+          landing_page_template: rawData.landing_page_template || 'isp-pro-1',
+          landing_page_show_packages: rawData.landing_page_show_packages ?? true,
+          landing_page_show_contact: rawData.landing_page_show_contact ?? true,
+          landing_page_contact_phone: rawData.landing_page_contact_phone || '',
+          landing_page_contact_email: rawData.landing_page_contact_email || '',
+          landing_page_contact_address: rawData.landing_page_contact_address || '',
+          landing_page_social_facebook: rawData.landing_page_social_facebook || '',
+          landing_page_social_youtube: rawData.landing_page_social_youtube || '',
+          landing_page_social_instagram: rawData.landing_page_social_instagram || '',
+          landing_page_social_twitter: rawData.landing_page_social_twitter || '',
+          landing_page_social_linkedin: rawData.landing_page_social_linkedin || '',
+          landing_page_social_tiktok: rawData.landing_page_social_tiktok || '',
+          landing_page_hero_title: rawData.landing_page_hero_title || '',
+          landing_page_hero_subtitle: rawData.landing_page_hero_subtitle || '',
+          landing_page_about_text: rawData.landing_page_about_text || '',
+          landing_page_ftp_enabled: rawData.landing_page_ftp_enabled || false,
+          landing_page_ftp_url: rawData.landing_page_ftp_url || '',
+          landing_page_ftp_servers: parseJsonField(rawData.landing_page_ftp_servers, []),
+          landing_page_livetv_enabled: rawData.landing_page_livetv_enabled || false,
+          landing_page_livetv_url: rawData.landing_page_livetv_url || '',
+          landing_page_livetv_channels: parseJsonField(rawData.landing_page_livetv_channels, []),
+          landing_page_custom_menus: parseJsonField(rawData.landing_page_custom_menus, []),
+          landing_page_whatsapp: rawData.landing_page_whatsapp || '',
+          landing_page_telegram: rawData.landing_page_telegram || '',
+          slug: rawData.slug || '',
+          customer_registration_enabled: rawData.customer_registration_enabled ?? true,
+          customer_registration_auto_approve: rawData.customer_registration_auto_approve || false,
+          turnstile_enabled: rawData.turnstile_enabled || false,
+          turnstile_site_key: rawData.turnstile_site_key || '',
+        };
 
         setTenant(tenantData);
 
@@ -537,7 +592,7 @@ export default function TenantLanding() {
     return acc;
   }, {} as Record<string, Area[]>);
 
-  // Build dynamic navigation items
+  // Build dynamic navigation items with multiple FTP/LiveTV support
   const buildNavItems = () => {
     const items: { id: string; label: string; url?: string; isExternal?: boolean; subItems?: { label: string; url: string }[] }[] = [
       { id: 'home', label: 'হোম' },
@@ -554,24 +609,68 @@ export default function TenantLanding() {
       items.push({ id: 'coverage', label: 'কভারেজ' });
     }
 
-    // Add FTP if enabled
-    if (tenant.landing_page_ftp_enabled && tenant.landing_page_ftp_url) {
-      items.push({ 
-        id: 'ftp', 
-        label: 'FTP Server', 
-        url: tenant.landing_page_ftp_url,
-        isExternal: true 
-      });
+    // Add FTP menu with submenus for multiple servers
+    if (tenant.landing_page_ftp_enabled) {
+      const ftpServers = tenant.landing_page_ftp_servers || [];
+      if (ftpServers.length > 1) {
+        // Multiple FTP servers - show as dropdown
+        items.push({
+          id: 'ftp',
+          label: 'FTP Server',
+          subItems: ftpServers.map(server => ({
+            label: server.name || 'FTP Server',
+            url: server.url
+          }))
+        });
+      } else if (ftpServers.length === 1) {
+        // Single FTP server - direct link
+        items.push({
+          id: 'ftp',
+          label: ftpServers[0].name || 'FTP Server',
+          url: ftpServers[0].url,
+          isExternal: true
+        });
+      } else if (tenant.landing_page_ftp_url) {
+        // Fallback to old single URL field
+        items.push({
+          id: 'ftp',
+          label: 'FTP Server',
+          url: tenant.landing_page_ftp_url,
+          isExternal: true
+        });
+      }
     }
 
-    // Add Live TV if enabled
-    if (tenant.landing_page_livetv_enabled && tenant.landing_page_livetv_url) {
-      items.push({ 
-        id: 'livetv', 
-        label: 'Live TV', 
-        url: tenant.landing_page_livetv_url,
-        isExternal: true 
-      });
+    // Add Live TV menu with submenus for multiple channels
+    if (tenant.landing_page_livetv_enabled) {
+      const liveTvChannels = tenant.landing_page_livetv_channels || [];
+      if (liveTvChannels.length > 1) {
+        // Multiple channels - show as dropdown
+        items.push({
+          id: 'livetv',
+          label: 'Live TV',
+          subItems: liveTvChannels.map(channel => ({
+            label: channel.name || 'Channel',
+            url: channel.url
+          }))
+        });
+      } else if (liveTvChannels.length === 1) {
+        // Single channel - direct link
+        items.push({
+          id: 'livetv',
+          label: liveTvChannels[0].name || 'Live TV',
+          url: liveTvChannels[0].url,
+          isExternal: true
+        });
+      } else if (tenant.landing_page_livetv_url) {
+        // Fallback to old single URL field
+        items.push({
+          id: 'livetv',
+          label: 'Live TV',
+          url: tenant.landing_page_livetv_url,
+          isExternal: true
+        });
+      }
     }
 
     // Add custom menus
@@ -631,7 +730,7 @@ export default function TenantLanding() {
             <nav className="hidden lg:flex items-center gap-6">
               {navItems.map((item) => (
                 <div key={item.id} className="relative group">
-                  {item.url ? (
+                  {item.url && !item.subItems?.length ? (
                     <a
                       href={item.url}
                       target={item.isExternal ? '_blank' : '_self'}
@@ -643,15 +742,38 @@ export default function TenantLanding() {
                       {item.label}
                       {item.isExternal && <ExternalLink className="h-3 w-3" />}
                     </a>
+                  ) : item.subItems && item.subItems.length > 0 ? (
+                    <>
+                      <button
+                        onClick={() => setOpenDropdown(openDropdown === item.id ? null : item.id)}
+                        className={`text-sm font-medium transition-colors flex items-center gap-1 ${
+                          template.isDark ? 'text-white/70 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        {item.label}
+                        <ChevronRight className={`h-3 w-3 transition-transform ${openDropdown === item.id ? 'rotate-90' : ''}`} />
+                      </button>
+                      {/* Dropdown for submenus */}
+                      {openDropdown === item.id && (
+                        <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-lg shadow-xl border py-2 z-50">
+                          {item.subItems.map((sub, idx) => (
+                            <a
+                              key={idx}
+                              href={sub.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                            >
+                              <ExternalLink className="h-3 w-3 text-gray-400" />
+                              {sub.label}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <button
-                      onClick={() => {
-                        if (item.subItems && item.subItems.length > 0) {
-                          setOpenDropdown(openDropdown === item.id ? null : item.id);
-                        } else {
-                          scrollToSection(item.id);
-                        }
-                      }}
+                      onClick={() => scrollToSection(item.id)}
                       className={`text-sm font-medium transition-colors relative ${
                         activeSection === item.id
                           ? themeColors.text
@@ -663,23 +785,6 @@ export default function TenantLanding() {
                         <span className={`absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r ${themeColors.gradient} rounded-full`} />
                       )}
                     </button>
-                  )}
-                  
-                  {/* Dropdown for submenus */}
-                  {item.subItems && item.subItems.length > 0 && openDropdown === item.id && (
-                    <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-xl border py-2 z-50">
-                      {item.subItems.map((sub, idx) => (
-                        <a
-                          key={idx}
-                          href={sub.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                        >
-                          {sub.label}
-                        </a>
-                      ))}
-                    </div>
                   )}
                 </div>
               ))}
@@ -1462,6 +1567,36 @@ export default function TenantLanding() {
                       className={`w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
                     >
                       <MessageCircle className="h-5 w-5 text-white" />
+                    </a>
+                  )}
+                  {tenant.landing_page_social_linkedin && (
+                    <a 
+                      href={tenant.landing_page_social_linkedin} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-blue-700 to-blue-800 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
+                    >
+                      <Linkedin className="h-5 w-5 text-white" />
+                    </a>
+                  )}
+                  {tenant.landing_page_social_tiktok && (
+                    <a 
+                      href={tenant.landing_page_social_tiktok} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-gray-900 to-black flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
+                    >
+                      <Music className="h-5 w-5 text-white" />
+                    </a>
+                  )}
+                  {tenant.landing_page_telegram && (
+                    <a 
+                      href={tenant.landing_page_telegram.startsWith('http') ? tenant.landing_page_telegram : `https://t.me/${tenant.landing_page_telegram.replace('@', '')}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg`}
+                    >
+                      <Send className="h-5 w-5 text-white" />
                     </a>
                   )}
                 </div>
