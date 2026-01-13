@@ -22,6 +22,7 @@ export type ModuleName =
   | 'isp_btrc_reports'
   | 'isp_tickets'
   | 'landing_page'
+  | 'customer_location'
   | 'sms_alerts'
   | 'email_alerts'
   | 'api_access'
@@ -81,6 +82,7 @@ export interface TenantFeatures {
   isp_btrc_reports?: boolean;
   isp_tickets?: boolean;
   landing_page?: boolean;
+  customer_location?: boolean;
   // Alert features
   sms_alerts?: boolean;
   email_alerts?: boolean;
@@ -377,6 +379,7 @@ export const AVAILABLE_MODULES: ModuleConfig[] = [
   { id: 'isp_btrc_reports', name: 'BTRC Reports', description: 'BTRC regulatory reports', category: 'isp' },
   { id: 'isp_tickets', name: 'Support Tickets', description: 'Customer support ticket system', category: 'isp' },
   { id: 'landing_page', name: 'Landing Page', description: 'Custom landing page with templates and branding', category: 'isp' },
+  { id: 'customer_location', name: 'Customer Location', description: 'GPS location capture and verification', category: 'isp' },
   
   // Alert Features
   { id: 'sms_alerts', name: 'SMS Alerts', description: 'SMS notifications for alerts', category: 'alerts' },
@@ -598,6 +601,8 @@ export const SUPER_ADMIN_FEATURES: TenantFeatures = {
   isp_areas: true,
   isp_crm: true,
   isp_inventory: true,
+  landing_page: true,
+  customer_location: true,
   sms_alerts: true,
   email_alerts: true,
   api_access: true,
