@@ -3401,6 +3401,86 @@ export type Database = {
           },
         ]
       }
+      location_visits: {
+        Row: {
+          area: string | null
+          asn: string | null
+          created_at: string | null
+          device_type: string | null
+          district: string | null
+          full_address: string | null
+          id: string
+          ip_address: string | null
+          isp_name: string | null
+          latitude: number | null
+          longitude: number | null
+          name: string | null
+          phone: string | null
+          tenant_id: string
+          thana: string | null
+          token: string
+          updated_at: string | null
+          verified_at: string | null
+          verified_by: string | null
+          verified_status: string | null
+          visited_at: string | null
+        }
+        Insert: {
+          area?: string | null
+          asn?: string | null
+          created_at?: string | null
+          device_type?: string | null
+          district?: string | null
+          full_address?: string | null
+          id?: string
+          ip_address?: string | null
+          isp_name?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          name?: string | null
+          phone?: string | null
+          tenant_id: string
+          thana?: string | null
+          token: string
+          updated_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+          verified_status?: string | null
+          visited_at?: string | null
+        }
+        Update: {
+          area?: string | null
+          asn?: string | null
+          created_at?: string | null
+          device_type?: string | null
+          district?: string | null
+          full_address?: string | null
+          id?: string
+          ip_address?: string | null
+          isp_name?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          name?: string | null
+          phone?: string | null
+          tenant_id?: string
+          thana?: string | null
+          token?: string
+          updated_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+          verified_status?: string | null
+          visited_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "location_visits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mikrotik_routers: {
         Row: {
           allow_customer_delete: boolean | null
@@ -6970,6 +7050,53 @@ export type Database = {
           },
         ]
       }
+      tenant_location_settings: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          popup_description: string | null
+          popup_title: string | null
+          require_name: boolean | null
+          require_phone: boolean | null
+          tenant_id: string
+          unique_token: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          popup_description?: string | null
+          popup_title?: string | null
+          require_name?: boolean | null
+          require_phone?: boolean | null
+          tenant_id: string
+          unique_token: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          popup_description?: string | null
+          popup_title?: string | null
+          require_name?: boolean | null
+          require_phone?: boolean | null
+          tenant_id?: string
+          unique_token?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_location_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_payment_gateways: {
         Row: {
           bkash_mode: string | null
@@ -7803,6 +7930,7 @@ export type Database = {
       generate_bill_number: { Args: { _tenant_id: string }; Returns: string }
       generate_customer_code: { Args: { _tenant_id: string }; Returns: string }
       generate_employee_code: { Args: { _tenant_id: string }; Returns: string }
+      generate_location_token: { Args: never; Returns: string }
       generate_po_number: { Args: { _tenant_id: string }; Returns: string }
       generate_request_number: { Args: { _tenant_id: string }; Returns: string }
       generate_so_number: { Args: { _tenant_id: string }; Returns: string }
