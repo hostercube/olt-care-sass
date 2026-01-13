@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useStaffAuth } from '@/hooks/useStaffPermissions';
-import { Loader2, LogIn, Building2, Eye, EyeOff } from 'lucide-react';
+import { Loader2, LogIn, Building2, Eye, EyeOff, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
+import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 
 interface Tenant {
   id: string;
@@ -20,17 +22,28 @@ export default function StaffLogin() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login, isAuthenticated, loading: authLoading } = useStaffAuth();
+  const { settings: platformSettings, loading: settingsLoading } = usePlatformSettings();
   
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);
   const [tenantsLoading, setTenantsLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
   
   const [formData, setFormData] = useState({
     tenantId: searchParams.get('tenant') || '',
     username: '',
     password: '',
   });
+
+  const captchaSiteKey = platformSettings.captchaSiteKey?.trim() || '';
+  const captchaEnabled = platformSettings.enableCaptcha === true && captchaSiteKey.length > 10;
+
+  const resetCaptcha = () => {
+    setCaptchaToken(null);
+    setCaptchaReset(v => v + 1);
+  };
 
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
@@ -72,6 +85,11 @@ export default function StaffLogin() {
       return;
     }
 
+    if (captchaEnabled && !captchaToken) {
+      toast.error('Please complete the CAPTCHA verification');
+      return;
+    }
+
     setLoading(true);
     const result = await login(formData.username, formData.password, formData.tenantId);
     setLoading(false);
@@ -81,10 +99,11 @@ export default function StaffLogin() {
       navigate('/staff/dashboard');
     } else {
       toast.error(result.error || 'Login failed');
+      resetCaptcha();
     }
   };
 
-  if (authLoading) {
+  if (authLoading || settingsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -165,7 +184,21 @@ export default function StaffLogin() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              {captchaEnabled && (
+                <div className="pt-2">
+                  <TurnstileWidget
+                    siteKey={captchaSiteKey}
+                    onToken={(token) => setCaptchaToken(token)}
+                    resetKey={captchaReset}
+                  />
+                </div>
+              )}
+
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={loading || (captchaEnabled && !captchaToken)}
+              >
                 {loading ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
@@ -181,6 +214,14 @@ export default function StaffLogin() {
               </p>
             </div>
           </CardContent>
+          {captchaEnabled && (
+            <CardFooter className="justify-center border-t pt-4">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Shield className="h-3 w-3" />
+                Protected by Cloudflare Turnstile
+              </div>
+            </CardFooter>
+          )}
         </Card>
 
         <div className="mt-4 text-center">

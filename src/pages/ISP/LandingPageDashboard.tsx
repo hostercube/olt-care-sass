@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,8 @@ import {
   Facebook, Youtube, Palette, Layout, Image, Type, Users, Package, 
   MessageSquare, Settings2, Eye, Wifi, Zap, Shield, Headphones, Award,
   Star, ChevronRight, Upload, Link, PenTool, Sparkles, Smartphone,
-  Monitor, FileText, BarChart3, Target, Video, Instagram, Twitter
+  Monitor, FileText, BarChart3, Target, Video, Instagram, Twitter,
+  GripVertical, ChevronUp, ChevronDown, Map
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
@@ -181,6 +182,139 @@ const THEME_COLORS = [
   { id: 'teal', name: 'Teal', class: 'bg-teal-500' },
   { id: 'amber', name: 'Amber', class: 'bg-amber-500' },
 ];
+
+// Section Order Manager Component with Drag & Drop simulation
+interface SectionItem {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ElementType;
+  enabled: boolean;
+  settingsKey?: keyof LandingSettings;
+  alwaysEnabled?: boolean;
+}
+
+function SectionOrderManager({ 
+  settings, 
+  saving, 
+  onToggle 
+}: { 
+  settings: LandingSettings; 
+  saving: boolean;
+  onToggle: (key: keyof LandingSettings, value: boolean) => void;
+}) {
+  const defaultSections: SectionItem[] = [
+    { id: 'hero', name: 'হিরো সেকশন', description: 'মূল ব্যানার ও শিরোনাম', icon: Sparkles, enabled: true, alwaysEnabled: true },
+    { id: 'features', name: 'ফিচার সেকশন', description: 'সুবিধাসমূহ দেখান', icon: Zap, enabled: true, alwaysEnabled: true },
+    { id: 'packages', name: 'প্যাকেজ সেকশন', description: 'ISP প্যাকেজ দেখান', icon: Package, enabled: settings.landing_page_show_packages, settingsKey: 'landing_page_show_packages' },
+    { id: 'stats', name: 'স্ট্যাটস সেকশন', description: 'গ্রাহক সংখ্যা, আপটাইম ইত্যাদি', icon: BarChart3, enabled: true, alwaysEnabled: true },
+    { id: 'whyus', name: 'কেন আমরা সেরা', description: 'Why Choose Us সেকশন', icon: Award, enabled: true, alwaysEnabled: true },
+    { id: 'coverage', name: 'কভারেজ ম্যাপ', description: 'সার্ভিস এরিয়া দেখান', icon: Map, enabled: true, alwaysEnabled: true },
+    { id: 'contact', name: 'যোগাযোগ ফর্ম', description: 'কন্টাক্ট ফর্ম দেখান', icon: MessageSquare, enabled: settings.landing_page_show_contact, settingsKey: 'landing_page_show_contact' },
+    { id: 'footer', name: 'ফুটার', description: 'সোশ্যাল লিংক ও কপিরাইট', icon: Globe, enabled: true, alwaysEnabled: true },
+  ];
+
+  const [sections, setSections] = useState(defaultSections);
+
+  // Update sections when settings change
+  useEffect(() => {
+    setSections(prev => prev.map(section => {
+      if (section.settingsKey) {
+        return { ...section, enabled: settings[section.settingsKey] as boolean };
+      }
+      return section;
+    }));
+  }, [settings]);
+
+  const moveSection = (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= sections.length) return;
+    
+    const newSections = [...sections];
+    [newSections[index], newSections[newIndex]] = [newSections[newIndex], newSections[index]];
+    setSections(newSections);
+    toast.success('সেকশন অর্ডার আপডেট হয়েছে');
+  };
+
+  const handleToggleSection = (section: SectionItem) => {
+    if (section.alwaysEnabled || !section.settingsKey) return;
+    onToggle(section.settingsKey, !section.enabled);
+  };
+
+  return (
+    <div className="space-y-2">
+      {sections.map((section, index) => (
+        <Card key={section.id} className="overflow-hidden">
+          <CardContent className="p-0">
+            <div className="flex items-center gap-3 p-4">
+              {/* Drag Handle / Order Buttons */}
+              <div className="flex flex-col gap-1">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6"
+                  onClick={() => moveSection(index, 'up')}
+                  disabled={index === 0}
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6"
+                  onClick={() => moveSection(index, 'down')}
+                  disabled={index === sections.length - 1}
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {/* Grip Handle Visual */}
+              <div className="p-2 rounded bg-muted/50 cursor-grab">
+                <GripVertical className="h-5 w-5 text-muted-foreground" />
+              </div>
+
+              {/* Section Icon */}
+              <div className={`p-2 rounded-lg ${section.enabled ? 'bg-primary/10' : 'bg-muted'}`}>
+                <section.icon className={`h-5 w-5 ${section.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
+              </div>
+
+              {/* Section Info */}
+              <div className="flex-1">
+                <p className={`font-medium ${!section.enabled ? 'text-muted-foreground' : ''}`}>
+                  {section.name}
+                </p>
+                <p className="text-xs text-muted-foreground">{section.description}</p>
+              </div>
+
+              {/* Order Badge */}
+              <Badge variant="outline" className="font-mono">
+                #{index + 1}
+              </Badge>
+
+              {/* Toggle Switch */}
+              {section.alwaysEnabled ? (
+                <Badge variant="secondary" className="ml-2">Always On</Badge>
+              ) : (
+                <Switch
+                  checked={section.enabled}
+                  onCheckedChange={() => handleToggleSection(section)}
+                  disabled={saving}
+                />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+
+      <div className="mt-4 p-4 rounded-lg bg-muted/30 border border-dashed">
+        <p className="text-sm text-muted-foreground text-center">
+          💡 তীর বাটন ব্যবহার করে সেকশনের অর্ডার পরিবর্তন করুন। "Always On" সেকশনগুলো বন্ধ করা যায় না।
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function LandingPageDashboard() {
   const { tenantId } = useTenantContext();
@@ -815,98 +949,23 @@ export default function LandingPageDashboard() {
             </div>
           </TabsContent>
 
-          {/* Sections Tab */}
+          {/* Sections Tab - Drag and Drop Ordering */}
           <TabsContent value="sections" className="mt-6">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Package className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">প্যাকেজ সেকশন</p>
-                        <p className="text-xs text-muted-foreground">ISP প্যাকেজ দেখান</p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={settings.landing_page_show_packages}
-                      onCheckedChange={(checked) => handleToggle('landing_page_show_packages', checked)}
-                      disabled={saving}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold">সেকশন ম্যানেজমেন্ট</h3>
+                  <p className="text-sm text-muted-foreground">
+                    সেকশনগুলো ড্র্যাগ করে অর্ডার পরিবর্তন করুন বা শো/হাইড করুন
+                  </p>
+                </div>
+              </div>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">যোগাযোগ ফর্ম</p>
-                        <p className="text-xs text-muted-foreground">কন্টাক্ট ফর্ম দেখান</p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={settings.landing_page_show_contact}
-                      onCheckedChange={(checked) => handleToggle('landing_page_show_contact', checked)}
-                      disabled={saving}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <BarChart3 className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">স্ট্যাটস সেকশন</p>
-                      <p className="text-xs text-muted-foreground">গ্রাহক সংখ্যা, আপটাইম ইত্যাদি</p>
-                    </div>
-                  </div>
-                  <Badge variant="secondary" className="mt-2">Auto Enabled</Badge>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <Zap className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">ফিচার সেকশন</p>
-                      <p className="text-xs text-muted-foreground">সুবিধাসমূহ দেখান</p>
-                    </div>
-                  </div>
-                  <Badge variant="secondary" className="mt-2">Auto Enabled</Badge>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <Award className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">কেন আমরা সেরা</p>
-                      <p className="text-xs text-muted-foreground">Why Choose Us সেকশন</p>
-                    </div>
-                  </div>
-                  <Badge variant="secondary" className="mt-2">Auto Enabled</Badge>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <Globe className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">ফুটার</p>
-                      <p className="text-xs text-muted-foreground">সোশ্যাল লিংক ও কপিরাইট</p>
-                    </div>
-                  </div>
-                  <Badge variant="secondary" className="mt-2">Auto Enabled</Badge>
-                </CardContent>
-              </Card>
+              <SectionOrderManager 
+                settings={settings}
+                saving={saving}
+                onToggle={handleToggle}
+              />
             </div>
           </TabsContent>
         </Tabs>

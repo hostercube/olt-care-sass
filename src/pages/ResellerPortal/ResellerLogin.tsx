@@ -1,21 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Users, Lock } from 'lucide-react';
+import { Loader2, Users, Lock, Shield, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
+import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 
 export default function ResellerLogin() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [checkingToken, setCheckingToken] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const { settings: platformSettings, loading: settingsLoading } = usePlatformSettings();
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
+
+  const captchaSiteKey = platformSettings.captchaSiteKey?.trim() || '';
+  const captchaEnabled = platformSettings.enableCaptcha === true && captchaSiteKey.length > 10;
+
+  const resetCaptcha = () => {
+    setCaptchaToken(null);
+    setCaptchaReset(v => v + 1);
+  };
 
   // Check for impersonation token on mount
   useEffect(() => {
@@ -83,6 +97,17 @@ export default function ResellerLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!username.trim() || !password.trim()) {
+      toast.error('Please enter both username and password');
+      return;
+    }
+
+    if (captchaEnabled && !captchaToken) {
+      toast.error('Please complete the CAPTCHA verification');
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -96,6 +121,7 @@ export default function ResellerLogin() {
 
       if (error || !reseller) {
         toast.error('Invalid username or password');
+        resetCaptcha();
         setLoading(false);
         return;
       }
@@ -103,6 +129,7 @@ export default function ResellerLogin() {
       // Check password (plain text comparison - matching existing create behavior)
       if ((reseller as any).password !== password) {
         toast.error('Invalid username or password');
+        resetCaptcha();
         setLoading(false);
         return;
       }
@@ -125,17 +152,20 @@ export default function ResellerLogin() {
     } catch (err: any) {
       console.error('Login error:', err);
       toast.error('Login failed. Please try again.');
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
   };
 
-  if (checkingToken) {
+  if (checkingToken || settingsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-          <p className="text-muted-foreground">Verifying login...</p>
+          <p className="text-muted-foreground">
+            {checkingToken ? 'Verifying login...' : 'Loading...'}
+          </p>
         </div>
       </div>
     );
@@ -168,16 +198,43 @@ export default function ResellerLogin() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+
+            {captchaEnabled && (
+              <div className="pt-2">
+                <TurnstileWidget
+                  siteKey={captchaSiteKey}
+                  onToken={(token) => setCaptchaToken(token)}
+                  resetKey={captchaReset}
+                />
+              </div>
+            )}
+
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={loading || (captchaEnabled && !captchaToken)}
+            >
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -192,6 +249,14 @@ export default function ResellerLogin() {
             </Button>
           </form>
         </CardContent>
+        {captchaEnabled && (
+          <CardFooter className="justify-center border-t pt-4">
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Shield className="h-3 w-3" />
+              Protected by Cloudflare Turnstile
+            </div>
+          </CardFooter>
+        )}
       </Card>
     </div>
   );
