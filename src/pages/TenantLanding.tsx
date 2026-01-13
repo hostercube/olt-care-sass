@@ -662,8 +662,8 @@ export default function TenantLanding({ slugOverride }: TenantLandingProps = {})
       items.push({ id: 'packages', label: 'প্যাকেজ' });
     }
 
-    // Add coverage if areas exist
-    if (areas.length > 0) {
+    // Add coverage if enabled and areas exist
+    if ((tenant.landing_page_show_coverage !== false) && areas.length > 0) {
       items.push({ id: 'coverage', label: 'কভারেজ' });
     }
 
@@ -1152,7 +1152,7 @@ export default function TenantLanding({ slugOverride }: TenantLandingProps = {})
       )}
 
       {/* Enhanced Coverage Map Section - ISPpoint Style */}
-      {areas.length > 0 && (
+      {(tenant.landing_page_show_coverage !== false) && areas.length > 0 && (
         <section id="coverage" className={`${template.sectionBgClass} py-20 lg:py-28 relative overflow-hidden`}>
           {/* Decorative Background Elements */}
           <div className="absolute inset-0 pointer-events-none">

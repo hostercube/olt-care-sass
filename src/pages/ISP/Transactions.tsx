@@ -460,54 +460,62 @@ export default function Transactions() {
       title="Income & Expense"
       subtitle="Track your business transactions and categories"
     >
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Income</p>
-                <p className="text-xl sm:text-2xl font-bold text-green-600">৳{totalIncome.toLocaleString()}</p>
+      {/* Stats - Responsive Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <Card className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 border-green-200/50">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">Total Income</p>
+                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-green-600 truncate">৳{totalIncome.toLocaleString()}</p>
               </div>
-              <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Expense</p>
-                <p className="text-xl sm:text-2xl font-bold text-red-600">৳{totalExpense.toLocaleString()}</p>
+        <Card className="bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/30 dark:to-red-900/20 border-red-200/50">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">Total Expense</p>
+                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-red-600 truncate">৳{totalExpense.toLocaleString()}</p>
               </div>
-              <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-red-500" />
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
+                <TrendingDown className="h-5 w-5 sm:h-6 sm:w-6 text-red-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Net Profit/Loss</p>
-                <p className={`text-xl sm:text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  ৳{netProfit.toLocaleString()}
+        <Card className={`bg-gradient-to-br ${netProfit >= 0 ? 'from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200/50' : 'from-orange-50 to-orange-100/50 dark:from-orange-950/30 dark:to-orange-900/20 border-orange-200/50'}`}>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">Net {netProfit >= 0 ? 'Profit' : 'Loss'}</p>
+                <p className={`text-lg sm:text-xl lg:text-2xl font-bold truncate ${netProfit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                  {netProfit >= 0 ? '+' : ''}৳{netProfit.toLocaleString()}
                 </p>
               </div>
-              <DollarSign className={`h-6 w-6 sm:h-8 sm:w-8 ${netProfit >= 0 ? 'text-green-500' : 'text-red-500'}`} />
+              <div className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center ${netProfit >= 0 ? 'bg-blue-500/20' : 'bg-orange-500/20'}`}>
+                <DollarSign className={`h-5 w-5 sm:h-6 sm:w-6 ${netProfit >= 0 ? 'text-blue-600' : 'text-orange-600'}`} />
+              </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Categories</p>
-                <p className="text-xl sm:text-2xl font-bold">{categories.length}</p>
-                <p className="text-xs text-muted-foreground">
-                  {incomeCategories.length} income, {expenseCategories.length} expense
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 border-purple-200/50">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">Categories</p>
+                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-purple-600">{categories.length}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {incomeCategories.length} in, {expenseCategories.length} exp
                 </p>
               </div>
-              <Receipt className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -535,30 +543,36 @@ export default function Transactions() {
         {/* Transactions Tab */}
         <TabsContent value="transactions">
           <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <CardTitle>Transactions</CardTitle>
-                    <CardDescription>Record and manage income and expenses</CardDescription>
+                    <CardTitle className="text-lg sm:text-xl">Transactions</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">Record and manage income and expenses</CardDescription>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={exportToCSV}>
-                      <FileSpreadsheet className="h-4 w-4 mr-2" />
-                      Export
+                    <Button variant="outline" size="sm" onClick={exportToCSV} className="h-8 text-xs sm:text-sm">
+                      <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
+                      <span className="hidden xs:inline">Export</span>
+                      <span className="xs:hidden">CSV</span>
                     </Button>
-                    <Button size="sm" onClick={() => { resetForm(); setShowDialog(true); }}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Transaction
+                    <Button variant="outline" size="sm" onClick={printReport} className="h-8 text-xs sm:text-sm">
+                      <Printer className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
+                      <span className="hidden xs:inline">Print</span>
+                    </Button>
+                    <Button size="sm" onClick={() => { resetForm(); setShowDialog(true); }} className="h-8 text-xs sm:text-sm">
+                      <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
+                      <span className="hidden xs:inline">Add Transaction</span>
+                      <span className="xs:hidden">Add</span>
                     </Button>
                   </div>
                 </div>
                 
-                {/* Filters */}
-                <div className="flex flex-col sm:flex-row gap-2">
+                {/* Filters - Responsive */}
+                <div className="flex flex-wrap gap-2">
                   <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <Calendar className="h-4 w-4 mr-2" />
+                    <SelectTrigger className="w-[140px] sm:w-[160px] h-8 text-xs sm:text-sm">
+                      <Calendar className="h-3.5 w-3.5 mr-1.5" />
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -568,62 +582,66 @@ export default function Transactions() {
                     </SelectContent>
                   </Select>
                   <Select value={transactionFilter} onValueChange={setTransactionFilter}>
-                    <SelectTrigger className="w-full sm:w-[140px]">
-                      <Filter className="h-4 w-4 mr-2" />
+                    <SelectTrigger className="w-[120px] sm:w-[130px] h-8 text-xs sm:text-sm">
+                      <Filter className="h-3.5 w-3.5 mr-1.5" />
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="income">Income Only</SelectItem>
-                      <SelectItem value="expense">Expense Only</SelectItem>
+                      <SelectItem value="income">Income</SelectItem>
+                      <SelectItem value="expense">Expense</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[400px] sm:h-[500px]">
-                <div className="rounded-md border min-w-[600px]">
+            <CardContent className="p-2 sm:p-4">
+              <ScrollArea className="h-[350px] sm:h-[450px]">
+                <div className="rounded-md border overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead className="hidden sm:table-cell">Description</TableHead>
-                        <TableHead className="hidden md:table-cell">Method</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="w-[80px]">Actions</TableHead>
+                      <TableRow className="text-xs">
+                        <TableHead className="py-2 px-2 sm:px-3 whitespace-nowrap">Date</TableHead>
+                        <TableHead className="py-2 px-2 sm:px-3">Type</TableHead>
+                        <TableHead className="py-2 px-2 sm:px-3 hidden xs:table-cell">Category</TableHead>
+                        <TableHead className="hidden md:table-cell py-2 px-3">Description</TableHead>
+                        <TableHead className="hidden lg:table-cell py-2 px-3">Method</TableHead>
+                        <TableHead className="text-right py-2 px-2 sm:px-3 whitespace-nowrap">Amount</TableHead>
+                        <TableHead className="w-[60px] sm:w-[80px] py-2 px-1 sm:px-2"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {loading ? (
                         <TableRow><TableCell colSpan={7} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
                       ) : filteredTransactions.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No transactions found for this period</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">No transactions found</TableCell></TableRow>
                       ) : (
                         filteredTransactions.map((tx) => (
-                          <TableRow key={tx.id}>
-                            <TableCell className="whitespace-nowrap">{format(new Date(tx.date), 'MMM dd, yyyy')}</TableCell>
-                            <TableCell>
-                              <Badge variant={tx.type === 'income' ? 'default' : 'destructive'} className="text-xs">
-                                {tx.type === 'income' ? <TrendingUp className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
-                                {tx.type}
+                          <TableRow key={tx.id} className="text-xs sm:text-sm">
+                            <TableCell className="py-2 px-2 sm:px-3 whitespace-nowrap font-medium">{format(new Date(tx.date), 'dd MMM')}</TableCell>
+                            <TableCell className="py-2 px-2 sm:px-3">
+                              <Badge 
+                                variant={tx.type === 'income' ? 'default' : 'destructive'} 
+                                className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5"
+                              >
+                                {tx.type === 'income' ? <TrendingUp className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" /> : <TrendingDown className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />}
+                                <span className="hidden sm:inline">{tx.type}</span>
+                                <span className="sm:hidden">{tx.type === 'income' ? 'In' : 'Ex'}</span>
                               </Badge>
                             </TableCell>
-                            <TableCell className="max-w-[120px] truncate">{getCategoryName(tx.category_id)}</TableCell>
-                            <TableCell className="hidden sm:table-cell max-w-[150px] truncate">{tx.description || '-'}</TableCell>
-                            <TableCell className="hidden md:table-cell capitalize">{tx.payment_method || '-'}</TableCell>
-                            <TableCell className={`text-right font-medium whitespace-nowrap ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                              {tx.type === 'income' ? '+' : '-'}৳{tx.amount.toLocaleString()}
+                            <TableCell className="hidden xs:table-cell py-2 px-2 sm:px-3 max-w-[80px] sm:max-w-[120px] truncate">{getCategoryName(tx.category_id)}</TableCell>
+                            <TableCell className="hidden md:table-cell py-2 px-3 max-w-[150px] truncate text-muted-foreground">{tx.description || '-'}</TableCell>
+                            <TableCell className="hidden lg:table-cell py-2 px-3 capitalize text-muted-foreground">{tx.payment_method || '-'}</TableCell>
+                            <TableCell className={`text-right py-2 px-2 sm:px-3 font-semibold whitespace-nowrap ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                              <span className="hidden sm:inline">{tx.type === 'income' ? '+' : '-'}</span>৳{tx.amount.toLocaleString()}
                             </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditTransaction(tx)}>
-                                  <Edit className="h-4 w-4" />
+                            <TableCell className="py-2 px-1 sm:px-2">
+                              <div className="flex gap-0.5 justify-end">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={() => openEditTransaction(tx)}>
+                                  <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeletingTransaction(tx)}>
-                                  <Trash2 className="h-4 w-4" />
+                                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 text-destructive hover:text-destructive" onClick={() => setDeletingTransaction(tx)}>
+                                  <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -749,12 +767,12 @@ export default function Transactions() {
 
         {/* Summary/Reports Tab */}
         <TabsContent value="reports">
-          <div className="space-y-6">
-            {/* Month Selector */}
-            <div className="flex items-center gap-4">
+          <div className="space-y-4 sm:space-y-6">
+            {/* Month Selector - Responsive */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-[200px]">
-                  <Calendar className="h-4 w-4 mr-2" />
+                <SelectTrigger className="w-[150px] sm:w-[180px] h-8 sm:h-9 text-xs sm:text-sm">
+                  <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -763,45 +781,62 @@ export default function Transactions() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={exportToCSV}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Export CSV
+              <Button variant="outline" size="sm" onClick={exportToCSV} className="h-8 sm:h-9 text-xs sm:text-sm">
+                <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
+                <span className="hidden xs:inline">Export CSV</span>
+                <span className="xs:hidden">CSV</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={printReport}>
-                <Printer className="h-4 w-4 mr-2" />
-                Print Report
+              <Button variant="outline" size="sm" onClick={printReport} className="h-8 sm:h-9 text-xs sm:text-sm">
+                <Printer className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
+                <span className="hidden xs:inline">Print Report</span>
+                <span className="xs:hidden">Print</span>
               </Button>
             </div>
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="bg-green-50 dark:bg-green-950/20 border-green-200">
-                <CardContent className="p-4">
-                  <p className="text-sm text-muted-foreground">Total Income</p>
-                  <p className="text-2xl font-bold text-green-600">৳{totalIncome.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {monthlyTransactions.filter(t => t.type === 'income').length} transactions
-                  </p>
+            {/* Summary Cards - Responsive */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <Card className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 border-green-200/50">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Total Income</p>
+                      <p className="text-xl sm:text-2xl font-bold text-green-600">৳{totalIncome.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {monthlyTransactions.filter(t => t.type === 'income').length} transactions
+                      </p>
+                    </div>
+                    <TrendingUp className="h-8 w-8 sm:h-10 sm:w-10 text-green-500/30" />
+                  </div>
                 </CardContent>
               </Card>
-              <Card className="bg-red-50 dark:bg-red-950/20 border-red-200">
-                <CardContent className="p-4">
-                  <p className="text-sm text-muted-foreground">Total Expense</p>
-                  <p className="text-2xl font-bold text-red-600">৳{totalExpense.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {monthlyTransactions.filter(t => t.type === 'expense').length} transactions
-                  </p>
+              <Card className="bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/30 dark:to-red-900/20 border-red-200/50">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Total Expense</p>
+                      <p className="text-xl sm:text-2xl font-bold text-red-600">৳{totalExpense.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {monthlyTransactions.filter(t => t.type === 'expense').length} transactions
+                      </p>
+                    </div>
+                    <TrendingDown className="h-8 w-8 sm:h-10 sm:w-10 text-red-500/30" />
+                  </div>
                 </CardContent>
               </Card>
-              <Card className={`${netProfit >= 0 ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200' : 'bg-orange-50 dark:bg-orange-950/20 border-orange-200'}`}>
-                <CardContent className="p-4">
-                  <p className="text-sm text-muted-foreground">Net Profit/Loss</p>
-                  <p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                    {netProfit >= 0 ? '+' : ''}৳{netProfit.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {netProfit >= 0 ? 'Profit' : 'Loss'} for this month
-                  </p>
+              <Card className={`bg-gradient-to-br ${netProfit >= 0 ? 'from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200/50' : 'from-orange-50 to-orange-100/50 dark:from-orange-950/30 dark:to-orange-900/20 border-orange-200/50'}`}>
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Net {netProfit >= 0 ? 'Profit' : 'Loss'}</p>
+                      <p className={`text-xl sm:text-2xl font-bold ${netProfit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                        {netProfit >= 0 ? '+' : ''}৳{netProfit.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        For this month
+                      </p>
+                    </div>
+                    <DollarSign className={`h-8 w-8 sm:h-10 sm:w-10 ${netProfit >= 0 ? 'text-blue-500/30' : 'text-orange-500/30'}`} />
+                  </div>
                 </CardContent>
               </Card>
             </div>
