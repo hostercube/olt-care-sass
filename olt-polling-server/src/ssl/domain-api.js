@@ -54,6 +54,90 @@ export function setupDomainRoutes(app, supabase) {
   };
 
   /**
+   * Resolve tenant for a given hostname
+   * GET /api/domains/resolve?host=example.com
+   * 
+   * Notes:
+   * - Uses server-side credentials, so it works even when frontend RLS blocks public reads.
+   * - Returns only minimal tenant + domain info needed for routing.
+   */
+  app.get('/api/domains/resolve', async (req, res) => {
+    const rawHost = String(req.query.host || req.query.hostname || '').toLowerCase().trim();
+
+    // Some proxies may include port in Host header. Strip it.
+    const hostname = rawHost.replace(/:\d+$/, '');
+
+    if (!hostname) {
+      return res.status(400).json({ success: false, error: 'host is required' });
+    }
+
+    try {
+      const hostnameWithoutWww = hostname.replace(/^www\./, '');
+      const candidates = Array.from(
+        new Set([hostname, hostnameWithoutWww, `www.${hostnameWithoutWww}`])
+      );
+
+      // 1) Direct match: stored as full hostname in `domain`
+      let { data: domainData, error: domainErr } = await supabase
+        .from('tenant_custom_domains')
+        .select('tenant_id, domain, subdomain, is_verified, ssl_status, ssl_provisioning_status')
+        .in('domain', candidates)
+        .limit(1)
+        .maybeSingle();
+
+      if (domainErr) {
+        logger.warn('Domain resolve lookup error (direct match):', domainErr);
+      }
+
+      // 2) Optional match: stored as root domain + subdomain
+      if (!domainData) {
+        const parts = hostnameWithoutWww.split('.').filter(Boolean);
+        if (parts.length >= 3) {
+          const sub = parts[0];
+          const root = parts.slice(1).join('.');
+          const { data: subdomainData, error: subdomainErr } = await supabase
+            .from('tenant_custom_domains')
+            .select('tenant_id, domain, subdomain, is_verified, ssl_status, ssl_provisioning_status')
+            .eq('domain', root)
+            .eq('subdomain', sub)
+            .limit(1)
+            .maybeSingle();
+
+          if (subdomainErr) {
+            logger.warn('Domain resolve lookup error (subdomain match):', subdomainErr);
+          }
+
+          if (subdomainData) domainData = subdomainData;
+        }
+      }
+
+      if (!domainData?.tenant_id) {
+        return res.json({ success: true, found: false });
+      }
+
+      const { data: tenantData, error: tenantErr } = await supabase
+        .from('tenants')
+        .select('id, slug, company_name, logo_url, landing_page_enabled, status')
+        .eq('id', domainData.tenant_id)
+        .maybeSingle();
+
+      if (tenantErr || !tenantData) {
+        return res.json({ success: true, found: false });
+      }
+
+      return res.json({
+        success: true,
+        found: true,
+        domain: domainData,
+        tenant: tenantData,
+      });
+    } catch (error) {
+      logger.error('Domain resolve error:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
    * Verify DNS for a domain
    * POST /api/domains/verify-dns
    */
@@ -300,6 +384,11 @@ export function setupDomainRoutes(app, supabase) {
   });
 
   // Routes without /api prefix for compatibility
+  app.get('/domains/resolve', (req, res) => {
+    req.url = '/api/domains/resolve';
+    app.handle(req, res);
+  });
+
   app.post('/domains/verify-dns', (req, res) => {
     req.url = '/api/domains/verify-dns';
     app.handle(req, res);

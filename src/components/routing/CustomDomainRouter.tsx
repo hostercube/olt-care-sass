@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchJsonSafe, normalizePollingServerUrl } from '@/lib/polling-server';
 import { Loader2, Wifi, AlertCircle } from 'lucide-react';
 
 /**
@@ -90,75 +91,111 @@ export default function CustomDomainRouter({ children }: Props) {
       try {
         // Normalize hostname variations (with/without www)
         const hostnameWithoutWww = hostname.replace(/^www\./, '');
-        
-        console.log('[CustomDomainRouter] Checking hostname:', hostname);
-        
-        // Query for domain that matches the hostname (any status first for debugging)
-        let domainData = null;
+        const candidates = Array.from(
+          new Set([hostname, hostnameWithoutWww, `www.${hostnameWithoutWww}`])
+        );
 
-        // Try exact match first
-        const { data: exactMatch, error: err1 } = await supabase
+        console.log('[CustomDomainRouter] Checking hostname:', hostname);
+
+        // 1) Primary: direct database lookup (fast path)
+        let domainData: any | null = null;
+
+        const { data: directMatch, error: directErr } = await supabase
           .from('tenant_custom_domains')
           .select('tenant_id, domain, subdomain, is_verified, ssl_status, ssl_provisioning_status')
-          .eq('domain', hostname)
+          .in('domain', candidates)
+          .limit(1)
           .maybeSingle();
 
-        if (!err1 && exactMatch) {
-          console.log('[CustomDomainRouter] Found exact match:', exactMatch);
-          domainData = exactMatch;
-        } else {
-          // Try without www
-          const { data: noWwwMatch, error: err2 } = await supabase
-            .from('tenant_custom_domains')
-            .select('tenant_id, domain, subdomain, is_verified, ssl_status, ssl_provisioning_status')
-            .eq('domain', hostnameWithoutWww)
-            .maybeSingle();
+        if (!directErr && directMatch) {
+          domainData = directMatch;
+          console.log('[CustomDomainRouter] Found domain match:', directMatch);
+        } else if (directErr) {
+          console.warn('[CustomDomainRouter] Domain lookup error (direct):', directErr);
+        }
 
-          if (!err2 && noWwwMatch) {
-            console.log('[CustomDomainRouter] Found no-www match:', noWwwMatch);
-            domainData = noWwwMatch;
-          } else {
-            // Try with www prefix
-            const { data: wwwMatch, error: err3 } = await supabase
+        // 2) Optional: subdomain+root-domain storage pattern (domain=root, subdomain=sub)
+        if (!domainData) {
+          const parts = hostnameWithoutWww.split('.').filter(Boolean);
+          if (parts.length >= 3) {
+            const sub = parts[0];
+            const root = parts.slice(1).join('.');
+            const { data: subdomainMatch, error: subdomainErr } = await supabase
               .from('tenant_custom_domains')
               .select('tenant_id, domain, subdomain, is_verified, ssl_status, ssl_provisioning_status')
-              .eq('domain', `www.${hostnameWithoutWww}`)
+              .eq('domain', root)
+              .eq('subdomain', sub)
+              .limit(1)
               .maybeSingle();
 
-            if (!err3 && wwwMatch) {
-              console.log('[CustomDomainRouter] Found www match:', wwwMatch);
-              domainData = wwwMatch;
-            } else {
-              console.log('[CustomDomainRouter] No domain match found for:', hostname);
+            if (!subdomainErr && subdomainMatch) {
+              domainData = subdomainMatch;
+              console.log('[CustomDomainRouter] Found subdomain match:', subdomainMatch);
+            } else if (subdomainErr) {
+              console.warn('[CustomDomainRouter] Domain lookup error (subdomain):', subdomainErr);
             }
           }
         }
 
-        // Check if we found a domain
+        // 3) Fallback: resolve via backend (works even if public DB reads are blocked)
+        // Try same-origin first (important for custom domains).
+        if (!domainData) {
+          const candidateBases = [
+            normalizePollingServerUrl(`${window.location.origin}/olt-polling-server`),
+            normalizePollingServerUrl(import.meta.env.VITE_POLLING_SERVER_URL || ''),
+            normalizePollingServerUrl(import.meta.env.VITE_VPS_URL || ''),
+          ].filter(Boolean);
+
+          for (const base of candidateBases) {
+            const { ok, data } = await fetchJsonSafe<any>(
+              `${base}/api/domains/resolve?host=${encodeURIComponent(hostname)}`,
+              undefined,
+              8000
+            );
+
+            if (ok && data?.found && data?.domain?.tenant_id) {
+              domainData = data.domain;
+              // If backend returned tenant too, we can use it directly.
+              if (data.tenant) {
+                const tenantData = data.tenant as any;
+                if (tenantData.status !== 'active' && tenantData.status !== 'trial') {
+                  setState('error');
+                  setErrorMessage('This ISP account is currently suspended');
+                  return;
+                }
+
+                setTenant({
+                  id: tenantData.id,
+                  slug: tenantData.slug,
+                  company_name: tenantData.company_name || 'ISP Portal',
+                  logo_url: tenantData.logo_url,
+                  landing_page_enabled: tenantData.landing_page_enabled === true,
+                  status: tenantData.status,
+                });
+                setState('custom_domain');
+                return;
+              }
+
+              break;
+            }
+          }
+        }
+
         if (!domainData) {
           console.log('[CustomDomainRouter] Domain not found in database:', hostname);
           setState('not_found');
           return;
         }
 
-        // Domain found - check if it's verified and SSL is active
-        // Allow domains that are verified OR have active SSL
-        const isReady = domainData.is_verified === true || 
-                        domainData.ssl_status === 'active' || 
-                        domainData.ssl_provisioning_status === 'active';
+        // IMPORTANT: If a domain exists in the system, route it to the tenant.
+        // (DNS/SSL verification is handled separately; routing should not block the portal UI.)
 
-        if (!isReady) {
-          console.log('[CustomDomainRouter] Domain found but not verified/active:', domainData);
-          setState('not_found');
-          return;
-        }
-
-        // Found verified domain - get tenant details
+        // Found domain - get tenant details
         const { data: tenantData, error: tenantError } = await supabase
           .from('tenants')
           .select('id, slug, company_name, logo_url, landing_page_enabled, status')
           .eq('id', domainData.tenant_id)
-          .single();
+          .maybeSingle();
 
         if (tenantError || !tenantData) {
           console.error('Tenant lookup error:', tenantError);
@@ -184,7 +221,6 @@ export default function CustomDomainRouter({ children }: Props) {
           status: tenantData.status,
         });
         setState('custom_domain');
-
       } catch (err) {
         console.error('Custom domain detection error:', err);
         setState('error');
