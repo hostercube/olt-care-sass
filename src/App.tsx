@@ -79,6 +79,7 @@ import CustomerTypes from "./pages/ISP/CustomerTypes";
 import RechargeHistory from "./pages/ISP/RechargeHistory";
 import BandwidthManagement from "./pages/ISP/BandwidthManagement";
 import SupportTickets from "./pages/ISP/SupportTickets";
+import LandingPageDashboard from "./pages/ISP/LandingPageDashboard";
 import ISPSMSTemplates from "./pages/ISP/SMSTemplates";
 import ISPEmailTemplates from "./pages/ISP/EmailTemplates";
 
@@ -498,7 +499,18 @@ const App = () => (
               <Route path="/isp/tickets" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
-                    <SupportTickets />
+                    <ModuleAccessGuard module="isp_tickets" moduleName="Support Tickets">
+                      <SupportTickets />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/landing-page" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="landing_page" moduleName="Landing Page">
+                      <LandingPageDashboard />
+                    </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />

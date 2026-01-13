@@ -16,6 +16,7 @@ import {
   DollarSign,
   FileText,
   Gauge,
+  Globe,
   LayoutDashboard,
   Mail,
   MapPin,
@@ -104,6 +105,7 @@ const operationsHRItems: NavItem[] = [
   { title: 'payroll_hr', href: '/isp/staff', icon: Users, requiredModule: 'isp_hr_payroll' },
   { title: 'inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
   { title: 'support_tickets', href: '/isp/tickets', icon: MessageSquare, requiredModule: 'isp_tickets' },
+  { title: 'landing_page', href: '/isp/landing-page', icon: Globe, requiredModule: 'landing_page' },
   { title: 'reports', href: '/isp/reports', icon: FileText },
 ];
 
