@@ -103,6 +103,7 @@ const communicationItems: NavItem[] = [
 const operationsHRItems: NavItem[] = [
   { title: 'payroll_hr', href: '/isp/staff', icon: Users, requiredModule: 'isp_hr_payroll' },
   { title: 'inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
+  { title: 'support_tickets', href: '/isp/tickets', icon: MessageSquare, requiredModule: 'isp_tickets' },
   { title: 'reports', href: '/isp/reports', icon: FileText },
 ];
 

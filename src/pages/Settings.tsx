@@ -921,6 +921,11 @@ export default function Settings() {
             <CustomerPortalSettingsCard />
           </TabsContent>
 
+          {/* Landing Page Settings */}
+          <TabsContent value="landing" className="space-y-6">
+            <LandingPageSettingsCard />
+          </TabsContent>
+
           {/* General Settings */}
           <TabsContent value="general" className="space-y-6">
             <Card variant="glass">
