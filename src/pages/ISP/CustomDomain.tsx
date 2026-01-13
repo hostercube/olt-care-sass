@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
-import { Globe, Plus, Loader2, CheckCircle, XCircle, Clock, Copy, RefreshCw, Trash2, Shield, Link } from 'lucide-react';
+import { usePollingServerUrl } from '@/hooks/usePlatformSettings';
+import { Globe, Plus, Loader2, CheckCircle, XCircle, Clock, Copy, RefreshCw, Trash2, Shield, Link, Lock, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -27,12 +28,17 @@ interface CustomDomainType {
   subdomain: string | null;
   is_verified: boolean;
   ssl_status: string;
+  ssl_provisioning_status: string;
+  ssl_issued_at: string | null;
+  ssl_expires_at: string | null;
+  ssl_error: string | null;
   dns_txt_record: string | null;
   created_at: string;
 }
 
 export default function CustomDomain() {
   const { tenantId, tenant } = useTenantContext();
+  const { pollingServerUrl } = usePollingServerUrl();
   const [domains, setDomains] = useState<CustomDomainType[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
@@ -40,6 +46,7 @@ export default function CustomDomain() {
   const [domain, setDomain] = useState('');
   const [serverIP, setServerIP] = useState<string>('');
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [provisioningSSL, setProvisioningSSL] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -58,7 +65,6 @@ export default function CustomDomain() {
       }
       
       if (data?.value) {
-        // Handle both formats: direct string or {value: string}
         let ipValue: string = '';
         if (typeof data.value === 'string') {
           ipValue = data.value;
@@ -66,7 +72,6 @@ export default function CustomDomain() {
           const valueObj = data.value as Record<string, any>;
           ipValue = valueObj.value || valueObj.ip || '';
         }
-        console.log('Fetched server IP:', ipValue);
         setServerIP(ipValue);
       }
     } catch (err) {
@@ -97,176 +102,112 @@ export default function CustomDomain() {
     fetchDomains();
   }, [fetchServerIP, fetchDomains]);
 
-  // Check DNS records using public DNS-over-HTTPS (Cloudflare)
-  const checkDNSRecords = async (
-    fullDomain: string,
-    rootDomain: string,
-    expectedIP: string,
-    expectedTXT: string
-  ): Promise<{
-    aRecordValid: boolean;
-    txtRecordValid: boolean;
-    aRecordFound: string | null;
-    txtRecordFound: string | null;
-    txtCheckedName: string;
-  }> => {
-    const normalizedIP = (expectedIP || '').trim();
-    const normalizedTXT = (expectedTXT || '').trim();
-
-    let aRecordValid = false;
-    let txtRecordValid = false;
-    let aRecordFound: string | null = null;
-    let txtRecordFound: string | null = null;
-
-    // A record check (full domain)
-    try {
-      const aResponse = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(fullDomain)}&type=A`, {
-        headers: { 'Accept': 'application/dns-json' },
-      });
-
-      if (aResponse.ok) {
-        const aData = await aResponse.json();
-        if (aData.Answer && aData.Answer.length > 0) {
-          for (const record of aData.Answer) {
-            if (record.type === 1) {
-              aRecordFound = record.data;
-              if (record.data === normalizedIP) {
-                aRecordValid = true;
-                break;
-              }
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error checking A record:', err);
+  // Normalize polling server URL
+  const normalizePollingServerUrl = (url: string): string => {
+    if (!url) return '';
+    let normalized = url.trim();
+    normalized = normalized.replace(/\/+$/, '');
+    if (normalized.endsWith('/api')) {
+      normalized = normalized.slice(0, -4);
     }
-
-    // TXT record check.
-    // Default: root domain (_isppoint.rootDomain) but some DNS setups may add it under the full host.
-    // Also: some panels drop the underscore; we check both to reduce false negatives.
-    const candidates = [
-      `_isppoint.${rootDomain}`,
-      `_isppoint.${fullDomain}`,
-      `isppoint.${rootDomain}`,
-      `isppoint.${fullDomain}`,
-    ];
-    let txtCheckedName = candidates[0];
-
-    for (const candidateName of candidates) {
-      try {
-        txtCheckedName = candidateName;
-        const txtResponse = await fetch(
-          `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(candidateName)}&type=TXT`,
-          { headers: { 'Accept': 'application/dns-json' } }
-        );
-
-        if (!txtResponse.ok) continue;
-
-        const txtData = await txtResponse.json();
-        if (!txtData.Answer || txtData.Answer.length === 0) continue;
-
-        for (const record of txtData.Answer) {
-          if (record.type !== 16) continue;
-
-          // TXT records come with quotes, remove them; some providers split strings.
-          const txtValue = String(record.data).replace(/"/g, '').trim();
-          txtRecordFound = txtValue;
-
-          // Some providers may append extra chunks; allow exact or contains match.
-          if (txtValue === normalizedTXT || txtValue.includes(normalizedTXT)) {
-            txtRecordValid = true;
-            break;
-          }
-        }
-
-        if (txtRecordValid) break;
-      } catch (err) {
-        console.error('Error checking TXT record:', err);
-      }
-    }
-
-    return { aRecordValid, txtRecordValid, aRecordFound, txtRecordFound, txtCheckedName };
+    return normalized;
   };
 
-  // Auto-verify domain by checking DNS via client-side DNS-over-HTTPS
-  const handleVerifyDomain = async (domainData: CustomDomainType) => {
+  // Verify DNS via backend
+  const handleVerifyDNS = async (domainData: CustomDomainType) => {
     setVerifying(domainData.id);
     try {
-      // Domain is stored as the full domain (e.g., test.isppoint.com)
-      const fullDomain = domainData.domain;
-      // Extract root domain for TXT record (e.g., isppoint.com from test.isppoint.com)
-      const domainParts = fullDomain.split('.');
-      const rootDomain = domainParts.length > 2 
-        ? domainParts.slice(-2).join('.') 
-        : fullDomain;
-
-      if (!serverIP) {
-        toast.error('Server IP not configured. Please contact administrator.');
+      const baseUrl = normalizePollingServerUrl(pollingServerUrl);
+      if (!baseUrl) {
+        toast.error('Polling server URL not configured');
         return;
       }
 
-      const dnsResult = await checkDNSRecords(fullDomain, rootDomain, serverIP, domainData.dns_txt_record || '');
-      
-      console.log('DNS check result:', dnsResult);
+      const response = await fetch(`${baseUrl}/api/domains/verify-dns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: domainData.domain }),
+      });
 
-      const isVerified = dnsResult.aRecordValid && dnsResult.txtRecordValid;
+      const result = await response.json();
 
-      if (isVerified) {
-        // Update domain as verified in database
-        const { error: updateError } = await supabase
+      if (result.dnsValid) {
+        // Update status in database
+        await supabase
           .from('tenant_custom_domains')
           .update({ 
-            is_verified: true,
-            ssl_status: 'active',
-            verified_at: new Date().toISOString()
+            ssl_provisioning_status: 'dns_verified',
           } as any)
           .eq('id', domainData.id);
 
-        if (updateError) {
-          throw new Error('Failed to update domain status');
-        }
-
-        toast.success('Domain verified successfully! SSL is now active.');
+        toast.success('DNS verified! You can now provision SSL certificate.');
+        fetchDomains();
       } else {
-        const issues: string[] = [];
-        
-        if (!dnsResult.aRecordValid) {
-          if (dnsResult.aRecordFound) {
-            issues.push(`A record points to ${dnsResult.aRecordFound} instead of ${serverIP}`);
-          } else {
-            issues.push(`A record not found. Please add: @ -> ${serverIP}`);
-          }
-        }
-        
-        if (!dnsResult.txtRecordValid) {
-          if (dnsResult.txtRecordFound) {
-            issues.push(`TXT record value is "${dnsResult.txtRecordFound}" instead of "${domainData.dns_txt_record}"`);
-          } else {
-            issues.push(`TXT record not found. Please add: _isppoint -> ${domainData.dns_txt_record}`);
-          }
-        }
-
         toast.error(
           <div className="space-y-1">
-            <p className="font-medium">DNS not configured correctly:</p>
-            {issues.map((issue: string, i: number) => (
-              <p key={i} className="text-sm">• {issue}</p>
-            ))}
+            <p className="font-medium">DNS not configured</p>
+            <p className="text-sm">Add A record: {domainData.domain} → {result.serverIP}</p>
           </div>,
           { duration: 8000 }
         );
       }
-      
-      fetchDomains();
     } catch (err: any) {
-      toast.error(err.message || 'Verification failed');
+      toast.error(err.message || 'DNS verification failed');
     } finally {
       setVerifying(null);
     }
   };
 
-  // Clean domain input - remove http://, https://, www., trailing slashes
+  // Provision SSL certificate
+  const handleProvisionSSL = async (domainData: CustomDomainType) => {
+    setProvisioningSSL(domainData.id);
+    try {
+      const baseUrl = normalizePollingServerUrl(pollingServerUrl);
+      if (!baseUrl) {
+        toast.error('Polling server URL not configured');
+        return;
+      }
+
+      toast.info('Starting SSL provisioning... This may take 1-2 minutes.');
+
+      const response = await fetch(`${baseUrl}/api/domains/provision-ssl`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          domain: domainData.domain,
+          domainId: domainData.id,
+          tenantId,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success(
+          <div className="space-y-1">
+            <p className="font-medium">🎉 SSL Certificate Issued!</p>
+            <p className="text-sm">Your domain {domainData.domain} is now live with HTTPS.</p>
+          </div>,
+          { duration: 10000 }
+        );
+        fetchDomains();
+      } else {
+        toast.error(
+          <div className="space-y-1">
+            <p className="font-medium">SSL Provisioning Failed</p>
+            <p className="text-sm">{result.error}</p>
+          </div>,
+          { duration: 10000 }
+        );
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'SSL provisioning failed');
+    } finally {
+      setProvisioningSSL(null);
+    }
+  };
+
+  // Clean domain input
   const cleanDomainInput = (input: string): string => {
     let cleaned = input.toLowerCase().trim();
     cleaned = cleaned.replace(/^https?:\/\//, '');
@@ -281,7 +222,6 @@ export default function CustomDomain() {
     try {
       const cleanedDomain = cleanDomainInput(domain);
       
-      // Validate domain format
       const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
       if (!domainRegex.test(cleanedDomain)) {
         toast.error('Invalid domain format. Example: yourdomain.com or isp.yourdomain.com');
@@ -295,11 +235,12 @@ export default function CustomDomain() {
         .insert({
           tenant_id: tenantId,
           domain: cleanedDomain,
-          subdomain: null, // Simplified - no separate subdomain
+          subdomain: null,
           dns_txt_record: txtRecord,
+          ssl_provisioning_status: 'pending',
         } as any);
       if (error) throw error;
-      toast.success('Domain added. Please configure DNS records.');
+      toast.success('Domain added. Configure DNS and verify to enable SSL.');
       setShowDialog(false);
       setDomain('');
       fetchDomains();
@@ -314,6 +255,18 @@ export default function CustomDomain() {
     if (!deleteId) return;
     setDeleting(true);
     try {
+      const domainToDelete = domains.find(d => d.id === deleteId);
+      
+      // Try to remove via backend (which will clean up Nginx + SSL)
+      if (domainToDelete && pollingServerUrl) {
+        const baseUrl = normalizePollingServerUrl(pollingServerUrl);
+        try {
+          await fetch(`${baseUrl}/api/domains/${deleteId}`, { method: 'DELETE' });
+        } catch (e) {
+          // Ignore backend errors, still delete from DB
+        }
+      }
+
       const { error } = await supabase
         .from('tenant_custom_domains')
         .delete()
@@ -335,13 +288,20 @@ export default function CustomDomain() {
     toast.success('Copied to clipboard');
   };
 
-  const getStatusIcon = (isVerified: boolean, sslStatus: string) => {
-    if (isVerified && sslStatus === 'active') {
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
-    } else if (isVerified) {
-      return <Clock className="h-4 w-4 text-yellow-500" />;
+  const getStatusBadge = (d: CustomDomainType) => {
+    if (d.ssl_status === 'active' && d.is_verified) {
+      return <Badge variant="default" className="bg-green-500">Active</Badge>;
     }
-    return <XCircle className="h-4 w-4 text-red-500" />;
+    if (d.ssl_provisioning_status === 'issuing') {
+      return <Badge variant="secondary">Issuing SSL...</Badge>;
+    }
+    if (d.ssl_provisioning_status === 'dns_verified') {
+      return <Badge variant="outline" className="border-blue-500 text-blue-500">DNS Verified</Badge>;
+    }
+    if (d.ssl_provisioning_status === 'failed') {
+      return <Badge variant="destructive">Failed</Badge>;
+    }
+    return <Badge variant="secondary">Pending DNS</Badge>;
   };
 
   const displayIP = serverIP || 'Not configured';
@@ -349,32 +309,31 @@ export default function CustomDomain() {
   return (
     <DashboardLayout
       title="Custom Domain"
-      subtitle="Configure your own domain for white-label branding"
+      subtitle="Configure your own domain with automatic SSL certificates"
     >
-      {/* Enterprise SaaS Architecture Info */}
-      <Card className="mb-6 border-green-500/20 bg-green-500/5">
+      {/* Production-Grade SSL Info */}
+      <Card className="mb-6 border-primary/20 bg-primary/5">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
-            <Shield className="h-5 w-5 text-green-500 mt-0.5" />
+            <Lock className="h-5 w-5 text-primary mt-0.5" />
             <div>
-              <h4 className="font-medium text-green-700 dark:text-green-400">Enterprise Custom Domain System</h4>
+              <h4 className="font-medium text-primary">Automatic SSL Provisioning</h4>
               <p className="text-sm text-muted-foreground mt-1">
-                Our system uses <strong>dynamic host-based tenant resolution</strong> — the same architecture used by 
-                Shopify, Vercel, and Netlify. Simply point your domain's DNS to our server and verify ownership. 
-                No per-domain server configuration needed!
+                Our system automatically issues <strong>Let's Encrypt SSL certificates</strong> for each custom domain.
+                No manual configuration required — just add your domain, verify DNS, and click "Issue SSL".
               </p>
               <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="p-2 rounded bg-background/50">
-                  <p className="text-xs font-medium">✅ Unlimited Domains</p>
-                  <p className="text-xs text-muted-foreground">Add as many domains as you need</p>
+                  <p className="text-xs font-medium">🔒 Per-Domain SSL</p>
+                  <p className="text-xs text-muted-foreground">Individual certificate for each domain</p>
                 </div>
                 <div className="p-2 rounded bg-background/50">
-                  <p className="text-xs font-medium">✅ Instant Activation</p>
-                  <p className="text-xs text-muted-foreground">Works immediately after DNS verification</p>
+                  <p className="text-xs font-medium">⚡ Auto-Renewal</p>
+                  <p className="text-xs text-muted-foreground">Certificates renew automatically</p>
                 </div>
                 <div className="p-2 rounded bg-background/50">
-                  <p className="text-xs font-medium">✅ SSL Included</p>
-                  <p className="text-xs text-muted-foreground">Global wildcard SSL coverage</p>
+                  <p className="text-xs font-medium">✅ No Browser Warnings</p>
+                  <p className="text-xs text-muted-foreground">Fully trusted HTTPS</p>
                 </div>
               </div>
             </div>
@@ -386,7 +345,7 @@ export default function CustomDomain() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Your Domains</CardTitle>
-            <CardDescription>Manage custom domains for your ISP portal</CardDescription>
+            <CardDescription>Manage custom domains with automatic SSL</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={fetchDomains}>
@@ -408,7 +367,7 @@ export default function CustomDomain() {
               <Globe className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">No Custom Domains</h3>
               <p className="text-muted-foreground mb-4">
-                Add your first domain to use your own branding.
+                Add your first domain to use your own branding with HTTPS.
               </p>
               <Button onClick={() => setShowDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -418,224 +377,258 @@ export default function CustomDomain() {
           ) : (
             <div className="space-y-4">
               {domains.map((d) => {
-                // Helper: Extract A record name from domain
-                // e.g., "isp.example.com" → "isp", "example.com" → "@"
-                const domainParts = d.domain.split('.');
-                const isSubdomain = domainParts.length > 2;
-                const aRecordName = isSubdomain ? domainParts[0] : '@';
-                const rootDomain = isSubdomain ? domainParts.slice(1).join('.') : d.domain;
-                
+                const isProvisioning = provisioningSSL === d.id;
+                const isVerifying = verifying === d.id;
+                const canProvisionSSL = d.ssl_provisioning_status === 'dns_verified' || 
+                                        (d.ssl_provisioning_status === 'failed');
+                const needsDNS = d.ssl_provisioning_status === 'pending';
+                const isActive = d.ssl_status === 'active' && d.is_verified;
+
                 return (
-                <Card key={d.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        {getStatusIcon(d.is_verified, d.ssl_status)}
-                        <div>
-                          <p className="font-medium font-mono">{d.domain}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Added {new Date(d.created_at).toLocaleDateString()}
-                          </p>
+                  <Card key={d.id} className={isActive ? 'border-green-500/30' : ''}>
+                    <CardContent className="p-4">
+                      {/* Domain Header */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          {isActive ? (
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                          ) : d.ssl_provisioning_status === 'failed' ? (
+                            <XCircle className="h-5 w-5 text-red-500" />
+                          ) : (
+                            <Clock className="h-5 w-5 text-yellow-500" />
+                          )}
+                          <div>
+                            <p className="font-medium font-mono text-lg">{d.domain}</p>
+                            <p className="text-sm text-muted-foreground">
+                              Added {new Date(d.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={d.is_verified ? 'default' : 'secondary'}>
-                          {d.is_verified ? 'Verified' : 'Pending'}
-                        </Badge>
-                        <Badge variant={d.ssl_status === 'active' ? 'default' : 'outline'}>
-                          SSL: {d.ssl_status}
-                        </Badge>
-                        {!d.is_verified && (
+                        <div className="flex items-center gap-2">
+                          {getStatusBadge(d)}
                           <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleVerifyDomain(d)}
-                            disabled={verifying === d.id}
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeleteId(d.id)}
                           >
-                            {verifying === d.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-1" />
-                                Verify
-                              </>
-                            )}
+                            <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteId(d.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
+                        </div>
                       </div>
-                    </div>
 
-                    {d.is_verified && (
-                      <div className="mt-3 rounded-lg border border-green-500/20 bg-green-500/5 p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                          <p className="text-sm font-medium text-green-700 dark:text-green-400">✅ Domain Active!</p>
-                        </div>
-                        <p className="text-xs text-muted-foreground mb-3">
-                          Your domain <span className="font-mono text-primary">{d.domain}</span> is now 
-                          live. Visitors will see your branded landing page or login.
-                        </p>
-                        <a 
-                          href={`https://${d.domain}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          <Globe className="h-3 w-3" />
-                          Visit https://{d.domain}
-                        </a>
-                      </div>
-                    )}
-
-                    {!d.is_verified && (
-                      <div className="p-4 bg-muted rounded-lg space-y-4">
-                        <div>
-                          <p className="text-sm font-medium mb-1">⚙️ DNS Configuration Required</p>
-                          <p className="text-xs text-muted-foreground">
-                            Add these 2 DNS records at your domain registrar, wait 5-30 mins, then click <strong>Verify</strong>.
-                          </p>
-                        </div>
-
-                        {/* DNS Record 1: TXT */}
-                        <div className="p-3 bg-background rounded-lg border">
-                          <div className="flex items-center justify-between mb-2">
-                            <Badge variant="outline">Record 1: TXT</Badge>
-                            <Button variant="ghost" size="sm" onClick={() => copyToClipboard(d.dns_txt_record || '')}>
-                              <Copy className="h-3 w-3 mr-1" /> Copy Value
-                            </Button>
+                      {/* Active Domain - Success State */}
+                      {isActive && (
+                        <div className="p-4 rounded-lg border border-green-500/20 bg-green-500/5">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Lock className="h-4 w-4 text-green-500" />
+                            <p className="font-medium text-green-700 dark:text-green-400">
+                              ✅ Domain Active with SSL
+                            </p>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <p className="text-muted-foreground">Name:</p>
-                              <p className="font-mono font-medium">_isppoint</p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">Value:</p>
-                              <p className="font-mono font-medium break-all">{d.dns_txt_record}</p>
-                            </div>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-2">
-                            Some panels may require: <span className="font-mono">_isppoint.{rootDomain}</span>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Your domain is live with HTTPS. Visitors will see your branded portal.
                           </p>
-                        </div>
-
-                        {/* DNS Record 2: A */}
-                        <div className="p-3 bg-background rounded-lg border">
-                          <div className="flex items-center justify-between mb-2">
-                            <Badge variant="outline">Record 2: A</Badge>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => copyToClipboard(serverIP)}
-                              disabled={!serverIP}
+                          <div className="flex items-center gap-4">
+                            <a 
+                              href={`https://${d.domain}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
                             >
-                              <Copy className="h-3 w-3 mr-1" /> Copy IP
+                              <Globe className="h-4 w-4" />
+                              https://{d.domain}
+                            </a>
+                            {d.ssl_expires_at && (
+                              <span className="text-xs text-muted-foreground">
+                                SSL expires: {new Date(d.ssl_expires_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Failed State */}
+                      {d.ssl_provisioning_status === 'failed' && d.ssl_error && (
+                        <div className="p-4 rounded-lg border border-red-500/20 bg-red-500/5 mb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="h-4 w-4 text-red-500" />
+                            <p className="font-medium text-red-700 dark:text-red-400">
+                              SSL Provisioning Failed
+                            </p>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-2">{d.ssl_error}</p>
+                          <Button 
+                            size="sm" 
+                            onClick={() => handleProvisionSSL(d)}
+                            disabled={isProvisioning}
+                          >
+                            {isProvisioning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                            Retry SSL Provisioning
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* DNS Verified - Ready for SSL */}
+                      {canProvisionSSL && !isActive && (
+                        <div className="p-4 rounded-lg border border-blue-500/20 bg-blue-500/5 mb-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-blue-700 dark:text-blue-400 mb-1">
+                                ✓ DNS Verified - Ready for SSL
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                Click the button to issue SSL certificate (takes 1-2 minutes)
+                              </p>
+                            </div>
+                            <Button 
+                              onClick={() => handleProvisionSSL(d)}
+                              disabled={isProvisioning}
+                              className="bg-blue-600 hover:bg-blue-700"
+                            >
+                              {isProvisioning ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  Issuing SSL...
+                                </>
+                              ) : (
+                                <>
+                                  <Lock className="h-4 w-4 mr-2" />
+                                  Issue SSL Certificate
+                                </>
+                              )}
                             </Button>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <p className="text-muted-foreground">Name:</p>
-                              <p className="font-mono font-medium">{aRecordName}</p>
-                              {isSubdomain && (
-                                <p className="text-[10px] text-muted-foreground">(subdomain of {rootDomain})</p>
-                              )}
+                        </div>
+                      )}
+
+                      {/* Pending DNS Configuration */}
+                      {needsDNS && (
+                        <div className="p-4 bg-muted rounded-lg space-y-4">
+                          <div>
+                            <p className="text-sm font-medium mb-1">⚙️ Step 1: Configure DNS</p>
+                            <p className="text-xs text-muted-foreground">
+                              Add this A record at your domain registrar, then verify.
+                            </p>
+                          </div>
+
+                          <div className="p-3 bg-background rounded-lg border">
+                            <div className="flex items-center justify-between mb-2">
+                              <Badge variant="outline">A Record</Badge>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => copyToClipboard(serverIP)}
+                                disabled={!serverIP}
+                              >
+                                <Copy className="h-3 w-3 mr-1" /> Copy IP
+                              </Button>
                             </div>
-                            <div>
-                              <p className="text-muted-foreground">Points to:</p>
-                              <p className="font-mono font-medium">{displayIP}</p>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <p className="text-muted-foreground">Name:</p>
+                                <p className="font-mono font-medium">{d.domain}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Points to:</p>
+                                <p className="font-mono font-medium">{displayIP}</p>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Tips */}
-                        <div className="text-[11px] text-muted-foreground space-y-1">
-                          <p>💡 <strong>Cloudflare users:</strong> Set A record to "DNS only" (grey cloud), not "Proxied"</p>
-                        </div>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-muted-foreground">
+                              💡 DNS propagation takes 5-30 minutes
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleVerifyDNS(d)}
+                              disabled={isVerifying}
+                            >
+                              {isVerifying ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-1" />
+                                  Verify DNS
+                                </>
+                              )}
+                            </Button>
+                          </div>
 
-                        {!serverIP && (
-                          <p className="text-xs text-yellow-500 font-medium">
-                            ⚠️ Server IP not configured. Please contact administrator.
+                          {!serverIP && (
+                            <p className="text-xs text-yellow-500 font-medium">
+                              ⚠️ Server IP not configured. Please contact administrator.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Issuing State */}
+                      {d.ssl_provisioning_status === 'issuing' && (
+                        <div className="p-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
+                            <p className="font-medium text-yellow-700 dark:text-yellow-400">
+                              Issuing SSL Certificate...
+                            </p>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            This usually takes 1-2 minutes. Please wait.
                           </p>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )})}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* How It Works Guide */}
+      {/* How It Works */}
       <Card className="mt-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-blue-500" />
-            How It Works (For Administrators)
+            How It Works
           </CardTitle>
-          <CardDescription>
-            Enterprise SaaS custom domain architecture - no per-domain configuration needed
-          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="p-4 bg-muted rounded-lg space-y-4">
-            <div>
-              <h4 className="font-medium text-sm mb-2">Server Architecture (One-time Setup)</h4>
-              <p className="text-xs text-muted-foreground mb-3">
-                Our system uses a <strong>catch-all Nginx configuration</strong>. Once configured, all tenant domains work automatically:
-              </p>
-              <pre className="overflow-x-auto rounded-md bg-background p-3 text-[11px] leading-5 font-mono">
-{`server {
-    listen 443 ssl http2;
-    server_name _;  # Catch-all - handles ANY domain
-
-    # Wildcard/Global SSL Certificate
-    ssl_certificate /etc/letsencrypt/live/yourmain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/yourmain.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;  # Or serve static files
-        proxy_set_header Host $host;        # Pass original domain to backend
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}`}</pre>
-            </div>
-
-            <div>
-              <h4 className="font-medium text-sm mb-2">How Dynamic Resolution Works</h4>
-              <ol className="text-xs text-muted-foreground list-decimal pl-4 space-y-1">
-                <li>Tenant adds domain in this panel → Domain saved to database</li>
-                <li>Tenant configures DNS (A record → Server IP)</li>
-                <li>Verification confirms DNS is correct</li>
-                <li>Any request to that domain → Backend reads Host header → Finds tenant in DB → Serves their portal</li>
-              </ol>
-              <p className="text-xs text-muted-foreground mt-2">
-                <strong>Result:</strong> Unlimited tenants, unlimited domains per tenant, zero Nginx changes per domain!
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 bg-muted rounded-lg">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                <span className="text-sm font-bold text-primary">1</span>
+              </div>
+              <h4 className="font-medium mb-1">Add Domain</h4>
+              <p className="text-sm text-muted-foreground">
+                Enter your domain name (e.g., isp.example.com)
               </p>
             </div>
-
-            <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-              <h4 className="font-medium text-sm text-green-600 dark:text-green-400 mb-1">✅ Benefits of This Architecture</h4>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>• <strong>Scalable:</strong> Add 10,000+ tenant domains without touching server config</li>
-                <li>• <strong>Instant:</strong> Domains work immediately after DNS verification</li>
-                <li>• <strong>Secure:</strong> Global wildcard SSL covers all domains</li>
-                <li>• <strong>Industry Standard:</strong> Same pattern used by Shopify, Vercel, Netlify</li>
-              </ul>
+            <div className="p-4 bg-muted rounded-lg">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                <span className="text-sm font-bold text-primary">2</span>
+              </div>
+              <h4 className="font-medium mb-1">Configure DNS</h4>
+              <p className="text-sm text-muted-foreground">
+                Add A record pointing to our server IP at your registrar
+              </p>
+            </div>
+            <div className="p-4 bg-muted rounded-lg">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                <span className="text-sm font-bold text-primary">3</span>
+              </div>
+              <h4 className="font-medium mb-1">Issue SSL</h4>
+              <p className="text-sm text-muted-foreground">
+                Click button to automatically provision SSL certificate
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Tenant Portal URLs Info */}
+      {/* Portal URLs */}
       <Card className="mt-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -643,7 +636,7 @@ export default function CustomDomain() {
             Portal Login URLs
           </CardTitle>
           <CardDescription>
-            Share these login page URLs with your customers, resellers, and staff
+            Share these URLs with your customers, resellers, and staff
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -651,7 +644,7 @@ export default function CustomDomain() {
             {tenant?.subdomain && (
               <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                 <div>
-                  <p className="text-sm font-medium">Tenant Portal URL</p>
+                  <p className="text-sm font-medium">Default Portal</p>
                   <p className="text-xs text-muted-foreground font-mono">
                     {window.location.origin}/t/{tenant.subdomain}
                   </p>
@@ -666,10 +659,13 @@ export default function CustomDomain() {
               </div>
             )}
             
-            {domains.filter(d => d.is_verified).map((d) => (
+            {domains.filter(d => d.ssl_status === 'active').map((d) => (
               <div key={d.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                 <div>
-                  <p className="text-sm font-medium">Custom Domain Portal</p>
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    Custom Domain
+                    <Lock className="h-3 w-3 text-green-500" />
+                  </p>
                   <p className="text-xs text-muted-foreground font-mono">
                     https://{d.domain}
                   </p>
@@ -683,16 +679,11 @@ export default function CustomDomain() {
                 </Button>
               </div>
             ))}
-
-            <p className="text-xs text-muted-foreground">
-              These portal URLs allow customers, resellers, and staff to login with your custom branding.
-              Configure your branding in <strong>Settings → Branding</strong> to customize the login page appearance.
-            </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Add Domain Dialog - Simplified */}
+      {/* Add Domain Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -722,7 +713,8 @@ export default function CustomDomain() {
             
             <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
               <p className="text-xs text-muted-foreground">
-                <strong>After adding:</strong> You'll need to add DNS records at your domain registrar (Cloudflare, Namecheap, GoDaddy, etc.)
+                <strong>After adding:</strong> Configure DNS A record pointing to our server,
+                then click "Issue SSL" to get your free SSL certificate.
               </p>
             </div>
           </div>
@@ -742,7 +734,7 @@ export default function CustomDomain() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Domain?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. You will need to re-add and verify this domain.
+              This will remove the domain and its SSL certificate. You will need to re-add and re-verify if you want to use it again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
