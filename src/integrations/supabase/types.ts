@@ -7058,10 +7058,10 @@ export type Database = {
           created_at: string | null
           id: string
           is_active: boolean | null
-          popup_description: string | null
-          popup_title: string | null
-          require_name: boolean | null
-          require_phone: boolean | null
+          popup_description: string
+          popup_title: string
+          require_name: boolean
+          require_phone: boolean
           tenant_id: string
           unique_token: string
           updated_at: string | null
@@ -7070,10 +7070,10 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_active?: boolean | null
-          popup_description?: string | null
-          popup_title?: string | null
-          require_name?: boolean | null
-          require_phone?: boolean | null
+          popup_description?: string
+          popup_title?: string
+          require_name?: boolean
+          require_phone?: boolean
           tenant_id: string
           unique_token: string
           updated_at?: string | null
@@ -7082,10 +7082,10 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_active?: boolean | null
-          popup_description?: string | null
-          popup_title?: string | null
-          require_name?: boolean | null
-          require_phone?: boolean | null
+          popup_description?: string
+          popup_title?: string
+          require_name?: boolean
+          require_phone?: boolean
           tenant_id?: string
           unique_token?: string
           updated_at?: string | null
