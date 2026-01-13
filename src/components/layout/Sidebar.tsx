@@ -112,6 +112,7 @@ const websiteItems: NavItem[] = [
   { title: 'landing_page', href: '/isp/landing-page', icon: Globe, requiredModule: 'landing_page' },
   { title: 'custom_domain', href: '/isp/domain', icon: Network, requiredModule: 'custom_domain' },
   { title: 'connection_requests', href: '/isp/connection-requests', icon: ClipboardList },
+  { title: 'customer_location', href: '/isp/customer-location', icon: MapPin },
 ];
 
 // System Settings - Admin controls
