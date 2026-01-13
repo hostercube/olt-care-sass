@@ -7087,6 +7087,18 @@ export type Database = {
           invoice_header: string | null
           invoice_prefix: string | null
           invoice_terms: string | null
+          landing_page_about_text: string | null
+          landing_page_contact_address: string | null
+          landing_page_contact_email: string | null
+          landing_page_contact_phone: string | null
+          landing_page_enabled: boolean | null
+          landing_page_hero_subtitle: string | null
+          landing_page_hero_title: string | null
+          landing_page_show_contact: boolean | null
+          landing_page_show_packages: boolean | null
+          landing_page_social_facebook: string | null
+          landing_page_social_youtube: string | null
+          landing_page_template: string | null
           language: string | null
           logo_url: string | null
           manual_features: Json | null
@@ -7104,6 +7116,7 @@ export type Database = {
           owner_name: string | null
           owner_user_id: string | null
           phone: string | null
+          slug: string | null
           status: Database["public"]["Enums"]["tenant_status"]
           subdomain: string | null
           subtitle: string | null
@@ -7138,6 +7151,18 @@ export type Database = {
           invoice_header?: string | null
           invoice_prefix?: string | null
           invoice_terms?: string | null
+          landing_page_about_text?: string | null
+          landing_page_contact_address?: string | null
+          landing_page_contact_email?: string | null
+          landing_page_contact_phone?: string | null
+          landing_page_enabled?: boolean | null
+          landing_page_hero_subtitle?: string | null
+          landing_page_hero_title?: string | null
+          landing_page_show_contact?: boolean | null
+          landing_page_show_packages?: boolean | null
+          landing_page_social_facebook?: string | null
+          landing_page_social_youtube?: string | null
+          landing_page_template?: string | null
           language?: string | null
           logo_url?: string | null
           manual_features?: Json | null
@@ -7155,6 +7180,7 @@ export type Database = {
           owner_name?: string | null
           owner_user_id?: string | null
           phone?: string | null
+          slug?: string | null
           status?: Database["public"]["Enums"]["tenant_status"]
           subdomain?: string | null
           subtitle?: string | null
@@ -7189,6 +7215,18 @@ export type Database = {
           invoice_header?: string | null
           invoice_prefix?: string | null
           invoice_terms?: string | null
+          landing_page_about_text?: string | null
+          landing_page_contact_address?: string | null
+          landing_page_contact_email?: string | null
+          landing_page_contact_phone?: string | null
+          landing_page_enabled?: boolean | null
+          landing_page_hero_subtitle?: string | null
+          landing_page_hero_title?: string | null
+          landing_page_show_contact?: boolean | null
+          landing_page_show_packages?: boolean | null
+          landing_page_social_facebook?: string | null
+          landing_page_social_youtube?: string | null
+          landing_page_template?: string | null
           language?: string | null
           logo_url?: string | null
           manual_features?: Json | null
@@ -7206,6 +7244,7 @@ export type Database = {
           owner_name?: string | null
           owner_user_id?: string | null
           phone?: string | null
+          slug?: string | null
           status?: Database["public"]["Enums"]["tenant_status"]
           subdomain?: string | null
           subtitle?: string | null

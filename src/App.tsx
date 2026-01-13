@@ -110,6 +110,7 @@ import ActivityLogs from "./pages/ActivityLogs";
 import Invoices from "./pages/Invoices";
 import NotificationHistory from "./pages/NotificationHistory";
 import TenantLogin from "./pages/TenantLogin";
+import TenantLanding from "./pages/TenantLanding";
 
 const queryClient = new QueryClient();
 
@@ -127,8 +128,9 @@ const App = () => (
               <Route path="/" element={<Landing />} />
               <Route path="/auth" element={<Auth />} />
               
-              {/* Tenant-specific login pages */}
+              {/* Tenant-specific pages */}
               <Route path="/t/:tenantSlug" element={<TenantLogin />} />
+              <Route path="/p/:tenantSlug" element={<TenantLanding />} />
               
               {/* Redirect /dashboard to /isp (ISP Dashboard is the main tenant dashboard) */}
               <Route path="/dashboard" element={
