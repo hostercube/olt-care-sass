@@ -35,6 +35,7 @@ interface SettingsData {
   is_active: boolean;
   popup_title: string;
   popup_description: string;
+  popup_enabled?: boolean;
   require_name: boolean;
   require_phone: boolean;
 }
@@ -169,35 +170,45 @@ export default function LocationCapture() {
     }
   }, [token]);
 
-  // Get IP info - optimized with faster timeout and parallel fetching
+  // Get IP info - optimized (HTTPS-only fallbacks to avoid mixed-content blocking)
   const fetchIpInfo = useCallback(async (): Promise<IpData> => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
+    const timeout = setTimeout(() => controller.abort(), 2500); // 2.5s timeout
 
-    // Try ipapi.co first (most reliable)
+    // 1) ipapi.co (good signal, https)
     try {
       const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
       if (res.ok) {
         const d = await res.json();
-        if (d.ip) {
+        if (d?.ip) {
           clearTimeout(timeout);
-          return { ip_address: d.ip, isp_name: d.org || null, asn: d.asn || null };
+          return {
+            ip_address: d.ip,
+            isp_name: d.org || null,
+            asn: d.asn || null,
+          };
         }
       }
     } catch {
-      // Try fallback
+      // fall through
     }
 
-    // Fallback to ip-api.com
+    // 2) ipwho.is (https + provides ISP/ASN in many cases)
     try {
-      const res = await fetch('http://ip-api.com/json/?fields=query,isp,as', { signal: controller.signal });
+      const res = await fetch('https://ipwho.is/', { signal: controller.signal });
       if (res.ok) {
         const d = await res.json();
-        clearTimeout(timeout);
-        return { ip_address: d.query || null, isp_name: d.isp || null, asn: d.as?.split(' ')[0] || null };
+        if (d?.ip) {
+          clearTimeout(timeout);
+          return {
+            ip_address: d.ip || null,
+            isp_name: d.connection?.isp || d.connection?.org || null,
+            asn: d.connection?.asn ? `AS${d.connection.asn}` : null,
+          };
+        }
       }
     } catch {
-      // Ignore
+      // ignore
     }
 
     clearTimeout(timeout);
@@ -229,8 +240,22 @@ export default function LocationCapture() {
     }
   }, []);
 
-  // Get GPS location
-  const getLocation = useCallback((): Promise<GeolocationPosition> => {
+  // Get GPS location (fast first, then high-accuracy fallback)
+  const getLocationFast = useCallback((): Promise<GeolocationPosition> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by your browser'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 7000,
+        maximumAge: 5 * 60 * 1000, // allow cached fix for speed
+      });
+    });
+  }, []);
+
+  const getLocationHighAccuracy = useCallback((): Promise<GeolocationPosition> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error('Geolocation is not supported by your browser'));
@@ -238,7 +263,7 @@ export default function LocationCapture() {
       }
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         enableHighAccuracy: true,
-        timeout: 30000,
+        timeout: 20000,
         maximumAge: 0,
       });
     });
@@ -371,58 +396,63 @@ export default function LocationCapture() {
 
       setCaptureProgress('Getting your location...');
 
-      try {
-        // Start GPS immediately - this is the slow part
-        const gpsPromise = getLocation().catch(err => {
-          console.warn('GPS failed:', err);
-          return null;
-        });
+       try {
+         // Start GPS immediately (fast attempt first)
+         const gpsPromise = (async () => {
+           try {
+             return await getLocationFast();
+           } catch {
+             setCaptureProgress('Trying high accuracy...');
+             return await getLocationHighAccuracy();
+           }
+         })().catch(err => {
+           console.warn('GPS failed:', err);
+           return null;
+         });
 
-        // Fetch IP in parallel (non-blocking)
-        const ipPromise = fetchIpInfo();
+         // Fetch IP in parallel (non-blocking)
+         const ipPromise = fetchIpInfo();
 
-        // Wait for GPS first (critical)
-        const position = await gpsPromise;
+         // Wait for GPS first (critical)
+         const position = await gpsPromise;
 
-        if (position) {
-          const { latitude, longitude } = position.coords;
-          capturedLocation = { ...capturedLocation, latitude, longitude };
-          setLocationData(capturedLocation);
-          setCaptureProgress('Getting address...');
+         if (position) {
+           const { latitude, longitude } = position.coords;
+           capturedLocation = { ...capturedLocation, latitude, longitude };
+           setLocationData(capturedLocation);
+           setCaptureProgress('Getting address...');
 
-          // Reverse geocode in background
-          reverseGeocode(latitude, longitude).then(addressData => {
-            if (addressData) {
-              setLocationData(prev => ({
-                ...prev,
-                full_address: addressData.full_address,
-                area: addressData.area,
-                district: addressData.district,
-                thana: addressData.thana,
-              }));
-              capturedLocation = { ...capturedLocation, ...addressData };
-            }
-          });
-        }
+           // Reverse geocode in background
+           reverseGeocode(latitude, longitude).then(addressData => {
+             if (addressData) {
+               setLocationData(prev => ({
+                 ...prev,
+                 full_address: addressData.full_address,
+                 area: addressData.area,
+                 district: addressData.district,
+                 thana: addressData.thana,
+               }));
+               capturedLocation = { ...capturedLocation, ...addressData };
+             }
+           });
+         }
 
-        // Get IP result
-        capturedIp = await ipPromise;
-        setIpData(capturedIp);
+         // Get IP result
+         capturedIp = await ipPromise;
+         setIpData(capturedIp);
 
-      } catch (err) {
-        console.error('Location capture error:', err);
-      }
+       } catch (err) {
+         console.error('Location capture error:', err);
+       }
 
-      // Check if form is required
-      const needsForm = settings.require_name || settings.require_phone;
+       // Show popup if enabled OR any field is required
+       const showPopup = !!settings.popup_enabled || settings.require_name || settings.require_phone;
 
-      if (needsForm) {
-        // Show form for user to fill
-        setStep('form');
-      } else {
-        // Auto-submit immediately
-        await submitLocationData(settings, capturedLocation, capturedIp, capturedDevice);
-      }
+       if (showPopup) {
+         setStep('form');
+       } else {
+         await submitLocationData(settings, capturedLocation, capturedIp, capturedDevice);
+       }
     };
 
     captureAndProcess();

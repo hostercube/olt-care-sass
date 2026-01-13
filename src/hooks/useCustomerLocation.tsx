@@ -34,6 +34,7 @@ export interface LocationSettings {
   is_active: boolean;
   popup_title: string;
   popup_description: string;
+  popup_enabled: boolean;
   require_name: boolean;
   require_phone: boolean;
   created_at: string;
