@@ -69,6 +69,7 @@ export function useCustomerLocation(tenantId: string | null) {
       return data as LocationVisit[];
     },
     enabled: !!tenantId,
+    refetchInterval: 10000, // Refetch every 10 seconds for live updates
   });
 
   // Fetch location settings
@@ -131,6 +132,11 @@ export function useCustomerLocation(tenantId: string | null) {
           .insert({
             tenant_id: tenantId,
             unique_token: token,
+            is_active: true,
+            popup_title: 'Please provide your details',
+            popup_description: 'Enter your name and phone number for verification',
+            require_name: false,
+            require_phone: false,
             ...settingsData,
           })
           .select()
@@ -255,6 +261,12 @@ export function useCustomerLocation(tenantId: string | null) {
   const uniqueAreas = [...new Set(visits?.map(v => v.area).filter(Boolean) || [])];
   const uniqueDistricts = [...new Set(visits?.map(v => v.district).filter(Boolean) || [])];
 
+  // Calculate live visitor count (visits in last 5 minutes)
+  const liveVisitorCount = visits?.filter(v => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    return new Date(v.visited_at) > fiveMinutesAgo;
+  }).length || 0;
+
   return {
     visits,
     settings,
@@ -268,69 +280,9 @@ export function useCustomerLocation(tenantId: string | null) {
     filterVisits,
     uniqueAreas,
     uniqueDistricts,
+    liveVisitorCount,
     isSaving: saveSettingsMutation.isPending,
     isRegenerating: regenerateTokenMutation.isPending,
     isVerifying: verifyVisitMutation.isPending,
-  };
-}
-
-// Hook for public location capture page
-export function usePublicLocationCapture() {
-  const { toast } = useToast();
-
-  // Fetch settings by token
-  const fetchSettingsByToken = async (token: string) => {
-    const { data, error } = await supabase
-      .from('tenant_location_settings')
-      .select('*, tenants!inner(id, name, logo_url, custom_domain)')
-      .eq('unique_token', token)
-      .eq('is_active', true)
-      .maybeSingle();
-    
-    if (error) throw error;
-    return data;
-  };
-
-  // Submit location visit
-  const submitLocationMutation = useMutation({
-    mutationFn: async (visitData: {
-      token: string;
-      tenant_id: string;
-      latitude: number | null;
-      longitude: number | null;
-      full_address: string | null;
-      area: string | null;
-      district: string | null;
-      thana: string | null;
-      ip_address: string | null;
-      isp_name: string | null;
-      asn: string | null;
-      device_type: string;
-      name?: string;
-      phone?: string;
-    }) => {
-      const { data, error } = await supabase
-        .from('location_visits')
-        .insert(visitData)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: 'Failed to submit location. Please try again.',
-        variant: 'destructive',
-      });
-      console.error('Location submit error:', error);
-    },
-  });
-
-  return {
-    fetchSettingsByToken,
-    submitLocation: submitLocationMutation.mutateAsync,
-    isSubmitting: submitLocationMutation.isPending,
   };
 }
