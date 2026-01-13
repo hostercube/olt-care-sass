@@ -7182,6 +7182,13 @@ export type Database = {
           landing_page_ftp_enabled: boolean | null
           landing_page_ftp_servers: Json | null
           landing_page_ftp_url: string | null
+          landing_page_hero_background_url: string | null
+          landing_page_hero_badge_text: string | null
+          landing_page_hero_primary_button_text: string | null
+          landing_page_hero_primary_button_url: string | null
+          landing_page_hero_secondary_button_text: string | null
+          landing_page_hero_secondary_button_url: string | null
+          landing_page_hero_slides: Json
           landing_page_hero_subtitle: string | null
           landing_page_hero_title: string | null
           landing_page_livetv_channels: Json | null
@@ -7265,6 +7272,13 @@ export type Database = {
           landing_page_ftp_enabled?: boolean | null
           landing_page_ftp_servers?: Json | null
           landing_page_ftp_url?: string | null
+          landing_page_hero_background_url?: string | null
+          landing_page_hero_badge_text?: string | null
+          landing_page_hero_primary_button_text?: string | null
+          landing_page_hero_primary_button_url?: string | null
+          landing_page_hero_secondary_button_text?: string | null
+          landing_page_hero_secondary_button_url?: string | null
+          landing_page_hero_slides?: Json
           landing_page_hero_subtitle?: string | null
           landing_page_hero_title?: string | null
           landing_page_livetv_channels?: Json | null
@@ -7348,6 +7362,13 @@ export type Database = {
           landing_page_ftp_enabled?: boolean | null
           landing_page_ftp_servers?: Json | null
           landing_page_ftp_url?: string | null
+          landing_page_hero_background_url?: string | null
+          landing_page_hero_badge_text?: string | null
+          landing_page_hero_primary_button_text?: string | null
+          landing_page_hero_primary_button_url?: string | null
+          landing_page_hero_secondary_button_text?: string | null
+          landing_page_hero_secondary_button_url?: string | null
+          landing_page_hero_slides?: Json
           landing_page_hero_subtitle?: string | null
           landing_page_hero_title?: string | null
           landing_page_livetv_channels?: Json | null
@@ -7812,6 +7833,10 @@ export type Database = {
       is_authenticated: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       is_tenant_active: { Args: { _tenant_id: string }; Returns: boolean }
+      is_tenant_landing_slug_available: {
+        Args: { p_current_tenant_id: string; p_slug: string }
+        Returns: boolean
+      }
       match_bkash_payment: {
         Args: {
           _amount: number
