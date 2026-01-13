@@ -111,6 +111,7 @@ const operationsHRItems: NavItem[] = [
 // Website & Landing Page - Separate section
 const websiteItems: NavItem[] = [
   { title: 'landing_page', href: '/isp/landing-page', icon: Globe, requiredModule: 'landing_page' },
+  { title: 'connection_requests', href: '/isp/connection-requests', icon: ClipboardList },
 ];
 
 // System Settings - Admin controls

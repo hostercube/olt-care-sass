@@ -80,6 +80,7 @@ import RechargeHistory from "./pages/ISP/RechargeHistory";
 import BandwidthManagement from "./pages/ISP/BandwidthManagement";
 import SupportTickets from "./pages/ISP/SupportTickets";
 import LandingPageDashboard from "./pages/ISP/LandingPageDashboard";
+import ConnectionRequests from "./pages/ISP/ConnectionRequests";
 import ISPSMSTemplates from "./pages/ISP/SMSTemplates";
 import ISPEmailTemplates from "./pages/ISP/EmailTemplates";
 
@@ -511,6 +512,13 @@ const App = () => (
                     <ModuleAccessGuard module="landing_page" moduleName="Landing Page">
                       <LandingPageDashboard />
                     </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/connection-requests" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ConnectionRequests />
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
