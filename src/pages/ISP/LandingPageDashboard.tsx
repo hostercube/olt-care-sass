@@ -430,62 +430,65 @@ export default function LandingPageDashboard() {
       if (error) throw error;
 
       if (data) {
+        // Cast to any to access new columns not yet in generated types
+        const tenantData = data as any;
+        
         // Parse JSON fields
-        const ftpServers = data.landing_page_ftp_servers 
-          ? (typeof data.landing_page_ftp_servers === 'string' 
-              ? JSON.parse(data.landing_page_ftp_servers) 
-              : data.landing_page_ftp_servers)
+        const ftpServers = tenantData.landing_page_ftp_servers 
+          ? (typeof tenantData.landing_page_ftp_servers === 'string' 
+              ? JSON.parse(tenantData.landing_page_ftp_servers) 
+              : tenantData.landing_page_ftp_servers)
           : [];
         
-        const liveTvChannels = data.landing_page_livetv_channels 
-          ? (typeof data.landing_page_livetv_channels === 'string' 
-              ? JSON.parse(data.landing_page_livetv_channels) 
-              : data.landing_page_livetv_channels)
+        const liveTvChannels = tenantData.landing_page_livetv_channels 
+          ? (typeof tenantData.landing_page_livetv_channels === 'string' 
+              ? JSON.parse(tenantData.landing_page_livetv_channels) 
+              : tenantData.landing_page_livetv_channels)
           : [];
         
-        const customMenus = data.landing_page_custom_menus 
-          ? (typeof data.landing_page_custom_menus === 'string' 
-              ? JSON.parse(data.landing_page_custom_menus) 
-              : data.landing_page_custom_menus)
+        const customMenus = tenantData.landing_page_custom_menus 
+          ? (typeof tenantData.landing_page_custom_menus === 'string' 
+              ? JSON.parse(tenantData.landing_page_custom_menus) 
+              : tenantData.landing_page_custom_menus)
           : [];
         
-        const customSections = data.landing_page_custom_sections 
-          ? (typeof data.landing_page_custom_sections === 'string' 
-              ? JSON.parse(data.landing_page_custom_sections) 
-              : data.landing_page_custom_sections)
+        const customSections = tenantData.landing_page_custom_sections 
+          ? (typeof tenantData.landing_page_custom_sections === 'string' 
+              ? JSON.parse(tenantData.landing_page_custom_sections) 
+              : tenantData.landing_page_custom_sections)
           : [];
 
         setSettings({
-          landing_page_enabled: data.landing_page_enabled || false,
-          landing_page_template: data.landing_page_template || 'isp-pro-1',
-          landing_page_show_packages: data.landing_page_show_packages ?? true,
-          landing_page_show_contact: data.landing_page_show_contact ?? true,
-          landing_page_contact_phone: data.landing_page_contact_phone || '',
-          landing_page_contact_email: data.landing_page_contact_email || '',
-          landing_page_contact_address: data.landing_page_contact_address || '',
-          landing_page_social_facebook: data.landing_page_social_facebook || '',
-          landing_page_social_youtube: data.landing_page_social_youtube || '',
-          landing_page_hero_title: data.landing_page_hero_title || '',
-          landing_page_hero_subtitle: data.landing_page_hero_subtitle || '',
-          landing_page_about_text: data.landing_page_about_text || '',
-          slug: data.slug || '',
-          subdomain: data.subdomain || '',
-          company_name: data.company_name || '',
-          logo_url: data.logo_url || '',
-          theme_color: data.theme_color || 'cyan',
-          landing_page_ftp_enabled: data.landing_page_ftp_enabled || false,
+          landing_page_enabled: tenantData.landing_page_enabled || false,
+          landing_page_template: tenantData.landing_page_template || 'isp-pro-1',
+          landing_page_show_packages: tenantData.landing_page_show_packages ?? true,
+          landing_page_show_contact: tenantData.landing_page_show_contact ?? true,
+          landing_page_contact_phone: tenantData.landing_page_contact_phone || '',
+          landing_page_contact_email: tenantData.landing_page_contact_email || '',
+          landing_page_contact_address: tenantData.landing_page_contact_address || '',
+          landing_page_social_facebook: tenantData.landing_page_social_facebook || '',
+          landing_page_social_youtube: tenantData.landing_page_social_youtube || '',
+          landing_page_hero_title: tenantData.landing_page_hero_title || '',
+          landing_page_hero_subtitle: tenantData.landing_page_hero_subtitle || '',
+          landing_page_about_text: tenantData.landing_page_about_text || '',
+          slug: tenantData.slug || '',
+          subdomain: tenantData.subdomain || '',
+          company_name: tenantData.company_name || '',
+          logo_url: tenantData.logo_url || '',
+          theme_color: tenantData.theme_color || 'cyan',
+          landing_page_ftp_enabled: tenantData.landing_page_ftp_enabled || false,
           landing_page_ftp_servers: ftpServers,
-          landing_page_livetv_enabled: data.landing_page_livetv_enabled || false,
+          landing_page_livetv_enabled: tenantData.landing_page_livetv_enabled || false,
           landing_page_livetv_channels: liveTvChannels,
           landing_page_custom_menus: customMenus,
-          landing_page_social_instagram: data.landing_page_social_instagram || '',
-          landing_page_social_twitter: data.landing_page_social_twitter || '',
-          landing_page_social_linkedin: data.landing_page_social_linkedin || '',
-          landing_page_social_tiktok: data.landing_page_social_tiktok || '',
-          landing_page_whatsapp: data.landing_page_whatsapp || '',
-          landing_page_telegram: data.landing_page_telegram || '',
+          landing_page_social_instagram: tenantData.landing_page_social_instagram || '',
+          landing_page_social_twitter: tenantData.landing_page_social_twitter || '',
+          landing_page_social_linkedin: tenantData.landing_page_social_linkedin || '',
+          landing_page_social_tiktok: tenantData.landing_page_social_tiktok || '',
+          landing_page_whatsapp: tenantData.landing_page_whatsapp || '',
+          landing_page_telegram: tenantData.landing_page_telegram || '',
           landing_page_custom_sections: customSections,
-          customer_registration_enabled: data.customer_registration_enabled ?? true,
+          customer_registration_enabled: tenantData.customer_registration_enabled ?? true,
         });
       }
     } catch (err) {

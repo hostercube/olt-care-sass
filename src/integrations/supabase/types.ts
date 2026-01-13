@@ -7176,11 +7176,14 @@ export type Database = {
           landing_page_contact_email: string | null
           landing_page_contact_phone: string | null
           landing_page_custom_menus: Json | null
+          landing_page_custom_sections: Json | null
           landing_page_enabled: boolean | null
           landing_page_ftp_enabled: boolean | null
+          landing_page_ftp_servers: Json | null
           landing_page_ftp_url: string | null
           landing_page_hero_subtitle: string | null
           landing_page_hero_title: string | null
+          landing_page_livetv_channels: Json | null
           landing_page_livetv_enabled: boolean | null
           landing_page_livetv_url: string | null
           landing_page_section_order: Json | null
@@ -7188,8 +7191,11 @@ export type Database = {
           landing_page_show_packages: boolean | null
           landing_page_social_facebook: string | null
           landing_page_social_instagram: string | null
+          landing_page_social_linkedin: string | null
+          landing_page_social_tiktok: string | null
           landing_page_social_twitter: string | null
           landing_page_social_youtube: string | null
+          landing_page_telegram: string | null
           landing_page_template: string | null
           landing_page_whatsapp: string | null
           language: string | null
@@ -7249,11 +7255,14 @@ export type Database = {
           landing_page_contact_email?: string | null
           landing_page_contact_phone?: string | null
           landing_page_custom_menus?: Json | null
+          landing_page_custom_sections?: Json | null
           landing_page_enabled?: boolean | null
           landing_page_ftp_enabled?: boolean | null
+          landing_page_ftp_servers?: Json | null
           landing_page_ftp_url?: string | null
           landing_page_hero_subtitle?: string | null
           landing_page_hero_title?: string | null
+          landing_page_livetv_channels?: Json | null
           landing_page_livetv_enabled?: boolean | null
           landing_page_livetv_url?: string | null
           landing_page_section_order?: Json | null
@@ -7261,8 +7270,11 @@ export type Database = {
           landing_page_show_packages?: boolean | null
           landing_page_social_facebook?: string | null
           landing_page_social_instagram?: string | null
+          landing_page_social_linkedin?: string | null
+          landing_page_social_tiktok?: string | null
           landing_page_social_twitter?: string | null
           landing_page_social_youtube?: string | null
+          landing_page_telegram?: string | null
           landing_page_template?: string | null
           landing_page_whatsapp?: string | null
           language?: string | null
@@ -7322,11 +7334,14 @@ export type Database = {
           landing_page_contact_email?: string | null
           landing_page_contact_phone?: string | null
           landing_page_custom_menus?: Json | null
+          landing_page_custom_sections?: Json | null
           landing_page_enabled?: boolean | null
           landing_page_ftp_enabled?: boolean | null
+          landing_page_ftp_servers?: Json | null
           landing_page_ftp_url?: string | null
           landing_page_hero_subtitle?: string | null
           landing_page_hero_title?: string | null
+          landing_page_livetv_channels?: Json | null
           landing_page_livetv_enabled?: boolean | null
           landing_page_livetv_url?: string | null
           landing_page_section_order?: Json | null
@@ -7334,8 +7349,11 @@ export type Database = {
           landing_page_show_packages?: boolean | null
           landing_page_social_facebook?: string | null
           landing_page_social_instagram?: string | null
+          landing_page_social_linkedin?: string | null
+          landing_page_social_tiktok?: string | null
           landing_page_social_twitter?: string | null
           landing_page_social_youtube?: string | null
+          landing_page_telegram?: string | null
           landing_page_template?: string | null
           landing_page_whatsapp?: string | null
           language?: string | null
