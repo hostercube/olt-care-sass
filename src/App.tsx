@@ -86,6 +86,8 @@ import LandingPageDashboard from "./pages/ISP/LandingPageDashboard";
 import ConnectionRequests from "./pages/ISP/ConnectionRequests";
 import ISPSMSTemplates from "./pages/ISP/SMSTemplates";
 import ISPEmailTemplates from "./pages/ISP/EmailTemplates";
+import CustomerLocation from "./pages/ISP/CustomerLocation";
+import LocationCapture from "./pages/LocationCapture";
 
 // Customer Portal Pages
 import CustomerLogin from "./pages/CustomerPortal/CustomerLogin";
@@ -527,6 +529,15 @@ const App = () => (
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
+              <Route path="/isp/customer-location" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <CustomerLocation />
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              {/* Public location capture page - no auth required */}
+              <Route path="/l/:token" element={<LocationCapture />} />
               <Route path="/isp/pos" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>

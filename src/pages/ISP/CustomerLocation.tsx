@@ -90,11 +90,11 @@ export default function CustomerLocation() {
   // Generate full location link
   const locationLink = useMemo(() => {
     if (!settings?.unique_token) return '';
-    const baseUrl = currentTenant?.custom_domain 
-      ? `https://${currentTenant.custom_domain}`
+    const baseUrl = tenant?.custom_domain 
+      ? `https://${tenant.custom_domain}`
       : window.location.origin;
     return `${baseUrl}/l/${settings.unique_token}`;
-  }, [settings?.unique_token, currentTenant?.custom_domain]);
+  }, [settings?.unique_token, tenant?.custom_domain]);
 
   const copyLink = () => {
     navigator.clipboard.writeText(locationLink);
