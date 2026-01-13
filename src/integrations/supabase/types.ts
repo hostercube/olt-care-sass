@@ -6856,6 +6856,11 @@ export type Database = {
           domain: string
           id: string
           is_verified: boolean | null
+          nginx_config_path: string | null
+          ssl_error: string | null
+          ssl_expires_at: string | null
+          ssl_issued_at: string | null
+          ssl_provisioning_status: string | null
           ssl_status: string | null
           subdomain: string | null
           tenant_id: string
@@ -6868,6 +6873,11 @@ export type Database = {
           domain: string
           id?: string
           is_verified?: boolean | null
+          nginx_config_path?: string | null
+          ssl_error?: string | null
+          ssl_expires_at?: string | null
+          ssl_issued_at?: string | null
+          ssl_provisioning_status?: string | null
           ssl_status?: string | null
           subdomain?: string | null
           tenant_id: string
@@ -6880,6 +6890,11 @@ export type Database = {
           domain?: string
           id?: string
           is_verified?: boolean | null
+          nginx_config_path?: string | null
+          ssl_error?: string | null
+          ssl_expires_at?: string | null
+          ssl_issued_at?: string | null
+          ssl_provisioning_status?: string | null
           ssl_status?: string | null
           subdomain?: string | null
           tenant_id?: string

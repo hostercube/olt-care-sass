@@ -36,6 +36,7 @@ import { processPendingSMS, getSMSGatewaySettings, sendSMS } from './notificatio
 import { processPendingEmails, getEmailGatewaySettings } from './notifications/email-sender.js';
 import { setupResellerRoutes } from './reseller/reseller-api.js';
 import { initiatePayment, handlePaymentCallback } from './payments/payment-handler.js';
+import { setupDomainRoutes } from './ssl/domain-api.js';
 
 const app = express();
 app.use(cors());
@@ -3286,6 +3287,9 @@ app.post('/payments/bkash/checkout-redirect', (req, res) => {
 
 // Setup Reseller Portal API routes
 setupResellerRoutes(app, supabase);
+
+// Setup Custom Domain & SSL API routes
+setupDomainRoutes(app, supabase);
 
 // ============= VPS FILE STORAGE ENDPOINTS =============
 // Configure multer for file uploads
