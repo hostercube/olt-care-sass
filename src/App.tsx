@@ -13,6 +13,8 @@ import { ModuleAccessGuard } from "@/components/layout/ModuleAccessGuard";
 import { StaffAuthProvider } from "@/hooks/useStaffPermissions";
 import { StaffProtectedRoute } from "@/components/layout/StaffProtectedRoute";
 import CustomDomainRouter from "./components/routing/CustomDomainRouter";
+import CustomDomainLandingWrapper from "./components/routing/CustomDomainLandingWrapper";
+import CustomDomainLoginWrapper from "./components/routing/CustomDomainLoginWrapper";
 
 // Staff Portal Pages
 import StaffLogin from "./pages/StaffPortal/StaffLogin";
@@ -129,9 +131,10 @@ const App = () => (
             <AuthProvider>
               <LanguageCurrencyProvider>
               <Routes>
-                {/* Public Routes */}
-                <Route path="/" element={<Landing />} />
-              <Route path="/auth" element={<Auth />} />
+                {/* Public Routes - Custom domain aware */}
+                <Route path="/" element={<CustomDomainLandingWrapper />} />
+                <Route path="/auth" element={<CustomDomainLoginWrapper />} />
+                <Route path="/login" element={<CustomDomainLoginWrapper />} />
               
               {/* Tenant-specific pages */}
               <Route path="/t/:tenantSlug" element={<TenantLogin />} />

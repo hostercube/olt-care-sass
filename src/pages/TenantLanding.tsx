@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
+import { useCustomDomainContext } from '@/components/routing/CustomDomainRouter';
 import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
 import { CustomSectionRenderer } from '@/components/landing/CustomSectionRenderer';
 import { LandingHeader } from '@/components/landing/LandingHeader';
@@ -253,9 +254,19 @@ const SLIDER_IMAGES = [
   { url: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=1920&h=800&fit=crop', title: '২৪/৭ সাপোর্ট', subtitle: 'সার্বক্ষণিক সহায়তা' },
 ];
 
-export default function TenantLanding() {
+// Props interface for direct slug passing
+interface TenantLandingProps {
+  slugOverride?: string;
+}
+
+export default function TenantLanding({ slugOverride }: TenantLandingProps = {}) {
   const navigate = useNavigate();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const { tenantSlug: urlSlug } = useParams<{ tenantSlug: string }>();
+  const { effectiveSlug: contextSlug } = useCustomDomainContext();
+  
+  // Priority: prop > URL param > context
+  const tenantSlug = slugOverride || urlSlug || contextSlug;
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tenant, setTenant] = useState<TenantData | null>(null);

@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Wifi, User, Lock, Loader2, Eye, EyeOff, Shield, Zap, Clock, Users, Store, UserCheck, ArrowLeft, Home } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCustomDomainContext } from '@/components/routing/CustomDomainRouter';
 
 interface TenantBranding {
   company_name: string;
@@ -32,7 +33,12 @@ const THEME_COLOR_MAP: Record<string, string> = {
 
 export default function TenantLogin() {
   const navigate = useNavigate();
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const { tenantSlug: urlSlug } = useParams<{ tenantSlug: string }>();
+  const { effectiveSlug: contextSlug } = useCustomDomainContext();
+  
+  // Priority: URL param > context (from custom domain)
+  const tenantSlug = urlSlug || contextSlug;
+  
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [tenantId, setTenantId] = useState<string | null>(null);
