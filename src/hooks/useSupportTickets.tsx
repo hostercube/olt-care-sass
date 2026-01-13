@@ -64,6 +64,8 @@ export interface CreateTicketData {
   description?: string;
   priority?: TicketPriority;
   category?: string;
+  assigned_to?: string;
+  assigned_name?: string;
 }
 
 export function useSupportTickets() {
@@ -158,6 +160,8 @@ export function useSupportTickets() {
           priority: ticketData.priority || 'medium',
           category: ticketData.category || null,
           status: 'open',
+          assigned_to: ticketData.assigned_to || null,
+          assigned_name: ticketData.assigned_name || null,
         })
         .select()
         .single();

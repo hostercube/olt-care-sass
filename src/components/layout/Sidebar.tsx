@@ -186,6 +186,7 @@ export function Sidebar() {
   const [communicationExpanded, setCommunicationExpanded] = useState(false);
   const [operationsExpanded, setOperationsExpanded] = useState(false);
   const [resellerExpanded, setResellerExpanded] = useState(false);
+  const [websiteExpanded, setWebsiteExpanded] = useState(false);
   const [systemExpanded, setSystemExpanded] = useState(false);
   const [subscriptionExpanded, setSubscriptionExpanded] = useState(false);
   const [impersonation, setImpersonation] = useState<{ tenantId: string; tenantName?: string } | null>(null);
@@ -257,6 +258,7 @@ export function Sidebar() {
   const filteredCommunicationItems = useMemo(() => filterByModule(communicationItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredOperationsItems = useMemo(() => filterByModule(operationsHRItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredResellerItems = useMemo(() => filterByModule(resellerItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredWebsiteItems = useMemo(() => filterByModule(websiteItems), [hasAccess, inTenantView, isSuperAdmin]);
 
   const renderNavItem = (item: NavItem) => {
     const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
@@ -423,6 +425,12 @@ export function Sidebar() {
               collapsible: true,
               expanded: operationsExpanded,
               onToggle: () => setOperationsExpanded((v) => !v),
+            })}
+
+            {filteredWebsiteItems.length > 0 && renderSection(t('website'), filteredWebsiteItems, {
+              collapsible: true,
+              expanded: websiteExpanded,
+              onToggle: () => setWebsiteExpanded((v) => !v),
             })}
 
             {renderSection(t('system'), filteredTenantSystemItems, {
