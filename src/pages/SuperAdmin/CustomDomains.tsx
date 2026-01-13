@@ -35,6 +35,8 @@ interface CustomDomainWithTenant {
   tenant_id: string;
   tenant_name?: string;
   tenant_company?: string;
+  tenant_slug?: string;
+  tenant_slug_locked?: boolean;
 }
 
 export default function SuperAdminCustomDomains() {
@@ -65,7 +67,7 @@ export default function SuperAdminCustomDomains() {
       const tenantIds = [...new Set((domainsData || []).map((d: any) => d.tenant_id))];
       const { data: tenantsData } = await supabase
         .from('tenants')
-        .select('id, name, company_name')
+        .select('id, name, company_name, slug, landing_page_slug_locked')
         .in('id', tenantIds);
 
       const tenantsMap = new Map((tenantsData || []).map((t: any) => [t.id, t]));
@@ -76,6 +78,8 @@ export default function SuperAdminCustomDomains() {
           ...d,
           tenant_name: tenant?.name || 'Unknown',
           tenant_company: tenant?.company_name || '',
+          tenant_slug: tenant?.slug || '',
+          tenant_slug_locked: tenant?.landing_page_slug_locked ?? false,
         };
       });
 
@@ -283,6 +287,25 @@ export default function SuperAdminCustomDomains() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {d.tenant_slug_locked && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              const { error } = await supabase
+                                .from('tenants')
+                                .update({ landing_page_slug_locked: false } as any)
+                                .eq('id', d.tenant_id);
+                              if (!error) {
+                                toast.success('Slug unlocked for editing');
+                                fetchDomains();
+                              }
+                            }}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Unlock Slug
+                          </Button>
+                        )}
                         {!d.is_verified && (
                           <Button
                             variant="ghost"
