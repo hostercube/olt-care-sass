@@ -43,6 +43,24 @@ interface LiveTVChannel {
   url: string;
 }
 
+// Custom section types for landing page builder
+interface CustomSection {
+  id: string;
+  type: 'hero' | 'text' | 'image' | 'cta' | 'features' | 'custom' | 'gallery' | 'video' | 'testimonial' | 'faq';
+  title: string;
+  subtitle?: string;
+  content?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  buttonText?: string;
+  buttonUrl?: string;
+  bgColor?: string;
+  textColor?: string;
+  items?: { title: string; description: string; icon?: string; imageUrl?: string }[];
+  order: number;
+  isVisible: boolean;
+}
+
 interface TenantData {
   id: string;
   company_name: string;
@@ -73,6 +91,7 @@ interface TenantData {
   landing_page_livetv_url?: string;
   landing_page_livetv_channels?: LiveTVChannel[];
   landing_page_custom_menus?: CustomMenuItem[];
+  landing_page_custom_sections?: CustomSection[];
   landing_page_whatsapp?: string;
   landing_page_telegram?: string;
   slug: string;
@@ -355,6 +374,7 @@ export default function TenantLanding() {
           landing_page_livetv_url: rawData.landing_page_livetv_url || '',
           landing_page_livetv_channels: parseJsonField(rawData.landing_page_livetv_channels, []),
           landing_page_custom_menus: parseJsonField(rawData.landing_page_custom_menus, []),
+          landing_page_custom_sections: parseJsonField(rawData.landing_page_custom_sections, []),
           landing_page_whatsapp: rawData.landing_page_whatsapp || '',
           landing_page_telegram: rawData.landing_page_telegram || '',
           slug: rawData.slug || '',
@@ -1449,6 +1469,248 @@ export default function TenantLanding() {
           </div>
         </div>
       </section>
+
+      {/* Custom Sections - Rendered dynamically from tenant dashboard */}
+      {tenant.landing_page_custom_sections && tenant.landing_page_custom_sections.length > 0 && (
+        <>
+          {tenant.landing_page_custom_sections
+            .filter(section => section.isVisible)
+            .sort((a, b) => a.order - b.order)
+            .map((section) => (
+              <section 
+                key={section.id} 
+                id={`custom-${section.id}`}
+                className={`py-16 lg:py-24`}
+                style={{ 
+                  backgroundColor: section.bgColor || (template.isDark ? '#111827' : '#f9fafb'),
+                  color: section.textColor || (template.isDark ? '#ffffff' : '#111827')
+                }}
+              >
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                  {/* Text Section */}
+                  {section.type === 'text' && (
+                    <div className="max-w-4xl mx-auto text-center">
+                      {section.title && (
+                        <h2 className="text-3xl md:text-4xl font-bold mb-4">{section.title}</h2>
+                      )}
+                      {section.subtitle && (
+                        <p className="text-xl opacity-80 mb-6">{section.subtitle}</p>
+                      )}
+                      {section.content && (
+                        <div className="prose prose-lg max-w-none" style={{ color: section.textColor || 'inherit' }}>
+                          <p className="whitespace-pre-wrap">{section.content}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Image Section */}
+                  {section.type === 'image' && (
+                    <div className="text-center">
+                      {section.title && (
+                        <h2 className="text-3xl md:text-4xl font-bold mb-4">{section.title}</h2>
+                      )}
+                      {section.subtitle && (
+                        <p className="text-xl opacity-80 mb-8">{section.subtitle}</p>
+                      )}
+                      {section.imageUrl && (
+                        <img 
+                          src={section.imageUrl} 
+                          alt={section.title || 'Section image'} 
+                          className="max-w-full h-auto rounded-2xl shadow-2xl mx-auto"
+                        />
+                      )}
+                      {section.content && (
+                        <p className="mt-6 text-lg opacity-80 max-w-2xl mx-auto">{section.content}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CTA Section */}
+                  {section.type === 'cta' && (
+                    <div className="text-center py-8">
+                      {section.title && (
+                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">{section.title}</h2>
+                      )}
+                      {section.subtitle && (
+                        <p className="text-xl opacity-80 mb-8 max-w-2xl mx-auto">{section.subtitle}</p>
+                      )}
+                      {section.buttonText && section.buttonUrl && (
+                        <a 
+                          href={section.buttonUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className={`inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r ${themeColors.gradient} text-white font-semibold text-lg shadow-lg hover:opacity-90 transition-opacity`}
+                        >
+                          {section.buttonText}
+                          <ArrowRight className="h-5 w-5" />
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Features Section */}
+                  {section.type === 'features' && (
+                    <div>
+                      {section.title && (
+                        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">{section.title}</h2>
+                      )}
+                      {section.subtitle && (
+                        <p className="text-xl opacity-80 text-center mb-12 max-w-2xl mx-auto">{section.subtitle}</p>
+                      )}
+                      {section.items && section.items.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                          {section.items.map((item, idx) => (
+                            <div key={idx} className={`p-6 rounded-2xl ${template.isDark ? 'bg-white/5' : 'bg-white shadow-lg'}`}>
+                              {item.imageUrl && (
+                                <img src={item.imageUrl} alt={item.title} className="w-16 h-16 object-cover rounded-xl mb-4" />
+                              )}
+                              <h3 className="text-xl font-bold mb-2">{item.title}</h3>
+                              <p className="opacity-70">{item.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Gallery Section */}
+                  {section.type === 'gallery' && (
+                    <div>
+                      {section.title && (
+                        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">{section.title}</h2>
+                      )}
+                      {section.subtitle && (
+                        <p className="text-xl opacity-80 text-center mb-12">{section.subtitle}</p>
+                      )}
+                      {section.items && section.items.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                          {section.items.map((item, idx) => (
+                            <div key={idx} className="aspect-square rounded-xl overflow-hidden">
+                              <img 
+                                src={item.imageUrl} 
+                                alt={item.title || `Gallery item ${idx + 1}`} 
+                                className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Video Section */}
+                  {section.type === 'video' && (
+                    <div className="text-center">
+                      {section.title && (
+                        <h2 className="text-3xl md:text-4xl font-bold mb-4">{section.title}</h2>
+                      )}
+                      {section.subtitle && (
+                        <p className="text-xl opacity-80 mb-8">{section.subtitle}</p>
+                      )}
+                      {section.videoUrl && (
+                        <div className="aspect-video max-w-4xl mx-auto rounded-2xl overflow-hidden shadow-2xl">
+                          <iframe 
+                            src={section.videoUrl.replace('watch?v=', 'embed/')} 
+                            title={section.title || 'Video'} 
+                            className="w-full h-full"
+                            allowFullScreen
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Testimonial Section */}
+                  {section.type === 'testimonial' && (
+                    <div>
+                      {section.title && (
+                        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">{section.title}</h2>
+                      )}
+                      {section.subtitle && (
+                        <p className="text-xl opacity-80 text-center mb-12">{section.subtitle}</p>
+                      )}
+                      {section.items && section.items.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                          {section.items.map((item, idx) => (
+                            <div key={idx} className={`p-6 rounded-2xl ${template.isDark ? 'bg-white/5' : 'bg-white shadow-lg'}`}>
+                              <div className="flex items-center gap-4 mb-4">
+                                {item.imageUrl && (
+                                  <img src={item.imageUrl} alt={item.title} className="w-12 h-12 rounded-full object-cover" />
+                                )}
+                                <div>
+                                  <h4 className="font-bold">{item.title}</h4>
+                                </div>
+                              </div>
+                              <p className="italic opacity-80">"{item.description}"</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* FAQ Section */}
+                  {section.type === 'faq' && (
+                    <div className="max-w-3xl mx-auto">
+                      {section.title && (
+                        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">{section.title}</h2>
+                      )}
+                      {section.subtitle && (
+                        <p className="text-xl opacity-80 text-center mb-12">{section.subtitle}</p>
+                      )}
+                      {section.items && section.items.length > 0 && (
+                        <div className="space-y-4">
+                          {section.items.map((item, idx) => (
+                            <div key={idx} className={`p-6 rounded-xl ${template.isDark ? 'bg-white/5' : 'bg-white shadow-lg'}`}>
+                              <h4 className="font-bold text-lg mb-2">{item.title}</h4>
+                              <p className="opacity-70">{item.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Custom/Generic Section */}
+                  {section.type === 'custom' && (
+                    <div className="text-center">
+                      {section.title && (
+                        <h2 className="text-3xl md:text-4xl font-bold mb-4">{section.title}</h2>
+                      )}
+                      {section.subtitle && (
+                        <p className="text-xl opacity-80 mb-6">{section.subtitle}</p>
+                      )}
+                      {section.imageUrl && (
+                        <img 
+                          src={section.imageUrl} 
+                          alt={section.title || 'Custom section'} 
+                          className="max-w-full h-auto rounded-2xl shadow-xl mx-auto mb-6"
+                        />
+                      )}
+                      {section.content && (
+                        <div className="prose prose-lg max-w-3xl mx-auto" style={{ color: section.textColor || 'inherit' }}>
+                          <p className="whitespace-pre-wrap">{section.content}</p>
+                        </div>
+                      )}
+                      {section.buttonText && section.buttonUrl && (
+                        <a 
+                          href={section.buttonUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className={`inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-lg bg-gradient-to-r ${themeColors.gradient} text-white font-semibold shadow-lg hover:opacity-90 transition-opacity`}
+                        >
+                          {section.buttonText}
+                          <ArrowRight className="h-4 w-4" />
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
+            ))}
+        </>
+      )}
 
       {/* Contact Section */}
       {tenant.landing_page_show_contact && (
