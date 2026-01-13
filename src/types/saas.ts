@@ -21,6 +21,7 @@ export type ModuleName =
   | 'isp_bandwidth_management'
   | 'isp_btrc_reports'
   | 'isp_tickets'
+  | 'landing_page'
   | 'sms_alerts'
   | 'email_alerts'
   | 'api_access'
@@ -79,6 +80,7 @@ export interface TenantFeatures {
   isp_bandwidth_management?: boolean;
   isp_btrc_reports?: boolean;
   isp_tickets?: boolean;
+  landing_page?: boolean;
   // Alert features
   sms_alerts?: boolean;
   email_alerts?: boolean;
@@ -374,6 +376,7 @@ export const AVAILABLE_MODULES: ModuleConfig[] = [
   { id: 'isp_bandwidth_management', name: 'Bandwidth Management', description: 'Bandwidth buy/sell, providers, clients, invoicing', category: 'isp' },
   { id: 'isp_btrc_reports', name: 'BTRC Reports', description: 'BTRC regulatory reports', category: 'isp' },
   { id: 'isp_tickets', name: 'Support Tickets', description: 'Customer support ticket system', category: 'isp' },
+  { id: 'landing_page', name: 'Landing Page', description: 'Custom landing page with templates and branding', category: 'isp' },
   
   // Alert Features
   { id: 'sms_alerts', name: 'SMS Alerts', description: 'SMS notifications for alerts', category: 'alerts' },
