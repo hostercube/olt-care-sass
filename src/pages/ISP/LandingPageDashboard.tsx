@@ -155,6 +155,7 @@ interface LandingSettings {
   landing_page_enabled: boolean;
   landing_page_template: string;
   landing_page_show_packages: boolean;
+  landing_page_show_coverage: boolean;
   landing_page_show_contact: boolean;
   landing_page_contact_phone: string;
   landing_page_contact_email: string;
@@ -266,7 +267,7 @@ function SectionOrderManager({
     { id: 'packages', name: 'প্যাকেজ সেকশন', description: 'ISP প্যাকেজ দেখান', icon: Package, enabled: settings.landing_page_show_packages, settingsKey: 'landing_page_show_packages' },
     { id: 'stats', name: 'স্ট্যাটস সেকশন', description: 'গ্রাহক সংখ্যা, আপটাইম ইত্যাদি', icon: BarChart3, enabled: true, alwaysEnabled: true },
     { id: 'whyus', name: 'কেন আমরা সেরা', description: 'Why Choose Us সেকশন', icon: Award, enabled: true, alwaysEnabled: true },
-    { id: 'coverage', name: 'কভারেজ ম্যাপ', description: 'সার্ভিস এরিয়া দেখান', icon: Map, enabled: true, alwaysEnabled: true },
+    { id: 'coverage', name: 'কভারেজ ম্যাপ', description: 'সার্ভিস এরিয়া দেখান', icon: Map, enabled: settings.landing_page_show_coverage !== false, settingsKey: 'landing_page_show_coverage' },
     { id: 'contact', name: 'যোগাযোগ ফর্ম', description: 'কন্টাক্ট ফর্ম দেখান', icon: MessageSquare, enabled: settings.landing_page_show_contact, settingsKey: 'landing_page_show_contact' },
     { id: 'footer', name: 'ফুটার', description: 'সোশ্যাল লিংক ও কপিরাইট', icon: Globe, enabled: true, alwaysEnabled: true },
   ];
@@ -376,6 +377,7 @@ export default function LandingPageDashboard() {
     landing_page_enabled: false,
     landing_page_template: 'isp-pro-1',
     landing_page_show_packages: true,
+    landing_page_show_coverage: true,
     landing_page_show_contact: true,
     landing_page_contact_phone: '',
     landing_page_contact_email: '',
@@ -489,6 +491,7 @@ export default function LandingPageDashboard() {
           landing_page_enabled: tenantData.landing_page_enabled || false,
           landing_page_template: tenantData.landing_page_template || 'isp-pro-1',
           landing_page_show_packages: tenantData.landing_page_show_packages ?? true,
+          landing_page_show_coverage: tenantData.landing_page_show_coverage ?? true,
           landing_page_show_contact: tenantData.landing_page_show_contact ?? true,
           landing_page_contact_phone: tenantData.landing_page_contact_phone || '',
           landing_page_contact_email: tenantData.landing_page_contact_email || '',
@@ -1965,6 +1968,17 @@ export default function LandingPageDashboard() {
                     <Switch
                       checked={settings.landing_page_show_packages}
                       onCheckedChange={(checked) => handleSave({ landing_page_show_packages: checked })}
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                    <div>
+                      <p className="font-medium">কভারেজ সেকশন দেখান</p>
+                      <p className="text-sm text-muted-foreground">সার্ভিস এরিয়া ম্যাপ</p>
+                    </div>
+                    <Switch
+                      checked={settings.landing_page_show_coverage !== false}
+                      onCheckedChange={(checked) => handleSave({ landing_page_show_coverage: checked })}
                       disabled={saving}
                     />
                   </div>
