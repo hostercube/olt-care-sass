@@ -38,7 +38,6 @@ export default function CustomDomain() {
   const [showDialog, setShowDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [domain, setDomain] = useState('');
-  const [subdomain, setSubdomain] = useState('');
   const [serverIP, setServerIP] = useState<string>('');
   const [verifying, setVerifying] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -194,16 +193,19 @@ export default function CustomDomain() {
   const handleVerifyDomain = async (domainData: CustomDomainType) => {
     setVerifying(domainData.id);
     try {
-      const fullDomain = domainData.subdomain 
-        ? `${domainData.subdomain}.${domainData.domain}` 
-        : domainData.domain;
+      // Domain is stored as the full domain (e.g., test.isppoint.com)
+      const fullDomain = domainData.domain;
+      // Extract root domain for TXT record (e.g., isppoint.com from test.isppoint.com)
+      const domainParts = fullDomain.split('.');
+      const rootDomain = domainParts.length > 2 
+        ? domainParts.slice(-2).join('.') 
+        : fullDomain;
 
       if (!serverIP) {
         toast.error('Server IP not configured. Please contact administrator.');
         return;
       }
 
-      const rootDomain = domainData.domain;
       const dnsResult = await checkDNSRecords(fullDomain, rootDomain, serverIP, domainData.dns_txt_record || '');
       
       console.log('DNS check result:', dnsResult);
@@ -264,24 +266,42 @@ export default function CustomDomain() {
     }
   };
 
+  // Clean domain input - remove http://, https://, www., trailing slashes
+  const cleanDomainInput = (input: string): string => {
+    let cleaned = input.toLowerCase().trim();
+    cleaned = cleaned.replace(/^https?:\/\//, '');
+    cleaned = cleaned.replace(/^www\./, '');
+    cleaned = cleaned.replace(/\/.*$/, '');
+    return cleaned;
+  };
+
   const handleAddDomain = async () => {
     if (!tenantId || !domain) return;
     setSaving(true);
     try {
+      const cleanedDomain = cleanDomainInput(domain);
+      
+      // Validate domain format
+      const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+      if (!domainRegex.test(cleanedDomain)) {
+        toast.error('Invalid domain format. Example: yourdomain.com or isp.yourdomain.com');
+        setSaving(false);
+        return;
+      }
+
       const txtRecord = `isppoint-verify=${tenantId.slice(0, 8)}`;
       const { error } = await supabase
         .from('tenant_custom_domains')
         .insert({
           tenant_id: tenantId,
-          domain: domain.toLowerCase().trim(),
-          subdomain: subdomain || null,
+          domain: cleanedDomain,
+          subdomain: null, // Simplified - no separate subdomain
           dns_txt_record: txtRecord,
         } as any);
       if (error) throw error;
       toast.success('Domain added. Please configure DNS records.');
       setShowDialog(false);
       setDomain('');
-      setSubdomain('');
       fetchDomains();
     } catch (err: any) {
       toast.error(err.message || 'Failed to add domain');
@@ -397,16 +417,22 @@ export default function CustomDomain() {
             </div>
           ) : (
             <div className="space-y-4">
-              {domains.map((d) => (
+              {domains.map((d) => {
+                // Helper: Extract A record name from domain
+                // e.g., "isp.example.com" → "isp", "example.com" → "@"
+                const domainParts = d.domain.split('.');
+                const isSubdomain = domainParts.length > 2;
+                const aRecordName = isSubdomain ? domainParts[0] : '@';
+                const rootDomain = isSubdomain ? domainParts.slice(1).join('.') : d.domain;
+                
+                return (
                 <Card key={d.id}>
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
                         {getStatusIcon(d.is_verified, d.ssl_status)}
                         <div>
-                          <p className="font-medium">
-                            {d.subdomain ? `${d.subdomain}.` : ''}{d.domain}
-                          </p>
+                          <p className="font-medium font-mono">{d.domain}</p>
                           <p className="text-sm text-muted-foreground">
                             Added {new Date(d.created_at).toLocaleDateString()}
                           </p>
@@ -414,7 +440,7 @@ export default function CustomDomain() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant={d.is_verified ? 'default' : 'secondary'}>
-                          {d.is_verified ? 'Verified' : 'Pending Verification'}
+                          {d.is_verified ? 'Verified' : 'Pending'}
                         </Badge>
                         <Badge variant={d.ssl_status === 'active' ? 'default' : 'outline'}>
                           SSL: {d.ssl_status}
@@ -450,91 +476,99 @@ export default function CustomDomain() {
                       <div className="mt-3 rounded-lg border border-green-500/20 bg-green-500/5 p-4">
                         <div className="flex items-center gap-2 mb-2">
                           <CheckCircle className="h-4 w-4 text-green-500" />
-                          <p className="text-sm font-medium text-green-700 dark:text-green-400">Domain Active!</p>
+                          <p className="text-sm font-medium text-green-700 dark:text-green-400">✅ Domain Active!</p>
                         </div>
                         <p className="text-xs text-muted-foreground mb-3">
-                          Your domain <span className="font-mono text-primary">{d.subdomain ? `${d.subdomain}.` : ''}{d.domain}</span> is now 
-                          live and serving your ISP portal. All visitors to this domain will see your branded landing page or login.
+                          Your domain <span className="font-mono text-primary">{d.domain}</span> is now 
+                          live. Visitors will see your branded landing page or login.
                         </p>
-                        <div className="flex items-center gap-2">
-                          <a 
-                            href={`https://${d.subdomain ? `${d.subdomain}.` : ''}${d.domain}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                          >
-                            <Globe className="h-3 w-3" />
-                            Visit Domain
-                          </a>
-                        </div>
+                        <a 
+                          href={`https://${d.domain}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <Globe className="h-3 w-3" />
+                          Visit https://{d.domain}
+                        </a>
                       </div>
                     )}
 
                     {!d.is_verified && (
-                      <div className="p-4 bg-muted rounded-lg space-y-3">
+                      <div className="p-4 bg-muted rounded-lg space-y-4">
                         <div>
-                          <p className="text-sm font-medium">DNS Configuration Required</p>
+                          <p className="text-sm font-medium mb-1">⚙️ DNS Configuration Required</p>
                           <p className="text-xs text-muted-foreground">
-                            Add these DNS records in your domain provider (Cloudflare / Namecheap / etc). After saving DNS,
-                            wait 5–30 minutes, then click <span className="font-medium">Verify</span>.
+                            Add these 2 DNS records at your domain registrar, wait 5-30 mins, then click <strong>Verify</strong>.
                           </p>
                         </div>
 
-                        <ol className="text-xs text-muted-foreground list-decimal pl-4 space-y-1">
-                          <li>
-                            If you are using Cloudflare: set the A record to <span className="font-medium">DNS only</span>
-                            (grey cloud). Proxy (orange cloud) will break verification.
-                          </li>
-                          <li>
-                            TXT record name should be <span className="font-mono">_isppoint</span> (some panels may require
-                            full name like <span className="font-mono">_isppoint.{d.domain}</span>).
-                          </li>
-                          <li>
-                            For subdomain setup: create an A record for <span className="font-medium">{d.subdomain}</span>
-                            instead of <span className="font-mono">@</span>.
-                          </li>
-                        </ol>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between p-2 bg-background rounded">
-                            <div>
-                              <p className="text-xs text-muted-foreground">Type: TXT</p>
-                              <p className="text-xs text-muted-foreground">Name: _isppoint</p>
-                              <p className="font-mono text-sm break-all">{d.dns_txt_record}</p>
-                            </div>
+                        {/* DNS Record 1: TXT */}
+                        <div className="p-3 bg-background rounded-lg border">
+                          <div className="flex items-center justify-between mb-2">
+                            <Badge variant="outline">Record 1: TXT</Badge>
                             <Button variant="ghost" size="sm" onClick={() => copyToClipboard(d.dns_txt_record || '')}>
-                              <Copy className="h-4 w-4" />
+                              <Copy className="h-3 w-3 mr-1" /> Copy Value
                             </Button>
                           </div>
-                          <div className="flex items-center justify-between p-2 bg-background rounded">
+                          <div className="grid grid-cols-2 gap-2 text-xs">
                             <div>
-                              <p className="text-xs text-muted-foreground">Type: A</p>
-                              <p className="text-xs text-muted-foreground">
-                                Name: {d.subdomain ? d.subdomain : '@'}
-                              </p>
-                              <p className="font-mono text-sm">{displayIP}</p>
+                              <p className="text-muted-foreground">Name:</p>
+                              <p className="font-mono font-medium">_isppoint</p>
                             </div>
+                            <div>
+                              <p className="text-muted-foreground">Value:</p>
+                              <p className="font-mono font-medium break-all">{d.dns_txt_record}</p>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-2">
+                            Some panels may require: <span className="font-mono">_isppoint.{rootDomain}</span>
+                          </p>
+                        </div>
+
+                        {/* DNS Record 2: A */}
+                        <div className="p-3 bg-background rounded-lg border">
+                          <div className="flex items-center justify-between mb-2">
+                            <Badge variant="outline">Record 2: A</Badge>
                             <Button 
                               variant="ghost" 
                               size="sm" 
                               onClick={() => copyToClipboard(serverIP)}
                               disabled={!serverIP}
                             >
-                              <Copy className="h-4 w-4" />
+                              <Copy className="h-3 w-3 mr-1" /> Copy IP
                             </Button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <p className="text-muted-foreground">Name:</p>
+                              <p className="font-mono font-medium">{aRecordName}</p>
+                              {isSubdomain && (
+                                <p className="text-[10px] text-muted-foreground">(subdomain of {rootDomain})</p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Points to:</p>
+                              <p className="font-mono font-medium">{displayIP}</p>
+                            </div>
                           </div>
                         </div>
 
+                        {/* Tips */}
+                        <div className="text-[11px] text-muted-foreground space-y-1">
+                          <p>💡 <strong>Cloudflare users:</strong> Set A record to "DNS only" (grey cloud), not "Proxied"</p>
+                        </div>
+
                         {!serverIP && (
-                          <p className="text-xs text-yellow-500">
-                            Server IP not configured. Please contact administrator.
+                          <p className="text-xs text-yellow-500 font-medium">
+                            ⚠️ Server IP not configured. Please contact administrator.
                           </p>
                         )}
                       </div>
                     )}
                   </CardContent>
                 </Card>
-              ))}
+              )})}
             </div>
           )}
         </CardContent>
@@ -637,13 +671,13 @@ export default function CustomDomain() {
                 <div>
                   <p className="text-sm font-medium">Custom Domain Portal</p>
                   <p className="text-xs text-muted-foreground font-mono">
-                    https://{d.subdomain ? `${d.subdomain}.` : ''}{d.domain}
+                    https://{d.domain}
                   </p>
                 </div>
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  onClick={() => copyToClipboard(`https://${d.subdomain ? `${d.subdomain}.` : ''}${d.domain}`)}
+                  onClick={() => copyToClipboard(`https://${d.domain}`)}
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
@@ -658,39 +692,43 @@ export default function CustomDomain() {
         </CardContent>
       </Card>
 
-      {/* Add Domain Dialog */}
+      {/* Add Domain Dialog - Simplified */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Custom Domain</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary" />
+              Add Custom Domain
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Domain Name *</Label>
+              <Label>Your Domain *</Label>
               <Input
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
-                placeholder="example.com"
+                placeholder="yourdomain.com or isp.yourdomain.com"
+                className="font-mono"
               />
               <p className="text-xs text-muted-foreground">
-                Enter your domain without http:// or www
+                Enter your full domain name. Examples:
               </p>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className="font-mono text-xs">yourisp.com</Badge>
+                <Badge variant="outline" className="font-mono text-xs">isp.yourdomain.com</Badge>
+                <Badge variant="outline" className="font-mono text-xs">net.example.com</Badge>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Subdomain (Optional)</Label>
-              <Input
-                value={subdomain}
-                onChange={(e) => setSubdomain(e.target.value)}
-                placeholder="isp"
-              />
+            
+            <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
               <p className="text-xs text-muted-foreground">
-                Leave empty to use the root domain, or enter a subdomain like "isp" for isp.example.com
+                <strong>After adding:</strong> You'll need to add DNS records at your domain registrar (Cloudflare, Namecheap, GoDaddy, etc.)
               </p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button onClick={handleAddDomain} disabled={saving || !domain}>
+            <Button onClick={handleAddDomain} disabled={saving || !domain.trim()}>
               {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Add Domain
             </Button>
