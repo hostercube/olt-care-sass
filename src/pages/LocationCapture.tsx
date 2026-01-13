@@ -23,6 +23,11 @@ interface IpData {
   asn: string | null;
 }
 
+interface DeviceData {
+  device_type: 'mobile' | 'tablet' | 'desktop';
+  user_agent: string;
+}
+
 interface SettingsData {
   id: string;
   tenant_id: string;
@@ -54,55 +59,134 @@ export default function LocationCapture() {
     isp_name: null,
     asn: null,
   });
+  const [deviceData, setDeviceData] = useState<DeviceData>({
+    device_type: 'mobile',
+    user_agent: '',
+  });
   const [formData, setFormData] = useState({ name: '', phone: '' });
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Mobile device detection - checks for real mobile hardware
-  const isMobileDevice = useCallback(() => {
-    const userAgent = navigator.userAgent.toLowerCase();
-    
-    // Check for mobile OS indicators
-    const hasMobileOS = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i.test(userAgent);
-    
-    // Check touch capability
-    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    
-    // Check for mobile-specific features
-    const isMobileBrowser = /mobi|android|touch|mini/i.test(navigator.userAgent);
-    
-    // Must have mobile indicators
-    return hasMobileOS || (hasTouch && isMobileBrowser);
-  }, []);
-
-  // Check if running on desktop pretending to be mobile
-  const isDesktopDevice = useCallback(() => {
+  // Robust device detection - detects true mobile vs desktop emulation
+  const detectDeviceType = useCallback((): DeviceData => {
     const ua = navigator.userAgent;
     
-    // Clear desktop OS indicators without mobile
-    const isDesktopOS = (ua.includes('Windows NT') || ua.includes('Macintosh') || ua.includes('Linux x86_64')) 
-      && !ua.includes('Android') && !ua.includes('iPhone') && !ua.includes('iPad');
+    // Primary mobile detection - look for actual mobile OS
+    const isAndroid = /Android/i.test(ua);
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isMobileOS = isAndroid || isIOS || /webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
     
-    // Check window dimensions - desktop DevTools typically has large outer window
-    const hasLargeOuterWindow = window.outerWidth > 1200 && window.innerWidth < 500;
+    // Detect if it's a tablet
+    const isTablet = /iPad|Android.*Tablet|Tablet/i.test(ua) && !/Mobile/i.test(ua);
     
-    return isDesktopOS || hasLargeOuterWindow;
-  }, []);
-
-  // Get IP info
-  const fetchIpInfo = useCallback(async (): Promise<IpData> => {
-    try {
-      const response = await fetch('https://ipapi.co/json/');
-      const data = await response.json();
-      return {
-        ip_address: data.ip || null,
-        isp_name: data.org || null,
-        asn: data.asn || null,
-      };
-    } catch (error) {
-      console.error('Failed to fetch IP info:', error);
-      return { ip_address: null, isp_name: null, asn: null };
+    // Desktop OS detection - strong indicators this is NOT a real mobile
+    const isWindowsDesktop = /Windows NT/i.test(ua) && !/Windows Phone/i.test(ua);
+    const isMacDesktop = /Macintosh/i.test(ua) && !('ontouchend' in document);
+    const isLinuxDesktop = /Linux/i.test(ua) && !/Android/i.test(ua);
+    const isDesktopOS = isWindowsDesktop || isMacDesktop || isLinuxDesktop;
+    
+    // Additional check: Chrome DevTools emulation has large outerWidth
+    const isDevToolsEmulation = window.outerWidth > 1000 && window.innerWidth < 600;
+    
+    // Use UserAgentData API if available for more accurate detection
+    const uaData = (navigator as any).userAgentData;
+    if (uaData) {
+      const isMobileFromUA = uaData.mobile === true;
+      const platform = uaData.platform?.toLowerCase() || '';
+      const isRealDesktop = ['windows', 'macos', 'linux', 'chromeos'].includes(platform);
+      
+      if (isRealDesktop && !isMobileFromUA) {
+        return { device_type: 'desktop', user_agent: ua };
+      }
+      if (isMobileFromUA) {
+        return { device_type: isTablet ? 'tablet' : 'mobile', user_agent: ua };
+      }
     }
+    
+    // Final determination
+    if (isDesktopOS || isDevToolsEmulation) {
+      return { device_type: 'desktop', user_agent: ua };
+    }
+    
+    if (isTablet) {
+      return { device_type: 'tablet', user_agent: ua };
+    }
+    
+    if (isMobileOS) {
+      return { device_type: 'mobile', user_agent: ua };
+    }
+    
+    // Default to mobile if touch is available and no desktop indicators
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    if (hasTouch && !isDesktopOS) {
+      return { device_type: 'mobile', user_agent: ua };
+    }
+    
+    return { device_type: 'desktop', user_agent: ua };
+  }, []);
+  
+  // Check if this is truly a mobile device
+  const isTrulyMobile = useCallback(() => {
+    const device = detectDeviceType();
+    return device.device_type === 'mobile' || device.device_type === 'tablet';
+  }, [detectDeviceType]);
+
+  // Get IP info - try multiple providers for reliability
+  const fetchIpInfo = useCallback(async (): Promise<IpData> => {
+    // Try ipapi.co first
+    try {
+      const response = await fetch('https://ipapi.co/json/', { 
+        signal: AbortSignal.timeout(5000) 
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ip) {
+          return {
+            ip_address: data.ip || null,
+            isp_name: data.org || null,
+            asn: data.asn || null,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('ipapi.co failed, trying fallback...');
+    }
+    
+    // Fallback to ip-api.com
+    try {
+      const response = await fetch('http://ip-api.com/json/?fields=query,isp,as', {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          ip_address: data.query || null,
+          isp_name: data.isp || null,
+          asn: data.as?.split(' ')[0] || null,
+        };
+      }
+    } catch (e) {
+      console.warn('ip-api.com failed, trying fallback...');
+    }
+    
+    // Final fallback to ipify
+    try {
+      const response = await fetch('https://api.ipify.org?format=json', {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          ip_address: data.ip || null,
+          isp_name: null,
+          asn: null,
+        };
+      }
+    } catch (e) {
+      console.error('All IP fetch attempts failed');
+    }
+    
+    return { ip_address: null, isp_name: null, asn: null };
   }, []);
 
   // Get address from coordinates using OpenStreetMap
@@ -150,6 +234,7 @@ export default function LocationCapture() {
     settingsData: SettingsData,
     location: LocationData,
     ip: IpData,
+    device: DeviceData,
     form?: { name?: string; phone?: string }
   ) => {
     if (hasSubmittedRef.current) return; // Prevent duplicate submissions
@@ -173,7 +258,8 @@ export default function LocationCapture() {
           ip_address: ip.ip_address,
           isp_name: ip.isp_name,
           asn: ip.asn,
-          device_type: 'mobile',
+          device_type: device.device_type,
+          user_agent: device.user_agent,
           name: form?.name || null,
           phone: form?.phone || null,
           verified_status: 'pending',
@@ -205,8 +291,8 @@ export default function LocationCapture() {
         return;
       }
 
-      // Check device type
-      if (!isMobileDevice() || isDesktopDevice()) {
+      // Check device type - block desktop devices
+      if (!isTrulyMobile()) {
         setStep('desktop-warning');
         return;
       }
@@ -238,7 +324,7 @@ export default function LocationCapture() {
     };
 
     init();
-  }, [token, isMobileDevice, isDesktopDevice]);
+  }, [token, isTrulyMobile]);
 
   // Capture location when on capturing step
   useEffect(() => {
@@ -247,6 +333,8 @@ export default function LocationCapture() {
     const captureAndProcess = async () => {
       let capturedLocation: LocationData = { ...locationData };
       let capturedIp: IpData = { ...ipData };
+      const capturedDevice = detectDeviceType();
+      setDeviceData(capturedDevice);
 
       try {
         // Fetch IP info and GPS in parallel
@@ -281,36 +369,36 @@ export default function LocationCapture() {
         console.error('Location capture error:', err);
       }
 
-      // Check if form is required
-      const needsForm = settings.require_name || settings.require_phone;
+      // Check if form is required - handle null values
+      const needsForm = settings.require_name === true || settings.require_phone === true;
       
       if (needsForm) {
         // Show form for user to fill
         setStep('form');
       } else {
         // Auto-submit immediately
-        await submitLocationData(settings, capturedLocation, capturedIp);
+        await submitLocationData(settings, capturedLocation, capturedIp, capturedDevice);
       }
     };
 
     captureAndProcess();
-  }, [step, settings, fetchIpInfo, getLocation, reverseGeocode, submitLocationData, locationData, ipData]);
+  }, [step, settings, fetchIpInfo, getLocation, reverseGeocode, submitLocationData, detectDeviceType, locationData, ipData]);
 
   // Handle form submit
   const handleFormSubmit = async () => {
     if (!settings) return;
     
     // Validate required fields
-    if (settings.require_name && !formData.name.trim()) {
+    if (settings.require_name === true && !formData.name.trim()) {
       toast({ title: 'Error', description: 'Name is required', variant: 'destructive' });
       return;
     }
-    if (settings.require_phone && !formData.phone.trim()) {
+    if (settings.require_phone === true && !formData.phone.trim()) {
       toast({ title: 'Error', description: 'Phone is required', variant: 'destructive' });
       return;
     }
 
-    await submitLocationData(settings, locationData, ipData, {
+    await submitLocationData(settings, locationData, ipData, deviceData, {
       name: formData.name.trim() || undefined,
       phone: formData.phone.trim() || undefined,
     });
@@ -453,7 +541,7 @@ export default function LocationCapture() {
               {!settings?.require_name && !settings?.require_phone && (
                 <Button 
                   variant="ghost" 
-                  onClick={() => submitLocationData(settings!, locationData, ipData)}
+                  onClick={() => submitLocationData(settings!, locationData, ipData, deviceData)}
                   disabled={isSubmitting}
                 >
                   Skip

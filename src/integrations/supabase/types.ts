@@ -3420,6 +3420,7 @@ export type Database = {
           thana: string | null
           token: string
           updated_at: string | null
+          user_agent: string | null
           verified_at: string | null
           verified_by: string | null
           verified_status: string | null
@@ -3443,6 +3444,7 @@ export type Database = {
           thana?: string | null
           token: string
           updated_at?: string | null
+          user_agent?: string | null
           verified_at?: string | null
           verified_by?: string | null
           verified_status?: string | null
@@ -3466,6 +3468,7 @@ export type Database = {
           thana?: string | null
           token?: string
           updated_at?: string | null
+          user_agent?: string | null
           verified_at?: string | null
           verified_by?: string | null
           verified_status?: string | null
