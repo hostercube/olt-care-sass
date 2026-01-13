@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload, Globe, DollarSign, Palette, CheckCircle, Paintbrush, Monitor, Sun, Moon, Users, LayoutTemplate } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload, Globe, DollarSign, Palette, CheckCircle, Paintbrush, Monitor, Sun, Moon, Users } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useTenantBackup } from '@/hooks/useTenantBackup';
@@ -26,7 +26,7 @@ import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { LandingPageSettingsCard } from '@/components/settings/LandingPageSettingsCard';
+
 
 // Password Change Component
 function PasswordChangeCard() {
@@ -880,11 +880,6 @@ export default function Settings() {
                 <span className="hidden sm:inline">Customer Portal</span>
                 <span className="sm:hidden">Portal</span>
               </TabsTrigger>
-              <TabsTrigger value="landing" className="gap-1.5 text-xs sm:text-sm">
-                <LayoutTemplate className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Landing Page</span>
-                <span className="sm:hidden">Landing</span>
-              </TabsTrigger>
               <TabsTrigger value="general" className="gap-1.5 text-xs sm:text-sm">
                 <SettingsIcon className="h-3.5 w-3.5" />
                 <span>General</span>
@@ -926,10 +921,6 @@ export default function Settings() {
             <CustomerPortalSettingsCard />
           </TabsContent>
 
-          {/* Landing Page Settings */}
-          <TabsContent value="landing" className="space-y-6">
-            <LandingPageSettingsCard />
-          </TabsContent>
 
           {/* General Settings */}
           <TabsContent value="general" className="space-y-6">

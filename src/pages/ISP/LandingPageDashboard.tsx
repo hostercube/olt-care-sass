@@ -16,7 +16,7 @@ import {
   MessageSquare, Settings2, Eye, Wifi, Zap, Shield, Headphones, Award,
   Star, ChevronRight, Upload, Link, PenTool, Sparkles, Smartphone,
   Monitor, FileText, BarChart3, Target, Video, Instagram, Twitter,
-  GripVertical, ChevronUp, ChevronDown, Map
+  GripVertical, ChevronUp, ChevronDown, Map, Tv, FolderOpen, Plus, Trash2, Menu
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
@@ -148,6 +148,22 @@ interface LandingSettings {
   company_name: string;
   logo_url: string;
   theme_color: string;
+  // New menu settings
+  landing_page_ftp_enabled: boolean;
+  landing_page_ftp_url: string;
+  landing_page_livetv_enabled: boolean;
+  landing_page_livetv_url: string;
+  landing_page_custom_menus: CustomMenuItem[];
+  landing_page_social_instagram: string;
+  landing_page_social_twitter: string;
+  landing_page_whatsapp: string;
+}
+
+interface CustomMenuItem {
+  id: string;
+  label: string;
+  url: string;
+  subMenus?: { id: string; label: string; url: string }[];
 }
 
 interface LandingConfig {
@@ -339,6 +355,14 @@ export default function LandingPageDashboard() {
     company_name: '',
     logo_url: '',
     theme_color: 'cyan',
+    landing_page_ftp_enabled: false,
+    landing_page_ftp_url: '',
+    landing_page_livetv_enabled: false,
+    landing_page_livetv_url: '',
+    landing_page_custom_menus: [],
+    landing_page_social_instagram: '',
+    landing_page_social_twitter: '',
+    landing_page_whatsapp: '',
   });
   const [config, setConfig] = useState<LandingConfig>({
     heroStyle: 'centered',
@@ -396,6 +420,14 @@ export default function LandingPageDashboard() {
           company_name: data.company_name || '',
           logo_url: data.logo_url || '',
           theme_color: data.theme_color || 'cyan',
+          landing_page_ftp_enabled: data.landing_page_ftp_enabled || false,
+          landing_page_ftp_url: data.landing_page_ftp_url || '',
+          landing_page_livetv_enabled: data.landing_page_livetv_enabled || false,
+          landing_page_livetv_url: data.landing_page_livetv_url || '',
+          landing_page_custom_menus: (data.landing_page_custom_menus as unknown as CustomMenuItem[]) || [],
+          landing_page_social_instagram: data.landing_page_social_instagram || '',
+          landing_page_social_twitter: data.landing_page_social_twitter || '',
+          landing_page_whatsapp: data.landing_page_whatsapp || '',
         });
       }
     } catch (err) {
@@ -409,9 +441,15 @@ export default function LandingPageDashboard() {
   const handleSave = async (updates: Partial<LandingSettings>) => {
     setSaving(true);
     try {
+      // Convert custom menus to JSON for database
+      const dbUpdates: Record<string, unknown> = { ...updates };
+      if (updates.landing_page_custom_menus) {
+        dbUpdates.landing_page_custom_menus = JSON.parse(JSON.stringify(updates.landing_page_custom_menus));
+      }
+      
       const { error } = await supabase
         .from('tenants')
-        .update(updates)
+        .update(dbUpdates)
         .eq('id', tenantId);
 
       if (error) throw error;
@@ -595,10 +633,11 @@ export default function LandingPageDashboard() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 h-auto gap-2 bg-transparent p-0">
+          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 h-auto gap-2 bg-transparent p-0">
             {[
               { id: 'templates', icon: Layout, label: 'টেমপ্লেট' },
               { id: 'content', icon: Type, label: 'কনটেন্ট' },
+              { id: 'menus', icon: Menu, label: 'মেনু' },
               { id: 'branding', icon: Palette, label: 'ব্র্যান্ডিং' },
               { id: 'contact', icon: Phone, label: 'যোগাযোগ' },
               { id: 'sections', icon: Settings2, label: 'সেকশন' },
@@ -777,6 +816,315 @@ export default function LandingPageDashboard() {
                   কনটেন্ট সেভ করুন
                 </Button>
               </div>
+            </div>
+          </TabsContent>
+
+          {/* Menu Settings Tab */}
+          <TabsContent value="menus" className="mt-6">
+            <div className="space-y-6">
+              {/* FTP / Live TV Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Tv className="h-4 w-4" />
+                    FTP & Live TV
+                  </CardTitle>
+                  <CardDescription>
+                    FTP সার্ভার এবং Live TV লিংক সেটিংস
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* FTP Settings */}
+                  <div className="p-4 rounded-lg border bg-muted/30">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-blue-500/10">
+                          <FolderOpen className="h-5 w-5 text-blue-500" />
+                        </div>
+                        <div>
+                          <p className="font-medium">FTP Server</p>
+                          <p className="text-sm text-muted-foreground">FTP সার্ভার লিংক মেনুতে দেখান</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={settings.landing_page_ftp_enabled}
+                        onCheckedChange={(checked) => handleSave({ landing_page_ftp_enabled: checked })}
+                        disabled={saving}
+                      />
+                    </div>
+                    {settings.landing_page_ftp_enabled && (
+                      <div className="flex gap-2">
+                        <Input
+                          value={settings.landing_page_ftp_url}
+                          onChange={(e) => handleInputChange('landing_page_ftp_url', e.target.value)}
+                          placeholder="http://ftp.yourcompany.com বা ftp://192.168.1.1"
+                        />
+                        <Button 
+                          onClick={() => handleSave({ landing_page_ftp_url: settings.landing_page_ftp_url })}
+                          disabled={saving}
+                        >
+                          সেভ
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Live TV Settings */}
+                  <div className="p-4 rounded-lg border bg-muted/30">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-red-500/10">
+                          <Video className="h-5 w-5 text-red-500" />
+                        </div>
+                        <div>
+                          <p className="font-medium">Live TV</p>
+                          <p className="text-sm text-muted-foreground">IPTV/Live TV লিংক মেনুতে দেখান</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={settings.landing_page_livetv_enabled}
+                        onCheckedChange={(checked) => handleSave({ landing_page_livetv_enabled: checked })}
+                        disabled={saving}
+                      />
+                    </div>
+                    {settings.landing_page_livetv_enabled && (
+                      <div className="flex gap-2">
+                        <Input
+                          value={settings.landing_page_livetv_url}
+                          onChange={(e) => handleInputChange('landing_page_livetv_url', e.target.value)}
+                          placeholder="http://tv.yourcompany.com"
+                        />
+                        <Button 
+                          onClick={() => handleSave({ landing_page_livetv_url: settings.landing_page_livetv_url })}
+                          disabled={saving}
+                        >
+                          সেভ
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* WhatsApp Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    WhatsApp
+                  </CardTitle>
+                  <CardDescription>
+                    WhatsApp চ্যাট বাটনের জন্য নম্বর সেট করুন
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <Input
+                      value={settings.landing_page_whatsapp}
+                      onChange={(e) => handleInputChange('landing_page_whatsapp', e.target.value)}
+                      placeholder="+8801XXXXXXXXX"
+                    />
+                    <Button 
+                      onClick={() => handleSave({ landing_page_whatsapp: settings.landing_page_whatsapp })}
+                      disabled={saving}
+                    >
+                      সেভ
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    দেশের কোড সহ নম্বর দিন (যেমন: +8801712345678)
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Custom Menu Management */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Menu className="h-4 w-4" />
+                    কাস্টম মেনু
+                  </CardTitle>
+                  <CardDescription>
+                    নিজের মতো মেনু আইটেম যোগ করুন (সাবমেনু সহ)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {settings.landing_page_custom_menus.map((menu, index) => (
+                    <div key={menu.id} className="p-4 rounded-lg border bg-muted/30 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={menu.label}
+                          onChange={(e) => {
+                            const updated = [...settings.landing_page_custom_menus];
+                            updated[index] = { ...menu, label: e.target.value };
+                            setSettings(prev => ({ ...prev, landing_page_custom_menus: updated }));
+                          }}
+                          placeholder="মেনু নাম"
+                          className="flex-1"
+                        />
+                        <Input
+                          value={menu.url}
+                          onChange={(e) => {
+                            const updated = [...settings.landing_page_custom_menus];
+                            updated[index] = { ...menu, url: e.target.value };
+                            setSettings(prev => ({ ...prev, landing_page_custom_menus: updated }));
+                          }}
+                          placeholder="https://example.com"
+                          className="flex-1"
+                        />
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => {
+                            const updated = settings.landing_page_custom_menus.filter((_, i) => i !== index);
+                            setSettings(prev => ({ ...prev, landing_page_custom_menus: updated }));
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+
+                      {/* Sub-menus */}
+                      {menu.subMenus && menu.subMenus.length > 0 && (
+                        <div className="ml-6 space-y-2 border-l-2 border-primary/20 pl-4">
+                          {menu.subMenus.map((sub, subIndex) => (
+                            <div key={sub.id} className="flex items-center gap-2">
+                              <Input
+                                value={sub.label}
+                                onChange={(e) => {
+                                  const updated = [...settings.landing_page_custom_menus];
+                                  const newSubs = [...(updated[index].subMenus || [])];
+                                  newSubs[subIndex] = { ...sub, label: e.target.value };
+                                  updated[index] = { ...menu, subMenus: newSubs };
+                                  setSettings(prev => ({ ...prev, landing_page_custom_menus: updated }));
+                                }}
+                                placeholder="সাবমেনু নাম"
+                                className="flex-1"
+                              />
+                              <Input
+                                value={sub.url}
+                                onChange={(e) => {
+                                  const updated = [...settings.landing_page_custom_menus];
+                                  const newSubs = [...(updated[index].subMenus || [])];
+                                  newSubs[subIndex] = { ...sub, url: e.target.value };
+                                  updated[index] = { ...menu, subMenus: newSubs };
+                                  setSettings(prev => ({ ...prev, landing_page_custom_menus: updated }));
+                                }}
+                                placeholder="https://example.com"
+                                className="flex-1"
+                              />
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => {
+                                  const updated = [...settings.landing_page_custom_menus];
+                                  const newSubs = (updated[index].subMenus || []).filter((_, i) => i !== subIndex);
+                                  updated[index] = { ...menu, subMenus: newSubs };
+                                  setSettings(prev => ({ ...prev, landing_page_custom_menus: updated }));
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const updated = [...settings.landing_page_custom_menus];
+                          const newSubs = [...(menu.subMenus || []), { id: crypto.randomUUID(), label: '', url: '' }];
+                          updated[index] = { ...menu, subMenus: newSubs };
+                          setSettings(prev => ({ ...prev, landing_page_custom_menus: updated }));
+                        }}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        সাবমেনু যোগ করুন
+                      </Button>
+                    </div>
+                  ))}
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const newMenu: CustomMenuItem = { 
+                          id: crypto.randomUUID(), 
+                          label: '', 
+                          url: '',
+                          subMenus: []
+                        };
+                        setSettings(prev => ({ 
+                          ...prev, 
+                          landing_page_custom_menus: [...prev.landing_page_custom_menus, newMenu] 
+                        }));
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      নতুন মেনু যোগ করুন
+                    </Button>
+                    <Button 
+                      onClick={() => handleSave({ landing_page_custom_menus: settings.landing_page_custom_menus })}
+                      disabled={saving}
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                      মেনু সেভ করুন
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Additional Social Links */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    অতিরিক্ত সোশ্যাল লিংক
+                  </CardTitle>
+                  <CardDescription>
+                    Instagram, Twitter লিংক যোগ করুন
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Instagram className="h-4 w-4" />
+                        Instagram
+                      </Label>
+                      <Input
+                        value={settings.landing_page_social_instagram}
+                        onChange={(e) => handleInputChange('landing_page_social_instagram', e.target.value)}
+                        placeholder="https://instagram.com/yourpage"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Twitter className="h-4 w-4" />
+                        Twitter / X
+                      </Label>
+                      <Input
+                        value={settings.landing_page_social_twitter}
+                        onChange={(e) => handleInputChange('landing_page_social_twitter', e.target.value)}
+                        placeholder="https://twitter.com/yourpage"
+                      />
+                    </div>
+                  </div>
+                  <Button 
+                    onClick={() => handleSave({ 
+                      landing_page_social_instagram: settings.landing_page_social_instagram,
+                      landing_page_social_twitter: settings.landing_page_social_twitter 
+                    })}
+                    disabled={saving}
+                    className="w-full md:w-auto"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                    সোশ্যাল লিংক সেভ করুন
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
