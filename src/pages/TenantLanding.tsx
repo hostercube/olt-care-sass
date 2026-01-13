@@ -723,25 +723,27 @@ export default function TenantLanding() {
       <header className={`${template.headerClass} sticky top-0 z-50`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 lg:h-20">
-            {/* Logo */}
+            {/* Logo Only - Company name used for document title/favicon */}
             <div className="flex items-center gap-3">
               {tenant.logo_url ? (
-                <img src={tenant.logo_url} alt="Logo" className="h-10 w-auto max-w-[160px] object-contain" />
+                <img 
+                  src={tenant.logo_url} 
+                  alt={tenant.company_name} 
+                  className="h-12 w-auto max-w-[200px] object-contain" 
+                />
               ) : (
                 <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${themeColors.gradient} flex items-center justify-center shadow-lg ${themeColors.glow}`}>
                   <Wifi className="h-7 w-7 text-white" />
                 </div>
               )}
-              <div className="hidden sm:block">
-                <h1 className={`font-bold text-lg ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
-                  {tenant.company_name}
-                </h1>
-                {tenant.subtitle && (
-                  <p className={`text-xs ${template.isDark ? 'text-white/70' : 'text-gray-500'}`}>
-                    {tenant.subtitle}
-                  </p>
-                )}
-              </div>
+              {/* Show company name only if no logo is set */}
+              {!tenant.logo_url && (
+                <div className="hidden sm:block">
+                  <h1 className={`font-bold text-lg ${template.isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {tenant.company_name}
+                  </h1>
+                </div>
+              )}
             </div>
 
             {/* Desktop Navigation */}
