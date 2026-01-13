@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-import { Wifi, User, Lock, Loader2, Eye, EyeOff, Shield, Zap, Clock, Users, Store, UserCheck } from 'lucide-react';
+import { Wifi, User, Lock, Loader2, Eye, EyeOff, Shield, Zap, Clock, Users, Store, UserCheck, ArrowLeft, Home } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -290,6 +290,19 @@ export default function TenantLogin() {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex flex-col">
       {/* Theme colored top bar */}
       <div className={`h-1.5 bg-gradient-to-r ${themeGradient}`} />
+      
+      {/* Back to Home Button */}
+      <div className="absolute top-4 left-4 z-10">
+        <Button
+          variant="ghost"
+          onClick={() => navigate(`/p/${tenantSlug}`)}
+          className="gap-2 text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <Home className="h-4 w-4" />
+          <span className="hidden sm:inline">Back to Home</span>
+        </Button>
+      </div>
       
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-md space-y-6">

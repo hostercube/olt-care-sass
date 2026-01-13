@@ -99,13 +99,24 @@ export interface TemplateConfig {
   heroSubtextClass: string;
   heroLayout: 'centered' | 'left' | 'right' | 'split';
   heroAnimation: string;
-  // Section styles
+  // Section styles - unique per template
   sectionBgClass: string;
   sectionAltBgClass: string;
-  // Card styles
+  sectionTextClass: string;
+  sectionHeadingClass: string;
+  // Card styles - unique per template
   cardClass: string;
   cardHoverClass: string;
   cardBorderClass: string;
+  cardTextClass: string;
+  cardTitleClass: string;
+  // Package card styles - unique per template  
+  packageCardClass: string;
+  packageCardPopular: string;
+  packagePriceClass: string;
+  // Feature section styles
+  featureCardClass: string;
+  featureIconBgClass: string;
   // Button styles
   primaryButtonClass: string;
   secondaryButtonClass: string;
@@ -115,6 +126,9 @@ export interface TemplateConfig {
   headingClass: string;
   subheadingClass: string;
   paragraphClass: string;
+  // Footer styles
+  footerClass: string;
+  footerTextClass: string;
   // Effects
   glowClass: string;
   shadowClass: string;
@@ -125,6 +139,9 @@ export interface TemplateConfig {
   hasGradientText: boolean;
   hasAnimatedBg: boolean;
   patternOverlay?: string;
+  // Unique section order/style modifiers
+  sectionStyle: 'default' | 'wave' | 'diagonal' | 'rounded' | 'sharp' | 'floating';
+  cardStyle: 'flat' | 'elevated' | 'bordered' | 'glass' | 'gradient' | 'neumorphic';
 }
 
 // Enhanced templates with distinct visual identities
@@ -148,22 +165,35 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroAnimation: 'animate-fade-in',
     sectionBgClass: 'bg-gray-50',
     sectionAltBgClass: 'bg-white',
+    sectionTextClass: 'text-gray-600',
+    sectionHeadingClass: 'text-gray-900',
     cardClass: 'bg-white shadow-xl hover:shadow-2xl transition-all duration-500 border-0 rounded-2xl',
     cardHoverClass: 'hover:-translate-y-2 hover:shadow-blue-200/50',
     cardBorderClass: 'border-t-4 border-t-blue-500',
+    cardTextClass: 'text-gray-600',
+    cardTitleClass: 'text-gray-900',
+    packageCardClass: 'bg-white rounded-2xl shadow-xl border-0 overflow-hidden',
+    packageCardPopular: 'ring-2 ring-blue-500 scale-105',
+    packagePriceClass: 'text-blue-600',
+    featureCardClass: 'bg-white rounded-xl shadow-lg border border-gray-100 p-6',
+    featureIconBgClass: 'bg-gradient-to-br from-blue-500 to-indigo-500',
     primaryButtonClass: 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/30',
     secondaryButtonClass: 'border-blue-500 text-blue-600 hover:bg-blue-50',
     badgeClass: 'bg-blue-500/10 text-blue-600 border-0',
     headingClass: 'bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent',
     subheadingClass: 'text-gray-600',
     paragraphClass: 'text-gray-600',
+    footerClass: 'bg-slate-900',
+    footerTextClass: 'text-gray-300',
     glowClass: 'shadow-lg shadow-blue-500/20',
     shadowClass: 'shadow-2xl',
     isDark: false,
     hasGlassEffect: true,
     hasGradientText: true,
     hasAnimatedBg: true,
-    patternOverlay: 'radial-gradient(circle at 50% 50%, rgba(59,130,246,0.1) 0%, transparent 50%)'
+    patternOverlay: 'radial-gradient(circle at 50% 50%, rgba(59,130,246,0.1) 0%, transparent 50%)',
+    sectionStyle: 'wave',
+    cardStyle: 'elevated'
   },
   'isp-corporate': {
     id: 'isp-corporate',
@@ -184,21 +214,34 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroAnimation: 'animate-slide-in',
     sectionBgClass: 'bg-slate-900',
     sectionAltBgClass: 'bg-slate-950',
+    sectionTextClass: 'text-gray-300',
+    sectionHeadingClass: 'text-white',
     cardClass: 'bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all rounded-xl',
     cardHoverClass: 'hover:border-white/30',
     cardBorderClass: 'border-l-4 border-l-cyan-500',
+    cardTextClass: 'text-gray-300',
+    cardTitleClass: 'text-white',
+    packageCardClass: 'bg-white/5 backdrop-blur-md rounded-xl border border-white/10',
+    packageCardPopular: 'ring-2 ring-cyan-500 bg-white/10',
+    packagePriceClass: 'text-cyan-400',
+    featureCardClass: 'bg-white/5 rounded-lg border border-white/10 p-6 backdrop-blur-sm',
+    featureIconBgClass: 'bg-gradient-to-br from-cyan-500 to-blue-500',
     primaryButtonClass: 'bg-white text-slate-900 hover:bg-gray-100 shadow-lg',
     secondaryButtonClass: 'border-white/30 text-white hover:bg-white/10',
     badgeClass: 'bg-white/10 text-white border-white/20',
     headingClass: 'text-white',
     subheadingClass: 'text-gray-400',
     paragraphClass: 'text-gray-400',
+    footerClass: 'bg-black',
+    footerTextClass: 'text-gray-400',
     glowClass: 'shadow-lg shadow-white/5',
     shadowClass: 'shadow-2xl shadow-black/50',
     isDark: true,
     hasGlassEffect: true,
     hasGradientText: false,
-    hasAnimatedBg: false
+    hasAnimatedBg: false,
+    sectionStyle: 'sharp',
+    cardStyle: 'glass'
   },
   'isp-vibrant': {
     id: 'isp-vibrant',
@@ -218,23 +261,36 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroLayout: 'centered',
     heroAnimation: 'animate-fade-in',
     sectionBgClass: 'bg-gradient-to-b from-gray-50 to-white',
-    sectionAltBgClass: 'bg-white',
+    sectionAltBgClass: 'bg-cyan-50/50',
+    sectionTextClass: 'text-gray-600',
+    sectionHeadingClass: 'text-gray-900',
     cardClass: 'bg-white shadow-xl hover:shadow-2xl transition-all border border-gray-100 rounded-3xl overflow-hidden',
     cardHoverClass: 'hover:-translate-y-3 hover:rotate-1',
-    cardBorderClass: 'border-t-4 border-t-gradient-to-r from-cyan-500 to-blue-500',
+    cardBorderClass: 'border-t-4 border-t-cyan-500',
+    cardTextClass: 'text-gray-600',
+    cardTitleClass: 'text-gray-900',
+    packageCardClass: 'bg-white rounded-3xl shadow-xl border border-cyan-100 overflow-hidden transform transition-all',
+    packageCardPopular: 'ring-2 ring-cyan-500 scale-105 shadow-cyan-200/50',
+    packagePriceClass: 'text-cyan-600',
+    featureCardClass: 'bg-gradient-to-br from-white to-cyan-50 rounded-2xl shadow-lg p-6 border border-cyan-100',
+    featureIconBgClass: 'bg-gradient-to-br from-cyan-500 to-blue-600',
     primaryButtonClass: 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-lg shadow-cyan-500/30 rounded-full',
     secondaryButtonClass: 'border-cyan-500 text-cyan-600 hover:bg-cyan-50 rounded-full',
     badgeClass: 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-700 border-0',
     headingClass: 'bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent',
     subheadingClass: 'text-gray-600',
     paragraphClass: 'text-gray-600',
+    footerClass: 'bg-gradient-to-r from-cyan-900 to-blue-900',
+    footerTextClass: 'text-cyan-100',
     glowClass: 'shadow-lg shadow-cyan-500/30',
     shadowClass: 'shadow-2xl shadow-cyan-500/20',
     isDark: false,
     hasGlassEffect: false,
     hasGradientText: true,
     hasAnimatedBg: true,
-    patternOverlay: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 1440 320\'%3E%3Cpath fill=\'%23ffffff\' fill-opacity=\'0.1\' d=\'M0,224L48,213.3C96,203,192,181,288,181.3C384,181,480,203,576,213.3C672,224,768,224,864,208C960,192,1056,160,1152,165.3C1248,171,1344,213,1392,234.7L1440,256L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z\'%3E%3C/path%3E%3C/svg%3E")'
+    patternOverlay: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 1440 320\'%3E%3Cpath fill=\'%23ffffff\' fill-opacity=\'0.1\' d=\'M0,224L48,213.3C96,203,192,181,288,181.3C384,181,480,203,576,213.3C672,224,768,224,864,208C960,192,1056,160,1152,165.3C1248,171,1344,213,1392,234.7L1440,256L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z\'%3E%3C/path%3E%3C/svg%3E")',
+    sectionStyle: 'wave',
+    cardStyle: 'elevated'
   },
   'isp-gaming': {
     id: 'isp-gaming',
@@ -255,22 +311,35 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroAnimation: 'animate-slide-in',
     sectionBgClass: 'bg-purple-950',
     sectionAltBgClass: 'bg-violet-950',
+    sectionTextClass: 'text-purple-200',
+    sectionHeadingClass: 'text-white',
     cardClass: 'bg-purple-900/50 backdrop-blur-md border border-purple-500/20 hover:border-purple-500/50 transition-all rounded-2xl',
     cardHoverClass: 'hover:shadow-lg hover:shadow-purple-500/20',
     cardBorderClass: 'border-l-4 border-l-fuchsia-500',
+    cardTextClass: 'text-purple-200',
+    cardTitleClass: 'text-white',
+    packageCardClass: 'bg-purple-900/50 backdrop-blur-md rounded-2xl border border-purple-500/20',
+    packageCardPopular: 'ring-2 ring-fuchsia-500 border-fuchsia-500/50 shadow-lg shadow-fuchsia-500/30',
+    packagePriceClass: 'text-fuchsia-400',
+    featureCardClass: 'bg-purple-900/30 rounded-xl border border-purple-500/20 p-6 backdrop-blur-sm',
+    featureIconBgClass: 'bg-gradient-to-br from-purple-500 to-fuchsia-500',
     primaryButtonClass: 'bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-600 hover:to-fuchsia-600 text-white shadow-lg shadow-purple-500/40 rounded-xl',
     secondaryButtonClass: 'border-purple-400 text-purple-300 hover:bg-purple-500/20 rounded-xl',
     badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
     headingClass: 'bg-gradient-to-r from-purple-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent',
     subheadingClass: 'text-purple-300',
     paragraphClass: 'text-purple-200',
+    footerClass: 'bg-purple-950 border-t border-purple-500/20',
+    footerTextClass: 'text-purple-300',
     glowClass: 'shadow-lg shadow-purple-500/30',
     shadowClass: 'shadow-2xl shadow-purple-500/20',
     isDark: true,
     hasGlassEffect: true,
     hasGradientText: true,
     hasAnimatedBg: true,
-    patternOverlay: 'radial-gradient(circle at 30% 20%, rgba(168,85,247,0.15) 0%, transparent 40%)'
+    patternOverlay: 'radial-gradient(circle at 30% 20%, rgba(168,85,247,0.15) 0%, transparent 40%)',
+    sectionStyle: 'diagonal',
+    cardStyle: 'glass'
   },
   'modern-blue': {
     id: 'modern-blue',
@@ -291,21 +360,34 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroAnimation: 'animate-fade-in',
     sectionBgClass: 'bg-gray-50',
     sectionAltBgClass: 'bg-white',
+    sectionTextClass: 'text-gray-600',
+    sectionHeadingClass: 'text-gray-900',
     cardClass: 'bg-white shadow-xl shadow-gray-200/50 border-0 hover:shadow-2xl transition-shadow rounded-xl',
     cardHoverClass: 'hover:-translate-y-1',
     cardBorderClass: '',
+    cardTextClass: 'text-gray-600',
+    cardTitleClass: 'text-gray-900',
+    packageCardClass: 'bg-white rounded-xl shadow-lg border border-gray-100',
+    packageCardPopular: 'ring-2 ring-blue-500 shadow-blue-200/50',
+    packagePriceClass: 'text-blue-600',
+    featureCardClass: 'bg-white rounded-lg shadow-md border border-gray-100 p-6',
+    featureIconBgClass: 'bg-blue-600',
     primaryButtonClass: 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg',
     secondaryButtonClass: 'border-blue-600 text-blue-600 hover:bg-blue-50',
     badgeClass: 'bg-blue-100 text-blue-700',
     headingClass: 'text-gray-900',
     subheadingClass: 'text-gray-600',
     paragraphClass: 'text-gray-600',
+    footerClass: 'bg-slate-900',
+    footerTextClass: 'text-gray-300',
     glowClass: '',
     shadowClass: 'shadow-xl',
     isDark: false,
     hasGlassEffect: false,
     hasGradientText: false,
-    hasAnimatedBg: false
+    hasAnimatedBg: false,
+    sectionStyle: 'default',
+    cardStyle: 'flat'
   },
   'clean-white': {
     id: 'clean-white',
@@ -326,21 +408,34 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroAnimation: 'animate-fade-in',
     sectionBgClass: 'bg-gray-50',
     sectionAltBgClass: 'bg-white',
+    sectionTextClass: 'text-gray-600',
+    sectionHeadingClass: 'text-gray-900',
     cardClass: 'bg-white shadow-lg border border-gray-100 hover:shadow-xl transition-shadow rounded-xl',
     cardHoverClass: 'hover:border-gray-200',
     cardBorderClass: '',
+    cardTextClass: 'text-gray-600',
+    cardTitleClass: 'text-gray-900',
+    packageCardClass: 'bg-white rounded-xl shadow-md border border-gray-200',
+    packageCardPopular: 'ring-2 ring-gray-900 shadow-lg',
+    packagePriceClass: 'text-gray-900',
+    featureCardClass: 'bg-white rounded-lg border border-gray-100 p-6 hover:shadow-md transition-shadow',
+    featureIconBgClass: 'bg-gray-900',
     primaryButtonClass: 'bg-gray-900 hover:bg-gray-800 text-white',
     secondaryButtonClass: 'border-gray-300 text-gray-700 hover:bg-gray-50',
     badgeClass: 'bg-gray-100 text-gray-700',
     headingClass: 'text-gray-900',
     subheadingClass: 'text-gray-600',
     paragraphClass: 'text-gray-600',
+    footerClass: 'bg-gray-900',
+    footerTextClass: 'text-gray-300',
     glowClass: '',
     shadowClass: 'shadow-lg',
     isDark: false,
     hasGlassEffect: false,
     hasGradientText: false,
-    hasAnimatedBg: false
+    hasAnimatedBg: false,
+    sectionStyle: 'rounded',
+    cardStyle: 'bordered'
   },
   'dark-gradient': {
     id: 'dark-gradient',
@@ -361,21 +456,34 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroAnimation: 'animate-fade-in',
     sectionBgClass: 'bg-gray-900',
     sectionAltBgClass: 'bg-gray-950',
+    sectionTextClass: 'text-gray-300',
+    sectionHeadingClass: 'text-white',
     cardClass: 'bg-white/10 backdrop-blur-md border border-white/10 hover:bg-white/15 transition-all rounded-2xl',
     cardHoverClass: 'hover:border-purple-500/30',
     cardBorderClass: '',
+    cardTextClass: 'text-gray-300',
+    cardTitleClass: 'text-white',
+    packageCardClass: 'bg-white/10 backdrop-blur-md rounded-2xl border border-white/10',
+    packageCardPopular: 'ring-2 ring-purple-500 bg-purple-500/10 shadow-lg shadow-purple-500/20',
+    packagePriceClass: 'text-purple-400',
+    featureCardClass: 'bg-white/5 rounded-xl border border-white/10 p-6 backdrop-blur-sm',
+    featureIconBgClass: 'bg-gradient-to-br from-purple-500 to-pink-500',
     primaryButtonClass: 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg shadow-purple-500/30',
     secondaryButtonClass: 'border-white/30 text-white hover:bg-white/10',
     badgeClass: 'bg-purple-500/20 text-purple-300 border-0',
     headingClass: 'text-white',
     subheadingClass: 'text-gray-400',
     paragraphClass: 'text-gray-400',
+    footerClass: 'bg-black',
+    footerTextClass: 'text-gray-400',
     glowClass: 'shadow-lg shadow-purple-500/20',
     shadowClass: 'shadow-2xl',
     isDark: true,
     hasGlassEffect: true,
     hasGradientText: false,
-    hasAnimatedBg: true
+    hasAnimatedBg: true,
+    sectionStyle: 'floating',
+    cardStyle: 'glass'
   },
   'nature-green': {
     id: 'nature-green',
@@ -396,21 +504,34 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroAnimation: 'animate-fade-in',
     sectionBgClass: 'bg-emerald-50',
     sectionAltBgClass: 'bg-white',
+    sectionTextClass: 'text-gray-600',
+    sectionHeadingClass: 'text-emerald-900',
     cardClass: 'bg-white shadow-xl shadow-emerald-200/30 border-0 hover:shadow-2xl transition-shadow rounded-2xl',
     cardHoverClass: 'hover:-translate-y-2',
     cardBorderClass: 'border-t-4 border-t-emerald-500',
+    cardTextClass: 'text-gray-600',
+    cardTitleClass: 'text-emerald-900',
+    packageCardClass: 'bg-white rounded-2xl shadow-xl border border-emerald-100',
+    packageCardPopular: 'ring-2 ring-emerald-500 shadow-emerald-200/50 scale-105',
+    packagePriceClass: 'text-emerald-600',
+    featureCardClass: 'bg-gradient-to-br from-white to-emerald-50 rounded-xl shadow-lg p-6 border border-emerald-100',
+    featureIconBgClass: 'bg-gradient-to-br from-emerald-500 to-teal-500',
     primaryButtonClass: 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-lg shadow-emerald-500/30',
     secondaryButtonClass: 'border-emerald-500 text-emerald-600 hover:bg-emerald-50',
     badgeClass: 'bg-emerald-500/10 text-emerald-700 border-0',
     headingClass: 'text-emerald-800',
     subheadingClass: 'text-gray-600',
     paragraphClass: 'text-gray-600',
+    footerClass: 'bg-emerald-900',
+    footerTextClass: 'text-emerald-100',
     glowClass: 'shadow-lg shadow-emerald-500/20',
     shadowClass: 'shadow-xl shadow-emerald-200/50',
     isDark: false,
     hasGlassEffect: false,
     hasGradientText: false,
-    hasAnimatedBg: false
+    hasAnimatedBg: false,
+    sectionStyle: 'rounded',
+    cardStyle: 'elevated'
   },
   'sunset-orange': {
     id: 'sunset-orange',
@@ -431,21 +552,34 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroAnimation: 'animate-slide-in',
     sectionBgClass: 'bg-orange-50',
     sectionAltBgClass: 'bg-white',
+    sectionTextClass: 'text-gray-600',
+    sectionHeadingClass: 'text-orange-900',
     cardClass: 'bg-white shadow-xl shadow-orange-200/30 border-0 hover:shadow-2xl transition-shadow rounded-2xl',
     cardHoverClass: 'hover:-translate-y-2 hover:rotate-1',
     cardBorderClass: 'border-t-4 border-t-orange-500',
+    cardTextClass: 'text-gray-600',
+    cardTitleClass: 'text-orange-900',
+    packageCardClass: 'bg-white rounded-2xl shadow-xl border border-orange-100 overflow-hidden',
+    packageCardPopular: 'ring-2 ring-orange-500 scale-105 shadow-orange-200/50',
+    packagePriceClass: 'text-orange-600',
+    featureCardClass: 'bg-gradient-to-br from-white to-orange-50 rounded-2xl shadow-lg p-6 border border-orange-100',
+    featureIconBgClass: 'bg-gradient-to-br from-orange-500 to-red-500',
     primaryButtonClass: 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-lg shadow-orange-500/30 rounded-full',
     secondaryButtonClass: 'border-orange-500 text-orange-600 hover:bg-orange-50 rounded-full',
     badgeClass: 'bg-gradient-to-r from-orange-500/20 to-red-500/20 text-orange-700 border-0',
     headingClass: 'bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent',
     subheadingClass: 'text-gray-600',
     paragraphClass: 'text-gray-600',
+    footerClass: 'bg-gradient-to-r from-orange-900 to-red-900',
+    footerTextClass: 'text-orange-100',
     glowClass: 'shadow-lg shadow-orange-500/30',
     shadowClass: 'shadow-xl shadow-orange-200/50',
     isDark: false,
     hasGlassEffect: false,
     hasGradientText: true,
-    hasAnimatedBg: true
+    hasAnimatedBg: true,
+    sectionStyle: 'diagonal',
+    cardStyle: 'elevated'
   },
   'ocean-teal': {
     id: 'ocean-teal',
@@ -466,21 +600,34 @@ export const ENHANCED_TEMPLATES: Record<string, TemplateConfig> = {
     heroAnimation: 'animate-fade-in',
     sectionBgClass: 'bg-teal-50',
     sectionAltBgClass: 'bg-white',
+    sectionTextClass: 'text-gray-600',
+    sectionHeadingClass: 'text-teal-900',
     cardClass: 'bg-white shadow-xl shadow-teal-200/30 border-0 hover:shadow-2xl transition-shadow rounded-2xl',
     cardHoverClass: 'hover:-translate-y-2',
     cardBorderClass: 'border-b-4 border-b-teal-500',
+    cardTextClass: 'text-gray-600',
+    cardTitleClass: 'text-teal-900',
+    packageCardClass: 'bg-white rounded-2xl shadow-xl border border-teal-100',
+    packageCardPopular: 'ring-2 ring-teal-500 shadow-teal-200/50',
+    packagePriceClass: 'text-teal-600',
+    featureCardClass: 'bg-gradient-to-br from-white to-teal-50 rounded-xl shadow-md p-6 border border-teal-100',
+    featureIconBgClass: 'bg-gradient-to-br from-teal-500 to-cyan-500',
     primaryButtonClass: 'bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-lg shadow-teal-500/30',
     secondaryButtonClass: 'border-teal-500 text-teal-600 hover:bg-teal-50',
     badgeClass: 'bg-teal-500/10 text-teal-700 border-0',
     headingClass: 'text-teal-800',
     subheadingClass: 'text-gray-600',
     paragraphClass: 'text-gray-600',
+    footerClass: 'bg-teal-900',
+    footerTextClass: 'text-teal-100',
     glowClass: 'shadow-lg shadow-teal-500/20',
     shadowClass: 'shadow-xl shadow-teal-200/50',
     isDark: false,
     hasGlassEffect: false,
     hasGradientText: false,
-    hasAnimatedBg: false
+    hasAnimatedBg: false,
+    sectionStyle: 'wave',
+    cardStyle: 'flat'
   },
 };
 
