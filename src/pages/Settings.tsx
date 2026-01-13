@@ -864,46 +864,51 @@ export default function Settings() {
     <DashboardLayout title="Settings" subtitle="System configuration and preferences">
       <div className="space-y-6 animate-fade-in max-w-4xl">
         <Tabs defaultValue="branding" className="space-y-6">
-          <TabsList className="bg-secondary flex-wrap h-auto py-1">
-            <TabsTrigger value="branding" className="gap-2">
-              <Building2 className="h-4 w-4" />
-              Branding
-            </TabsTrigger>
-            <TabsTrigger value="themes" className="gap-2">
-              <Paintbrush className="h-4 w-4" />
-              Themes
-            </TabsTrigger>
-            <TabsTrigger value="portal" className="gap-2">
-              <Users className="h-4 w-4" />
-              Customer Portal
-            </TabsTrigger>
-            <TabsTrigger value="landing" className="gap-2">
-              <LayoutTemplate className="h-4 w-4" />
-              Landing Page
-            </TabsTrigger>
-            <TabsTrigger value="general" className="gap-2">
-              <SettingsIcon className="h-4 w-4" />
-              General
-            </TabsTrigger>
-            <TabsTrigger value="polling" className="gap-2">
-              <Clock className="h-4 w-4" />
-              Polling
-            </TabsTrigger>
-            <TabsTrigger value="alerts" className="gap-2">
-              <Bell className="h-4 w-4" />
-              Alerts
-            </TabsTrigger>
-            <TabsTrigger value="security" className="gap-2">
-              <Shield className="h-4 w-4" />
-              Security
-            </TabsTrigger>
-            {canBackup && (
-              <TabsTrigger value="backup" className="gap-2">
-                <HardDrive className="h-4 w-4" />
-                Backup
+          <div className="overflow-x-auto pb-2">
+            <TabsList className="bg-secondary inline-flex min-w-max">
+              <TabsTrigger value="branding" className="gap-1.5 text-xs sm:text-sm">
+                <Building2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Branding</span>
+                <span className="sm:hidden">Brand</span>
               </TabsTrigger>
-            )}
-          </TabsList>
+              <TabsTrigger value="themes" className="gap-1.5 text-xs sm:text-sm">
+                <Paintbrush className="h-3.5 w-3.5" />
+                <span>Themes</span>
+              </TabsTrigger>
+              <TabsTrigger value="portal" className="gap-1.5 text-xs sm:text-sm">
+                <Users className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Customer Portal</span>
+                <span className="sm:hidden">Portal</span>
+              </TabsTrigger>
+              <TabsTrigger value="landing" className="gap-1.5 text-xs sm:text-sm">
+                <LayoutTemplate className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Landing Page</span>
+                <span className="sm:hidden">Landing</span>
+              </TabsTrigger>
+              <TabsTrigger value="general" className="gap-1.5 text-xs sm:text-sm">
+                <SettingsIcon className="h-3.5 w-3.5" />
+                <span>General</span>
+              </TabsTrigger>
+              <TabsTrigger value="polling" className="gap-1.5 text-xs sm:text-sm">
+                <Clock className="h-3.5 w-3.5" />
+                <span>Polling</span>
+              </TabsTrigger>
+              <TabsTrigger value="alerts" className="gap-1.5 text-xs sm:text-sm">
+                <Bell className="h-3.5 w-3.5" />
+                <span>Alerts</span>
+              </TabsTrigger>
+              <TabsTrigger value="security" className="gap-1.5 text-xs sm:text-sm">
+                <Shield className="h-3.5 w-3.5" />
+                <span>Security</span>
+              </TabsTrigger>
+              {canBackup && (
+                <TabsTrigger value="backup" className="gap-1.5 text-xs sm:text-sm">
+                  <HardDrive className="h-3.5 w-3.5" />
+                  <span>Backup</span>
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </div>
 
           {/* Branding Settings */}
           <TabsContent value="branding" className="space-y-6">
