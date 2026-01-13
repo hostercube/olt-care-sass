@@ -7178,6 +7178,7 @@ export type Database = {
           landing_page_contact_phone: string | null
           landing_page_custom_menus: Json | null
           landing_page_custom_sections: Json | null
+          landing_page_dark_mode: boolean | null
           landing_page_enabled: boolean | null
           landing_page_footer_style: string | null
           landing_page_ftp_enabled: boolean | null
@@ -7213,6 +7214,7 @@ export type Database = {
           landing_page_show_packages: boolean | null
           landing_page_show_pay_bill_button: boolean | null
           landing_page_show_register_button: boolean | null
+          landing_page_slug_locked: boolean | null
           landing_page_social_facebook: string | null
           landing_page_social_instagram: string | null
           landing_page_social_linkedin: string | null
@@ -7281,6 +7283,7 @@ export type Database = {
           landing_page_contact_phone?: string | null
           landing_page_custom_menus?: Json | null
           landing_page_custom_sections?: Json | null
+          landing_page_dark_mode?: boolean | null
           landing_page_enabled?: boolean | null
           landing_page_footer_style?: string | null
           landing_page_ftp_enabled?: boolean | null
@@ -7316,6 +7319,7 @@ export type Database = {
           landing_page_show_packages?: boolean | null
           landing_page_show_pay_bill_button?: boolean | null
           landing_page_show_register_button?: boolean | null
+          landing_page_slug_locked?: boolean | null
           landing_page_social_facebook?: string | null
           landing_page_social_instagram?: string | null
           landing_page_social_linkedin?: string | null
@@ -7384,6 +7388,7 @@ export type Database = {
           landing_page_contact_phone?: string | null
           landing_page_custom_menus?: Json | null
           landing_page_custom_sections?: Json | null
+          landing_page_dark_mode?: boolean | null
           landing_page_enabled?: boolean | null
           landing_page_footer_style?: string | null
           landing_page_ftp_enabled?: boolean | null
@@ -7419,6 +7424,7 @@ export type Database = {
           landing_page_show_packages?: boolean | null
           landing_page_show_pay_bill_button?: boolean | null
           landing_page_show_register_button?: boolean | null
+          landing_page_slug_locked?: boolean | null
           landing_page_social_facebook?: string | null
           landing_page_social_instagram?: string | null
           landing_page_social_linkedin?: string | null
