@@ -47,6 +47,12 @@ interface LiveTVChannel {
 
 // Use imported CustomSection type from landingPage.ts
 
+interface HeroSlide {
+  url: string;
+  title?: string;
+  subtitle?: string;
+}
+
 interface TenantData {
   id: string;
   company_name: string;
@@ -69,6 +75,13 @@ interface TenantData {
   landing_page_social_tiktok?: string;
   landing_page_hero_title: string;
   landing_page_hero_subtitle: string;
+  landing_page_hero_badge_text?: string;
+  landing_page_hero_primary_button_text?: string;
+  landing_page_hero_primary_button_url?: string;
+  landing_page_hero_secondary_button_text?: string;
+  landing_page_hero_secondary_button_url?: string;
+  landing_page_hero_background_url?: string;
+  landing_page_hero_slides?: HeroSlide[];
   landing_page_about_text: string;
   landing_page_ftp_enabled?: boolean;
   landing_page_ftp_url?: string;
@@ -294,6 +307,13 @@ export default function TenantLanding() {
           landing_page_social_tiktok: rawData.landing_page_social_tiktok || '',
           landing_page_hero_title: rawData.landing_page_hero_title || '',
           landing_page_hero_subtitle: rawData.landing_page_hero_subtitle || '',
+          landing_page_hero_badge_text: rawData.landing_page_hero_badge_text || '',
+          landing_page_hero_primary_button_text: rawData.landing_page_hero_primary_button_text || '',
+          landing_page_hero_primary_button_url: rawData.landing_page_hero_primary_button_url || '',
+          landing_page_hero_secondary_button_text: rawData.landing_page_hero_secondary_button_text || '',
+          landing_page_hero_secondary_button_url: rawData.landing_page_hero_secondary_button_url || '',
+          landing_page_hero_background_url: rawData.landing_page_hero_background_url || '',
+          landing_page_hero_slides: parseJsonField(rawData.landing_page_hero_slides, []),
           landing_page_about_text: rawData.landing_page_about_text || '',
           landing_page_ftp_enabled: rawData.landing_page_ftp_enabled || false,
           landing_page_ftp_url: rawData.landing_page_ftp_url || '',
@@ -899,14 +919,19 @@ export default function TenantLanding() {
 
       {/* Hero Section with Slider */}
       <section id="home" className={`${template.heroClass} relative overflow-hidden`}>
-        {/* Animated Background Effects */}
+        {/* Background Image or Slider */}
         <div className="absolute inset-0">
-          {/* Slider Background */}
-          {SLIDER_IMAGES.map((slide, index) => (
+          {/* Custom Hero Slides or Default Slider */}
+          {(tenant.landing_page_hero_slides && tenant.landing_page_hero_slides.length > 0 
+            ? tenant.landing_page_hero_slides 
+            : tenant.landing_page_hero_background_url 
+              ? [{ url: tenant.landing_page_hero_background_url }]
+              : SLIDER_IMAGES
+          ).map((slide, index) => (
             <div
               key={index}
               className={`absolute inset-0 transition-opacity duration-1000 ${
-                currentSlide === index ? 'opacity-30' : 'opacity-0'
+                currentSlide === index ? 'opacity-40' : 'opacity-0'
               }`}
               style={{
                 backgroundImage: `url(${slide.url})`,
@@ -919,46 +944,33 @@ export default function TenantLanding() {
           {/* Animated Gradient Orbs */}
           <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-white/10 to-transparent rounded-full blur-3xl animate-pulse" />
           <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-br from-white/5 to-transparent rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-radial from-white/5 to-transparent rounded-full blur-3xl" />
         </div>
 
-        {/* Floating Particles Effect */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {[...Array(20)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute w-2 h-2 bg-white/20 rounded-full animate-float"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 5}s`,
-                animationDuration: `${5 + Math.random() * 5}s`,
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Slider Controls */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-          {SLIDER_IMAGES.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => setCurrentSlide(index)}
-              className={`w-3 h-3 rounded-full transition-all ${
-                currentSlide === index 
-                  ? `bg-gradient-to-r ${themeColors.gradient} w-8` 
-                  : 'bg-white/30 hover:bg-white/50'
-              }`}
-            />
-          ))}
-        </div>
+        {/* Slider Controls - show only if multiple slides */}
+        {((tenant.landing_page_hero_slides?.length || 0) > 1 || (!tenant.landing_page_hero_slides?.length && !tenant.landing_page_hero_background_url)) && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+            {(tenant.landing_page_hero_slides?.length ? tenant.landing_page_hero_slides : SLIDER_IMAGES).map((_, index) => (
+              <button
+                key={index}
+                onClick={() => setCurrentSlide(index)}
+                className={`w-3 h-3 rounded-full transition-all ${
+                  currentSlide === index 
+                    ? `bg-gradient-to-r ${themeColors.gradient} w-8` 
+                    : 'bg-white/30 hover:bg-white/50'
+                }`}
+              />
+            ))}
+          </div>
+        )}
         
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-32">
-          <div className="text-center max-w-4xl mx-auto">
-            {/* Trust Badge */}
+          <div className={`max-w-4xl ${template.heroLayout === 'left' ? '' : template.heroLayout === 'right' ? 'ml-auto' : 'mx-auto text-center'}`}>
+            {/* Hero Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 mb-8 animate-fade-in">
               <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
-              <span className={template.heroSubtextClass}>বাংলাদেশের বিশ্বস্ত ইন্টারনেট সেবা প্রদানকারী</span>
+              <span className={template.heroSubtextClass}>
+                {tenant.landing_page_hero_badge_text || 'বাংলাদেশের বিশ্বস্ত ইন্টারনেট সেবা প্রদানকারী'}
+              </span>
             </div>
             
             {/* Main Heading */}
@@ -974,13 +986,27 @@ export default function TenantLanding() {
             </h1>
             
             {/* Subtitle */}
-            <p className={`text-lg md:text-xl lg:text-2xl ${template.heroSubtextClass} max-w-2xl mx-auto mb-10`}>
+            <p className={`text-lg md:text-xl lg:text-2xl ${template.heroSubtextClass} max-w-2xl ${template.heroLayout === 'centered' ? 'mx-auto' : ''} mb-10`}>
               {tenant.landing_page_hero_subtitle || 'ফাইবার অপটিক প্রযুক্তিতে উচ্চ গতির ব্রডব্যান্ড সংযোগ। সাশ্রয়ী মূল্যে সেরা সেবা।'}
             </p>
             
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-              {tenant.landing_page_show_packages && packages.length > 0 && (
+            {/* CTA Buttons - Custom or Default */}
+            <div className={`flex flex-col sm:flex-row gap-4 ${template.heroLayout === 'centered' ? 'justify-center' : ''} mb-16`}>
+              {/* Primary Button */}
+              {tenant.landing_page_hero_primary_button_text ? (
+                <Button 
+                  size="lg" 
+                  className={`bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white text-lg px-8 py-6 shadow-2xl ${themeColors.glow}`}
+                  onClick={() => {
+                    const url = tenant.landing_page_hero_primary_button_url;
+                    if (url?.startsWith('#')) scrollToSection(url.slice(1));
+                    else if (url) window.open(url, '_blank');
+                  }}
+                >
+                  {tenant.landing_page_hero_primary_button_text}
+                  <ChevronRight className="ml-2 h-5 w-5" />
+                </Button>
+              ) : tenant.landing_page_show_packages && packages.length > 0 ? (
                 <Button 
                   size="lg" 
                   className={`bg-gradient-to-r ${themeColors.gradient} hover:opacity-90 text-white text-lg px-8 py-6 shadow-2xl ${themeColors.glow}`}
@@ -989,29 +1015,47 @@ export default function TenantLanding() {
                   প্যাকেজ দেখুন
                   <ChevronRight className="ml-2 h-5 w-5" />
                 </Button>
-              )}
+              ) : null}
               
-              {/* Pay Bill Button - Hero */}
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className={`${template.heroTextClass} border-2 border-green-400/50 hover:bg-green-500/20 text-lg px-8 py-6 backdrop-blur-sm`}
-                onClick={() => navigate(`/t/${tenantSlug}`)}
-              >
-                <DollarSign className="mr-2 h-5 w-5" />
-                বিল পরিশোধ করুন
-              </Button>
-              
-              {tenant.customer_registration_enabled && (
+              {/* Secondary Button */}
+              {tenant.landing_page_hero_secondary_button_text ? (
                 <Button 
                   size="lg" 
                   variant="outline" 
                   className={`${template.heroTextClass} border-2 border-white/30 hover:bg-white/10 text-lg px-8 py-6 backdrop-blur-sm`}
-                  onClick={() => setRegisterModalOpen(true)}
+                  onClick={() => {
+                    const url = tenant.landing_page_hero_secondary_button_url;
+                    if (url?.startsWith('#')) scrollToSection(url.slice(1));
+                    else if (url) window.open(url, '_blank');
+                  }}
                 >
-                  <UserPlus className="mr-2 h-5 w-5" />
-                  এখনই রেজিস্টার করুন
+                  {tenant.landing_page_hero_secondary_button_text}
                 </Button>
+              ) : (
+                <>
+                  {/* Pay Bill Button - Hero */}
+                  <Button 
+                    size="lg" 
+                    variant="outline" 
+                    className={`${template.heroTextClass} border-2 border-green-400/50 hover:bg-green-500/20 text-lg px-8 py-6 backdrop-blur-sm`}
+                    onClick={() => navigate(`/t/${tenantSlug}`)}
+                  >
+                    <DollarSign className="mr-2 h-5 w-5" />
+                    বিল পরিশোধ করুন
+                  </Button>
+                  
+                  {tenant.customer_registration_enabled && (
+                    <Button 
+                      size="lg" 
+                      variant="outline" 
+                      className={`${template.heroTextClass} border-2 border-white/30 hover:bg-white/10 text-lg px-8 py-6 backdrop-blur-sm`}
+                      onClick={() => setRegisterModalOpen(true)}
+                    >
+                      <UserPlus className="mr-2 h-5 w-5" />
+                      এখনই রেজিস্টার করুন
+                    </Button>
+                  )}
+                </>
               )}
             </div>
 

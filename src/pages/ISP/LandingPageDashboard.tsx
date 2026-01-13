@@ -23,6 +23,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { toast } from 'sonner';
 import { AdvancedSectionEditor } from '@/components/landing/AdvancedSectionEditor';
+import { HeroSectionEditor } from '@/components/landing/HeroSectionEditor';
+import { SlugVerificationInput } from '@/components/landing/SlugVerificationInput';
+import { ImageUploader } from '@/components/landing/ImageUploader';
 import { CustomSection as CustomSectionType, SECTION_TYPES } from '@/types/landingPage';
 
 // Advanced landing page templates with unique names (no company references)
@@ -902,8 +905,8 @@ export default function LandingPageDashboard() {
 
           {/* Content Tab */}
           <TabsContent value="content" className="mt-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* URL Slug */}
+            <div className="space-y-6">
+              {/* URL Slug with verification */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
@@ -911,69 +914,67 @@ export default function LandingPageDashboard() {
                     URL Slug
                   </CardTitle>
                   <CardDescription>
-                    আপনার ওয়েবসাইটের URL অ্যাড্রেস
+                    আপনার ওয়েবসাইটের ইউনিক URL অ্যাড্রেস
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex gap-2">
-                    <Input
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <SlugVerificationInput
                       value={settings.slug}
-                      onChange={(e) => handleInputChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                      placeholder="your-company-name"
+                      onChange={(value) => handleInputChange('slug', value)}
+                      disabled={saving}
                     />
-                    <Button 
-                      onClick={() => handleSave({ slug: settings.slug })}
-                      disabled={saving || !settings.slug}
-                    >
-                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'সেভ'}
-                    </Button>
+                    <div className="flex items-end">
+                      <Button 
+                        onClick={() => handleSave({ slug: settings.slug })}
+                        disabled={saving || !settings.slug || settings.slug.length < 3}
+                        className="w-full md:w-auto"
+                      >
+                        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                        স্লাগ সেভ করুন
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    শুধুমাত্র ছোট হাতের অক্ষর, সংখ্যা এবং হাইফেন ব্যবহার করুন
-                  </p>
+                  {publicUrl && (
+                    <div className="p-3 rounded-lg bg-muted/50 border">
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">প্রিভিউ: </span>
+                        <code className="font-mono text-primary">{publicUrl}</code>
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
-              {/* Hero Title */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Type className="h-4 w-4" />
-                    Hero Title
-                  </CardTitle>
-                  <CardDescription>
-                    মূল ব্যানার শিরোনাম
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Input
-                    value={settings.landing_page_hero_title}
-                    onChange={(e) => handleInputChange('landing_page_hero_title', e.target.value)}
-                    placeholder="দ্রুতগতির ইন্টারনেট আপনার দোরগোড়ায়"
-                  />
-                </CardContent>
-              </Card>
-
-              {/* Hero Subtitle */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Hero Subtitle
-                  </CardTitle>
-                  <CardDescription>
-                    সাবটাইটেল বা ট্যাগলাইন
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    value={settings.landing_page_hero_subtitle}
-                    onChange={(e) => handleInputChange('landing_page_hero_subtitle', e.target.value)}
-                    placeholder="ফাইবার অপটিক প্রযুক্তিতে উচ্চ গতির ব্রডব্যান্ড সংযোগ।"
-                    rows={3}
-                  />
-                </CardContent>
-              </Card>
+              {/* Hero Section Editor */}
+              <HeroSectionEditor
+                settings={{
+                  landing_page_hero_title: settings.landing_page_hero_title,
+                  landing_page_hero_subtitle: settings.landing_page_hero_subtitle,
+                  landing_page_hero_badge_text: settings.landing_page_hero_badge_text,
+                  landing_page_hero_primary_button_text: settings.landing_page_hero_primary_button_text,
+                  landing_page_hero_primary_button_url: settings.landing_page_hero_primary_button_url,
+                  landing_page_hero_secondary_button_text: settings.landing_page_hero_secondary_button_text,
+                  landing_page_hero_secondary_button_url: settings.landing_page_hero_secondary_button_url,
+                  landing_page_hero_background_url: settings.landing_page_hero_background_url,
+                  landing_page_hero_slides: settings.landing_page_hero_slides,
+                }}
+                onSettingsChange={(key, value) => handleInputChange(key as keyof LandingSettings, value)}
+                onSave={async () => {
+                  await handleSave({
+                    landing_page_hero_title: settings.landing_page_hero_title,
+                    landing_page_hero_subtitle: settings.landing_page_hero_subtitle,
+                    landing_page_hero_badge_text: settings.landing_page_hero_badge_text,
+                    landing_page_hero_primary_button_text: settings.landing_page_hero_primary_button_text,
+                    landing_page_hero_primary_button_url: settings.landing_page_hero_primary_button_url,
+                    landing_page_hero_secondary_button_text: settings.landing_page_hero_secondary_button_text,
+                    landing_page_hero_secondary_button_url: settings.landing_page_hero_secondary_button_url,
+                    landing_page_hero_background_url: settings.landing_page_hero_background_url,
+                    landing_page_hero_slides: settings.landing_page_hero_slides,
+                  });
+                }}
+                saving={saving}
+              />
 
               {/* About Text */}
               <Card>
@@ -983,33 +984,25 @@ export default function LandingPageDashboard() {
                     আমাদের সম্পর্কে
                   </CardTitle>
                   <CardDescription>
-                    কোম্পানির বিবরণ
+                    কোম্পানির বিবরণ (About Us সেকশনে দেখাবে)
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                   <Textarea
                     value={settings.landing_page_about_text}
                     onChange={(e) => handleInputChange('landing_page_about_text', e.target.value)}
                     placeholder="আমরা আধুনিক ফাইবার অপটিক প্রযুক্তি ব্যবহার করে..."
                     rows={4}
                   />
+                  <Button 
+                    onClick={() => handleSave({ landing_page_about_text: settings.landing_page_about_text })}
+                    disabled={saving}
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                    সেভ করুন
+                  </Button>
                 </CardContent>
               </Card>
-
-              <div className="lg:col-span-2 flex justify-end">
-                <Button 
-                  onClick={() => handleSave({
-                    landing_page_hero_title: settings.landing_page_hero_title,
-                    landing_page_hero_subtitle: settings.landing_page_hero_subtitle,
-                    landing_page_about_text: settings.landing_page_about_text,
-                  })}
-                  disabled={saving}
-                  className="min-w-[150px]"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                  কনটেন্ট সেভ করুন
-                </Button>
-              </div>
             </div>
           </TabsContent>
 
@@ -1731,22 +1724,17 @@ export default function LandingPageDashboard() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label>OG Image URL (সোশ্যাল শেয়ার ইমেজ)</Label>
-                    <Input
+                    <ImageUploader
+                      label="OG Image (সোশ্যাল শেয়ার ইমেজ)"
                       value={settings.landing_page_og_image_url}
-                      onChange={(e) => handleInputChange('landing_page_og_image_url', e.target.value)}
+                      onChange={(url) => handleInputChange('landing_page_og_image_url', url)}
+                      folderPath="og-images"
+                      aspectRatio="1200/630"
                       placeholder="https://example.com/og-image.jpg"
                     />
                     <p className="text-xs text-muted-foreground">
                       সুপারিশকৃত সাইজ: 1200x630 পিক্সেল
                     </p>
-                    {settings.landing_page_og_image_url && (
-                      <img 
-                        src={settings.landing_page_og_image_url} 
-                        alt="OG Preview" 
-                        className="mt-2 h-24 rounded-lg object-cover"
-                      />
-                    )}
                   </div>
                   <Button 
                     onClick={() => handleSave({ 
