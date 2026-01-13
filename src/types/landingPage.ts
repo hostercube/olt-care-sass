@@ -562,21 +562,21 @@ export const LAYOUT_OPTIONS = {
   ],
 };
 
-// Section type definitions
+// Section type definitions - icons are string names for flexibility
 export const SECTION_TYPES = [
-  { id: 'text', label: 'Text', labelBn: 'টেক্সট', icon: 'Type', description: 'Simple text content' },
-  { id: 'image', label: 'Image', labelBn: 'ইমেজ', icon: 'ImagePlus', description: 'Image with caption' },
-  { id: 'cta', label: 'CTA', labelBn: 'CTA', icon: 'Target', description: 'Call to action section' },
-  { id: 'features', label: 'Features', labelBn: 'ফিচার', icon: 'Zap', description: 'Feature list grid' },
-  { id: 'gallery', label: 'Gallery', labelBn: 'গ্যালারি', icon: 'Image', description: 'Image gallery' },
-  { id: 'video', label: 'Video', labelBn: 'ভিডিও', icon: 'Video', description: 'Embedded video' },
-  { id: 'testimonial', label: 'Testimonial', labelBn: 'টেস্টিমোনিয়াল', icon: 'Users', description: 'Customer reviews' },
-  { id: 'faq', label: 'FAQ', labelBn: 'FAQ', icon: 'FileText', description: 'Frequently asked questions' },
-  { id: 'stats', label: 'Stats', labelBn: 'স্ট্যাটস', icon: 'BarChart3', description: 'Statistics counter' },
-  { id: 'team', label: 'Team', labelBn: 'টিম', icon: 'Users', description: 'Team members' },
-  { id: 'slider', label: 'Slider', labelBn: 'স্লাইডার', icon: 'Image', description: 'Image slider' },
-  { id: 'banner', label: 'Banner', labelBn: 'ব্যানার', icon: 'Layout', description: 'Full-width banner' },
-  { id: 'custom', label: 'Custom', labelBn: 'কাস্টম', icon: 'PenTool', description: 'Custom content' },
+  { id: 'text', label: 'Text', labelBn: 'টেক্সট', iconName: 'Type', description: 'Simple text content' },
+  { id: 'image', label: 'Image', labelBn: 'ইমেজ', iconName: 'ImagePlus', description: 'Image with caption' },
+  { id: 'cta', label: 'CTA', labelBn: 'CTA', iconName: 'Target', description: 'Call to action section' },
+  { id: 'features', label: 'Features', labelBn: 'ফিচার', iconName: 'Zap', description: 'Feature list grid' },
+  { id: 'gallery', label: 'Gallery', labelBn: 'গ্যালারি', iconName: 'Image', description: 'Image gallery' },
+  { id: 'video', label: 'Video', labelBn: 'ভিডিও', iconName: 'Video', description: 'Embedded video' },
+  { id: 'testimonial', label: 'Testimonial', labelBn: 'টেস্টিমোনিয়াল', iconName: 'Users', description: 'Customer reviews' },
+  { id: 'faq', label: 'FAQ', labelBn: 'FAQ', iconName: 'FileText', description: 'Frequently asked questions' },
+  { id: 'stats', label: 'Stats', labelBn: 'স্ট্যাটস', iconName: 'BarChart3', description: 'Statistics counter' },
+  { id: 'team', label: 'Team', labelBn: 'টিম', iconName: 'Users', description: 'Team members' },
+  { id: 'slider', label: 'Slider', labelBn: 'স্লাইডার', iconName: 'Image', description: 'Image slider' },
+  { id: 'banner', label: 'Banner', labelBn: 'ব্যানার', iconName: 'Layout', description: 'Full-width banner' },
+  { id: 'custom', label: 'Custom', labelBn: 'কাস্টম', iconName: 'PenTool', description: 'Custom content' },
 ];
 
 export const getLayoutClass = (layout?: Partial<SectionLayoutOptions>): string => {

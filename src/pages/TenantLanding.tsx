@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
+import { CustomSectionRenderer } from '@/components/landing/CustomSectionRenderer';
+import { CustomSection as CustomSectionType, ENHANCED_TEMPLATES } from '@/types/landingPage';
 import { 
   Wifi, Shield, Users, CreditCard, Check, ArrowRight, Menu, X,
   Phone, Mail, MapPin, Facebook, Youtube, Loader2, AlertTriangle,
@@ -43,23 +45,7 @@ interface LiveTVChannel {
   url: string;
 }
 
-// Custom section types for landing page builder
-interface CustomSection {
-  id: string;
-  type: 'hero' | 'text' | 'image' | 'cta' | 'features' | 'custom' | 'gallery' | 'video' | 'testimonial' | 'faq';
-  title: string;
-  subtitle?: string;
-  content?: string;
-  imageUrl?: string;
-  videoUrl?: string;
-  buttonText?: string;
-  buttonUrl?: string;
-  bgColor?: string;
-  textColor?: string;
-  items?: { title: string; description: string; icon?: string; imageUrl?: string }[];
-  order: number;
-  isVisible: boolean;
-}
+// Use imported CustomSection type from landingPage.ts
 
 interface TenantData {
   id: string;
@@ -91,7 +77,7 @@ interface TenantData {
   landing_page_livetv_url?: string;
   landing_page_livetv_channels?: LiveTVChannel[];
   landing_page_custom_menus?: CustomMenuItem[];
-  landing_page_custom_sections?: CustomSection[];
+  landing_page_custom_sections?: CustomSectionType[];
   landing_page_whatsapp?: string;
   landing_page_telegram?: string;
   slug: string;
@@ -135,117 +121,59 @@ const THEME_COLORS: Record<string, { primary: string; gradient: string; lightBg:
   amber: { primary: '#f59e0b', gradient: 'from-amber-500 via-yellow-400 to-orange-500', lightBg: 'bg-amber-500/10', text: 'text-amber-500', ring: 'ring-amber-500', glow: 'shadow-amber-500/30' },
 };
 
-// Template configurations with enhanced visual styles
-const TEMPLATES: Record<string, {
-  name: string;
-  headerClass: string;
-  heroClass: string;
-  heroTextClass: string;
-  heroSubtextClass: string;
-  sectionBgClass: string;
-  cardClass: string;
-  isDark: boolean;
-}> = {
-  'isp-pro-1': {
-    name: 'ISP Pro Modern',
+// Get template from enhanced templates with fallback to basic structure
+const getTemplateConfig = (templateId: string) => {
+  const enhanced = ENHANCED_TEMPLATES[templateId];
+  if (enhanced) {
+    return {
+      name: enhanced.name,
+      headerClass: enhanced.headerClass,
+      heroClass: enhanced.heroClass,
+      heroTextClass: enhanced.heroTextClass,
+      heroSubtextClass: enhanced.heroSubtextClass,
+      sectionBgClass: enhanced.sectionBgClass,
+      sectionAltBgClass: enhanced.sectionAltBgClass,
+      cardClass: enhanced.cardClass,
+      cardHoverClass: enhanced.cardHoverClass,
+      cardBorderClass: enhanced.cardBorderClass,
+      primaryButtonClass: enhanced.primaryButtonClass,
+      secondaryButtonClass: enhanced.secondaryButtonClass,
+      badgeClass: enhanced.badgeClass,
+      headingClass: enhanced.headingClass,
+      glowClass: enhanced.glowClass,
+      shadowClass: enhanced.shadowClass,
+      isDark: enhanced.isDark,
+      hasGlassEffect: enhanced.hasGlassEffect,
+      hasGradientText: enhanced.hasGradientText,
+      hasAnimatedBg: enhanced.hasAnimatedBg,
+      patternOverlay: enhanced.patternOverlay,
+    };
+  }
+  
+  // Fallback for any unknown templates
+  return {
+    name: 'Default Template',
     headerClass: 'bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-sm',
     heroClass: 'bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950',
     heroTextClass: 'text-white',
     heroSubtextClass: 'text-blue-100',
     sectionBgClass: 'bg-gray-50',
+    sectionAltBgClass: 'bg-white',
     cardClass: 'bg-white shadow-xl hover:shadow-2xl transition-shadow border-0',
+    cardHoverClass: 'hover:-translate-y-2',
+    cardBorderClass: 'border-t-4 border-t-blue-500',
+    primaryButtonClass: 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg',
+    secondaryButtonClass: 'border-blue-500 text-blue-600 hover:bg-blue-50',
+    badgeClass: 'bg-blue-500/10 text-blue-600 border-0',
+    headingClass: 'text-gray-900',
+    glowClass: 'shadow-lg shadow-blue-500/20',
+    shadowClass: 'shadow-2xl',
     isDark: false,
-  },
-  'isp-corporate': {
-    name: 'Corporate ISP',
-    headerClass: 'bg-slate-900/95 backdrop-blur-xl border-b border-white/10',
-    heroClass: 'bg-gradient-to-br from-slate-900 via-gray-900 to-black',
-    heroTextClass: 'text-white',
-    heroSubtextClass: 'text-gray-300',
-    sectionBgClass: 'bg-slate-900',
-    cardClass: 'bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all',
-    isDark: true,
-  },
-  'isp-vibrant': {
-    name: 'Vibrant Colors',
-    headerClass: 'bg-white/95 backdrop-blur-xl border-b border-cyan-100 shadow-sm',
-    heroClass: 'bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700',
-    heroTextClass: 'text-white',
-    heroSubtextClass: 'text-cyan-100',
-    sectionBgClass: 'bg-gradient-to-b from-gray-50 to-white',
-    cardClass: 'bg-white shadow-xl hover:shadow-2xl transition-shadow border border-gray-100',
-    isDark: false,
-  },
-  'isp-gaming': {
-    name: 'Gaming/Tech',
-    headerClass: 'bg-purple-950/95 backdrop-blur-xl border-b border-purple-500/20',
-    heroClass: 'bg-gradient-to-br from-purple-950 via-violet-950 to-fuchsia-950',
-    heroTextClass: 'text-white',
-    heroSubtextClass: 'text-purple-200',
-    sectionBgClass: 'bg-purple-950',
-    cardClass: 'bg-purple-900/50 backdrop-blur-md border border-purple-500/20 hover:border-purple-500/40 transition-all',
-    isDark: true,
-  },
-  'modern-blue': {
-    name: 'Classic Blue',
-    headerClass: 'bg-white/95 backdrop-blur-xl border-b border-gray-100',
-    heroClass: 'bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900',
-    heroTextClass: 'text-white',
-    heroSubtextClass: 'text-blue-100',
-    sectionBgClass: 'bg-gray-50',
-    cardClass: 'bg-white shadow-xl shadow-gray-200/50 border-0 hover:shadow-2xl transition-shadow',
-    isDark: false,
-  },
-  'clean-white': {
-    name: 'Clean White',
-    headerClass: 'bg-white shadow-sm border-b border-gray-100',
-    heroClass: 'bg-gradient-to-br from-gray-50 via-white to-gray-100',
-    heroTextClass: 'text-gray-900',
-    heroSubtextClass: 'text-gray-600',
-    sectionBgClass: 'bg-gray-50',
-    cardClass: 'bg-white shadow-lg border border-gray-100 hover:shadow-xl transition-shadow',
-    isDark: false,
-  },
-  'dark-gradient': {
-    name: 'Dark Elegant',
-    headerClass: 'bg-gray-900/95 backdrop-blur-xl border-b border-white/10',
-    heroClass: 'bg-gradient-to-br from-gray-900 via-purple-950 to-black',
-    heroTextClass: 'text-white',
-    heroSubtextClass: 'text-purple-200',
-    sectionBgClass: 'bg-gray-900',
-    cardClass: 'bg-white/10 backdrop-blur-md border border-white/10 hover:bg-white/15 transition-all',
-    isDark: true,
-  },
-  'nature-green': {
-    name: 'Eco Green',
-    headerClass: 'bg-white/95 backdrop-blur-xl border-b border-emerald-100',
-    heroClass: 'bg-gradient-to-br from-emerald-800 via-green-900 to-teal-900',
-    heroTextClass: 'text-white',
-    heroSubtextClass: 'text-emerald-100',
-    sectionBgClass: 'bg-emerald-50',
-    cardClass: 'bg-white shadow-xl shadow-emerald-200/30 border-0 hover:shadow-2xl transition-shadow',
-    isDark: false,
-  },
-  'sunset-orange': {
-    name: 'Sunset Warm',
-    headerClass: 'bg-white/95 backdrop-blur-xl border-b border-orange-100',
-    heroClass: 'bg-gradient-to-br from-orange-600 via-red-600 to-rose-700',
-    heroTextClass: 'text-white',
-    heroSubtextClass: 'text-orange-100',
-    sectionBgClass: 'bg-orange-50',
-    cardClass: 'bg-white shadow-xl shadow-orange-200/30 border-0 hover:shadow-2xl transition-shadow',
-    isDark: false,
-  },
-  'ocean-teal': {
-    name: 'Ocean Teal',
-    headerClass: 'bg-white/95 backdrop-blur-xl border-b border-teal-100',
-    heroClass: 'bg-gradient-to-br from-teal-600 via-cyan-700 to-blue-800',
-    heroTextClass: 'text-white',
-    heroSubtextClass: 'text-teal-100',
-    sectionBgClass: 'bg-teal-50',
-    cardClass: 'bg-white shadow-xl shadow-teal-200/30 border-0 hover:shadow-2xl transition-shadow',
-    isDark: false,
-  },
+    hasGlassEffect: true,
+    hasGradientText: false,
+    hasAnimatedBg: false,
+    patternOverlay: undefined,
+  };
 };
 
 // Features with icons
@@ -601,7 +529,7 @@ export default function TenantLanding() {
     );
   }
 
-  const template = TEMPLATES[tenant.landing_page_template] || TEMPLATES['isp-pro-1'];
+  const template = getTemplateConfig(tenant.landing_page_template);
   const themeColors = THEME_COLORS[tenant.theme_color] || THEME_COLORS.cyan;
 
   // Group areas by district for coverage map
@@ -1470,244 +1398,20 @@ export default function TenantLanding() {
         </div>
       </section>
 
-      {/* Custom Sections - Rendered dynamically from tenant dashboard */}
+      {/* Custom Sections - Rendered dynamically using CustomSectionRenderer */}
       {tenant.landing_page_custom_sections && tenant.landing_page_custom_sections.length > 0 && (
         <>
           {tenant.landing_page_custom_sections
             .filter(section => section.isVisible)
             .sort((a, b) => a.order - b.order)
             .map((section) => (
-              <section 
-                key={section.id} 
-                id={`custom-${section.id}`}
-                className={`py-16 lg:py-24`}
-                style={{ 
-                  backgroundColor: section.bgColor || (template.isDark ? '#111827' : '#f9fafb'),
-                  color: section.textColor || (template.isDark ? '#ffffff' : '#111827')
-                }}
-              >
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                  {/* Text Section */}
-                  {section.type === 'text' && (
-                    <div className="max-w-4xl mx-auto text-center">
-                      {section.title && (
-                        <h2 className="text-3xl md:text-4xl font-bold mb-4">{section.title}</h2>
-                      )}
-                      {section.subtitle && (
-                        <p className="text-xl opacity-80 mb-6">{section.subtitle}</p>
-                      )}
-                      {section.content && (
-                        <div className="prose prose-lg max-w-none" style={{ color: section.textColor || 'inherit' }}>
-                          <p className="whitespace-pre-wrap">{section.content}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Image Section */}
-                  {section.type === 'image' && (
-                    <div className="text-center">
-                      {section.title && (
-                        <h2 className="text-3xl md:text-4xl font-bold mb-4">{section.title}</h2>
-                      )}
-                      {section.subtitle && (
-                        <p className="text-xl opacity-80 mb-8">{section.subtitle}</p>
-                      )}
-                      {section.imageUrl && (
-                        <img 
-                          src={section.imageUrl} 
-                          alt={section.title || 'Section image'} 
-                          className="max-w-full h-auto rounded-2xl shadow-2xl mx-auto"
-                        />
-                      )}
-                      {section.content && (
-                        <p className="mt-6 text-lg opacity-80 max-w-2xl mx-auto">{section.content}</p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* CTA Section */}
-                  {section.type === 'cta' && (
-                    <div className="text-center py-8">
-                      {section.title && (
-                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">{section.title}</h2>
-                      )}
-                      {section.subtitle && (
-                        <p className="text-xl opacity-80 mb-8 max-w-2xl mx-auto">{section.subtitle}</p>
-                      )}
-                      {section.buttonText && section.buttonUrl && (
-                        <a 
-                          href={section.buttonUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className={`inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r ${themeColors.gradient} text-white font-semibold text-lg shadow-lg hover:opacity-90 transition-opacity`}
-                        >
-                          {section.buttonText}
-                          <ArrowRight className="h-5 w-5" />
-                        </a>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Features Section */}
-                  {section.type === 'features' && (
-                    <div>
-                      {section.title && (
-                        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">{section.title}</h2>
-                      )}
-                      {section.subtitle && (
-                        <p className="text-xl opacity-80 text-center mb-12 max-w-2xl mx-auto">{section.subtitle}</p>
-                      )}
-                      {section.items && section.items.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                          {section.items.map((item, idx) => (
-                            <div key={idx} className={`p-6 rounded-2xl ${template.isDark ? 'bg-white/5' : 'bg-white shadow-lg'}`}>
-                              {item.imageUrl && (
-                                <img src={item.imageUrl} alt={item.title} className="w-16 h-16 object-cover rounded-xl mb-4" />
-                              )}
-                              <h3 className="text-xl font-bold mb-2">{item.title}</h3>
-                              <p className="opacity-70">{item.description}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Gallery Section */}
-                  {section.type === 'gallery' && (
-                    <div>
-                      {section.title && (
-                        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">{section.title}</h2>
-                      )}
-                      {section.subtitle && (
-                        <p className="text-xl opacity-80 text-center mb-12">{section.subtitle}</p>
-                      )}
-                      {section.items && section.items.length > 0 && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {section.items.map((item, idx) => (
-                            <div key={idx} className="aspect-square rounded-xl overflow-hidden">
-                              <img 
-                                src={item.imageUrl} 
-                                alt={item.title || `Gallery item ${idx + 1}`} 
-                                className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Video Section */}
-                  {section.type === 'video' && (
-                    <div className="text-center">
-                      {section.title && (
-                        <h2 className="text-3xl md:text-4xl font-bold mb-4">{section.title}</h2>
-                      )}
-                      {section.subtitle && (
-                        <p className="text-xl opacity-80 mb-8">{section.subtitle}</p>
-                      )}
-                      {section.videoUrl && (
-                        <div className="aspect-video max-w-4xl mx-auto rounded-2xl overflow-hidden shadow-2xl">
-                          <iframe 
-                            src={section.videoUrl.replace('watch?v=', 'embed/')} 
-                            title={section.title || 'Video'} 
-                            className="w-full h-full"
-                            allowFullScreen
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Testimonial Section */}
-                  {section.type === 'testimonial' && (
-                    <div>
-                      {section.title && (
-                        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">{section.title}</h2>
-                      )}
-                      {section.subtitle && (
-                        <p className="text-xl opacity-80 text-center mb-12">{section.subtitle}</p>
-                      )}
-                      {section.items && section.items.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                          {section.items.map((item, idx) => (
-                            <div key={idx} className={`p-6 rounded-2xl ${template.isDark ? 'bg-white/5' : 'bg-white shadow-lg'}`}>
-                              <div className="flex items-center gap-4 mb-4">
-                                {item.imageUrl && (
-                                  <img src={item.imageUrl} alt={item.title} className="w-12 h-12 rounded-full object-cover" />
-                                )}
-                                <div>
-                                  <h4 className="font-bold">{item.title}</h4>
-                                </div>
-                              </div>
-                              <p className="italic opacity-80">"{item.description}"</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* FAQ Section */}
-                  {section.type === 'faq' && (
-                    <div className="max-w-3xl mx-auto">
-                      {section.title && (
-                        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">{section.title}</h2>
-                      )}
-                      {section.subtitle && (
-                        <p className="text-xl opacity-80 text-center mb-12">{section.subtitle}</p>
-                      )}
-                      {section.items && section.items.length > 0 && (
-                        <div className="space-y-4">
-                          {section.items.map((item, idx) => (
-                            <div key={idx} className={`p-6 rounded-xl ${template.isDark ? 'bg-white/5' : 'bg-white shadow-lg'}`}>
-                              <h4 className="font-bold text-lg mb-2">{item.title}</h4>
-                              <p className="opacity-70">{item.description}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Custom/Generic Section */}
-                  {section.type === 'custom' && (
-                    <div className="text-center">
-                      {section.title && (
-                        <h2 className="text-3xl md:text-4xl font-bold mb-4">{section.title}</h2>
-                      )}
-                      {section.subtitle && (
-                        <p className="text-xl opacity-80 mb-6">{section.subtitle}</p>
-                      )}
-                      {section.imageUrl && (
-                        <img 
-                          src={section.imageUrl} 
-                          alt={section.title || 'Custom section'} 
-                          className="max-w-full h-auto rounded-2xl shadow-xl mx-auto mb-6"
-                        />
-                      )}
-                      {section.content && (
-                        <div className="prose prose-lg max-w-3xl mx-auto" style={{ color: section.textColor || 'inherit' }}>
-                          <p className="whitespace-pre-wrap">{section.content}</p>
-                        </div>
-                      )}
-                      {section.buttonText && section.buttonUrl && (
-                        <a 
-                          href={section.buttonUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className={`inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-lg bg-gradient-to-r ${themeColors.gradient} text-white font-semibold shadow-lg hover:opacity-90 transition-opacity`}
-                        >
-                          {section.buttonText}
-                          <ArrowRight className="h-4 w-4" />
-                        </a>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </section>
+              <CustomSectionRenderer
+                key={section.id}
+                section={section as CustomSectionType}
+                themeColors={themeColors}
+                isDark={template.isDark}
+                cardClass={template.cardClass}
+              />
             ))}
         </>
       )}
