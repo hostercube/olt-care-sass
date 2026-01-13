@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { MapPin, Smartphone, Loader2, CheckCircle, AlertCircle, Monitor } from 'lucide-react';
+import { MapPin, Smartphone, Loader2, CheckCircle, AlertCircle, Monitor, Clock, Wifi, Navigation } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface LocationData {
@@ -39,12 +39,16 @@ interface SettingsData {
   require_phone: boolean;
 }
 
+// Storage key for deduplication
+const getStorageKey = (token: string) => `loc_visit_${token}`;
+
 export default function LocationCapture() {
   const { token } = useParams<{ token: string }>();
   const { toast } = useToast();
   const hasSubmittedRef = useRef(false);
+  const captureStartTime = useRef<number>(Date.now());
 
-  const [step, setStep] = useState<'loading' | 'desktop-warning' | 'capturing' | 'form' | 'submitting' | 'success' | 'error'>('loading');
+  const [step, setStep] = useState<'loading' | 'already-submitted' | 'desktop-warning' | 'capturing' | 'form' | 'submitting' | 'success' | 'error'>('loading');
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [locationData, setLocationData] = useState<LocationData>({
     latitude: null,
@@ -66,6 +70,8 @@ export default function LocationCapture() {
   const [formData, setFormData] = useState({ name: '', phone: '' });
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [captureTime, setCaptureTime] = useState<number | null>(null);
+  const [captureProgress, setCaptureProgress] = useState<string>('Initializing...');
 
   // Robust device detection - detects true mobile vs desktop emulation
   const detectDeviceType = useCallback((): DeviceData => {
@@ -131,61 +137,70 @@ export default function LocationCapture() {
     return device.device_type === 'mobile' || device.device_type === 'tablet';
   }, [detectDeviceType]);
 
-  // Get IP info - try multiple providers for reliability
-  const fetchIpInfo = useCallback(async (): Promise<IpData> => {
-    // Try ipapi.co first
+  // Check if already submitted from this browser
+  const hasAlreadySubmitted = useCallback(() => {
+    if (!token) return false;
     try {
-      const response = await fetch('https://ipapi.co/json/', { 
-        signal: AbortSignal.timeout(5000) 
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.ip) {
-          return {
-            ip_address: data.ip || null,
-            isp_name: data.org || null,
-            asn: data.asn || null,
-          };
+      const stored = localStorage.getItem(getStorageKey(token));
+      if (stored) {
+        const data = JSON.parse(stored);
+        // Expire after 24 hours
+        if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+          return true;
+        }
+        localStorage.removeItem(getStorageKey(token));
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return false;
+  }, [token]);
+
+  // Mark as submitted in localStorage
+  const markAsSubmitted = useCallback(() => {
+    if (!token) return;
+    try {
+      localStorage.setItem(getStorageKey(token), JSON.stringify({
+        timestamp: Date.now(),
+        submitted: true,
+      }));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [token]);
+
+  // Get IP info - optimized with faster timeout and parallel fetching
+  const fetchIpInfo = useCallback(async (): Promise<IpData> => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
+
+    // Try ipapi.co first (most reliable)
+    try {
+      const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.ip) {
+          clearTimeout(timeout);
+          return { ip_address: d.ip, isp_name: d.org || null, asn: d.asn || null };
         }
       }
-    } catch (e) {
-      console.warn('ipapi.co failed, trying fallback...');
+    } catch {
+      // Try fallback
     }
-    
+
     // Fallback to ip-api.com
     try {
-      const response = await fetch('http://ip-api.com/json/?fields=query,isp,as', {
-        signal: AbortSignal.timeout(5000)
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          ip_address: data.query || null,
-          isp_name: data.isp || null,
-          asn: data.as?.split(' ')[0] || null,
-        };
+      const res = await fetch('http://ip-api.com/json/?fields=query,isp,as', { signal: controller.signal });
+      if (res.ok) {
+        const d = await res.json();
+        clearTimeout(timeout);
+        return { ip_address: d.query || null, isp_name: d.isp || null, asn: d.as?.split(' ')[0] || null };
       }
-    } catch (e) {
-      console.warn('ip-api.com failed, trying fallback...');
+    } catch {
+      // Ignore
     }
-    
-    // Final fallback to ipify
-    try {
-      const response = await fetch('https://api.ipify.org?format=json', {
-        signal: AbortSignal.timeout(5000)
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          ip_address: data.ip || null,
-          isp_name: null,
-          asn: null,
-        };
-      }
-    } catch (e) {
-      console.error('All IP fetch attempts failed');
-    }
-    
+
+    clearTimeout(timeout);
     return { ip_address: null, isp_name: null, asn: null };
   }, []);
 
@@ -239,10 +254,10 @@ export default function LocationCapture() {
   ) => {
     if (hasSubmittedRef.current) return; // Prevent duplicate submissions
     hasSubmittedRef.current = true;
-    
+
     setIsSubmitting(true);
     setStep('submitting');
-    
+
     try {
       const { error: insertError } = await supabase
         .from('location_visits')
@@ -267,6 +282,14 @@ export default function LocationCapture() {
         });
 
       if (insertError) throw insertError;
+
+      // Mark as submitted in localStorage to prevent duplicate visits
+      markAsSubmitted();
+
+      // Calculate capture time
+      const elapsed = (Date.now() - captureStartTime.current) / 1000;
+      setCaptureTime(elapsed);
+
       setStep('success');
     } catch (err: any) {
       console.error('Failed to submit location:', err);
@@ -280,14 +303,22 @@ export default function LocationCapture() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [toast]);
+  }, [toast, markAsSubmitted]);
 
   // Initialize on mount
   useEffect(() => {
+    captureStartTime.current = Date.now();
+
     const init = async () => {
       if (!token) {
         setStep('error');
         setError('Invalid link');
+        return;
+      }
+
+      // Check if already submitted from this browser
+      if (hasAlreadySubmitted()) {
+        setStep('already-submitted');
         return;
       }
 
@@ -296,6 +327,8 @@ export default function LocationCapture() {
         setStep('desktop-warning');
         return;
       }
+
+      setCaptureProgress('Loading settings...');
 
       // Fetch settings directly from Supabase
       try {
@@ -307,13 +340,13 @@ export default function LocationCapture() {
           .maybeSingle();
 
         if (fetchError) throw fetchError;
-        
+
         if (!data) {
           setStep('error');
           setError('This link is invalid or has been disabled');
           return;
         }
-        
+
         setSettings(data as SettingsData);
         setStep('capturing');
       } catch (err) {
@@ -324,9 +357,9 @@ export default function LocationCapture() {
     };
 
     init();
-  }, [token, isTrulyMobile]);
+  }, [token, isTrulyMobile, hasAlreadySubmitted]);
 
-  // Capture location when on capturing step
+  // Capture location when on capturing step - optimized for speed
   useEffect(() => {
     if (step !== 'capturing' || !settings) return;
 
@@ -336,42 +369,53 @@ export default function LocationCapture() {
       const capturedDevice = detectDeviceType();
       setDeviceData(capturedDevice);
 
-      try {
-        // Fetch IP info and GPS in parallel
-        const [ipResult, position] = await Promise.all([
-          fetchIpInfo(),
-          getLocation().catch(err => {
-            console.warn('GPS failed:', err);
-            return null;
-          })
-        ]);
+      setCaptureProgress('Getting your location...');
 
-        capturedIp = ipResult;
-        setIpData(ipResult);
+      try {
+        // Start GPS immediately - this is the slow part
+        const gpsPromise = getLocation().catch(err => {
+          console.warn('GPS failed:', err);
+          return null;
+        });
+
+        // Fetch IP in parallel (non-blocking)
+        const ipPromise = fetchIpInfo();
+
+        // Wait for GPS first (critical)
+        const position = await gpsPromise;
 
         if (position) {
           const { latitude, longitude } = position.coords;
-          
-          // Reverse geocode
-          const addressData = await reverseGeocode(latitude, longitude);
-
-          capturedLocation = {
-            latitude,
-            longitude,
-            full_address: addressData?.full_address || null,
-            area: addressData?.area || null,
-            district: addressData?.district || null,
-            thana: addressData?.thana || null,
-          };
+          capturedLocation = { ...capturedLocation, latitude, longitude };
           setLocationData(capturedLocation);
+          setCaptureProgress('Getting address...');
+
+          // Reverse geocode in background
+          reverseGeocode(latitude, longitude).then(addressData => {
+            if (addressData) {
+              setLocationData(prev => ({
+                ...prev,
+                full_address: addressData.full_address,
+                area: addressData.area,
+                district: addressData.district,
+                thana: addressData.thana,
+              }));
+              capturedLocation = { ...capturedLocation, ...addressData };
+            }
+          });
         }
+
+        // Get IP result
+        capturedIp = await ipPromise;
+        setIpData(capturedIp);
+
       } catch (err) {
         console.error('Location capture error:', err);
       }
 
-      // Check if form is required - handle null values
-      const needsForm = settings.require_name === true || settings.require_phone === true;
-      
+      // Check if form is required
+      const needsForm = settings.require_name || settings.require_phone;
+
       if (needsForm) {
         // Show form for user to fill
         setStep('form');
@@ -412,7 +456,30 @@ export default function LocationCapture() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
             <p className="text-muted-foreground">
-              {step === 'submitting' ? 'Submitting your location...' : 'Loading...'}
+              {step === 'submitting' ? 'Submitting your location...' : captureProgress}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (step === 'already-submitted') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 rounded-full bg-blue-100 p-4 dark:bg-blue-900/20">
+              <CheckCircle className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+            </div>
+            <CardTitle>আপনার লোকেশন ইতিমধ্যে সাবমিট হয়েছে</CardTitle>
+            <CardDescription>
+              এই ডিভাইস থেকে আগেই লোকেশন পাঠানো হয়েছে
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-sm text-muted-foreground">
+              আপনি এই পেজটি বন্ধ করতে পারেন
             </p>
           </CardContent>
         </Card>
@@ -455,18 +522,22 @@ export default function LocationCapture() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 rounded-full bg-primary/10 p-4">
-              <MapPin className="h-12 w-12 text-primary animate-pulse" />
+              <Navigation className="h-12 w-12 text-primary animate-pulse" />
             </div>
             <CardTitle>লোকেশন সংগ্রহ করা হচ্ছে</CardTitle>
             <CardDescription>
               অনুগ্রহ করে লোকেশন পারমিশন দিন
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col items-center py-4">
+          <CardContent className="flex flex-col items-center py-4 space-y-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="mt-4 text-sm text-muted-foreground">
-              Getting your GPS coordinates...
+            <p className="text-sm text-muted-foreground">
+              {captureProgress}
             </p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Wifi className="h-3 w-3" />
+              <span>Fetching network info...</span>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -567,7 +638,20 @@ export default function LocationCapture() {
               আপনার লোকেশন সফলভাবে সাবমিট হয়েছে
             </CardDescription>
           </CardHeader>
-          <CardContent className="text-center">
+          <CardContent className="text-center space-y-3">
+            {captureTime && (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                <span>Time taken: {captureTime.toFixed(2)}s</span>
+              </div>
+            )}
+            {locationData.full_address && (
+              <div className="rounded-lg bg-muted p-3 text-sm text-left">
+                <p className="text-muted-foreground">
+                  📍 {locationData.full_address}
+                </p>
+              </div>
+            )}
             <p className="text-sm text-muted-foreground">
               আপনি এই পেজটি বন্ধ করতে পারেন
             </p>
