@@ -7179,9 +7179,11 @@ export type Database = {
           landing_page_custom_menus: Json | null
           landing_page_custom_sections: Json | null
           landing_page_enabled: boolean | null
+          landing_page_footer_style: string | null
           landing_page_ftp_enabled: boolean | null
           landing_page_ftp_servers: Json | null
           landing_page_ftp_url: string | null
+          landing_page_header_style: string | null
           landing_page_hero_background_url: string | null
           landing_page_hero_badge_text: string | null
           landing_page_hero_primary_button_text: string | null
@@ -7194,12 +7196,23 @@ export type Database = {
           landing_page_livetv_channels: Json | null
           landing_page_livetv_enabled: boolean | null
           landing_page_livetv_url: string | null
+          landing_page_map_embed_code: string | null
+          landing_page_map_link: string | null
           landing_page_meta_description: string | null
           landing_page_meta_title: string | null
           landing_page_og_image_url: string | null
           landing_page_section_order: Json | null
+          landing_page_show_about: boolean | null
           landing_page_show_contact: boolean | null
+          landing_page_show_coverage: boolean | null
+          landing_page_show_features: boolean | null
+          landing_page_show_footer_contact: boolean | null
+          landing_page_show_footer_links: boolean | null
+          landing_page_show_footer_social: boolean | null
+          landing_page_show_login_button: boolean | null
           landing_page_show_packages: boolean | null
+          landing_page_show_pay_bill_button: boolean | null
+          landing_page_show_register_button: boolean | null
           landing_page_social_facebook: string | null
           landing_page_social_instagram: string | null
           landing_page_social_linkedin: string | null
@@ -7269,9 +7282,11 @@ export type Database = {
           landing_page_custom_menus?: Json | null
           landing_page_custom_sections?: Json | null
           landing_page_enabled?: boolean | null
+          landing_page_footer_style?: string | null
           landing_page_ftp_enabled?: boolean | null
           landing_page_ftp_servers?: Json | null
           landing_page_ftp_url?: string | null
+          landing_page_header_style?: string | null
           landing_page_hero_background_url?: string | null
           landing_page_hero_badge_text?: string | null
           landing_page_hero_primary_button_text?: string | null
@@ -7284,12 +7299,23 @@ export type Database = {
           landing_page_livetv_channels?: Json | null
           landing_page_livetv_enabled?: boolean | null
           landing_page_livetv_url?: string | null
+          landing_page_map_embed_code?: string | null
+          landing_page_map_link?: string | null
           landing_page_meta_description?: string | null
           landing_page_meta_title?: string | null
           landing_page_og_image_url?: string | null
           landing_page_section_order?: Json | null
+          landing_page_show_about?: boolean | null
           landing_page_show_contact?: boolean | null
+          landing_page_show_coverage?: boolean | null
+          landing_page_show_features?: boolean | null
+          landing_page_show_footer_contact?: boolean | null
+          landing_page_show_footer_links?: boolean | null
+          landing_page_show_footer_social?: boolean | null
+          landing_page_show_login_button?: boolean | null
           landing_page_show_packages?: boolean | null
+          landing_page_show_pay_bill_button?: boolean | null
+          landing_page_show_register_button?: boolean | null
           landing_page_social_facebook?: string | null
           landing_page_social_instagram?: string | null
           landing_page_social_linkedin?: string | null
@@ -7359,9 +7385,11 @@ export type Database = {
           landing_page_custom_menus?: Json | null
           landing_page_custom_sections?: Json | null
           landing_page_enabled?: boolean | null
+          landing_page_footer_style?: string | null
           landing_page_ftp_enabled?: boolean | null
           landing_page_ftp_servers?: Json | null
           landing_page_ftp_url?: string | null
+          landing_page_header_style?: string | null
           landing_page_hero_background_url?: string | null
           landing_page_hero_badge_text?: string | null
           landing_page_hero_primary_button_text?: string | null
@@ -7374,12 +7402,23 @@ export type Database = {
           landing_page_livetv_channels?: Json | null
           landing_page_livetv_enabled?: boolean | null
           landing_page_livetv_url?: string | null
+          landing_page_map_embed_code?: string | null
+          landing_page_map_link?: string | null
           landing_page_meta_description?: string | null
           landing_page_meta_title?: string | null
           landing_page_og_image_url?: string | null
           landing_page_section_order?: Json | null
+          landing_page_show_about?: boolean | null
           landing_page_show_contact?: boolean | null
+          landing_page_show_coverage?: boolean | null
+          landing_page_show_features?: boolean | null
+          landing_page_show_footer_contact?: boolean | null
+          landing_page_show_footer_links?: boolean | null
+          landing_page_show_footer_social?: boolean | null
+          landing_page_show_login_button?: boolean | null
           landing_page_show_packages?: boolean | null
+          landing_page_show_pay_bill_button?: boolean | null
+          landing_page_show_register_button?: boolean | null
           landing_page_social_facebook?: string | null
           landing_page_social_instagram?: string | null
           landing_page_social_linkedin?: string | null
