@@ -56,14 +56,19 @@ export default function CustomerDashboard() {
       setCustomer(data as any);
       setIsOnline(data.status === 'active');
 
-      // Fetch tenant branding
+      // Fetch tenant branding from tenants table
       if (data?.tenant_id) {
-        const { data: brandingData } = await supabase
-          .from('tenant_branding')
-          .select('*')
-          .eq('tenant_id', data.tenant_id)
+        const { data: tenantData } = await supabase
+          .from('tenants')
+          .select('company_name, logo_url')
+          .eq('id', data.tenant_id)
           .maybeSingle();
-        if (brandingData) setTenantBranding(brandingData);
+        if (tenantData) {
+          setTenantBranding({
+            company_name: tenantData.company_name || 'Customer Portal',
+            logo_url: tenantData.logo_url
+          });
+        }
       }
 
       // Fetch ONU info if linked
