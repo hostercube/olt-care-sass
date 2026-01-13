@@ -28,7 +28,9 @@ import {
   Clock,
   ExternalLink,
   Radio,
-  AlertTriangle
+  AlertTriangle,
+  Download,
+  Trash2
 } from 'lucide-react';
 import { useCustomerLocation, LocationVisit, LocationFilters } from '@/hooks/useCustomerLocation';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
@@ -49,6 +51,8 @@ export default function CustomerLocation() {
     saveSettings,
     regenerateToken,
     verifyVisit,
+    deleteVisit,
+    bulkDeleteVisits,
     filterVisits,
     uniqueAreas,
     uniqueDistricts,
@@ -56,6 +60,7 @@ export default function CustomerLocation() {
     isSaving,
     isRegenerating,
     isVerifying,
+    isDeleting,
     refetchVisits,
   } = useCustomerLocation(tenantId);
 
@@ -215,6 +220,52 @@ export default function CustomerLocation() {
   const clearFilters = () => {
     setFilters({});
     setCurrentPage(1);
+  };
+
+  // Export visits to CSV
+  const exportToCSV = () => {
+    if (!filteredVisits.length) return;
+    
+    const headers = ['Name', 'Phone', 'Address', 'Area', 'District', 'Thana', 'IP Address', 'ISP', 'ASN', 'Device', 'Status', 'Visit Date'];
+    const rows = filteredVisits.map(v => [
+      v.name || '',
+      v.phone || '',
+      v.full_address || '',
+      v.area || '',
+      v.district || '',
+      v.thana || '',
+      v.ip_address || '',
+      v.isp_name || '',
+      v.asn || '',
+      v.device_type || '',
+      v.verified_status,
+      format(new Date(v.visited_at), 'yyyy-MM-dd HH:mm:ss'),
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `location-visits-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: 'Exported',
+      description: `${filteredVisits.length} visits exported to CSV.`,
+    });
+  };
+
+  // Delete visit handler
+  const handleDeleteVisit = (visitId: string) => {
+    if (confirm('Are you sure you want to delete this visit?')) {
+      deleteVisit(visitId);
+    }
   };
 
   // Stats
@@ -396,6 +447,13 @@ export default function CustomerLocation() {
                         Clear
                       </Button>
                     )}
+                    
+                    {filteredVisits.length > 0 && (
+                      <Button variant="outline" size="sm" onClick={exportToCSV}>
+                        <Download className="h-4 w-4 mr-1" />
+                        Export CSV
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -495,6 +553,15 @@ export default function CustomerLocation() {
                                         Complete
                                       </Button>
                                     )}
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDeleteVisit(visit.id)}
+                                      disabled={isDeleting}
+                                      className="text-destructive hover:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -787,7 +854,17 @@ export default function CustomerLocation() {
                         <p>{selectedVisit.phone}</p>
                       </div>
                     )}
+                    <div>
+                      <span className="text-muted-foreground">Device Type:</span>
+                      <p className="capitalize">{selectedVisit.device_type || 'Unknown'}</p>
+                    </div>
                   </div>
+                  {selectedVisit.user_agent && (
+                    <div className="mt-4 p-2 bg-muted rounded text-xs">
+                      <span className="text-muted-foreground">Device Info:</span>
+                      <p className="font-mono break-all mt-1">{selectedVisit.user_agent}</p>
+                    </div>
+                  )}
                   <div className="flex justify-end gap-2">
                     <Button
                       variant="outline"

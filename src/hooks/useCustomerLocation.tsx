@@ -17,6 +17,7 @@ export interface LocationVisit {
   isp_name: string | null;
   asn: string | null;
   device_type: string | null;
+  user_agent: string | null;
   name: string | null;
   phone: string | null;
   verified_status: 'pending' | 'verified' | 'completed';
@@ -235,6 +236,58 @@ export function useCustomerLocation(tenantId: string | null) {
     },
   });
 
+  // Delete location visit
+  const deleteVisitMutation = useMutation({
+    mutationFn: async (visitId: string) => {
+      const { error } = await supabase
+        .from('location_visits')
+        .delete()
+        .eq('id', visitId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['location-visits', tenantId] });
+      toast({
+        title: 'Deleted',
+        description: 'Location visit has been deleted.',
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Bulk delete visits
+  const bulkDeleteVisitsMutation = useMutation({
+    mutationFn: async (visitIds: string[]) => {
+      const { error } = await supabase
+        .from('location_visits')
+        .delete()
+        .in('id', visitIds);
+      
+      if (error) throw error;
+    },
+    onSuccess: (_, visitIds) => {
+      queryClient.invalidateQueries({ queryKey: ['location-visits', tenantId] });
+      toast({
+        title: 'Deleted',
+        description: `${visitIds.length} location visits have been deleted.`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   // Filter visits
   const filterVisits = useCallback((filters: LocationFilters) => {
     if (!visits) return [];
@@ -278,6 +331,8 @@ export function useCustomerLocation(tenantId: string | null) {
     saveSettings: saveSettingsMutation.mutate,
     regenerateToken: regenerateTokenMutation.mutate,
     verifyVisit: verifyVisitMutation.mutate,
+    deleteVisit: deleteVisitMutation.mutate,
+    bulkDeleteVisits: bulkDeleteVisitsMutation.mutate,
     filterVisits,
     uniqueAreas,
     uniqueDistricts,
@@ -285,5 +340,7 @@ export function useCustomerLocation(tenantId: string | null) {
     isSaving: saveSettingsMutation.isPending,
     isRegenerating: regenerateTokenMutation.isPending,
     isVerifying: verifyVisitMutation.isPending,
+    isDeleting: deleteVisitMutation.isPending,
+    isBulkDeleting: bulkDeleteVisitsMutation.isPending,
   };
 }
