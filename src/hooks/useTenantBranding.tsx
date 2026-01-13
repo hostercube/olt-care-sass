@@ -9,6 +9,7 @@ export interface TenantBranding {
   logo_url: string;
   favicon_url: string;
   theme_color: string;
+  dashboard_theme: string;
 }
 
 const defaultBranding: TenantBranding = {
@@ -17,7 +18,84 @@ const defaultBranding: TenantBranding = {
   logo_url: '',
   favicon_url: '',
   theme_color: 'cyan',
+  dashboard_theme: 'dark-default',
 };
+
+// Prebuilt dashboard themes
+export const DASHBOARD_THEMES = [
+  { 
+    id: 'dark-default', 
+    name: 'Dark Default', 
+    description: 'Modern dark theme with cyan accents',
+    preview: 'bg-slate-900',
+    sidebar: 'bg-slate-950',
+    accent: 'bg-cyan-500',
+    mode: 'dark'
+  },
+  { 
+    id: 'light-default', 
+    name: 'Light Default', 
+    description: 'Clean light theme with professional feel',
+    preview: 'bg-slate-100',
+    sidebar: 'bg-white',
+    accent: 'bg-cyan-500',
+    mode: 'light'
+  },
+  { 
+    id: 'admin-lte', 
+    name: 'Admin LTE', 
+    description: 'Classic admin panel with blue sidebar',
+    preview: 'bg-slate-100',
+    sidebar: 'bg-blue-600',
+    accent: 'bg-blue-500',
+    mode: 'light'
+  },
+  { 
+    id: 'dark-fixed', 
+    name: 'Dark Fixed', 
+    description: 'Dark theme with fixed sidebar layout',
+    preview: 'bg-slate-800',
+    sidebar: 'bg-slate-900',
+    accent: 'bg-indigo-500',
+    mode: 'dark'
+  },
+  { 
+    id: 'light-fixed', 
+    name: 'Light Fixed', 
+    description: 'Light theme with fixed sidebar layout',
+    preview: 'bg-gray-50',
+    sidebar: 'bg-gray-100',
+    accent: 'bg-indigo-500',
+    mode: 'light'
+  },
+  { 
+    id: 'dark-scrollable', 
+    name: 'Dark Scrollable', 
+    description: 'Dark theme with scrollable content',
+    preview: 'bg-zinc-900',
+    sidebar: 'bg-zinc-950',
+    accent: 'bg-purple-500',
+    mode: 'dark'
+  },
+  { 
+    id: 'magenta-modern', 
+    name: 'Magenta Modern', 
+    description: 'Vibrant magenta accents on dark background',
+    preview: 'bg-slate-900',
+    sidebar: 'bg-pink-600',
+    accent: 'bg-pink-500',
+    mode: 'dark'
+  },
+  { 
+    id: 'green-nature', 
+    name: 'Green Nature', 
+    description: 'Fresh green theme for eco-friendly brands',
+    preview: 'bg-slate-800',
+    sidebar: 'bg-emerald-700',
+    accent: 'bg-emerald-500',
+    mode: 'dark'
+  },
+];
 
 export const THEME_COLORS = [
   { name: 'Cyan', value: 'cyan', class: 'bg-cyan-500' },
@@ -48,7 +126,7 @@ export function useTenantBranding() {
       setLoading(true);
       const { data, error } = await supabase
         .from('tenants')
-        .select('company_name, subtitle, logo_url, favicon_url, theme_color')
+        .select('company_name, subtitle, logo_url, favicon_url, theme_color, dashboard_theme')
         .eq('id', tenantId)
         .single();
 
@@ -61,6 +139,7 @@ export function useTenantBranding() {
           logo_url: data.logo_url || '',
           favicon_url: data.favicon_url || '',
           theme_color: data.theme_color || defaultBranding.theme_color,
+          dashboard_theme: data.dashboard_theme || defaultBranding.dashboard_theme,
         });
       }
     } catch (error) {
@@ -244,7 +323,7 @@ export function useTenantBrandingById(tenantId: string | null) {
         setLoading(true);
       const { data, error } = await supabase
           .from('tenants')
-          .select('company_name, subtitle, logo_url, favicon_url, theme_color')
+          .select('company_name, subtitle, logo_url, favicon_url, theme_color, dashboard_theme')
           .eq('id', tenantId)
           .single();
 
@@ -257,6 +336,7 @@ export function useTenantBrandingById(tenantId: string | null) {
             logo_url: data.logo_url || '',
             favicon_url: data.favicon_url || '',
             theme_color: data.theme_color || defaultBranding.theme_color,
+            dashboard_theme: data.dashboard_theme || defaultBranding.dashboard_theme,
           });
         }
       } catch (error) {

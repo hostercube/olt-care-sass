@@ -7072,6 +7072,7 @@ export type Database = {
           created_at: string
           currency: string | null
           custom_domain: string | null
+          dashboard_theme: string | null
           district: string | null
           division: string | null
           email: string
@@ -7118,6 +7119,7 @@ export type Database = {
           created_at?: string
           currency?: string | null
           custom_domain?: string | null
+          dashboard_theme?: string | null
           district?: string | null
           division?: string | null
           email: string
@@ -7164,6 +7166,7 @@ export type Database = {
           created_at?: string
           currency?: string | null
           custom_domain?: string | null
+          dashboard_theme?: string | null
           district?: string | null
           division?: string | null
           email?: string

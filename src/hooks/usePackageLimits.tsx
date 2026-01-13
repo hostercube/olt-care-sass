@@ -194,7 +194,7 @@ export async function checkPackageLimit(
 ): Promise<LimitCheckResult> {
   try {
     // Get package limits
-    const { data: subscription } = await supabase
+    const { data: subscription, error: subError } = await supabase
       .from('subscriptions')
       .select(`
         package:packages(
@@ -211,17 +211,24 @@ export async function checkPackageLimit(
       .eq('status', 'active')
       .maybeSingle();
 
+    // If no subscription or error, allow the operation (don't block on subscription issues)
+    if (subError) {
+      console.warn('Error checking subscription:', subError);
+      return { allowed: true, currentCount: 0, maxLimit: null, remaining: null };
+    }
+
     const pkg = subscription?.package as any;
     if (!pkg) {
-      // No active subscription - use default limits
-      return { allowed: false, currentCount: 0, maxLimit: 0, remaining: 0, message: 'No active subscription found' };
+      // No active subscription - allow with default high limits for trial/demo
+      console.warn('No active subscription found for tenant, allowing operation');
+      return { allowed: true, currentCount: 0, maxLimit: null, remaining: null };
     }
 
     const limitKey = `max_${resource}`;
     const maxLimit = pkg[limitKey];
 
     // Unlimited
-    if (maxLimit === null) {
+    if (maxLimit === null || maxLimit === undefined) {
       return { allowed: true, currentCount: 0, maxLimit: null, remaining: null };
     }
 
@@ -277,6 +284,7 @@ export async function checkPackageLimit(
     };
   } catch (error) {
     console.error('Error checking package limit:', error);
+    // On any error, allow the operation to proceed
     return { allowed: true, currentCount: 0, maxLimit: null, remaining: null };
   }
 }
