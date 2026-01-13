@@ -7072,6 +7072,10 @@ export type Database = {
           created_at: string
           currency: string | null
           custom_domain: string | null
+          customer_portal_enabled: boolean | null
+          customer_registration_auto_approve: boolean | null
+          customer_registration_auto_pppoe: boolean | null
+          customer_registration_enabled: boolean | null
           dashboard_theme: string | null
           district: string | null
           division: string | null
@@ -7119,6 +7123,10 @@ export type Database = {
           created_at?: string
           currency?: string | null
           custom_domain?: string | null
+          customer_portal_enabled?: boolean | null
+          customer_registration_auto_approve?: boolean | null
+          customer_registration_auto_pppoe?: boolean | null
+          customer_registration_enabled?: boolean | null
           dashboard_theme?: string | null
           district?: string | null
           division?: string | null
@@ -7166,6 +7174,10 @@ export type Database = {
           created_at?: string
           currency?: string | null
           custom_domain?: string | null
+          customer_portal_enabled?: boolean | null
+          customer_registration_auto_approve?: boolean | null
+          customer_registration_auto_pppoe?: boolean | null
+          customer_registration_enabled?: boolean | null
           dashboard_theme?: string | null
           district?: string | null
           division?: string | null

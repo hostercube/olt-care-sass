@@ -154,7 +154,7 @@ export default function CustomerLogin() {
           <div className="text-center space-y-4">
             <div className="mx-auto h-20 w-20 rounded-2xl bg-gradient-to-br from-primary to-primary/60 shadow-lg shadow-primary/20 flex items-center justify-center overflow-hidden">
               {branding.logo_url ? (
-                <img src={branding.logo_url} alt="Logo" className="h-14 w-14 object-contain" />
+                <img src={branding.logo_url} alt={branding.company_name || 'Logo'} className="h-full w-full object-contain p-1" />
               ) : (
                 <Wifi className="h-10 w-10 text-primary-foreground" />
               )}
@@ -163,7 +163,7 @@ export default function CustomerLogin() {
               <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
                 {branding.company_name || 'Customer Portal'}
               </h1>
-              <p className="text-muted-foreground mt-1">{branding.subtitle || 'Access your account dashboard'}</p>
+              <p className="text-muted-foreground mt-1">{branding.subtitle || 'Internet Service Provider'}</p>
             </div>
           </div>
 

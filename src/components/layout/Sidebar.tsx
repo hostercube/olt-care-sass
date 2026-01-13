@@ -263,12 +263,12 @@ export function Sidebar() {
         className={cn(
           'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200',
           isActive
-            ? 'bg-primary/10 text-primary border border-primary/20'
+            ? 'bg-sidebar-accent text-sidebar-primary border border-sidebar-primary/20'
             : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
           collapsed && 'justify-center px-2',
         )}
       >
-        <item.icon className={cn('h-4 w-4 flex-shrink-0', isActive && 'text-primary')} />
+        <item.icon className={cn('h-4 w-4 flex-shrink-0', isActive && 'text-sidebar-primary')} />
         {!collapsed && (
           <>
             <span className="flex-1 truncate">{translatedTitle}</span>
@@ -297,15 +297,15 @@ export function Sidebar() {
           <div
             className={cn(
               'flex items-center justify-between px-3 mb-1',
-              collapsible && 'cursor-pointer hover:bg-muted/50 rounded py-1',
+              collapsible && 'cursor-pointer hover:bg-sidebar-accent/50 rounded py-1',
             )}
             onClick={collapsible ? opts?.onToggle : undefined}
           >
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
+            <p className="text-xs font-semibold text-sidebar-foreground/70 uppercase tracking-wider">{title}</p>
             {collapsible && (expanded ? (
-              <ChevronUp className="h-3 w-3 text-muted-foreground" />
+              <ChevronUp className="h-3 w-3 text-sidebar-foreground/60" />
             ) : (
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              <ChevronDown className="h-3 w-3 text-sidebar-foreground/60" />
             ))}
           </div>
         )}
