@@ -304,7 +304,24 @@ export default function Transactions() {
     toast.success('CSV exported successfully');
   };
 
-  // Print Report Function
+  // State for tenant info
+  const [tenantInfo, setTenantInfo] = useState<{ company_name: string; logo_url: string } | null>(null);
+
+  // Fetch tenant info for print
+  useEffect(() => {
+    const fetchTenantInfo = async () => {
+      if (!tenantId) return;
+      const { data } = await supabase
+        .from('tenants')
+        .select('company_name, logo_url')
+        .eq('id', tenantId)
+        .single();
+      if (data) setTenantInfo(data);
+    };
+    fetchTenantInfo();
+  }, [tenantId]);
+
+  // Print Report Function - Only table data with company name and logo
   const printReport = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -313,21 +330,13 @@ export default function Transactions() {
     }
 
     const monthName = format(parseISO(selectedMonth + '-01'), 'MMMM yyyy');
-    
-    const incomeRows = Object.entries(incomeSummary).map(([catId, amount]) => {
-      const cat = categories.find(c => c.id === catId);
-      return `<tr class="income-row"><td>${cat?.name || 'Uncategorized'}</td><td class="amount income">+৳${amount.toLocaleString()}</td></tr>`;
-    }).join('');
-
-    const expenseRows = Object.entries(expenseSummary).map(([catId, amount]) => {
-      const cat = categories.find(c => c.id === catId);
-      return `<tr class="expense-row"><td>${cat?.name || 'Uncategorized'}</td><td class="amount expense">-৳${amount.toLocaleString()}</td></tr>`;
-    }).join('');
+    const companyName = tenantInfo?.company_name || 'ISP Company';
+    const logoUrl = tenantInfo?.logo_url || '';
 
     const transactionRows = filteredTransactions.map(tx => `
       <tr>
         <td>${format(new Date(tx.date), 'dd/MM/yyyy')}</td>
-        <td><span class="badge ${tx.type}">${tx.type === 'income' ? 'Income' : 'Expense'}</span></td>
+        <td><span class="badge ${tx.type}">${tx.type === 'income' ? 'আয়' : 'ব্যয়'}</span></td>
         <td>${getCategoryName(tx.category_id)}</td>
         <td>${tx.description || '-'}</td>
         <td>${tx.payment_method || '-'}</td>
@@ -342,117 +351,190 @@ export default function Transactions() {
         <title>Income & Expense Report - ${monthName}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #fff; color: #333; }
-          .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #eee; }
-          .header h1 { font-size: 24px; color: #1a1a1a; margin-bottom: 5px; }
-          .header p { color: #666; font-size: 14px; }
-          .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
-          .summary-card { padding: 20px; border-radius: 12px; text-align: center; }
-          .summary-card.income { background: linear-gradient(135deg, #d1fae5, #a7f3d0); }
-          .summary-card.expense { background: linear-gradient(135deg, #fee2e2, #fecaca); }
-          .summary-card.profit { background: linear-gradient(135deg, #dbeafe, #bfdbfe); }
-          .summary-card .label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
-          .summary-card .value { font-size: 28px; font-weight: bold; margin-top: 5px; }
-          .summary-card.income .value { color: #059669; }
-          .summary-card.expense .value { color: #dc2626; }
-          .summary-card.profit .value { color: #2563eb; }
-          .section { margin-bottom: 30px; }
-          .section-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px; }
-          .section-title::before { content: ''; width: 4px; height: 20px; border-radius: 2px; }
-          .section-title.income::before { background: #10b981; }
-          .section-title.expense::before { background: #ef4444; }
-          table { width: 100%; border-collapse: collapse; font-size: 13px; }
-          th { background: #f8fafc; padding: 12px 15px; text-align: left; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
-          td { padding: 10px 15px; border-bottom: 1px solid #f1f5f9; }
-          tr:hover { background: #f8fafc; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: #fff; color: #333; font-size: 12px; }
+          .header { text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #1f2937; }
+          .header .logo { max-height: 60px; max-width: 180px; margin-bottom: 10px; object-fit: contain; }
+          .header h1 { font-size: 20px; color: #1f2937; margin-bottom: 4px; font-weight: 700; }
+          .header p { color: #666; font-size: 12px; }
+          .summary-row { display: flex; justify-content: space-between; margin-bottom: 15px; padding: 12px; background: #f8fafc; border-radius: 8px; }
+          .summary-item { text-align: center; flex: 1; }
+          .summary-item .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+          .summary-item .value { font-size: 18px; font-weight: bold; margin-top: 2px; }
+          .summary-item.income .value { color: #059669; }
+          .summary-item.expense .value { color: #dc2626; }
+          .summary-item.profit .value { color: #2563eb; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          th { background: #1f2937; color: white; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 11px; }
+          td { padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 11px; }
+          tr:nth-child(even) { background: #f9fafb; }
+          tr:hover { background: #f3f4f6; }
           .amount { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
           .amount.income { color: #059669; }
           .amount.expense { color: #dc2626; }
-          .income-row td:first-child { padding-left: 30px; }
-          .expense-row td:first-child { padding-left: 30px; }
-          .total-row { background: #f1f5f9; font-weight: bold; }
-          .total-row td { border-top: 2px solid #e2e8f0; }
-          .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+          .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; }
           .badge.income { background: #d1fae5; color: #059669; }
           .badge.expense { background: #fee2e2; color: #dc2626; }
-          .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px; }
+          .footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; text-align: center; color: #999; font-size: 10px; }
+          .total-row { background: #1f2937 !important; color: white; font-weight: bold; }
+          .total-row td { color: white; border: none; }
           @media print { 
-            body { padding: 0; } 
-            .summary-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            body { padding: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .badge, .summary-row, th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
         </style>
       </head>
       <body>
         <div class="header">
-          <h1>📊 Income & Expense Report</h1>
-          <p>Period: ${monthName}</p>
+          ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo" />` : ''}
+          <h1>${companyName}</h1>
+          <p>আয়-ব্যয় রিপোর্ট | ${monthName}</p>
         </div>
 
-        <div class="summary-grid">
-          <div class="summary-card income">
-            <div class="label">Total Income</div>
+        <div class="summary-row">
+          <div class="summary-item income">
+            <div class="label">মোট আয়</div>
             <div class="value">৳${totalIncome.toLocaleString()}</div>
           </div>
-          <div class="summary-card expense">
-            <div class="label">Total Expense</div>
+          <div class="summary-item expense">
+            <div class="label">মোট ব্যয়</div>
             <div class="value">৳${totalExpense.toLocaleString()}</div>
           </div>
-          <div class="summary-card profit">
-            <div class="label">Net ${netProfit >= 0 ? 'Profit' : 'Loss'}</div>
+          <div class="summary-item profit">
+            <div class="label">${netProfit >= 0 ? 'লাভ' : 'ক্ষতি'}</div>
             <div class="value">${netProfit >= 0 ? '+' : ''}৳${netProfit.toLocaleString()}</div>
           </div>
         </div>
 
-        <div class="section">
-          <h3 class="section-title income">Category-wise Summary</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th style="text-align: right;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr style="background: #f0fdf4;"><td><strong>📈 Income Categories</strong></td><td></td></tr>
-              ${incomeRows || '<tr><td colspan="2" style="text-align: center; color: #999;">No income this month</td></tr>'}
-              <tr style="background: #f0fdf4;" class="total-row"><td>Total Income</td><td class="amount income">৳${totalIncome.toLocaleString()}</td></tr>
-              <tr style="background: #fef2f2;"><td><strong>📉 Expense Categories</strong></td><td></td></tr>
-              ${expenseRows || '<tr><td colspan="2" style="text-align: center; color: #999;">No expenses this month</td></tr>'}
-              <tr style="background: #fef2f2;" class="total-row"><td>Total Expense</td><td class="amount expense">৳${totalExpense.toLocaleString()}</td></tr>
-              <tr class="total-row" style="background: #eff6ff;"><td><strong>Net ${netProfit >= 0 ? 'Profit' : 'Loss'}</strong></td><td class="amount" style="color: ${netProfit >= 0 ? '#059669' : '#dc2626'};">${netProfit >= 0 ? '+' : ''}৳${netProfit.toLocaleString()}</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="section">
-          <h3 class="section-title">All Transactions (${filteredTransactions.length})</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Category</th>
-                <th>Description</th>
-                <th>Method</th>
-                <th style="text-align: right;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${transactionRows || '<tr><td colspan="6" style="text-align: center; color: #999;">No transactions found</td></tr>'}
-            </tbody>
-          </table>
-        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>তারিখ</th>
+              <th>ধরন</th>
+              <th>ক্যাটাগরি</th>
+              <th>বিবরণ</th>
+              <th>পেমেন্ট</th>
+              <th style="text-align: right;">পরিমাণ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${transactionRows || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #999;">কোন লেনদেন পাওয়া যায়নি</td></tr>'}
+            <tr class="total-row">
+              <td colspan="5"><strong>মোট ${filteredTransactions.length}টি লেনদেন</strong></td>
+              <td class="amount" style="color: ${netProfit >= 0 ? '#10b981' : '#ef4444'};">
+                <strong>${netProfit >= 0 ? '+' : ''}৳${netProfit.toLocaleString()}</strong>
+              </td>
+            </tr>
+          </tbody>
+        </table>
 
         <div class="footer">
-          <p>Generated on ${format(new Date(), 'dd MMMM yyyy, hh:mm a')}</p>
+          <p>Generated on ${format(new Date(), 'dd/MM/yyyy hh:mm a')} | ${companyName}</p>
         </div>
       </body>
       </html>
     `);
+
     printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 250);
+    setTimeout(() => {
+      printWindow.print();
+    }, 300);
+  };
+
+  // Print Summary Report Function
+  const printSummaryReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print');
+      return;
+    }
+
+    const monthName = format(parseISO(selectedMonth + '-01'), 'MMMM yyyy');
+    const companyName = tenantInfo?.company_name || 'ISP Company';
+    const logoUrl = tenantInfo?.logo_url || '';
+
+    const incomeRows = Object.entries(incomeSummary).map(([catId, amount]) => {
+      const cat = categories.find(c => c.id === catId);
+      return `<tr><td style="padding-left: 20px;">📈 ${cat?.name || 'Uncategorized'}</td><td class="amount income">+৳${amount.toLocaleString()}</td></tr>`;
+    }).join('');
+
+    const expenseRows = Object.entries(expenseSummary).map(([catId, amount]) => {
+      const cat = categories.find(c => c.id === catId);
+      return `<tr><td style="padding-left: 20px;">📉 ${cat?.name || 'Uncategorized'}</td><td class="amount expense">-৳${amount.toLocaleString()}</td></tr>`;
+    }).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Summary Report - ${monthName}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: #fff; color: #333; font-size: 12px; }
+          .header { text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #1f2937; }
+          .header .logo { max-height: 60px; max-width: 180px; margin-bottom: 10px; object-fit: contain; }
+          .header h1 { font-size: 20px; color: #1f2937; margin-bottom: 4px; font-weight: 700; }
+          .header p { color: #666; font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          th { background: #1f2937; color: white; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 11px; }
+          td { padding: 10px 8px; border-bottom: 1px solid #e5e7eb; font-size: 11px; }
+          .amount { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
+          .amount.income { color: #059669; }
+          .amount.expense { color: #dc2626; }
+          .section-header { background: #f3f4f6; font-weight: bold; }
+          .section-header.income { background: #d1fae5; }
+          .section-header.expense { background: #fee2e2; }
+          .total-row { background: #1f2937 !important; color: white; font-weight: bold; }
+          .total-row td { color: white; }
+          .grand-total { background: #059669 !important; }
+          .grand-total td { color: white; font-size: 14px; }
+          .footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; text-align: center; color: #999; font-size: 10px; }
+          @media print { 
+            body { padding: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .section-header, .total-row, .grand-total, th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo" />` : ''}
+          <h1>${companyName}</h1>
+          <p>ক্যাটাগরি ভিত্তিক সারাংশ | ${monthName}</p>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>ক্যাটাগরি</th>
+              <th style="text-align: right;">পরিমাণ</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="section-header income"><td colspan="2"><strong>💰 আয় ক্যাটাগরিসমূহ</strong></td></tr>
+            ${incomeRows || '<tr><td colspan="2" style="text-align: center; color: #999;">এই মাসে কোন আয় নেই</td></tr>'}
+            <tr class="total-row"><td>মোট আয়</td><td class="amount" style="color: #10b981;">৳${totalIncome.toLocaleString()}</td></tr>
+            
+            <tr class="section-header expense"><td colspan="2"><strong>💸 ব্যয় ক্যাটাগরিসমূহ</strong></td></tr>
+            ${expenseRows || '<tr><td colspan="2" style="text-align: center; color: #999;">এই মাসে কোন ব্যয় নেই</td></tr>'}
+            <tr class="total-row"><td>মোট ব্যয়</td><td class="amount" style="color: #ef4444;">৳${totalExpense.toLocaleString()}</td></tr>
+            
+            <tr class="grand-total">
+              <td><strong>নিট ${netProfit >= 0 ? 'লাভ' : 'ক্ষতি'}</strong></td>
+              <td class="amount"><strong>${netProfit >= 0 ? '+' : ''}৳${netProfit.toLocaleString()}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <p>Generated on ${format(new Date(), 'dd/MM/yyyy hh:mm a')} | ${companyName}</p>
+        </div>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.print();
+    }, 300);
   };
 
   return (
@@ -788,8 +870,13 @@ export default function Transactions() {
               </Button>
               <Button variant="outline" size="sm" onClick={printReport} className="h-8 sm:h-9 text-xs sm:text-sm">
                 <Printer className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
-                <span className="hidden xs:inline">Print Report</span>
+                <span className="hidden xs:inline">লেনদেন প্রিন্ট</span>
                 <span className="xs:hidden">Print</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={printSummaryReport} className="h-8 sm:h-9 text-xs sm:text-sm bg-primary/5 hover:bg-primary/10">
+                <Printer className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
+                <span className="hidden xs:inline">সারাংশ প্রিন্ট</span>
+                <span className="xs:hidden">Summary</span>
               </Button>
             </div>
 
