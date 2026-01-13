@@ -65,6 +65,7 @@ export default function CustomerLocation() {
   const [showMapDialog, setShowMapDialog] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [verifiedCustomDomain, setVerifiedCustomDomain] = useState<string | null>(null);
 
   // Settings form state
   const [settingsForm, setSettingsForm] = useState({
@@ -87,6 +88,32 @@ export default function CustomerLocation() {
       });
     }
   }, [settings]);
+
+  // Fetch verified custom domain from tenant_custom_domains table
+  useEffect(() => {
+    const fetchCustomDomain = async () => {
+      if (!tenantId) return;
+      
+      try {
+        // Use raw query to avoid type recursion issues
+        const { data } = await (supabase as any)
+          .from('tenant_custom_domains')
+          .select('domain')
+          .eq('tenant_id', tenantId)
+          .eq('status', 'active')
+          .eq('is_primary', true)
+          .maybeSingle();
+        
+        if (data?.domain) {
+          setVerifiedCustomDomain(data.domain);
+        }
+      } catch (err) {
+        console.error('Failed to fetch custom domain:', err);
+      }
+    };
+    
+    fetchCustomDomain();
+  }, [tenantId]);
 
   // Subscribe to realtime updates for location visits
   useEffect(() => {
@@ -124,24 +151,24 @@ export default function CustomerLocation() {
     return filteredVisits.slice(start, start + pageSize);
   }, [filteredVisits, currentPage, pageSize]);
 
-  // Generate full location link - prioritize custom domain, then landing page slug
+  // Generate full location link - prioritize verified custom domain
   const locationLink = useMemo(() => {
     if (!settings?.unique_token) return '';
     
-    // Priority: 1. Custom Domain, 2. Landing Page Slug, 3. Current Origin
+    // Priority: 1. Verified Custom Domain, 2. Tenant's custom_domain field, 3. Current Origin
     let baseUrl = window.location.origin;
     
-    // Check if tenant has custom domain
-    if (tenant?.custom_domain) {
+    if (verifiedCustomDomain) {
+      baseUrl = `https://${verifiedCustomDomain}`;
+    } else if (tenant?.custom_domain) {
       baseUrl = `https://${tenant.custom_domain}`;
-    } else if (tenant?.slug) {
-      // If tenant has a landing page slug, use the main platform URL
-      // The link format remains /l/:token
-      baseUrl = window.location.origin;
     }
     
     return `${baseUrl}/l/${settings.unique_token}`;
-  }, [settings?.unique_token, tenant?.custom_domain, tenant?.slug]);
+  }, [settings?.unique_token, verifiedCustomDomain, tenant?.custom_domain]);
+  
+  // Get display domain for UI
+  const displayDomain = verifiedCustomDomain || tenant?.custom_domain || null;
 
   const copyLink = () => {
     if (!locationLink) return;
@@ -387,7 +414,8 @@ export default function CustomerLocation() {
                             <TableHead>Name</TableHead>
                             <TableHead>Phone</TableHead>
                             <TableHead>Address</TableHead>
-                            <TableHead>IP / ISP</TableHead>
+                            <TableHead>IP / ISP / ASN</TableHead>
+                            <TableHead>Device</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Date & Time</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -401,23 +429,33 @@ export default function CustomerLocation() {
                                 <TableCell>
                                   <div className="flex items-center gap-2">
                                     {isRecent && <Radio className="h-3 w-3 text-green-500 animate-pulse" />}
-                                    {visit.name || <span className="text-muted-foreground">Not provided</span>}
+                                    {visit.name || <span className="text-muted-foreground">-</span>}
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  {visit.phone || <span className="text-muted-foreground">Not provided</span>}
+                                  {visit.phone || <span className="text-muted-foreground">-</span>}
                                 </TableCell>
-                                <TableCell className="max-w-[200px] truncate">
-                                  {visit.full_address || `${visit.area || ''} ${visit.district || ''}`.trim() || 'Unknown'}
+                                <TableCell className="max-w-[180px] truncate" title={visit.full_address || ''}>
+                                  {visit.full_address || `${visit.area || ''} ${visit.district || ''}`.trim() || '-'}
                                 </TableCell>
                                 <TableCell>
-                                  <div className="text-sm">
-                                    <div>{visit.ip_address || 'Unknown'}</div>
-                                    <div className="text-muted-foreground text-xs">{visit.isp_name || ''}</div>
+                                  <div className="text-sm space-y-0.5">
+                                    <div className="font-mono text-xs">{visit.ip_address || '-'}</div>
+                                    <div className="text-muted-foreground text-xs truncate max-w-[140px]" title={visit.isp_name || ''}>
+                                      {visit.isp_name || '-'}
+                                    </div>
+                                    {visit.asn && (
+                                      <Badge variant="outline" className="text-[10px] py-0">{visit.asn}</Badge>
+                                    )}
                                   </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={visit.device_type === 'mobile' ? 'default' : 'secondary'} className="text-xs">
+                                    {visit.device_type || 'mobile'}
+                                  </Badge>
                                 </TableCell>
                                 <TableCell>{getStatusBadge(visit.verified_status)}</TableCell>
-                                <TableCell>
+                                <TableCell className="whitespace-nowrap">
                                   {format(new Date(visit.visited_at), 'dd MMM yyyy, hh:mm a')}
                                 </TableCell>
                                 <TableCell className="text-right">
