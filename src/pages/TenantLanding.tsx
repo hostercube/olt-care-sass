@@ -1535,8 +1535,7 @@ export default function TenantLanding() {
                     {tenant.turnstile_enabled && tenant.turnstile_site_key && (
                       <TurnstileWidget
                         siteKey={tenant.turnstile_site_key}
-                        onVerify={setContactTurnstileToken}
-                        onError={() => setContactTurnstileToken(null)}
+                        onToken={setContactTurnstileToken}
                       />
                     )}
                     
@@ -1708,8 +1707,7 @@ export default function TenantLanding() {
             {tenant.turnstile_enabled && tenant.turnstile_site_key && (
               <TurnstileWidget
                 siteKey={tenant.turnstile_site_key}
-                onVerify={setTurnstileToken}
-                onError={() => setTurnstileToken(null)}
+                onToken={setTurnstileToken}
               />
             )}
             
