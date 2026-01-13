@@ -107,56 +107,120 @@ export default function LocationCapture() {
     return Math.abs(hash).toString(36);
   }, []);
 
-  // Robust device detection
+  // Robust device detection - works even in desktop mode on mobile browser
   const detectDeviceType = useCallback((): DeviceData => {
     const ua = navigator.userAgent;
     const fingerprint = generateFingerprint();
     
-    const isAndroid = /Android/i.test(ua);
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
-    const isMobileOS = isAndroid || isIOS || /webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    const isTablet = /iPad|Android.*Tablet|Tablet/i.test(ua) && !/Mobile/i.test(ua);
-    const isWindowsDesktop = /Windows NT/i.test(ua) && !/Windows Phone/i.test(ua);
-    const isMacDesktop = /Macintosh/i.test(ua) && !('ontouchend' in document);
-    const isLinuxDesktop = /Linux/i.test(ua) && !/Android/i.test(ua);
-    const isDesktopOS = isWindowsDesktop || isMacDesktop || isLinuxDesktop;
+    // Screen info for debugging (appended to user_agent)
+    const screenInfo = `[Screen:${window.screen.width}x${window.screen.height},View:${window.innerWidth}x${window.innerHeight},Touch:${navigator.maxTouchPoints}]`;
+    
+    // PRIORITY 1: Physical screen characteristics (cannot be spoofed by desktop mode)
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+    const minDimension = Math.min(screenWidth, screenHeight);
+    const maxDimension = Math.max(screenWidth, screenHeight);
+    const aspectRatio = maxDimension / minDimension;
+    
+    // PRIORITY 2: Touch and orientation capabilities (cannot be spoofed)
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const touchPointCount = navigator.maxTouchPoints || 0;
+    const hasOrientation = typeof window.orientation !== 'undefined' || 'orientation' in screen;
+    const hasDeviceMotion = 'DeviceMotionEvent' in window;
+    const hasDeviceOrientation = 'DeviceOrientationEvent' in window;
+    
+    // PRIORITY 3: userAgentData (modern browsers, but can be spoofed in desktop mode)
+    const uaData = (navigator as any).userAgentData;
+    const isMobileFromUAData = uaData?.mobile === true;
+    const platformFromUA = uaData?.platform?.toLowerCase() || '';
+    
+    // PRIORITY 4: User agent patterns (can be spoofed in desktop mode)
+    const isAndroidUA = /Android/i.test(ua);
+    const isIOSUA = /iPhone|iPad|iPod/i.test(ua);
+    const isMobileUA = isAndroidUA || isIOSUA || /webOS|BlackBerry|IEMobile|Opera Mini|Mobile Safari/i.test(ua);
+    const isTabletUA = /iPad|Android(?!.*Mobile)|Tablet/i.test(ua);
+    const isWindowsDesktopUA = /Windows NT/i.test(ua) && !/Windows Phone/i.test(ua);
+    const isMacDesktopUA = /Macintosh/i.test(ua);
+    const isLinuxDesktopUA = /Linux/i.test(ua) && !/Android/i.test(ua);
+    const isDesktopUA = isWindowsDesktopUA || isMacDesktopUA || isLinuxDesktopUA;
+    
+    // Check for devtools mobile emulation (viewport much smaller than window)
     const isDevToolsEmulation = window.outerWidth > 1000 && window.innerWidth < 600;
     
-    const uaData = (navigator as any).userAgentData;
-    if (uaData) {
-      const isMobileFromUA = uaData.mobile === true;
-      const platform = uaData.platform?.toLowerCase() || '';
-      const isRealDesktop = ['windows', 'macos', 'linux', 'chromeos'].includes(platform);
-      
-      if (isRealDesktop && !isMobileFromUA) {
-        return { device_type: 'desktop', user_agent: ua, fingerprint };
-      }
-      if (isMobileFromUA) {
-        return { device_type: isTablet ? 'tablet' : 'mobile', user_agent: ua, fingerprint };
-      }
+    // DETECTION LOGIC: Prioritize physical characteristics over user agent
+    
+    // Real desktop: Large screen + no touch + desktop UA patterns
+    const isRealDesktop = (
+      minDimension >= 900 && // Large minimum screen dimension
+      !hasTouch && // No touch capability
+      !hasOrientation && // No device orientation
+      (isDesktopUA || ['windows', 'macos', 'linux', 'chromeos'].includes(platformFromUA))
+    );
+    
+    if (isRealDesktop || isDevToolsEmulation) {
+      return { device_type: 'desktop', user_agent: `${ua} ${screenInfo}`, fingerprint };
     }
     
-    if (isDesktopOS || isDevToolsEmulation) {
-      return { device_type: 'desktop', user_agent: ua, fingerprint };
+    // Mobile detection: Small screen OR touch with mobile characteristics
+    // This catches mobile devices even when using "Desktop Mode"
+    const isMobileScreen = minDimension < 500; // Typical mobile portrait width
+    const isTabletScreen = minDimension >= 500 && minDimension < 900 && aspectRatio < 1.8;
+    const hasMobileCapabilities = hasTouch && (hasOrientation || hasDeviceMotion || hasDeviceOrientation);
+    
+    // If userAgentData says mobile and has touch, definitely mobile
+    if (isMobileFromUAData && touchPointCount > 0) {
+      return { device_type: isTabletScreen || isTabletUA ? 'tablet' : 'mobile', user_agent: `${ua} ${screenInfo}`, fingerprint };
     }
     
-    if (isTablet) {
-      return { device_type: 'tablet', user_agent: ua, fingerprint };
+    // Physical screen says mobile (small screen + touch + orientation sensors)
+    if (isMobileScreen && hasMobileCapabilities) {
+      return { device_type: 'mobile', user_agent: `${ua} ${screenInfo}`, fingerprint };
     }
     
-    if (isMobileOS) {
-      return { device_type: 'mobile', user_agent: ua, fingerprint };
+    // Physical screen says tablet
+    if (isTabletScreen && hasMobileCapabilities) {
+      return { device_type: 'tablet', user_agent: `${ua} ${screenInfo}`, fingerprint };
     }
     
-    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    if (hasTouch && !isDesktopOS) {
-      return { device_type: 'mobile', user_agent: ua, fingerprint };
+    // Touch device with mobile screen dimensions (catches desktop mode on mobile)
+    if (hasTouch && minDimension < 600 && touchPointCount >= 1) {
+      return { device_type: 'mobile', user_agent: `${ua} ${screenInfo}`, fingerprint };
     }
     
-    return { device_type: 'desktop', user_agent: ua, fingerprint };
+    // Touch device with tablet screen dimensions
+    if (hasTouch && minDimension >= 600 && minDimension < 900) {
+      return { device_type: 'tablet', user_agent: `${ua} ${screenInfo}`, fingerprint };
+    }
+    
+    // Fallback to UA detection for cases where physical detection is inconclusive
+    if (isMobileUA && !isDesktopUA) {
+      return { device_type: isTabletUA ? 'tablet' : 'mobile', user_agent: `${ua} ${screenInfo}`, fingerprint };
+    }
+    
+    // Has touch but larger screen - could be tablet or touch laptop
+    if (hasTouch && hasOrientation) {
+      return { device_type: 'tablet', user_agent: `${ua} ${screenInfo}`, fingerprint };
+    }
+    
+    // Default to desktop only if truly no mobile indicators
+    return { device_type: 'desktop', user_agent: `${ua} ${screenInfo}`, fingerprint };
   }, [generateFingerprint]);
   
+  // Check if device is truly mobile - using physical characteristics
   const isTrulyMobile = useCallback(() => {
+    // Quick physical checks that cannot be spoofed
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+    const minDimension = Math.min(screenWidth, screenHeight);
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const hasOrientation = typeof window.orientation !== 'undefined' || 'orientation' in screen;
+    
+    // If small screen + touch + orientation sensor = definitely mobile device
+    if (minDimension < 900 && hasTouch && (hasOrientation || navigator.maxTouchPoints > 0)) {
+      return true;
+    }
+    
+    // Fall back to full detection
     const device = detectDeviceType();
     return device.device_type === 'mobile' || device.device_type === 'tablet';
   }, [detectDeviceType]);
