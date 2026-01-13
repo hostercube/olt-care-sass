@@ -12,6 +12,7 @@ import { TenantAccessGuard } from "@/components/layout/TenantAccessGuard";
 import { ModuleAccessGuard } from "@/components/layout/ModuleAccessGuard";
 import { StaffAuthProvider } from "@/hooks/useStaffPermissions";
 import { StaffProtectedRoute } from "@/components/layout/StaffProtectedRoute";
+import CustomDomainRouter from "./components/routing/CustomDomainRouter";
 
 // Staff Portal Pages
 import StaffLogin from "./pages/StaffPortal/StaffLogin";
@@ -124,11 +125,12 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <AuthProvider>
-            <LanguageCurrencyProvider>
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<Landing />} />
+          <CustomDomainRouter>
+            <AuthProvider>
+              <LanguageCurrencyProvider>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<Landing />} />
               <Route path="/auth" element={<Auth />} />
               
               {/* Tenant-specific pages */}
@@ -626,6 +628,7 @@ const App = () => (
             </Routes>
             </LanguageCurrencyProvider>
           </AuthProvider>
+          </CustomDomainRouter>
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
