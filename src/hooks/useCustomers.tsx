@@ -75,13 +75,24 @@ export function useCustomers() {
       if (tenantId) {
         customerData.tenant_id = tenantId;
         
-        // Check package limit before adding new customer
+        // Check package limit before adding new customer (but don't block on errors)
         if (!isSuperAdmin) {
-          const { checkPackageLimit } = await import('@/hooks/usePackageLimits');
-          const limitCheck = await checkPackageLimit(tenantId, 'customers', 1);
-          if (!limitCheck.allowed) {
-            toast.error(limitCheck.message || 'Customer limit reached. Please upgrade your package.');
-            throw new Error(limitCheck.message);
+          try {
+            const { checkPackageLimit } = await import('@/hooks/usePackageLimits');
+            const limitCheck = await checkPackageLimit(tenantId, 'customers', 1);
+            if (!limitCheck.allowed) {
+              toast.error(limitCheck.message || 'Customer limit reached. Please upgrade your package.');
+              throw new Error(limitCheck.message);
+            }
+          } catch (limitError: any) {
+            // If limit check fails due to no subscription, allow customer creation
+            if (limitError?.message?.includes('No active subscription')) {
+              console.warn('No active subscription found, allowing customer creation');
+            } else if (limitError?.message?.includes('limit reached')) {
+              throw limitError;
+            } else {
+              console.warn('Package limit check failed, allowing customer creation:', limitError);
+            }
           }
         }
       } else if (!isSuperAdmin) {
@@ -94,12 +105,20 @@ export function useCustomers() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error creating customer:', error);
+        throw new Error(error.message || 'Database error while creating customer');
+      }
+      
       toast.success('Customer created successfully');
       return newCustomer;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating customer:', err);
-      toast.error('Failed to create customer');
+      const message = err?.message || 'Failed to create customer';
+      // Only show toast if not already shown
+      if (!message.includes('limit reached')) {
+        toast.error(message);
+      }
       throw err;
     }
   };

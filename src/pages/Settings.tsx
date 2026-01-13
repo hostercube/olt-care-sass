@@ -14,13 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload, Globe, DollarSign, Palette, CheckCircle } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Clock, Shield, Database, Loader2, Mail, UserPlus, Network, Webhook, Send, MessageSquare, Download, HardDrive, Key, Eye, EyeOff, Building2, Image, Upload, Globe, DollarSign, Palette, CheckCircle, Paintbrush, Monitor, Sun, Moon } from 'lucide-react';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useTenantBackup } from '@/hooks/useTenantBackup';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
-import { useTenantBranding } from '@/hooks/useTenantBranding';
+import { useTenantBranding, DASHBOARD_THEMES } from '@/hooks/useTenantBranding';
+import { useTheme } from '@/hooks/useTheme';
 import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -478,6 +479,156 @@ function BrandingSettingsCard() {
   );
 }
 
+// Theme Settings Component with prebuilt themes
+function ThemeSettingsCard() {
+  const { branding, saving, updateBranding } = useTenantBranding();
+  const { theme, setTheme } = useTheme();
+  const [selectedTheme, setSelectedTheme] = useState(branding.dashboard_theme || 'dark-default');
+
+  useEffect(() => {
+    setSelectedTheme(branding.dashboard_theme || 'dark-default');
+  }, [branding.dashboard_theme]);
+
+  const handleThemeSelect = async (themeId: string) => {
+    setSelectedTheme(themeId);
+    
+    // Find the theme and apply the mode (dark/light)
+    const themeConfig = DASHBOARD_THEMES.find(t => t.id === themeId);
+    if (themeConfig) {
+      setTheme(themeConfig.mode as 'dark' | 'light');
+    }
+    
+    // Save to database
+    await updateBranding({ dashboard_theme: themeId } as any);
+  };
+
+  return (
+    <Card variant="glass">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Paintbrush className="h-5 w-5 text-primary" />
+          Dashboard Themes
+        </CardTitle>
+        <CardDescription>
+          Choose a prebuilt theme for your dashboard. This applies to all users in your organization.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Current Mode Indicator */}
+        <div className="flex items-center gap-4 p-4 rounded-lg bg-muted/30 border border-border">
+          <div className="flex items-center gap-2">
+            {theme === 'dark' ? (
+              <Moon className="h-5 w-5 text-primary" />
+            ) : (
+              <Sun className="h-5 w-5 text-amber-500" />
+            )}
+            <span className="font-medium">Current Mode:</span>
+            <span className="text-muted-foreground capitalize">{theme}</span>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">You can also toggle mode from the header</span>
+          </div>
+        </div>
+
+        {/* Theme Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {DASHBOARD_THEMES.map((themeOption) => (
+            <button
+              key={themeOption.id}
+              onClick={() => handleThemeSelect(themeOption.id)}
+              className={`
+                relative group text-left rounded-xl overflow-hidden border-2 transition-all duration-200
+                ${selectedTheme === themeOption.id 
+                  ? 'border-primary ring-2 ring-primary/30 scale-[1.02]' 
+                  : 'border-border hover:border-primary/50 hover:scale-[1.01]'
+                }
+              `}
+            >
+              {/* Theme Preview */}
+              <div className={`h-32 ${themeOption.preview} relative overflow-hidden`}>
+                {/* Sidebar Preview */}
+                <div className={`absolute left-0 top-0 bottom-0 w-12 ${themeOption.sidebar}`}>
+                  <div className="p-2 space-y-2">
+                    <div className="h-2 w-6 bg-white/20 rounded" />
+                    <div className="h-2 w-8 bg-white/10 rounded" />
+                    <div className="h-2 w-5 bg-white/10 rounded" />
+                    <div className="h-2 w-7 bg-white/10 rounded" />
+                  </div>
+                </div>
+                {/* Content Preview */}
+                <div className="absolute left-14 top-3 right-3 bottom-3">
+                  <div className={`h-4 w-20 ${themeOption.accent} rounded mb-2`} />
+                  <div className="flex gap-2 mb-2">
+                    <div className="h-8 flex-1 bg-white/10 rounded" />
+                    <div className="h-8 flex-1 bg-white/10 rounded" />
+                    <div className="h-8 flex-1 bg-white/10 rounded" />
+                  </div>
+                  <div className="h-12 bg-white/5 rounded" />
+                </div>
+                {/* Selected Indicator */}
+                {selectedTheme === themeOption.id && (
+                  <div className="absolute top-2 right-2">
+                    <CheckCircle className="h-5 w-5 text-primary drop-shadow-lg" />
+                  </div>
+                )}
+                {/* Mode Badge */}
+                <div className="absolute bottom-2 right-2">
+                  <span className={`
+                    px-2 py-0.5 rounded-full text-[10px] font-medium uppercase
+                    ${themeOption.mode === 'dark' 
+                      ? 'bg-slate-800 text-slate-300' 
+                      : 'bg-white text-slate-600'
+                    }
+                  `}>
+                    {themeOption.mode}
+                  </span>
+                </div>
+              </div>
+              {/* Theme Info */}
+              <div className="p-3 bg-card">
+                <h4 className="font-medium text-sm">{themeOption.name}</h4>
+                <p className="text-xs text-muted-foreground mt-0.5">{themeOption.description}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Quick Mode Toggle */}
+        <Separator />
+        <div className="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/20">
+          <div>
+            <Label className="flex items-center gap-2">
+              <Monitor className="h-4 w-4" />
+              Quick Mode Toggle
+            </Label>
+            <p className="text-sm text-muted-foreground mt-1">
+              Switch between dark and light mode without changing the full theme
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button 
+              variant={theme === 'light' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setTheme('light')}
+            >
+              <Sun className="h-4 w-4 mr-1" />
+              Light
+            </Button>
+            <Button 
+              variant={theme === 'dark' ? 'default' : 'outline'} 
+              size="sm"
+              onClick={() => setTheme('dark')}
+            >
+              <Moon className="h-4 w-4 mr-1" />
+              Dark
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Language & Currency Settings Component
 function LocalizationSettingsCard() {
   const { 
@@ -649,6 +800,10 @@ export default function Settings() {
               <Building2 className="h-4 w-4" />
               Branding
             </TabsTrigger>
+            <TabsTrigger value="themes" className="gap-2">
+              <Paintbrush className="h-4 w-4" />
+              Themes
+            </TabsTrigger>
             <TabsTrigger value="general" className="gap-2">
               <SettingsIcon className="h-4 w-4" />
               General
@@ -677,6 +832,11 @@ export default function Settings() {
           <TabsContent value="branding" className="space-y-6">
             <BrandingSettingsCard />
             <LocalizationSettingsCard />
+          </TabsContent>
+
+          {/* Themes Settings */}
+          <TabsContent value="themes" className="space-y-6">
+            <ThemeSettingsCard />
           </TabsContent>
 
           {/* General Settings */}
