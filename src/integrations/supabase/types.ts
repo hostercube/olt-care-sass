@@ -7931,6 +7931,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_customer_ticket_comment: {
+        Args: {
+          p_comment: string
+          p_created_by_name?: string
+          p_customer_id: string
+          p_ticket_id: string
+        }
+        Returns: undefined
+      }
       authenticate_customer: {
         Args: { p_password: string; p_tenant_id: string; p_username: string }
         Returns: {
@@ -7970,6 +7979,19 @@ export type Database = {
         }[]
       }
       count_sub_resellers: { Args: { p_reseller_id: string }; Returns: number }
+      create_customer_support_ticket: {
+        Args: {
+          p_category?: string
+          p_customer_id: string
+          p_description?: string
+          p_priority?: string
+          p_subject: string
+        }
+        Returns: {
+          id: string
+          ticket_number: string
+        }[]
+      }
       export_tenant_data: { Args: { _tenant_id: string }; Returns: Json }
       generate_bill_number: { Args: { _tenant_id: string }; Returns: string }
       generate_customer_code: { Args: { _tenant_id: string }; Returns: string }
@@ -8108,6 +8130,56 @@ export type Database = {
       is_tenant_landing_slug_available: {
         Args: { p_current_tenant_id: string; p_slug: string }
         Returns: boolean
+      }
+      list_customer_support_tickets: {
+        Args: { p_customer_id: string; p_status?: string }
+        Returns: {
+          assigned_name: string | null
+          assigned_to: string | null
+          category: string | null
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          customer_email: string | null
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          description: string | null
+          id: string
+          priority: Database["public"]["Enums"]["ticket_priority"] | null
+          resolution_notes: string | null
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["ticket_status"] | null
+          subject: string
+          tenant_id: string
+          ticket_number: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "support_tickets"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      list_customer_ticket_comments: {
+        Args: { p_customer_id: string; p_ticket_id: string }
+        Returns: {
+          comment: string
+          created_at: string
+          created_by: string | null
+          created_by_name: string | null
+          id: string
+          is_internal: boolean | null
+          tenant_id: string
+          ticket_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ticket_comments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       match_bkash_payment: {
         Args: {

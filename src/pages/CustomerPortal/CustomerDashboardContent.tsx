@@ -12,9 +12,8 @@ import {
   Router, Network, Signal, RefreshCw, Power,
   ArrowDownToLine, ArrowUpFromLine, Activity, Copy, Eye, EyeOff
 } from 'lucide-react';
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInDays, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
-import {
   LineChart,
   Line,
   XAxis,
@@ -55,9 +54,16 @@ export default function CustomerDashboardContent() {
   }
 
   const isOnline = customer?.status === 'active';
-  const daysUntilExpiry = customer?.expiry_date 
-    ? differenceInDays(new Date(customer.expiry_date), new Date())
-    : null;
+
+  const expiryDate = (() => {
+    const raw = customer?.expiry_date;
+    if (!raw || typeof raw !== 'string') return null;
+    // Prefer ISO parsing (DB timestamps are usually ISO). Fallback to Date ctor.
+    const d = raw.includes('T') ? parseISO(raw) : new Date(raw);
+    return isValid(d) ? d : null;
+  })();
+
+  const daysUntilExpiry = expiryDate ? differenceInDays(expiryDate, new Date()) : null;
 
   // Fetch device info from MikroTik/OLT via VPS polling server
   const fetchDeviceInfo = useCallback(async () => {
@@ -732,7 +738,7 @@ export default function CustomerDashboardContent() {
                   <span className="text-xs">Expiry Date</span>
                 </div>
                 <p className={`font-semibold text-sm ${daysUntilExpiry !== null && daysUntilExpiry <= 0 ? 'text-red-600' : ''}`}>
-                  {customer?.expiry_date ? format(new Date(customer.expiry_date), 'dd MMM yyyy') : 'N/A'}
+                  {expiryDate ? format(expiryDate, 'dd MMM yyyy') : 'N/A'}
                 </p>
               </div>
             </div>
