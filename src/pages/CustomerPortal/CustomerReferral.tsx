@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Gift, Copy, Users, DollarSign, CheckCircle, Clock, Share2, Wallet, ArrowDownCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Gift, Copy, Users, DollarSign, CheckCircle, Clock, Share2, Wallet, ArrowDownCircle, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -22,10 +22,10 @@ interface CustomerContext {
 interface ReferralStats {
   total_referrals: number;
   successful_referrals: number;
-  pending_referrals?: number;
-  total_bonus_earned?: number;
-  bonus_earned?: number;
-  bonus_balance?: number;
+  pending_referrals: number;
+  rejected_referrals: number;
+  total_bonus_earned: number;
+  bonus_balance: number;
 }
 
 interface ReferralRecord {
@@ -226,10 +226,12 @@ export default function CustomerReferral() {
       case 'bonus_paid':
         return <Badge className="bg-green-500">Completed</Badge>;
       case 'pending':
-        return <Badge variant="secondary">Pending</Badge>;
+        return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-700">Pending</Badge>;
       case 'activated':
       case 'active':
         return <Badge className="bg-blue-500">Active</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Rejected</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -316,7 +318,7 @@ export default function CustomerReferral() {
       </Card>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -357,6 +359,18 @@ export default function CustomerReferral() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
+                <p className="text-sm text-muted-foreground">Rejected</p>
+                <p className="text-2xl font-bold text-red-600">{stats?.rejected_referrals || 0}</p>
+              </div>
+              <X className="h-8 w-8 text-red-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm text-muted-foreground">Total Earned</p>
                 <p className="text-2xl font-bold text-primary">৳{stats?.total_bonus_earned || 0}</p>
               </div>
@@ -383,6 +397,7 @@ export default function CustomerReferral() {
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
           </div>
