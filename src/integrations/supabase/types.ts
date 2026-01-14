@@ -1450,6 +1450,7 @@ export type Database = {
           package_id: string | null
           phone: string
           preferred_date: string | null
+          referral_code: string | null
           rejection_reason: string | null
           request_number: string | null
           status: string | null
@@ -1471,6 +1472,7 @@ export type Database = {
           package_id?: string | null
           phone: string
           preferred_date?: string | null
+          referral_code?: string | null
           rejection_reason?: string | null
           request_number?: string | null
           status?: string | null
@@ -1492,6 +1494,7 @@ export type Database = {
           package_id?: string | null
           phone?: string
           preferred_date?: string | null
+          referral_code?: string | null
           rejection_reason?: string | null
           request_number?: string | null
           status?: string | null
