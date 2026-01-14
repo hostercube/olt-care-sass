@@ -16,7 +16,8 @@ import { format, startOfYear, endOfYear, getYear } from 'date-fns';
 const ITEMS_PER_PAGE = 10;
 
 export default function CustomerRecharges() {
-  const { customer } = useOutletContext<{ customer: any }>();
+  const context = useOutletContext<{ customer: any }>();
+  const customer = context?.customer;
   const [recharges, setRecharges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);

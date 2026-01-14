@@ -8,7 +8,8 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { format } from 'date-fns';
 
 export default function CustomerUsage() {
-  const { customer } = useOutletContext<{ customer: any }>();
+  const context = useOutletContext<{ customer: any }>();
+  const customer = context?.customer;
   const [bandwidthData, setBandwidthData] = useState<{ time: string; rx: number; tx: number }[]>([]);
 
   useEffect(() => {
