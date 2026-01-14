@@ -153,22 +153,36 @@ export default function TenantLogin() {
         return;
       }
 
-      const { data: customers, error } = await supabase
-        .from('customers')
-        .select(`id, name, phone, email, address, status, expiry_date, due_amount, monthly_bill, pppoe_username, pppoe_password, tenant_id, package_id, area_id, customer_code`)
-        .eq('tenant_id', tenantId)
-        .ilike('pppoe_username', usernameInput);
+      // Define customer type for RPC response
+      type CustomerAuth = {
+        id: string;
+        name: string;
+        tenant_id: string;
+        pppoe_username: string;
+      };
 
-      if (error) throw error;
+      // Use secure RPC function for authentication (bypasses RLS securely)
+      const { data, error } = await supabase
+        .rpc('authenticate_customer', {
+          p_tenant_id: tenantId,
+          p_username: usernameInput,
+          p_password: passwordInput
+        });
 
-      const customer = customers?.find(c => 
-        c.pppoe_password === passwordInput || c.pppoe_password?.trim() === passwordInput
-      );
+      const customers = data as CustomerAuth[] | null;
 
-      if (!customer) {
+      if (error) {
+        console.error('Login query error:', error);
+        toast.error('Login failed. Please try again.');
+        return;
+      }
+
+      if (!customers || customers.length === 0) {
         toast.error('Invalid PPPoE username or password');
         return;
       }
+
+      const customer = customers[0];
 
       localStorage.setItem('customer_session', JSON.stringify({
         id: customer.id,
