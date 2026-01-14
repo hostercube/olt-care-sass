@@ -1529,6 +1529,151 @@ export type Database = {
           },
         ]
       }
+      customer_apps_config: {
+        Row: {
+          android_app_url: string | null
+          app_icon_url: string | null
+          app_name: string | null
+          created_at: string | null
+          dashboard_announcement: string | null
+          dashboard_announcement_enabled: boolean | null
+          dashboard_banner_link: string | null
+          dashboard_banner_url: string | null
+          force_update_enabled: boolean | null
+          ftp_enabled: boolean | null
+          id: string
+          ios_app_url: string | null
+          live_tv_enabled: boolean | null
+          maintenance_message: string | null
+          maintenance_mode: boolean | null
+          min_app_version: string | null
+          news_enabled: boolean | null
+          primary_color: string | null
+          referral_enabled: boolean | null
+          secondary_color: string | null
+          speed_test_enabled: boolean | null
+          splash_screen_url: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          android_app_url?: string | null
+          app_icon_url?: string | null
+          app_name?: string | null
+          created_at?: string | null
+          dashboard_announcement?: string | null
+          dashboard_announcement_enabled?: boolean | null
+          dashboard_banner_link?: string | null
+          dashboard_banner_url?: string | null
+          force_update_enabled?: boolean | null
+          ftp_enabled?: boolean | null
+          id?: string
+          ios_app_url?: string | null
+          live_tv_enabled?: boolean | null
+          maintenance_message?: string | null
+          maintenance_mode?: boolean | null
+          min_app_version?: string | null
+          news_enabled?: boolean | null
+          primary_color?: string | null
+          referral_enabled?: boolean | null
+          secondary_color?: string | null
+          speed_test_enabled?: boolean | null
+          splash_screen_url?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          android_app_url?: string | null
+          app_icon_url?: string | null
+          app_name?: string | null
+          created_at?: string | null
+          dashboard_announcement?: string | null
+          dashboard_announcement_enabled?: boolean | null
+          dashboard_banner_link?: string | null
+          dashboard_banner_url?: string | null
+          force_update_enabled?: boolean | null
+          ftp_enabled?: boolean | null
+          id?: string
+          ios_app_url?: string | null
+          live_tv_enabled?: boolean | null
+          maintenance_message?: string | null
+          maintenance_mode?: boolean | null
+          min_app_version?: string | null
+          news_enabled?: boolean | null
+          primary_color?: string | null
+          referral_enabled?: boolean | null
+          secondary_color?: string | null
+          speed_test_enabled?: boolean | null
+          splash_screen_url?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_apps_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_apps_links: {
+        Row: {
+          category: string
+          created_at: string | null
+          description: string | null
+          icon_url: string | null
+          id: string
+          is_active: boolean | null
+          open_in_browser: boolean | null
+          requires_login: boolean | null
+          sort_order: number | null
+          tenant_id: string
+          title: string
+          updated_at: string | null
+          url: string
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          open_in_browser?: boolean | null
+          requires_login?: boolean | null
+          sort_order?: number | null
+          tenant_id: string
+          title: string
+          updated_at?: string | null
+          url: string
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          open_in_browser?: boolean | null
+          requires_login?: boolean | null
+          sort_order?: number | null
+          tenant_id?: string
+          title?: string
+          updated_at?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_apps_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_bills: {
         Row: {
           amount: number
@@ -1839,6 +1984,79 @@ export type Database = {
           },
         ]
       }
+      customer_referrals: {
+        Row: {
+          bonus_amount: number | null
+          bonus_paid_at: string | null
+          created_at: string | null
+          id: string
+          notes: string | null
+          referral_code: string
+          referred_customer_id: string | null
+          referred_email: string | null
+          referred_name: string | null
+          referred_phone: string | null
+          referrer_customer_id: string
+          status: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          bonus_amount?: number | null
+          bonus_paid_at?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          referral_code: string
+          referred_customer_id?: string | null
+          referred_email?: string | null
+          referred_name?: string | null
+          referred_phone?: string | null
+          referrer_customer_id: string
+          status?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          bonus_amount?: number | null
+          bonus_paid_at?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          referral_code?: string
+          referred_customer_id?: string | null
+          referred_email?: string | null
+          referred_name?: string | null
+          referred_phone?: string | null
+          referrer_customer_id?: string
+          status?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_referrals_referred_customer_id_fkey"
+            columns: ["referred_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_referrals_referrer_customer_id_fkey"
+            columns: ["referrer_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_referrals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_types: {
         Row: {
           created_at: string
@@ -1912,6 +2130,9 @@ export type Database = {
           pon_port: string | null
           pppoe_password: string | null
           pppoe_username: string | null
+          referral_bonus_balance: number | null
+          referral_code: string | null
+          referred_by: string | null
           reseller_id: string | null
           router_mac: string | null
           status: Database["public"]["Enums"]["customer_status"]
@@ -1949,6 +2170,9 @@ export type Database = {
           pon_port?: string | null
           pppoe_password?: string | null
           pppoe_username?: string | null
+          referral_bonus_balance?: number | null
+          referral_code?: string | null
+          referred_by?: string | null
           reseller_id?: string | null
           router_mac?: string | null
           status?: Database["public"]["Enums"]["customer_status"]
@@ -1986,6 +2210,9 @@ export type Database = {
           pon_port?: string | null
           pppoe_password?: string | null
           pppoe_username?: string | null
+          referral_bonus_balance?: number | null
+          referral_code?: string | null
+          referred_by?: string | null
           reseller_id?: string | null
           router_mac?: string | null
           status?: Database["public"]["Enums"]["customer_status"]
@@ -2026,6 +2253,13 @@ export type Database = {
             columns: ["package_id"]
             isOneToOne: false
             referencedRelation: "isp_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
           {
@@ -5070,6 +5304,59 @@ export type Database = {
           },
         ]
       }
+      referral_configs: {
+        Row: {
+          bonus_amount: number | null
+          bonus_percentage: number | null
+          bonus_type: string | null
+          bonus_validity_days: number | null
+          created_at: string | null
+          id: string
+          is_enabled: boolean | null
+          min_referrals_for_bonus: number | null
+          referral_link_prefix: string | null
+          tenant_id: string
+          terms_and_conditions: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bonus_amount?: number | null
+          bonus_percentage?: number | null
+          bonus_type?: string | null
+          bonus_validity_days?: number | null
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          min_referrals_for_bonus?: number | null
+          referral_link_prefix?: string | null
+          tenant_id: string
+          terms_and_conditions?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bonus_amount?: number | null
+          bonus_percentage?: number | null
+          bonus_type?: string | null
+          bonus_validity_days?: number | null
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          min_referrals_for_bonus?: number | null
+          referral_link_prefix?: string | null
+          tenant_id?: string
+          terms_and_conditions?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_configs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reseller_branches: {
         Row: {
           address: string | null
@@ -7995,12 +8282,41 @@ export type Database = {
       export_tenant_data: { Args: { _tenant_id: string }; Returns: Json }
       generate_bill_number: { Args: { _tenant_id: string }; Returns: string }
       generate_customer_code: { Args: { _tenant_id: string }; Returns: string }
+      generate_customer_referral_code: {
+        Args: { p_customer_id: string }
+        Returns: string
+      }
       generate_employee_code: { Args: { _tenant_id: string }; Returns: string }
       generate_location_token: { Args: never; Returns: string }
       generate_po_number: { Args: { _tenant_id: string }; Returns: string }
       generate_request_number: { Args: { _tenant_id: string }; Returns: string }
       generate_so_number: { Args: { _tenant_id: string }; Returns: string }
       generate_ticket_number: { Args: { _tenant_id: string }; Returns: string }
+      get_customer_apps_config: { Args: { p_tenant_id: string }; Returns: Json }
+      get_customer_apps_links: {
+        Args: { p_category?: string; p_tenant_id: string }
+        Returns: {
+          category: string
+          created_at: string | null
+          description: string | null
+          icon_url: string | null
+          id: string
+          is_active: boolean | null
+          open_in_browser: boolean | null
+          requires_login: boolean | null
+          sort_order: number | null
+          tenant_id: string
+          title: string
+          updated_at: string | null
+          url: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "customer_apps_links"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_customer_profile: {
         Args: { p_customer_id: string }
         Returns: {
@@ -8028,6 +8344,16 @@ export type Database = {
           upload_speed: number
         }[]
       }
+      get_customer_referral_stats: {
+        Args: { p_customer_id: string }
+        Returns: {
+          bonus_balance: number
+          bonus_earned: number
+          referral_code: string
+          successful_referrals: number
+          total_referrals: number
+        }[]
+      }
       get_enabled_payment_methods: {
         Args: never
         Returns: {
@@ -8041,6 +8367,7 @@ export type Database = {
           sort_order: number
         }[]
       }
+      get_referral_config: { Args: { p_tenant_id: string }; Returns: Json }
       get_reseller_all_customers: {
         Args: { p_reseller_id: string }
         Returns: {
@@ -8074,6 +8401,9 @@ export type Database = {
           pon_port: string | null
           pppoe_password: string | null
           pppoe_username: string | null
+          referral_bonus_balance: number | null
+          referral_code: string | null
+          referred_by: string | null
           reseller_id: string | null
           router_mac: string | null
           status: Database["public"]["Enums"]["customer_status"]
@@ -8186,6 +8516,10 @@ export type Database = {
           p_reseller_id: string
         }
         Returns: Json
+      }
+      track_referral_signup: {
+        Args: { p_referral_code: string; p_referred_customer_id: string }
+        Returns: boolean
       }
       transfer_reseller_balance: {
         Args: {
