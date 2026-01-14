@@ -7,9 +7,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import {
-  LayoutDashboard, CreditCard, Receipt, History, User, Settings,
-  LogOut, Menu, X, Wifi, ChevronRight, Phone, HelpCircle, Bell,
-  FileText, Clock, Gauge, Home
+  LayoutDashboard, CreditCard, History, User,
+  LogOut, Menu, X, Wifi, ChevronRight, HelpCircle, Gauge
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -122,10 +121,10 @@ export function CustomerPortalLayout() {
     navigate('/portal/login');
   };
 
+  // Removed Bills from navigation - only Recharge History is shown
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/portal/dashboard', icon: LayoutDashboard },
     { label: 'Pay Bill', href: '/portal/pay', icon: CreditCard },
-    { label: 'Bills', href: '/portal/bills', icon: Receipt },
     { label: 'Recharge History', href: '/portal/recharges', icon: History },
     { label: 'Usage & Speed', href: '/portal/usage', icon: Gauge },
     { label: 'My Profile', href: '/portal/profile', icon: User },
