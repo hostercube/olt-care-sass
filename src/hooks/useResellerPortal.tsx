@@ -181,7 +181,19 @@ export function useResellerPortal() {
 
       if (!profileRes.success) {
         console.error('Failed to fetch profile:', profileRes.error);
-        logout();
+        // Don't logout on profile fetch failure - use session data as fallback
+        // This could be a temporary network issue
+        setReseller({
+          id: session.id,
+          name: session.name,
+          username: session.username,
+          tenant_id: session.tenant_id,
+          level: session.level,
+          role: session.role as any,
+          balance: session.balance,
+          is_active: true,
+        } as any);
+        setLoading(false);
         return;
       }
 

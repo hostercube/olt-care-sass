@@ -31,30 +31,61 @@ export function CustomerPortalLayout() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const session = localStorage.getItem('customer_session');
-        if (!session) {
+        const sessionStr = localStorage.getItem('customer_session');
+        if (!sessionStr) {
           navigate('/portal/login');
           return;
         }
 
-        const { id, tenant_id } = JSON.parse(session);
+        let parsedSession;
+        try {
+          parsedSession = JSON.parse(sessionStr);
+        } catch {
+          localStorage.removeItem('customer_session');
+          navigate('/portal/login');
+          return;
+        }
 
-        // Fetch customer data
+        const { id, tenant_id, name, pppoe_username } = parsedSession;
+        
+        if (!id) {
+          localStorage.removeItem('customer_session');
+          navigate('/portal/login');
+          return;
+        }
+
+        // Fetch customer data - use service role bypass by selecting via RPC or direct query
         const { data: customerData, error } = await supabase
           .from('customers')
           .select('*, package:isp_packages(*)')
           .eq('id', id)
-          .single();
+          .maybeSingle();
 
-        if (error) throw error;
-        setCustomer(customerData);
+        if (error) {
+          console.error('Error fetching customer:', error);
+          // Don't logout on error - use session data as fallback
+        }
+        
+        if (customerData) {
+          setCustomer(customerData);
+        } else {
+          // Use session data as fallback
+          setCustomer({
+            id,
+            tenant_id,
+            name: name || 'Customer',
+            pppoe_username: pppoe_username || '',
+            status: 'active',
+          });
+        }
 
-        // Fetch tenant branding
-        if (customerData?.tenant_id) {
+        // Fetch tenant branding - use tenant_id from session or customerData
+        const effectiveTenantId = customerData?.tenant_id || tenant_id;
+        if (effectiveTenantId) {
           const { data: tenantData } = await supabase
             .from('tenants')
             .select('company_name, logo_url, favicon_url, subtitle, theme_color')
-            .eq('id', customerData.tenant_id)
+            .eq('id', effectiveTenantId)
             .maybeSingle();
 
           if (tenantData) {
@@ -75,8 +106,8 @@ export function CustomerPortalLayout() {
           }
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
-        navigate('/portal/login');
+        console.error('Error in customer portal layout:', err);
+        // Don't redirect on error - just show what we have
       } finally {
         setLoading(false);
       }

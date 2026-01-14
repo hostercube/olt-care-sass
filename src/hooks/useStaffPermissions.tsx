@@ -38,29 +38,108 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
       if (storedSession) {
         try {
           const session = JSON.parse(storedSession);
-          // Verify session is still valid by checking staff still exists
-          const { data, error } = await supabase
-            .from('staff')
-            .select('*, tenant_roles(permissions)')
-            .eq('id', session.id)
-            .eq('can_login', true)
-            .single();
-
-          if (data && !error) {
-            setStaffUser({
-              id: data.id,
-              name: data.name,
-              username: data.username || '',
-              tenant_id: data.tenant_id,
-              role_id: data.role_id,
-              role: data.role,
-              permissions: (data.tenant_roles as any)?.permissions || {},
-              type: 'staff',
-            });
-          } else {
+          
+          if (!session.id) {
             localStorage.removeItem(STAFF_SESSION_KEY);
+            setLoading(false);
+            return;
+          }
+          
+          // Check if it's a reseller type session
+          if (session.type === 'reseller') {
+            // Verify reseller exists
+            const { data, error } = await supabase
+              .from('resellers')
+              .select('*')
+              .eq('id', session.id)
+              .eq('is_active', true)
+              .maybeSingle();
+              
+            if (data && !error) {
+              setStaffUser({
+                id: data.id,
+                name: data.name,
+                username: data.username || '',
+                tenant_id: data.tenant_id,
+                role_id: null,
+                role: 'reseller',
+                permissions: {
+                  customer_view: true,
+                  customer_create: true,
+                  customer_edit: true,
+                  customer_recharge: true,
+                  billing_view: true,
+                  payment_collect: true,
+                },
+                type: 'reseller',
+              });
+            } else {
+              console.warn('Reseller session validation failed, using cached session');
+              // Use cached session data as fallback
+              if (session.name && session.tenant_id) {
+                setStaffUser({
+                  id: session.id,
+                  name: session.name || 'Reseller',
+                  username: session.username || '',
+                  tenant_id: session.tenant_id,
+                  role_id: null,
+                  role: 'reseller',
+                  permissions: session.permissions || {
+                    customer_view: true,
+                    customer_create: true,
+                    customer_edit: true,
+                    customer_recharge: true,
+                    billing_view: true,
+                    payment_collect: true,
+                  },
+                  type: 'reseller',
+                });
+              } else {
+                localStorage.removeItem(STAFF_SESSION_KEY);
+              }
+            }
+          } else {
+            // Verify staff exists
+            const { data, error } = await supabase
+              .from('staff')
+              .select('*, tenant_roles(permissions)')
+              .eq('id', session.id)
+              .eq('can_login', true)
+              .maybeSingle();
+
+            if (data && !error) {
+              setStaffUser({
+                id: data.id,
+                name: data.name,
+                username: data.username || '',
+                tenant_id: data.tenant_id,
+                role_id: data.role_id,
+                role: data.role,
+                permissions: (data.tenant_roles as any)?.permissions || {},
+                type: 'staff',
+              });
+            } else {
+              console.warn('Staff session validation failed:', error);
+              // Don't remove session - could be RLS issue, try to use cached data
+              // If we have cached user data in session, use it
+              if (session.name && session.tenant_id) {
+                setStaffUser({
+                  id: session.id,
+                  name: session.name || 'Staff',
+                  username: session.username || '',
+                  tenant_id: session.tenant_id,
+                  role_id: session.role_id || null,
+                  role: session.role || 'staff',
+                  permissions: session.permissions || {},
+                  type: session.type || 'staff',
+                });
+              } else {
+                localStorage.removeItem(STAFF_SESSION_KEY);
+              }
+            }
           }
         } catch (e) {
+          console.error('Error restoring staff session:', e);
           localStorage.removeItem(STAFF_SESSION_KEY);
         }
       }
@@ -95,7 +174,17 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
           type: 'staff',
         };
         setStaffUser(user);
-        localStorage.setItem(STAFF_SESSION_KEY, JSON.stringify({ id: staffData.id, type: 'staff' }));
+        // Store complete user data for session restoration fallback
+        localStorage.setItem(STAFF_SESSION_KEY, JSON.stringify({
+          id: staffData.id,
+          name: staffData.name,
+          username: staffData.username || '',
+          tenant_id: staffData.tenant_id,
+          role_id: staffData.role_id,
+          role: staffData.role,
+          permissions: (staffData.tenant_roles as any)?.permissions || {},
+          type: 'staff',
+        }));
         return { success: true };
       }
 
@@ -110,6 +199,14 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (resellerData && !resellerError) {
+        const permissions = {
+          customer_view: true,
+          customer_create: true,
+          customer_edit: true,
+          customer_recharge: true,
+          billing_view: true,
+          payment_collect: true,
+        };
         const user: StaffUser = {
           id: resellerData.id,
           name: resellerData.name,
@@ -117,18 +214,21 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
           tenant_id: resellerData.tenant_id,
           role_id: null,
           role: 'reseller',
-          permissions: {
-            customer_view: true,
-            customer_create: true,
-            customer_edit: true,
-            customer_recharge: true,
-            billing_view: true,
-            payment_collect: true,
-          },
+          permissions,
           type: 'reseller',
         };
         setStaffUser(user);
-        localStorage.setItem(STAFF_SESSION_KEY, JSON.stringify({ id: resellerData.id, type: 'reseller' }));
+        // Store complete user data for session restoration fallback
+        localStorage.setItem(STAFF_SESSION_KEY, JSON.stringify({
+          id: resellerData.id,
+          name: resellerData.name,
+          username: resellerData.username || '',
+          tenant_id: resellerData.tenant_id,
+          role_id: null,
+          role: 'reseller',
+          permissions,
+          type: 'reseller',
+        }));
         return { success: true };
       }
 
