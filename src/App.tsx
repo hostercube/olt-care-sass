@@ -627,7 +627,7 @@ const App = () => (
               <Route path="/isp/withdraw-requests" element={
                 <ProtectedRoute>
                   <TenantAccessGuard>
-                    <ModuleAccessGuard module="isp_withdraw_requests" moduleName="Withdraw Requests">
+                    <ModuleAccessGuard module="isp_referral" moduleName="Withdraw Requests">
                       <WithdrawRequests />
                     </ModuleAccessGuard>
                   </TenantAccessGuard>

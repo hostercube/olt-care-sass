@@ -102,13 +102,13 @@ const communicationItems: NavItem[] = [
   { title: 'all_gateways', href: '/isp/gateways', icon: CreditCard },
 ];
 
-// Referral & Wallet
+// Referral & Wallet (same module: isp_referral)
 const referralWalletItems: NavItem[] = [
   { title: 'referral_system', href: '/isp/referrals', icon: Gift, requiredModule: 'isp_referral' },
-  { title: 'withdraw_requests', href: '/isp/withdraw-requests', icon: Wallet, requiredModule: 'isp_withdraw_requests' },
+  { title: 'withdraw_requests', href: '/isp/withdraw-requests', icon: Wallet, requiredModule: 'isp_referral' },
 ];
 
-// Customer Apps
+// Customer Apps (separate module)
 const customerAppsItems: NavItem[] = [
   { title: 'customer_apps', href: '/isp/customer-apps', icon: Smartphone, requiredModule: 'isp_customer_apps' },
 ];
