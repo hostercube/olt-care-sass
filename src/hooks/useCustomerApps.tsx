@@ -82,9 +82,22 @@ export function useCustomerApps() {
     if (!tenantId) return;
 
     try {
+      const insertData = {
+        category: data.category || 'custom',
+        title: data.title || '',
+        url: data.url || '',
+        tenant_id: tenantId,
+        description: data.description,
+        icon_url: data.icon_url,
+        is_active: data.is_active ?? true,
+        open_in_browser: data.open_in_browser ?? false,
+        requires_login: data.requires_login ?? false,
+        sort_order: data.sort_order ?? 0,
+      };
+      
       const { error } = await supabase
         .from('customer_apps_links')
-        .insert({ ...data, tenant_id: tenantId });
+        .insert(insertData);
 
       if (error) throw error;
       toast.success('Link created successfully');
