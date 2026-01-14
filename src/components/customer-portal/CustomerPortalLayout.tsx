@@ -193,10 +193,10 @@ export function CustomerPortalLayout() {
     { label: 'Pay Bill', href: '/portal/pay', icon: CreditCard },
     { label: 'Recharge History', href: '/portal/recharges', icon: History },
     { label: 'Usage & Speed', href: '/portal/usage', icon: Gauge },
-    { label: 'Referral & Wallet', href: '/portal/referral', icon: Gift },
+    { label: 'Referral & Wallet', href: '/portal/referral', icon: Gift, hidden: !appsConfig?.referral_enabled },
     { label: 'My Profile', href: '/portal/profile', icon: User },
     { label: 'Support', href: '/portal/support', icon: HelpCircle },
-  ];
+  ].filter(item => !item.hidden);
 
   const isActive = (href: string) => location.pathname === href;
 
