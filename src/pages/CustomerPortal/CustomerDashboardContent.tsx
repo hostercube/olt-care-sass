@@ -186,7 +186,22 @@ export default function CustomerDashboardContent() {
     } finally {
       setLoadingDevice(false);
     }
-  }, [customer, isOnline]);
+  }, [
+    customer?.id,
+    customer?.tenant_id,
+    customer?.pppoe_username,
+    customer?.pppoe_password,
+    customer?.router_name,
+    customer?.router_mac,
+    customer?.onu_id,
+    customer?.onu_mac,
+    customer?.tx_power,
+    customer?.rx_power,
+    customer?.last_ip_address,
+    customer?.name,
+    customer?.status,
+    isOnline,
+  ]);
 
   // Fetch live bandwidth
   const fetchBandwidth = useCallback(async () => {
@@ -241,7 +256,7 @@ export default function CustomerDashboardContent() {
     } catch (err) {
       console.error('Error fetching bandwidth:', err);
     }
-  }, [customer]);
+  }, [customer?.pppoe_username, customer?.tenant_id, customer?.onu_id]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -280,9 +295,34 @@ export default function CustomerDashboardContent() {
     return 'blue';
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard`);
+  const expiryTone = getExpiryColor();
+  const expiryBorderClass =
+    expiryTone === 'red'
+      ? 'border-red-500/40 hover:border-red-500/60'
+      : expiryTone === 'orange'
+        ? 'border-orange-500/40 hover:border-orange-500/60'
+        : 'border-blue-500/40 hover:border-blue-500/60';
+
+  const expiryBgClass =
+    expiryTone === 'red'
+      ? 'bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent'
+      : expiryTone === 'orange'
+        ? 'bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-transparent'
+        : 'bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent';
+
+  const copyToClipboard = async (text: string, label: string) => {
+    if (!text) {
+      toast.error(`No ${label.toLowerCase()} to copy`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label} copied to clipboard`);
+    } catch (e) {
+      console.error('Clipboard error:', e);
+      toast.error('Copy failed');
+    }
   };
 
 
@@ -389,8 +429,8 @@ export default function CustomerDashboardContent() {
         </Card>
 
         {/* Days Until Expiry */}
-        <Card className={`relative overflow-hidden border-2 transition-all hover:shadow-lg border-${getExpiryColor()}-500/40 hover:border-${getExpiryColor()}-500/60`}>
-          <div className={`absolute inset-0 bg-gradient-to-br from-${getExpiryColor()}-500/10 via-${getExpiryColor()}-500/5 to-transparent`} />
+        <Card className={`relative overflow-hidden border-2 transition-all hover:shadow-lg ${expiryBorderClass}`}>
+          <div className={`absolute inset-0 ${expiryBgClass}`} />
           <CardContent className="p-4 relative">
             <div className="flex items-center gap-3">
               <div className={`p-3 rounded-xl shadow-lg bg-gradient-to-br ${
