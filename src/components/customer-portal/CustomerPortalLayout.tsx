@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import {
   LayoutDashboard, CreditCard, History, User,
-  LogOut, Menu, X, Wifi, ChevronRight, HelpCircle, Gauge
+  LogOut, Menu, X, Wifi, ChevronRight, HelpCircle, Gauge,
+  AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -19,6 +20,17 @@ interface NavItem {
   badge?: string;
 }
 
+type DebugInfo = {
+  hasSession: boolean;
+  sessionParseOk: boolean;
+  sessionCustomerId?: string;
+  sessionTenantId?: string;
+  rpcOk?: boolean;
+  rpcRows?: number;
+  rpcError?: string;
+  tenantBrandingOk?: boolean;
+};
+
 export function CustomerPortalLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -26,19 +38,32 @@ export function CustomerPortalLayout() {
   const [tenantBranding, setTenantBranding] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({
+    hasSession: false,
+    sessionParseOk: false,
+  });
+
+  const debug = new URLSearchParams(location.search).get('debug') === '1';
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const sessionStr = localStorage.getItem('customer_session');
+        setDebugInfo((p) => ({ ...p, hasSession: !!sessionStr }));
         if (!sessionStr) {
           navigate('/portal/login');
           return;
         }
 
-        let parsedSession;
+        let parsedSession: any;
         try {
           parsedSession = JSON.parse(sessionStr);
+          setDebugInfo((p) => ({
+            ...p,
+            sessionParseOk: true,
+            sessionCustomerId: parsedSession?.id,
+            sessionTenantId: parsedSession?.tenant_id,
+          }));
         } catch {
           localStorage.removeItem('customer_session');
           navigate('/portal/login');
@@ -46,7 +71,7 @@ export function CustomerPortalLayout() {
         }
 
         const { id, tenant_id, name, pppoe_username } = parsedSession;
-        
+
         if (!id) {
           localStorage.removeItem('customer_session');
           navigate('/portal/login');
@@ -59,15 +84,26 @@ export function CustomerPortalLayout() {
 
         if (error) {
           console.error('Error fetching customer via RPC:', error);
+          setDebugInfo((p) => ({
+            ...p,
+            rpcOk: false,
+            rpcError: error.message,
+          }));
+        } else {
+          setDebugInfo((p) => ({
+            ...p,
+            rpcOk: true,
+            rpcRows: Array.isArray(rpcResult) ? rpcResult.length : 0,
+          }));
         }
-        
+
         let effectiveTenantId = tenant_id;
-        
+
         if (rpcResult && Array.isArray(rpcResult) && rpcResult.length > 0) {
           // Convert RPC result to customer object with package nested
           const c = rpcResult[0];
           effectiveTenantId = c.tenant_id || tenant_id;
-          
+
           setCustomer({
             ...c,
             package: c.package_id ? {
@@ -98,15 +134,17 @@ export function CustomerPortalLayout() {
 
         // Fetch tenant branding - use tenant_id from RPC result or session
         if (effectiveTenantId) {
-          const { data: tenantData } = await supabase
+          const { data: tenantData, error: tenantErr } = await supabase
             .from('tenants')
             .select('company_name, logo_url, favicon_url, subtitle, theme_color')
             .eq('id', effectiveTenantId)
             .maybeSingle();
 
+          setDebugInfo((p) => ({ ...p, tenantBrandingOk: !!tenantData && !tenantErr }));
+
           if (tenantData) {
             setTenantBranding(tenantData);
-            
+
             // Apply favicon
             if (tenantData.favicon_url) {
               const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
@@ -114,7 +152,7 @@ export function CustomerPortalLayout() {
                 link.href = tenantData.favicon_url;
               }
             }
-            
+
             // Apply document title
             if (tenantData.company_name) {
               document.title = `${tenantData.company_name} - Customer Portal`;
@@ -123,6 +161,9 @@ export function CustomerPortalLayout() {
         }
       } catch (err) {
         console.error('Error in customer portal layout:', err);
+        if (debug) {
+          toast.error('Portal error (debug): check console');
+        }
         // Don't redirect on error - just show what we have
       } finally {
         setLoading(false);
@@ -130,7 +171,7 @@ export function CustomerPortalLayout() {
     };
 
     fetchData();
-  }, [navigate]);
+  }, [navigate, debug]);
 
   const handleLogout = () => {
     localStorage.removeItem('customer_session');

@@ -12,6 +12,7 @@ import { TenantAccessGuard } from "@/components/layout/TenantAccessGuard";
 import { ModuleAccessGuard } from "@/components/layout/ModuleAccessGuard";
 import { StaffAuthProvider } from "@/hooks/useStaffPermissions";
 import { StaffProtectedRoute } from "@/components/layout/StaffProtectedRoute";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
 import CustomDomainRouter from "./components/routing/CustomDomainRouter";
 import CustomDomainLandingWrapper from "./components/routing/CustomDomainLandingWrapper";
 import CustomDomainLoginWrapper from "./components/routing/CustomDomainLoginWrapper";
@@ -603,9 +604,23 @@ const App = () => (
 
               {/* Customer Portal Routes */}
               <Route path="/portal/login" element={<CustomerLogin />} />
-              <Route path="/portal" element={<CustomerPortalLayout />}>
+              <Route
+                path="/portal"
+                element={
+                  <ErrorBoundary>
+                    <CustomerPortalLayout />
+                  </ErrorBoundary>
+                }
+              >
                 <Route index element={<Navigate to="dashboard" replace />} />
-                <Route path="dashboard" element={<CustomerDashboardContent />} />
+                <Route
+                  path="dashboard"
+                  element={
+                    <ErrorBoundary>
+                      <CustomerDashboardContent />
+                    </ErrorBoundary>
+                  }
+                />
                 <Route path="pay" element={<CustomerPayBill />} />
                 <Route path="bills" element={<CustomerBills />} />
                 <Route path="recharges" element={<CustomerRecharges />} />
