@@ -131,7 +131,8 @@ export default function CustomerLogin() {
       );
 
       toast.success('Login successful!');
-      navigate('/portal/dashboard');
+      // Navigate to parent route so nested index redirect always works reliably
+      navigate('/portal', { replace: true });
     } catch (err: any) {
       console.error('Login error:', err);
       toast.error(err?.message || 'Login failed. Please try again.');

@@ -604,6 +604,7 @@ const App = () => (
               {/* Customer Portal Routes */}
               <Route path="/portal/login" element={<CustomerLogin />} />
               <Route path="/portal" element={<CustomerPortalLayout />}>
+                <Route index element={<Navigate to="dashboard" replace />} />
                 <Route path="dashboard" element={<CustomerDashboardContent />} />
                 <Route path="pay" element={<CustomerPayBill />} />
                 <Route path="bills" element={<CustomerBills />} />
