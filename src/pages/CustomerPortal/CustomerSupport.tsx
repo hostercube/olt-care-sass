@@ -45,7 +45,9 @@ interface TicketCategory {
 }
 
 export default function CustomerSupport() {
-  const { customer, tenantBranding } = useOutletContext<{ customer: any; tenantBranding: any }>();
+  const context = useOutletContext<{ customer: any; tenantBranding: any }>();
+  const customer = context?.customer;
+  const tenantBranding = context?.tenantBranding;
   const [activeTab, setActiveTab] = useState('tickets');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [categories, setCategories] = useState<TicketCategory[]>([]);

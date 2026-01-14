@@ -7,7 +7,9 @@ import { User, Phone, Mail, MapPin, Calendar, Package, CreditCard, Shield, Route
 import { format } from 'date-fns';
 
 export default function CustomerProfile() {
-  const { customer, tenantBranding } = useOutletContext<{ customer: any; tenantBranding: any }>();
+  const context = useOutletContext<{ customer: any; tenantBranding: any }>();
+  const customer = context?.customer;
+  const tenantBranding = context?.tenantBranding;
 
   return (
     <div className="space-y-6">

@@ -32,12 +32,27 @@ interface BandwidthData {
 
 export default function CustomerDashboardContent() {
   const navigate = useNavigate();
-  const { customer } = useOutletContext<{ customer: any; tenantBranding: any }>();
+  const context = useOutletContext<{ customer: any; tenantBranding: any }>();
+  const customer = context?.customer;
   const [recharges, setRecharges] = useState<any[]>([]);
   const [deviceInfo, setDeviceInfo] = useState<any>(null);
   const [bandwidthData, setBandwidthData] = useState<BandwidthData[]>([]);
   const [loadingDevice, setLoadingDevice] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Handle case when customer data is not available
+  if (!customer) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+        <AlertCircle className="h-16 w-16 text-muted-foreground mb-4" />
+        <h2 className="text-xl font-semibold mb-2">Unable to Load Dashboard</h2>
+        <p className="text-muted-foreground mb-4">Customer data could not be loaded. Please try logging in again.</p>
+        <Button onClick={() => navigate('/portal/login')}>
+          Go to Login
+        </Button>
+      </div>
+    );
+  }
 
   const isOnline = customer?.status === 'active';
   const daysUntilExpiry = customer?.expiry_date 

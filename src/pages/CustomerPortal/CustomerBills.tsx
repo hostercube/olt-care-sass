@@ -28,7 +28,8 @@ interface Bill {
 }
 
 export default function CustomerBills() {
-  const { customer } = useOutletContext<{ customer: any }>();
+  const context = useOutletContext<{ customer: any }>();
+  const customer = context?.customer;
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -42,7 +43,10 @@ export default function CustomerBills() {
   const itemsPerPage = 10;
 
   const fetchBills = useCallback(async () => {
-    if (!customer?.id) return;
+    if (!customer?.id) {
+      setLoading(false);
+      return;
+    }
     
     setLoading(true);
     try {
