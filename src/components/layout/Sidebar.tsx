@@ -108,6 +108,7 @@ const operationsHRItems: NavItem[] = [
   { title: 'inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
   { title: 'support_tickets', href: '/isp/tickets', icon: MessageSquare, requiredModule: 'isp_tickets' },
   { title: 'referral_system', href: '/isp/referrals', icon: Gift, requiredModule: 'isp_referral' },
+  { title: 'withdraw_requests', href: '/isp/withdraw-requests', icon: Wallet, requiredModule: 'isp_referral' },
   { title: 'customer_apps', href: '/isp/customer-apps', icon: Smartphone, requiredModule: 'isp_customer_apps' },
   { title: 'reports', href: '/isp/reports', icon: FileText },
 ];
