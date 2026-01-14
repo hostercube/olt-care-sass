@@ -222,7 +222,7 @@ export default function CustomerPayBill() {
   };
 
   const processRecharge = async (customerId: string, tenantId: string, amount: number) => {
-    const { validityDays, newExpiry, discountAmount } = calculatePricing();
+    const { newExpiry, discountAmount } = calculatePricing();
     const oldExpiry = customer?.expiry_date;
 
     // Create recharge record
@@ -263,7 +263,7 @@ export default function CustomerPayBill() {
   };
 
   // Function to enable customer on MikroTik after successful recharge
-  const enableCustomerOnMikroTik = async (customerId: string, tenantId: string) => {
+  const enableCustomerOnMikroTik = async (customerId: string, custTenantId: string) => {
     try {
       // Get customer details with router info
       const { data: customerData } = await supabase
@@ -277,14 +277,14 @@ export default function CustomerPayBill() {
         return;
       }
 
-      // Get polling server URL from tenant settings (key-value table)
-      const { data: settings } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'api_server_url')
-        .single();
+      // Get polling server URL from tenant settings
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('vps_url')
+        .eq('id', custTenantId)
+        .maybeSingle();
 
-      const apiServerUrl = settings?.value as string | undefined;
+      const apiServerUrl = (tenant as any)?.vps_url as string | undefined;
       if (!apiServerUrl) {
         console.log('No polling server configured, skipping MikroTik auto-enable');
         return;

@@ -9,7 +9,7 @@ import {
   Wifi, WifiOff, CreditCard, Calendar, Package, Timer,
   Gauge, AlertCircle, History, TrendingUp, ChevronRight,
   Sparkles, Zap, Clock, ArrowUpRight, Shield, Star,
-  Router, Network, Signal, RefreshCw, Power, PowerOff,
+  Router, Network, Signal, RefreshCw, Power,
   ArrowDownToLine, ArrowUpFromLine, Activity, Copy, Eye, EyeOff
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
@@ -32,14 +32,12 @@ interface BandwidthData {
 
 export default function CustomerDashboardContent() {
   const navigate = useNavigate();
-  const { customer, tenantBranding } = useOutletContext<{ customer: any; tenantBranding: any }>();
+  const { customer } = useOutletContext<{ customer: any; tenantBranding: any }>();
   const [recharges, setRecharges] = useState<any[]>([]);
   const [deviceInfo, setDeviceInfo] = useState<any>(null);
   const [bandwidthData, setBandwidthData] = useState<BandwidthData[]>([]);
   const [loadingDevice, setLoadingDevice] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [rebootingRouter, setRebootingRouter] = useState(false);
-  const [rebootingOnu, setRebootingOnu] = useState(false);
 
   const isOnline = customer?.status === 'active';
   const daysUntilExpiry = customer?.expiry_date 
@@ -253,13 +251,6 @@ export default function CustomerDashboardContent() {
     toast.success(`${label} copied to clipboard`);
   };
 
-  const handleRouterReboot = async () => {
-    toast.info('Router reboot is managed by your ISP. Please contact support.');
-  };
-
-  const handleOnuReboot = async () => {
-    toast.info('ONU reboot is managed by your ISP. Please contact support.');
-  };
 
   const getPowerColor = (power: number | null) => {
     if (power === null) return 'text-muted-foreground';
