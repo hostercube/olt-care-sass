@@ -7979,6 +7979,46 @@ export type Database = {
       generate_request_number: { Args: { _tenant_id: string }; Returns: string }
       generate_so_number: { Args: { _tenant_id: string }; Returns: string }
       generate_ticket_number: { Args: { _tenant_id: string }; Returns: string }
+      get_customer_profile: {
+        Args: { p_customer_id: string }
+        Returns: {
+          address: string
+          area_id: string
+          area_name: string
+          connection_date: string
+          customer_code: string
+          download_speed: string
+          due_amount: number
+          email: string
+          expiry_date: string
+          id: string
+          last_caller_id: string
+          last_ip_address: string
+          last_payment_date: string
+          mikrotik_id: string
+          monthly_bill: number
+          name: string
+          nid_number: string
+          notes: string
+          onu_id: string
+          onu_index: number
+          onu_mac: string
+          package_id: string
+          package_name: string
+          package_price: number
+          package_speed: string
+          package_validity_days: number
+          phone: string
+          pon_port: string
+          pppoe_password: string
+          pppoe_username: string
+          router_mac: string
+          speed_unit: string
+          status: string
+          tenant_id: string
+          upload_speed: string
+        }[]
+      }
       get_enabled_payment_methods: {
         Args: never
         Returns: {
