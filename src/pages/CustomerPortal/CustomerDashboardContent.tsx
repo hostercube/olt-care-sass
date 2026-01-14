@@ -627,15 +627,15 @@ export default function CustomerDashboardContent() {
             </div>
 
             {/* Signal Strength (dBm) */}
-            {(deviceInfo?.tx_power !== null || deviceInfo?.rx_power !== null) && (
+            {deviceInfo && (deviceInfo.tx_power != null || deviceInfo.rx_power != null) && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl bg-muted/50 border">
                   <div className="flex items-center gap-2 mb-1">
                     <ArrowUpFromLine className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">TX Power</span>
                   </div>
-                  <p className={`font-bold ${getPowerColor(deviceInfo?.tx_power)}`}>
-                    {deviceInfo?.tx_power !== null ? `${deviceInfo.tx_power} dBm` : 'N/A'}
+                  <p className={`font-bold ${getPowerColor(deviceInfo.tx_power ?? null)}`}>
+                    {deviceInfo.tx_power != null ? `${deviceInfo.tx_power} dBm` : 'N/A'}
                   </p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/50 border">
@@ -643,8 +643,8 @@ export default function CustomerDashboardContent() {
                     <ArrowDownToLine className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">RX Power</span>
                   </div>
-                  <p className={`font-bold ${getPowerColor(deviceInfo?.rx_power)}`}>
-                    {deviceInfo?.rx_power !== null ? `${deviceInfo.rx_power} dBm` : 'N/A'}
+                  <p className={`font-bold ${getPowerColor(deviceInfo.rx_power ?? null)}`}>
+                    {deviceInfo.rx_power != null ? `${deviceInfo.rx_power} dBm` : 'N/A'}
                   </p>
                 </div>
               </div>

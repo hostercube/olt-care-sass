@@ -8009,7 +8009,7 @@ export type Database = {
           area_name: string
           connection_date: string
           customer_code: string
-          download_speed: string
+          download_speed: number
           due_amount: number
           email: string
           expiry_date: string
@@ -8028,7 +8028,7 @@ export type Database = {
           package_id: string
           package_name: string
           package_price: number
-          package_speed: string
+          package_speed: number
           package_validity_days: number
           phone: string
           pon_port: string
@@ -8038,7 +8038,7 @@ export type Database = {
           speed_unit: string
           status: string
           tenant_id: string
-          upload_speed: string
+          upload_speed: number
         }[]
       }
       get_enabled_payment_methods: {
