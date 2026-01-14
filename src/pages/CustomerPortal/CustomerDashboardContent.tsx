@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,47 +7,234 @@ import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Wifi, WifiOff, CreditCard, Calendar, Package, Timer,
-  Gauge, AlertCircle, Receipt, History, TrendingUp, ChevronRight,
-  Sparkles, Zap, Clock, ArrowUpRight, Shield, Star
+  Gauge, AlertCircle, History, TrendingUp, ChevronRight,
+  Sparkles, Zap, Clock, ArrowUpRight, Shield, Star,
+  Router, Network, Signal, RefreshCw, Power, PowerOff,
+  ArrowDownToLine, ArrowUpFromLine, Activity, Copy, Eye, EyeOff
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
+import { toast } from 'sonner';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid
+} from 'recharts';
+
+interface BandwidthData {
+  time: string;
+  download: number;
+  upload: number;
+}
 
 export default function CustomerDashboardContent() {
   const navigate = useNavigate();
   const { customer, tenantBranding } = useOutletContext<{ customer: any; tenantBranding: any }>();
-  const [bills, setBills] = useState<any[]>([]);
   const [recharges, setRecharges] = useState<any[]>([]);
+  const [deviceInfo, setDeviceInfo] = useState<any>(null);
+  const [bandwidthData, setBandwidthData] = useState<BandwidthData[]>([]);
+  const [loadingDevice, setLoadingDevice] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rebootingRouter, setRebootingRouter] = useState(false);
+  const [rebootingOnu, setRebootingOnu] = useState(false);
 
   const isOnline = customer?.status === 'active';
   const daysUntilExpiry = customer?.expiry_date 
     ? differenceInDays(new Date(customer.expiry_date), new Date())
     : null;
 
+  // Fetch device info from MikroTik/OLT via VPS polling server
+  const fetchDeviceInfo = useCallback(async () => {
+    if (!customer?.id || !customer?.tenant_id) return;
+    
+    setLoadingDevice(true);
+    try {
+      // Get VPS URL from tenant settings
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('vps_url')
+        .eq('id', customer.tenant_id)
+        .maybeSingle();
+      
+      const vpsUrl = (tenant as any)?.vps_url;
+      
+      if (!vpsUrl || !customer.pppoe_username) {
+        // Use customer data directly if no VPS
+        setDeviceInfo({
+          pppoe_username: customer.pppoe_username || 'N/A',
+          pppoe_password: customer.pppoe_password || '***',
+          router_name: customer.router_name || 'N/A',
+          router_mac: customer.router_mac || 'N/A',
+          onu_name: customer.onu_name || customer.onu_id || 'N/A',
+          onu_mac: customer.onu_mac || 'N/A',
+          onu_status: isOnline ? 'online' : 'offline',
+          router_status: isOnline ? 'connected' : 'disconnected',
+          tx_power: customer.tx_power || null,
+          rx_power: customer.rx_power || null,
+          ip_address: customer.last_ip_address || 'N/A',
+        });
+        return;
+      }
+      
+      // Get OLT info for this customer
+      const { data: onuData } = await supabase
+        .from('onus')
+        .select('*, olt:olts(*)')
+        .eq('id', customer.onu_id)
+        .maybeSingle();
+      
+      if (onuData?.olt) {
+        const mikrotik = {
+          ip: onuData.olt.mikrotik_ip,
+          port: onuData.olt.mikrotik_port || 8728,
+          username: onuData.olt.mikrotik_username,
+          password: onuData.olt.mikrotik_password_encrypted,
+        };
+        
+        // Fetch PPPoE status from VPS
+        try {
+          const statusRes = await fetch(`${vpsUrl}/api/mikrotik/pppoe/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mikrotik, username: customer.pppoe_username }),
+          });
+          const statusData = await statusRes.json();
+          
+          setDeviceInfo({
+            pppoe_username: customer.pppoe_username || 'N/A',
+            pppoe_password: customer.pppoe_password || '***',
+            router_name: statusData.session?.name || customer.router_name || 'N/A',
+            router_mac: statusData.session?.callerId || customer.router_mac || 'N/A',
+            onu_name: onuData.name || customer.onu_id || 'N/A',
+            onu_mac: onuData.mac_address || customer.onu_mac || 'N/A',
+            onu_status: onuData.status || 'unknown',
+            router_status: statusData.session ? 'connected' : 'disconnected',
+            tx_power: onuData.tx_power || null,
+            rx_power: onuData.rx_power || null,
+            ip_address: statusData.session?.address || customer.last_ip_address || 'N/A',
+            uptime: statusData.session?.uptime || null,
+          });
+        } catch {
+          // Fallback to customer data
+          setDeviceInfo({
+            pppoe_username: customer.pppoe_username || 'N/A',
+            pppoe_password: customer.pppoe_password || '***',
+            router_name: onuData.router_name || customer.router_name || 'N/A',
+            router_mac: onuData.router_mac || customer.router_mac || 'N/A',
+            onu_name: onuData.name || 'N/A',
+            onu_mac: onuData.mac_address || customer.onu_mac || 'N/A',
+            onu_status: onuData.status || 'unknown',
+            router_status: isOnline ? 'connected' : 'disconnected',
+            tx_power: onuData.tx_power || null,
+            rx_power: onuData.rx_power || null,
+            ip_address: customer.last_ip_address || 'N/A',
+          });
+        }
+      } else {
+        // No ONU linked, use customer data
+        setDeviceInfo({
+          pppoe_username: customer.pppoe_username || 'N/A',
+          pppoe_password: customer.pppoe_password || '***',
+          router_name: customer.router_name || 'N/A',
+          router_mac: customer.router_mac || 'N/A',
+          onu_name: 'Not Linked',
+          onu_mac: customer.onu_mac || 'N/A',
+          onu_status: 'unknown',
+          router_status: isOnline ? 'connected' : 'disconnected',
+          tx_power: null,
+          rx_power: null,
+          ip_address: customer.last_ip_address || 'N/A',
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching device info:', err);
+    } finally {
+      setLoadingDevice(false);
+    }
+  }, [customer, isOnline]);
+
+  // Fetch live bandwidth
+  const fetchBandwidth = useCallback(async () => {
+    if (!customer?.pppoe_username || !customer?.tenant_id || !customer?.onu_id) return;
+    
+    try {
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('vps_url')
+        .eq('id', customer.tenant_id)
+        .maybeSingle();
+      
+      const vpsUrl = (tenant as any)?.vps_url;
+      if (!vpsUrl) return;
+      
+      // Get OLT info
+      const { data: onuData } = await supabase
+        .from('onus')
+        .select('*, olt:olts(*)')
+        .eq('id', customer.onu_id)
+        .maybeSingle();
+      
+      if (!onuData?.olt?.mikrotik_ip) return;
+      
+      const mikrotik = {
+        ip: onuData.olt.mikrotik_ip,
+        port: onuData.olt.mikrotik_port || 8728,
+        username: onuData.olt.mikrotik_username,
+        password: onuData.olt.mikrotik_password_encrypted,
+      };
+      
+      const res = await fetch(`${vpsUrl}/api/mikrotik/pppoe/bandwidth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mikrotik, username: customer.pppoe_username }),
+      });
+      
+      const data = await res.json();
+      if (data.bandwidth) {
+        const now = new Date();
+        const timeStr = format(now, 'HH:mm:ss');
+        setBandwidthData(prev => {
+          const newData = [...prev, {
+            time: timeStr,
+            download: Math.round((data.bandwidth.rxBytes || 0) / 1024 / 1024 * 8), // Mbps
+            upload: Math.round((data.bandwidth.txBytes || 0) / 1024 / 1024 * 8),
+          }];
+          // Keep last 20 data points
+          return newData.slice(-20);
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching bandwidth:', err);
+    }
+  }, [customer]);
+
   useEffect(() => {
     const fetchData = async () => {
       if (!customer?.id) return;
 
-      const [billsRes, rechargesRes] = await Promise.all([
-        supabase
-          .from('customer_bills')
-          .select('*')
-          .eq('customer_id', customer.id)
-          .order('bill_date', { ascending: false })
-          .limit(3),
-        supabase
-          .from('customer_recharges')
-          .select('*')
-          .eq('customer_id', customer.id)
-          .order('recharge_date', { ascending: false })
-          .limit(3)
-      ]);
+      const rechargesRes = await supabase
+        .from('customer_recharges')
+        .select('*')
+        .eq('customer_id', customer.id)
+        .order('recharge_date', { ascending: false })
+        .limit(3);
 
-      setBills(billsRes.data || []);
       setRecharges(rechargesRes.data || []);
     };
 
     fetchData();
-  }, [customer?.id]);
+    fetchDeviceInfo();
+  }, [customer?.id, fetchDeviceInfo]);
+
+  // Poll bandwidth every 5 seconds
+  useEffect(() => {
+    fetchBandwidth();
+    const interval = setInterval(fetchBandwidth, 5000);
+    return () => clearInterval(interval);
+  }, [fetchBandwidth]);
 
   const totalDays = customer?.package?.validity_days || 30;
   const usedDays = totalDays - (daysUntilExpiry || 0);
@@ -59,6 +246,26 @@ export default function CustomerDashboardContent() {
     if (daysUntilExpiry <= 3) return 'red';
     if (daysUntilExpiry <= 7) return 'orange';
     return 'blue';
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard`);
+  };
+
+  const handleRouterReboot = async () => {
+    toast.info('Router reboot is managed by your ISP. Please contact support.');
+  };
+
+  const handleOnuReboot = async () => {
+    toast.info('ONU reboot is managed by your ISP. Please contact support.');
+  };
+
+  const getPowerColor = (power: number | null) => {
+    if (power === null) return 'text-muted-foreground';
+    if (power >= -25) return 'text-green-500';
+    if (power >= -27) return 'text-yellow-500';
+    return 'text-red-500';
   };
 
   return (
@@ -193,7 +400,7 @@ export default function CustomerDashboardContent() {
               <div>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Speed</p>
                 <p className="text-lg font-bold">
-                  {customer?.package ? `${customer.package.download_speed}M` : 'N/A'}
+                  {customer?.package ? `${customer.package.download_speed || customer.package.speed}M` : 'N/A'}
                 </p>
               </div>
             </div>
@@ -221,6 +428,237 @@ export default function CustomerDashboardContent() {
         </Card>
       </div>
 
+      {/* Device Info & Connection Details */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* PPPoE & Connection Info */}
+        <Card className="border-2">
+          <CardHeader className="pb-3 bg-gradient-to-r from-blue-500/5 to-transparent">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Network className="h-5 w-5 text-blue-600" />
+              </div>
+              Connection Details
+              <Button variant="ghost" size="icon" className="ml-auto h-8 w-8" onClick={fetchDeviceInfo} disabled={loadingDevice}>
+                <RefreshCw className={`h-4 w-4 ${loadingDevice ? 'animate-spin' : ''}`} />
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* PPPoE Username */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <Network className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">PPPoE Username</p>
+                  <p className="font-mono font-semibold">{deviceInfo?.pppoe_username || customer?.pppoe_username || 'N/A'}</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyToClipboard(deviceInfo?.pppoe_username || customer?.pppoe_username || '', 'Username')}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* PPPoE Password */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-purple-500/10">
+                  <Shield className="h-4 w-4 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">PPPoE Password</p>
+                  <p className="font-mono font-semibold">
+                    {showPassword ? (deviceInfo?.pppoe_password || customer?.pppoe_password || '***') : '••••••••'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowPassword(!showPassword)}>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyToClipboard(deviceInfo?.pppoe_password || customer?.pppoe_password || '', 'Password')}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* IP Address */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <Wifi className="h-4 w-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">IP Address</p>
+                  <p className="font-mono font-semibold">{deviceInfo?.ip_address || customer?.last_ip_address || 'N/A'}</p>
+                </div>
+              </div>
+              <Badge variant={deviceInfo?.router_status === 'connected' ? 'default' : 'destructive'} className="text-xs">
+                {deviceInfo?.router_status || (isOnline ? 'Connected' : 'Disconnected')}
+              </Badge>
+            </div>
+
+            {/* Session Uptime */}
+            {deviceInfo?.uptime && (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-cyan-500/10">
+                    <Clock className="h-4 w-4 text-cyan-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Session Uptime</p>
+                    <p className="font-semibold">{deviceInfo.uptime}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Router & ONU Info */}
+        <Card className="border-2">
+          <CardHeader className="pb-3 bg-gradient-to-r from-orange-500/5 to-transparent">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <Router className="h-5 w-5 text-orange-600" />
+              </div>
+              Device Info
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Router Name & Status */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-orange-500/10">
+                  <Router className="h-4 w-4 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Router Name</p>
+                  <p className="font-semibold">{deviceInfo?.router_name || 'N/A'}</p>
+                  <p className="text-xs font-mono text-muted-foreground">{deviceInfo?.router_mac || 'N/A'}</p>
+                </div>
+              </div>
+              <Badge variant={deviceInfo?.router_status === 'connected' ? 'default' : 'secondary'} className="text-xs">
+                {deviceInfo?.router_status || 'Unknown'}
+              </Badge>
+            </div>
+
+            {/* ONU Name & Status */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-teal-500/10">
+                  <Signal className="h-4 w-4 text-teal-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">ONU Name</p>
+                  <p className="font-semibold">{deviceInfo?.onu_name || 'N/A'}</p>
+                  <p className="text-xs font-mono text-muted-foreground">{deviceInfo?.onu_mac || 'N/A'}</p>
+                </div>
+              </div>
+              <Badge variant={deviceInfo?.onu_status === 'online' ? 'default' : 'secondary'} className="text-xs">
+                {deviceInfo?.onu_status || 'Unknown'}
+              </Badge>
+            </div>
+
+            {/* Signal Strength (dBm) */}
+            {(deviceInfo?.tx_power !== null || deviceInfo?.rx_power !== null) && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-muted/50 border">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ArrowUpFromLine className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">TX Power</span>
+                  </div>
+                  <p className={`font-bold ${getPowerColor(deviceInfo?.tx_power)}`}>
+                    {deviceInfo?.tx_power !== null ? `${deviceInfo.tx_power} dBm` : 'N/A'}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-muted/50 border">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ArrowDownToLine className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">RX Power</span>
+                  </div>
+                  <p className={`font-bold ${getPowerColor(deviceInfo?.rx_power)}`}>
+                    {deviceInfo?.rx_power !== null ? `${deviceInfo.rx_power} dBm` : 'N/A'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Quick Actions for Devices */}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1" disabled>
+                <Power className="h-4 w-4 mr-2" />
+                Router Reboot
+              </Button>
+              <Button variant="outline" size="sm" className="flex-1" disabled>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                ONU Reboot
+              </Button>
+            </div>
+            <p className="text-xs text-center text-muted-foreground">Device reboot managed by ISP. Contact support if needed.</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Live Bandwidth Graph */}
+      <Card className="border-2">
+        <CardHeader className="pb-3 bg-gradient-to-r from-cyan-500/5 to-transparent">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-cyan-500/10">
+              <Activity className="h-5 w-5 text-cyan-600" />
+            </div>
+            Live Bandwidth Usage
+            {bandwidthData.length > 0 && (
+              <Badge variant="secondary" className="ml-auto text-xs">
+                Live
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {bandwidthData.length > 0 ? (
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={bandwidthData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="time" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                  <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" unit=" Mbps" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Line type="monotone" dataKey="download" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Download" />
+                  <Line type="monotone" dataKey="upload" stroke="#22c55e" strokeWidth={2} dot={false} name="Upload" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-48 flex items-center justify-center">
+              <div className="text-center">
+                <Activity className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-muted-foreground text-sm">
+                  {isOnline ? 'Loading bandwidth data...' : 'Connect to see live bandwidth'}
+                </p>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-center gap-6 mt-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-primary" />
+              <span className="text-sm text-muted-foreground">Download</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-500" />
+              <span className="text-sm text-muted-foreground">Upload</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Package Card */}
@@ -243,11 +681,11 @@ export default function CustomerDashboardContent() {
                     {customer?.package && <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {customer?.package?.download_speed || 0}/{customer?.package?.upload_speed || 0} {customer?.package?.speed_unit || 'Mbps'}
+                    {customer?.package?.download_speed || customer?.package?.speed || 0}/{customer?.package?.upload_speed || customer?.package?.speed || 0} {customer?.package?.speed_unit || 'Mbps'}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-primary">৳{customer?.monthly_bill || 0}</p>
+                  <p className="text-2xl font-bold text-primary">৳{customer?.monthly_bill || customer?.package?.price || 0}</p>
                   <p className="text-xs text-muted-foreground">per month</p>
                 </div>
               </div>
@@ -295,7 +733,7 @@ export default function CustomerDashboardContent() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
+        {/* Quick Actions - Updated without View Bills */}
         <Card className="border-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
@@ -321,23 +759,6 @@ export default function CustomerDashboardContent() {
                 </div>
               </div>
               <ArrowUpRight className="h-5 w-5 text-muted-foreground group-hover:text-green-600 transition-colors" />
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              className="w-full justify-between h-14 hover:bg-blue-500/10 hover:border-blue-500/50 transition-all group"
-              onClick={() => navigate('/portal/bills')}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
-                  <Receipt className="h-5 w-5 text-blue-600" />
-                </div>
-                <div className="text-left">
-                  <p className="font-semibold">View Bills</p>
-                  <p className="text-xs text-muted-foreground">Check your billing history</p>
-                </div>
-              </div>
-              <ArrowUpRight className="h-5 w-5 text-muted-foreground group-hover:text-blue-600 transition-colors" />
             </Button>
             
             <Button 
@@ -373,102 +794,71 @@ export default function CustomerDashboardContent() {
               </div>
               <ArrowUpRight className="h-5 w-5 text-muted-foreground group-hover:text-cyan-600 transition-colors" />
             </Button>
+
+            <Button 
+              variant="outline" 
+              className="w-full justify-between h-14 hover:bg-blue-500/10 hover:border-blue-500/50 transition-all group"
+              onClick={() => navigate('/portal/usage')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
+                  <Gauge className="h-5 w-5 text-blue-600" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold">Usage & Speed</p>
+                  <p className="text-xs text-muted-foreground">Monitor your connection</p>
+                </div>
+              </div>
+              <ArrowUpRight className="h-5 w-5 text-muted-foreground group-hover:text-blue-600 transition-colors" />
+            </Button>
           </CardContent>
         </Card>
       </div>
 
-      {/* Recent Activity */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Recent Bills */}
-        <Card className="border-2">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-blue-500/10">
-                <Receipt className="h-5 w-5 text-blue-600" />
-              </div>
-              Recent Bills
-            </CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/portal/bills')}>
-              View All <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {bills.length === 0 ? (
-              <div className="text-center py-8">
-                <Receipt className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No bills yet</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {bills.map((bill) => (
-                  <div key={bill.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border hover:bg-muted/80 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${bill.status === 'paid' ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
-                        <Receipt className={`h-4 w-4 ${bill.status === 'paid' ? 'text-green-600' : 'text-red-600'}`} />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{bill.bill_number}</p>
-                        <p className="text-xs text-muted-foreground">{format(new Date(bill.bill_date), 'dd MMM yyyy')}</p>
-                      </div>
+      {/* Recent Recharges */}
+      <Card className="border-2">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-green-500/10">
+              <History className="h-5 w-5 text-green-600" />
+            </div>
+            Recent Recharges
+          </CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/portal/recharges')}>
+            View All <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {recharges.length === 0 ? (
+            <div className="text-center py-8">
+              <History className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-muted-foreground">No recharges yet</p>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-3">
+              {recharges.map((recharge) => (
+                <div key={recharge.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border hover:bg-muted/80 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-500/10">
+                      <TrendingUp className="h-4 w-4 text-green-600" />
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold">৳{bill.total_amount || bill.amount}</p>
-                      <Badge variant={bill.status === 'paid' ? 'default' : 'destructive'} className="text-[10px]">
-                        {bill.status}
-                      </Badge>
+                    <div>
+                      <p className="font-medium text-sm">{recharge.months || 1} Month(s)</p>
+                      <p className="text-xs text-muted-foreground">{format(new Date(recharge.recharge_date), 'dd MMM yyyy')}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent Recharges */}
-        <Card className="border-2">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <History className="h-5 w-5 text-green-600" />
-              </div>
-              Recent Recharges
-            </CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/portal/recharges')}>
-              View All <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {recharges.length === 0 ? (
-              <div className="text-center py-8">
-                <History className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No recharges yet</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recharges.map((recharge) => (
-                  <div key={recharge.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border hover:bg-muted/80 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-green-500/10">
-                        <TrendingUp className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{recharge.months || 1} Month(s)</p>
-                        <p className="text-xs text-muted-foreground">{format(new Date(recharge.recharge_date), 'dd MMM yyyy')}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-green-600">+৳{recharge.amount}</p>
-                      <Badge variant="default" className="text-[10px] bg-green-600">
-                        {recharge.status || 'completed'}
-                      </Badge>
-                    </div>
+                  <div className="text-right">
+                    <p className="font-bold text-green-600">+৳{recharge.amount}</p>
+                    <Badge variant="default" className="text-[10px] bg-green-600">
+                      {recharge.status || 'completed'}
+                    </Badge>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
