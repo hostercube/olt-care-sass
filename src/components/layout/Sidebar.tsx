@@ -102,14 +102,22 @@ const communicationItems: NavItem[] = [
   { title: 'all_gateways', href: '/isp/gateways', icon: CreditCard },
 ];
 
+// Referral & Wallet
+const referralWalletItems: NavItem[] = [
+  { title: 'referral_system', href: '/isp/referrals', icon: Gift, requiredModule: 'isp_referral' },
+  { title: 'withdraw_requests', href: '/isp/withdraw-requests', icon: Wallet, requiredModule: 'isp_withdraw_requests' },
+];
+
+// Customer Apps
+const customerAppsItems: NavItem[] = [
+  { title: 'customer_apps', href: '/isp/customer-apps', icon: Smartphone, requiredModule: 'isp_customer_apps' },
+];
+
 // Operations & HR
 const operationsHRItems: NavItem[] = [
   { title: 'payroll_hr', href: '/isp/staff', icon: Users, requiredModule: 'isp_hr_payroll' },
   { title: 'inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
   { title: 'support_tickets', href: '/isp/tickets', icon: MessageSquare, requiredModule: 'isp_tickets' },
-  { title: 'referral_system', href: '/isp/referrals', icon: Gift, requiredModule: 'isp_referral' },
-  { title: 'withdraw_requests', href: '/isp/withdraw-requests', icon: Wallet, requiredModule: 'isp_referral' },
-  { title: 'customer_apps', href: '/isp/customer-apps', icon: Smartphone, requiredModule: 'isp_customer_apps' },
   { title: 'reports', href: '/isp/reports', icon: FileText },
 ];
 
@@ -191,6 +199,8 @@ export function Sidebar() {
   const [billingExpanded, setBillingExpanded] = useState(false);
   const [networkExpanded, setNetworkExpanded] = useState(false);
   const [communicationExpanded, setCommunicationExpanded] = useState(false);
+  const [referralExpanded, setReferralExpanded] = useState(false);
+  const [customerAppsExpanded, setCustomerAppsExpanded] = useState(false);
   const [operationsExpanded, setOperationsExpanded] = useState(false);
   const [resellerExpanded, setResellerExpanded] = useState(false);
   const [websiteExpanded, setWebsiteExpanded] = useState(false);
@@ -233,6 +243,10 @@ export function Sidebar() {
         setNetworkExpanded(true);
       } else if (location.pathname.includes('/landing') || location.pathname.includes('/domain') || location.pathname.includes('/connection-requests')) {
         setWebsiteExpanded(true);
+      } else if (location.pathname.includes('/customer-apps')) {
+        setCustomerAppsExpanded(true);
+      } else if (location.pathname.includes('/referrals') || location.pathname.includes('/withdraw-requests')) {
+        setReferralExpanded(true);
       } else if (location.pathname.includes('/sms') || location.pathname.includes('/email') || location.pathname.includes('/campaigns') || location.pathname.includes('/gateways')) {
         setCommunicationExpanded(true);
       } else if (location.pathname.includes('/staff') || location.pathname.includes('/pos') || location.pathname.includes('/reports')) {
@@ -265,6 +279,8 @@ export function Sidebar() {
   const filteredBillingItems = useMemo(() => filterByModule(billingFinanceItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredNetworkItems = useMemo(() => filterByModule(networkInfraItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredCommunicationItems = useMemo(() => filterByModule(communicationItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredReferralWalletItems = useMemo(() => filterByModule(referralWalletItems), [hasAccess, inTenantView, isSuperAdmin]);
+  const filteredCustomerAppsItems = useMemo(() => filterByModule(customerAppsItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredOperationsItems = useMemo(() => filterByModule(operationsHRItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredResellerItems = useMemo(() => filterByModule(resellerItems), [hasAccess, inTenantView, isSuperAdmin]);
   const filteredWebsiteItems = useMemo(() => filterByModule(websiteItems), [hasAccess, inTenantView, isSuperAdmin]);
@@ -428,6 +444,18 @@ export function Sidebar() {
               collapsible: true,
               expanded: communicationExpanded,
               onToggle: () => setCommunicationExpanded((v) => !v),
+            })}
+
+            {filteredReferralWalletItems.length > 0 && renderSection(t('referral_wallet'), filteredReferralWalletItems, {
+              collapsible: true,
+              expanded: referralExpanded,
+              onToggle: () => setReferralExpanded((v) => !v),
+            })}
+
+            {filteredCustomerAppsItems.length > 0 && renderSection(t('customer_apps'), filteredCustomerAppsItems, {
+              collapsible: true,
+              expanded: customerAppsExpanded,
+              onToggle: () => setCustomerAppsExpanded((v) => !v),
             })}
 
             {filteredOperationsItems.length > 0 && renderSection(t('operations_hr'), filteredOperationsItems, {

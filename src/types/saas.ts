@@ -85,6 +85,7 @@ export interface TenantFeatures {
   isp_btrc_reports?: boolean;
   isp_tickets?: boolean;
   isp_referral?: boolean;
+  isp_withdraw_requests?: boolean;
   isp_customer_apps?: boolean;
   landing_page?: boolean;
   customer_location?: boolean;
@@ -384,9 +385,9 @@ export const AVAILABLE_MODULES: ModuleConfig[] = [
   { id: 'isp_btrc_reports', name: 'BTRC Reports', description: 'BTRC regulatory reports', category: 'isp' },
   { id: 'isp_tickets', name: 'Support Tickets', description: 'Customer support ticket system', category: 'isp' },
   { id: 'isp_referral', name: 'Referral System', description: 'Customer referral program with bonuses', category: 'isp' },
+  { id: 'isp_withdraw_requests', name: 'Withdraw Requests', description: 'Approve/reject customer wallet withdraw requests', category: 'isp' },
   { id: 'isp_customer_apps', name: 'Customer Apps', description: 'Android/iOS app configuration and links', category: 'isp' },
   { id: 'landing_page', name: 'Landing Page', description: 'Custom landing page with templates and branding', category: 'isp' },
-  { id: 'customer_location', name: 'Customer Location', description: 'GPS location capture and verification', category: 'isp' },
   
   // Alert Features
   { id: 'sms_alerts', name: 'SMS Alerts', description: 'SMS notifications for alerts', category: 'alerts' },

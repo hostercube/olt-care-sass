@@ -82,12 +82,17 @@ export default function CustomerReferral() {
         .rpc('get_tenant_referral_domain', { p_tenant_id: customer.tenant_id });
       
       if (domainData && code) {
-        const domain = domainData as string;
-        if (domain.includes('/')) {
-          setReferralLink(`https://${domain}?ref=${code}`);
-        } else {
-          setReferralLink(`https://${domain}?ref=${code}`);
-        }
+        const rawDomain = String(domainData);
+        const normalized = rawDomain
+          .replace(/^https?:\/\//, '')
+          .replace(/\/+$/, '');
+
+        // If domain includes a path (e.g., isppoint.com/p/tenant), don't add an extra slash before ?
+        const url = normalized.includes('/')
+          ? `https://${normalized}?ref=${code}`
+          : `https://${normalized}/?ref=${code}`;
+
+        setReferralLink(url);
       }
 
       // Fetch referral stats

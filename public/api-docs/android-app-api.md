@@ -548,7 +548,9 @@ GET /tenants?id=eq.{tenant_id}&select=company_name,logo_url,favicon_url,subtitle
 For generating referral links, use this priority:
 1. Custom domain (if available): `https://{custom_domain}/?ref={referral_code}`
 2. Subdomain (if available): `https://{subdomain}.isppoint.com/?ref={referral_code}`
-3. Fallback to main domain: `https://isppoint.com/?ref={referral_code}`
+3. Fallback to main domain tenant landing: `https://isppoint.com/p/{tenant_slug}/?ref={referral_code}`
+
+> Note: `{tenant_slug}` is the tenant’s slug (same one used in the tenant landing URL).
 
 ---
 
