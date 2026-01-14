@@ -48,7 +48,7 @@ import {
   Phone, Mail, MapPin, Calendar, Clock, User, Package, FileText,
   MoreVertical, Eye, Check, X, UserPlus, Loader2, Search,
   Filter, Download, RefreshCw, AlertCircle, CheckCircle2, XCircle,
-  MessageSquare, CreditCard
+  MessageSquare, CreditCard, Gift
 } from 'lucide-react';
 import { useConnectionRequests } from '@/hooks/useConnectionRequests';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
@@ -295,6 +295,7 @@ export default function ConnectionRequests() {
                       <TableHead>ফোন</TableHead>
                       <TableHead>প্যাকেজ</TableHead>
                       <TableHead>এলাকা</TableHead>
+                      <TableHead>রেফারেল কোড</TableHead>
                       <TableHead>স্ট্যাটাস</TableHead>
                       <TableHead>তারিখ</TableHead>
                       <TableHead className="w-[100px]">অ্যাকশন</TableHead>
@@ -322,6 +323,16 @@ export default function ConnectionRequests() {
                         </TableCell>
                         <TableCell>
                           {(request as any).areas?.name || (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {(request as any).referral_code ? (
+                            <Badge variant="outline" className="font-mono text-xs bg-purple-500/10 text-purple-600">
+                              <Gift className="h-3 w-3 mr-1" />
+                              {(request as any).referral_code}
+                            </Badge>
+                          ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>

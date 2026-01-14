@@ -8494,9 +8494,10 @@ export type Database = {
         Args: { p_customer_id: string }
         Returns: {
           bonus_balance: number
-          bonus_earned: number
-          referral_code: string
+          pending_referrals: number
+          rejected_referrals: number
           successful_referrals: number
+          total_bonus_earned: number
           total_referrals: number
         }[]
       }

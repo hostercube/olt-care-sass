@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -263,9 +263,13 @@ export default function TenantLanding({ slugOverride }: TenantLandingProps = {})
   const navigate = useNavigate();
   const { tenantSlug: urlSlug } = useParams<{ tenantSlug: string }>();
   const { effectiveSlug: contextSlug } = useCustomDomainContext();
+  const [searchParams] = useSearchParams();
   
   // Priority: prop > URL param > context
   const tenantSlug = slugOverride || urlSlug || contextSlug;
+  
+  // Capture referral code from URL
+  const referralCodeFromUrl = searchParams.get('ref') || '';
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -565,7 +569,7 @@ export default function TenantLanding({ slugOverride }: TenantLandingProps = {})
       
       const requestNumber = `REQ${String((countData?.length || 0) + 1).padStart(6, '0')}`;
 
-      // Create connection request
+      // Create connection request with referral code tracking
       const { error } = await supabase
         .from('connection_requests')
         .insert({
@@ -579,6 +583,7 @@ export default function TenantLanding({ slugOverride }: TenantLandingProps = {})
           package_id: registerForm.package_id || null,
           area_id: registerForm.area_id || null,
           notes: registerForm.notes || null,
+          referral_code: referralCodeFromUrl || null,
           status: tenant.customer_registration_auto_approve ? 'approved' : 'pending'
         });
 
