@@ -16,6 +16,7 @@ import {
   DollarSign,
   FileText,
   Gauge,
+  Gift,
   Globe,
   LayoutDashboard,
   Mail,
@@ -29,6 +30,7 @@ import {
   Server,
   Settings,
   Shield,
+  Smartphone,
   Terminal,
   UserCheck,
   Users,
@@ -105,6 +107,8 @@ const operationsHRItems: NavItem[] = [
   { title: 'payroll_hr', href: '/isp/staff', icon: Users, requiredModule: 'isp_hr_payroll' },
   { title: 'inventory', href: '/isp/pos', icon: Box, requiredModule: 'isp_inventory' },
   { title: 'support_tickets', href: '/isp/tickets', icon: MessageSquare, requiredModule: 'isp_tickets' },
+  { title: 'referral_system', href: '/isp/referrals', icon: Gift, requiredModule: 'isp_referral' },
+  { title: 'customer_apps', href: '/isp/customer-apps', icon: Smartphone, requiredModule: 'isp_customer_apps' },
   { title: 'reports', href: '/isp/reports', icon: FileText },
 ];
 

@@ -9,7 +9,7 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import {
   LayoutDashboard, CreditCard, History, User,
   LogOut, Menu, X, Wifi, ChevronRight, HelpCircle, Gauge,
-  AlertCircle
+  AlertCircle, Package, Gift
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -18,6 +18,7 @@ interface NavItem {
   href: string;
   icon: any;
   badge?: string;
+  hidden?: boolean;
 }
 
 type DebugInfo = {
@@ -36,6 +37,7 @@ export function CustomerPortalLayout() {
   const location = useLocation();
   const [customer, setCustomer] = useState<any>(null);
   const [tenantBranding, setTenantBranding] = useState<any>(null);
+  const [appsConfig, setAppsConfig] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
@@ -127,12 +129,20 @@ export function CustomerPortalLayout() {
 
         // Fetch tenant branding - use tenant_id from RPC result or session
         if (effectiveTenantId) {
-          const { data: tenantData, error: tenantErr } = await supabase
-            .from('tenants')
-            .select('company_name, logo_url, favicon_url, subtitle, theme_color')
-            .eq('id', effectiveTenantId)
-            .maybeSingle();
+          const [tenantResult, appsConfigResult] = await Promise.all([
+            supabase
+              .from('tenants')
+              .select('company_name, logo_url, favicon_url, subtitle, theme_color')
+              .eq('id', effectiveTenantId)
+              .maybeSingle(),
+            supabase
+              .from('customer_apps_config')
+              .select('*')
+              .eq('tenant_id', effectiveTenantId)
+              .maybeSingle()
+          ]);
 
+          const { data: tenantData, error: tenantErr } = tenantResult;
           setDebugInfo((p) => ({ ...p, tenantBrandingOk: !!tenantData && !tenantErr }));
 
           if (tenantData) {
@@ -150,6 +160,10 @@ export function CustomerPortalLayout() {
             if (tenantData.company_name) {
               document.title = `${tenantData.company_name} - Customer Portal`;
             }
+          }
+
+          if (appsConfigResult.data) {
+            setAppsConfig(appsConfigResult.data);
           }
         }
       } catch (err) {
@@ -172,15 +186,17 @@ export function CustomerPortalLayout() {
     navigate('/portal/login');
   };
 
-  // Removed Bills from navigation - only Recharge History is shown
+  // Build navigation items dynamically based on apps config
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/portal/dashboard', icon: LayoutDashboard },
+    { label: 'Packages', href: '/portal/packages', icon: Package },
     { label: 'Pay Bill', href: '/portal/pay', icon: CreditCard },
     { label: 'Recharge History', href: '/portal/recharges', icon: History },
     { label: 'Usage & Speed', href: '/portal/usage', icon: Gauge },
     { label: 'My Profile', href: '/portal/profile', icon: User },
     { label: 'Support', href: '/portal/support', icon: HelpCircle },
-  ];
+    { label: 'Referral', href: '/portal/referral', icon: Gift, hidden: !appsConfig?.referral_enabled },
+  ].filter(item => !item.hidden);
 
   const isActive = (href: string) => location.pathname === href;
 
