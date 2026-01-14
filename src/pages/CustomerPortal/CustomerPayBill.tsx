@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { 
   CreditCard, Smartphone, Banknote, CheckCircle, Loader2, 
   ExternalLink, XCircle, ArrowLeft, AlertCircle, Calendar, Zap, Package,
-  Clock, Wifi
+  Clock, Wifi, ArrowRightLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
@@ -31,6 +31,16 @@ interface RechargeOption {
   popular?: boolean;
 }
 
+interface ISPPackage {
+  id: string;
+  name: string;
+  price: number;
+  download_speed: number;
+  upload_speed: number;
+  speed_unit: string;
+  validity_days: number;
+}
+
 const RECHARGE_OPTIONS: RechargeOption[] = [
   { months: 1, label: '1 Month', discount: 0 },
   { months: 2, label: '2 Months', discount: 0 },
@@ -51,8 +61,12 @@ export default function CustomerPayBill() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
+  
+  // Package change support
+  const [pendingPackageChange, setPendingPackageChange] = useState<ISPPackage | null>(null);
+  const [isPackageChange, setIsPackageChange] = useState(false);
 
-  // Check for payment callback status
+  // Check for payment callback status and pending package change
   useEffect(() => {
     const status = searchParams.get('status');
     const paymentId = searchParams.get('payment_id');
@@ -63,6 +77,12 @@ export default function CustomerPayBill() {
     } else if (status === 'failed' || status === 'cancelled') {
       setPaymentFailed(true);
       toast.error('Payment could not be processed');
+    }
+    
+    // Check for pending package change from dashboard
+    const pendingPkgId = sessionStorage.getItem('pending_package_change');
+    if (pendingPkgId) {
+      setIsPackageChange(true);
     }
   }, [searchParams]);
 
@@ -92,6 +112,21 @@ export default function CustomerPayBill() {
       
       if (customerData) {
         setCustomer(customerData);
+      }
+
+      // Check for pending package change and fetch that package
+      const pendingPkgId = sessionStorage.getItem('pending_package_change');
+      if (pendingPkgId) {
+        const { data: pkgData } = await supabase
+          .from('isp_packages')
+          .select('id, name, price, download_speed, upload_speed, speed_unit, validity_days')
+          .eq('id', pendingPkgId)
+          .single();
+        
+        if (pkgData) {
+          setPendingPackageChange(pkgData as ISPPackage);
+          setIsPackageChange(true);
+        }
       }
 
       // Fetch enabled payment gateways for tenant
@@ -143,15 +178,20 @@ export default function CustomerPayBill() {
   };
 
   const calculatePricing = () => {
-    const packagePrice = customer?.package?.price || customer?.monthly_bill || 0;
+    // Use pending package price if this is a package change
+    const targetPackage = isPackageChange && pendingPackageChange ? pendingPackageChange : customer?.package;
+    const packagePrice = targetPackage?.price || customer?.monthly_bill || 0;
     const option = RECHARGE_OPTIONS.find(o => o.months === selectedMonths) || RECHARGE_OPTIONS[0];
     const subtotal = packagePrice * option.months;
     const discountAmount = Math.round((subtotal * option.discount) / 100);
     const total = subtotal - discountAmount;
-    const validityDays = (customer?.package?.validity_days || 30) * option.months;
-    const newExpiry = customer?.expiry_date && new Date(customer.expiry_date) > new Date()
-      ? addDays(new Date(customer.expiry_date), validityDays)
-      : addDays(new Date(), validityDays);
+    const validityDays = (targetPackage?.validity_days || 30) * option.months;
+    // For package changes, start fresh from today
+    const newExpiry = isPackageChange 
+      ? addDays(new Date(), validityDays)
+      : (customer?.expiry_date && new Date(customer.expiry_date) > new Date()
+          ? addDays(new Date(customer.expiry_date), validityDays)
+          : addDays(new Date(), validityDays));
 
     return { subtotal, discountAmount, total, validityDays, newExpiry, packagePrice };
   };
@@ -179,6 +219,8 @@ export default function CustomerPayBill() {
       const cancelUrl = `${baseUrl}/portal/pay`;
       const gatewayCallbackUrl = getPaymentCallbackUrl(selectedMethod || 'manual');
 
+      const pkgName = isPackageChange && pendingPackageChange ? pendingPackageChange.name : customer.package?.name || 'Standard';
+
       if (isOnlineGateway(selectedMethod)) {
         // Online payment - initiate gateway
         const response = await initiatePayment({
@@ -186,7 +228,7 @@ export default function CustomerPayBill() {
           amount: total,
           tenant_id: tenant_id,
           customer_id: id,
-          description: `Package Recharge - ${selectedMonths} Month(s) - ${customer.customer_code || customer.name}`,
+          description: `${isPackageChange ? 'Package Change: ' : ''}${pkgName} - ${selectedMonths} Month(s) - ${customer.customer_code || customer.name}`,
           gateway_callback_url: gatewayCallbackUrl,
           return_url: returnUrl,
           cancel_url: cancelUrl,
@@ -224,6 +266,9 @@ export default function CustomerPayBill() {
   const processRecharge = async (customerId: string, tenantId: string, amount: number) => {
     const { newExpiry, discountAmount } = calculatePricing();
     const oldExpiry = customer?.expiry_date;
+    const targetPackage = isPackageChange && pendingPackageChange ? pendingPackageChange : customer?.package;
+    const oldPackageId = customer?.package_id;
+    const newPackageId = isPackageChange && pendingPackageChange ? pendingPackageChange.id : oldPackageId;
 
     // Create recharge record
     await supabase.from('customer_recharges').insert({
@@ -235,19 +280,29 @@ export default function CustomerPayBill() {
       old_expiry: oldExpiry,
       new_expiry: format(newExpiry, 'yyyy-MM-dd'),
       discount: discountAmount,
-      notes: 'Customer portal self-recharge',
+      notes: isPackageChange 
+        ? `Package change from ${customer?.package?.name || 'N/A'} to ${pendingPackageChange?.name || 'N/A'}` 
+        : 'Customer portal self-recharge',
       status: 'completed',
       collected_by_type: 'customer_self',
       collected_by_name: customer?.name || 'Customer',
     });
 
-    // Update customer
-    await supabase.from('customers').update({
+    // Build customer update object
+    const customerUpdate: any = {
       expiry_date: format(newExpiry, 'yyyy-MM-dd'),
       last_payment_date: format(new Date(), 'yyyy-MM-dd'),
       due_amount: 0,
       status: 'active',
-    }).eq('id', customerId);
+    };
+    
+    // If package is changing, update package details
+    if (isPackageChange && pendingPackageChange) {
+      customerUpdate.package_id = pendingPackageChange.id;
+      customerUpdate.monthly_bill = pendingPackageChange.price;
+    }
+
+    await supabase.from('customers').update(customerUpdate).eq('id', customerId);
 
     // Create payment record
     await supabase.from('customer_payments').insert({
@@ -255,15 +310,20 @@ export default function CustomerPayBill() {
       customer_id: customerId,
       amount,
       payment_method: selectedMethod,
-      notes: `Self-recharge for ${selectedMonths} month(s)`,
+      notes: isPackageChange 
+        ? `Package change: ${pendingPackageChange?.name} - ${selectedMonths} month(s)` 
+        : `Self-recharge for ${selectedMonths} month(s)`,
     });
 
-    // Auto-enable customer on MikroTik if configured
-    await enableCustomerOnMikroTik(customerId, tenantId);
+    // Clear the pending package change from session storage
+    sessionStorage.removeItem('pending_package_change');
+
+    // Auto-enable customer on MikroTik and update package profile if configured
+    await enableCustomerOnMikroTik(customerId, tenantId, isPackageChange ? targetPackage?.name : undefined);
   };
 
   // Function to enable customer on MikroTik after successful recharge
-  const enableCustomerOnMikroTik = async (customerId: string, custTenantId: string) => {
+  const enableCustomerOnMikroTik = async (customerId: string, custTenantId: string, newPackageName?: string) => {
     try {
       // Get customer details with router info
       const { data: customerData } = await supabase
@@ -423,16 +483,34 @@ export default function CustomerPayBill() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/portal/dashboard')}>
+        <Button variant="ghost" size="icon" onClick={() => { sessionStorage.removeItem('pending_package_change'); navigate('/portal/dashboard'); }}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">Recharge Package</h1>
-          <p className="text-muted-foreground">Renew your internet subscription</p>
+          <h1 className="text-2xl font-bold">{isPackageChange ? 'Change Package' : 'Recharge Package'}</h1>
+          <p className="text-muted-foreground">{isPackageChange ? 'Complete payment to activate your new package' : 'Renew your internet subscription'}</p>
         </div>
       </div>
 
-      {/* Current Package */}
+      {/* Package Change Alert */}
+      {isPackageChange && pendingPackageChange && (
+        <div className="p-4 rounded-xl bg-purple-500/10 border-2 border-purple-500/30 flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-purple-500/20">
+            <ArrowRightLeft className="h-6 w-6 text-purple-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-purple-600">Package Change</h3>
+            <p className="text-sm text-muted-foreground">
+              Changing from <span className="font-medium">{customer?.package?.name || 'N/A'}</span> to <span className="font-medium text-purple-600">{pendingPackageChange.name}</span>
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => { sessionStorage.removeItem('pending_package_change'); setIsPackageChange(false); setPendingPackageChange(null); }}>
+            Cancel Change
+          </Button>
+        </div>
+      )}
+
+      {/* Current/New Package */}
       <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
         <CardContent className="p-5">
           <div className="flex items-center gap-4">
@@ -440,15 +518,19 @@ export default function CustomerPayBill() {
               <Package className="h-7 w-7 text-primary" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground">Current Package</p>
-              <h3 className="text-xl font-bold">{customer?.package?.name || 'Standard'}</h3>
+              <p className="text-sm text-muted-foreground">{isPackageChange ? 'New Package' : 'Current Package'}</p>
+              <h3 className="text-xl font-bold">{isPackageChange && pendingPackageChange ? pendingPackageChange.name : (customer?.package?.name || 'Standard')}</h3>
               <div className="flex items-center gap-3 mt-1">
-                <Badge variant="outline">{customer?.package?.speed || 'N/A'}</Badge>
+                <Badge variant="outline">
+                  {isPackageChange && pendingPackageChange 
+                    ? `${pendingPackageChange.download_speed}/${pendingPackageChange.upload_speed} ${pendingPackageChange.speed_unit || 'Mbps'}`
+                    : (customer?.package?.download_speed ? `${customer.package.download_speed}/${customer.package.upload_speed} Mbps` : 'N/A')}
+                </Badge>
                 <span className="text-lg font-semibold text-primary">৳{packagePrice}/month</span>
               </div>
             </div>
           </div>
-          {customer?.expiry_date && (
+          {customer?.expiry_date && !isPackageChange && (
             <div className="mt-4 p-3 rounded-lg bg-background/50 flex items-center gap-3">
               <Clock className="h-5 w-5 text-muted-foreground" />
               <div>
