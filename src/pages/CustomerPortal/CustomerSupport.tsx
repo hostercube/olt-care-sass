@@ -105,9 +105,11 @@ export default function CustomerSupport() {
 
       if (error) throw error;
       setTickets((data as any[]) || []);
-    } catch (err) {
-      console.error('Error fetching tickets:', err);
-      toast.error('Failed to load tickets');
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to load tickets';
+      console.error('[CustomerSupport] fetchTickets failed:', err);
+      toast.error(msg);
+      setTickets([]);
     } finally {
       setLoading(false);
     }

@@ -331,6 +331,17 @@ export function CustomerPortalLayout() {
 
         {/* Page Content */}
         <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
+          {debug && (
+            <div className="mb-4 rounded-lg border bg-card p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <AlertCircle className="h-4 w-4" />
+                Portal Debug
+              </div>
+              <pre className="mt-2 text-xs whitespace-pre-wrap text-muted-foreground">
+{JSON.stringify(debugInfo, null, 2)}
+              </pre>
+            </div>
+          )}
           <Outlet context={{ customer, tenantBranding }} />
         </main>
       </div>

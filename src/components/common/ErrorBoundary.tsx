@@ -24,6 +24,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const debug = new URLSearchParams(window.location.search).get('debug') === '1';
+      const message =
+        this.state.error instanceof Error
+          ? this.state.error.message
+          : typeof this.state.error === 'string'
+            ? this.state.error
+            : undefined;
+
       return (
         this.props.fallback ?? (
           <div className="min-h-[60vh] flex items-center justify-center px-6">
@@ -32,6 +40,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
               <p className="text-sm text-muted-foreground mt-2">
                 The page crashed while loading. Please refresh and try again.
               </p>
+              {debug && message && (
+                <pre className="mt-3 text-xs whitespace-pre-wrap rounded-md bg-muted p-3 border text-foreground/80">
+                  {message}
+                </pre>
+              )}
               <div className="mt-4">
                 <button
                   className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
