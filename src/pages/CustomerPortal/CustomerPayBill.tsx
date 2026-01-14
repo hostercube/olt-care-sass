@@ -258,8 +258,84 @@ export default function CustomerPayBill() {
       notes: `Self-recharge for ${selectedMonths} month(s)`,
     });
 
-    // TODO: If MikroTik integration is enabled, enable the user
-    // This would be done server-side via edge function
+    // Auto-enable customer on MikroTik if configured
+    await enableCustomerOnMikroTik(customerId, tenantId);
+  };
+
+  // Function to enable customer on MikroTik after successful recharge
+  const enableCustomerOnMikroTik = async (customerId: string, tenantId: string) => {
+    try {
+      // Get customer details with router info
+      const { data: customerData } = await supabase
+        .from('customers')
+        .select('pppoe_username, mikrotik_id, package:isp_packages(name)')
+        .eq('id', customerId)
+        .single();
+
+      if (!customerData?.pppoe_username || !customerData?.mikrotik_id) {
+        console.log('No MikroTik config for customer, skipping auto-enable');
+        return;
+      }
+
+      // Get polling server URL from tenant settings (key-value table)
+      const { data: settings } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'api_server_url')
+        .single();
+
+      const apiServerUrl = settings?.value as string | undefined;
+      if (!apiServerUrl) {
+        console.log('No polling server configured, skipping MikroTik auto-enable');
+        return;
+      }
+
+      // Normalize URL
+      let apiBase = apiServerUrl.trim();
+      apiBase = apiBase.replace(/\/+$/, '').replace(/\/api$/i, '');
+
+      // Get router config
+      const { data: router } = await supabase
+        .from('mikrotik_routers')
+        .select('*')
+        .eq('id', customerData.mikrotik_id)
+        .single();
+
+      if (!router) {
+        console.log('Router not found for customer');
+        return;
+      }
+
+      const mikrotik = {
+        ip: router.ip_address,
+        port: router.port,
+        username: router.username,
+        password: router.password_encrypted,
+      };
+
+      // Enable the PPPoE user
+      const response = await fetch(`${apiBase}/api/mikrotik/pppoe/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          mikrotik, 
+          username: customerData.pppoe_username, 
+          disabled: false 
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('Customer enabled on MikroTik successfully');
+        toast.success('Internet connection activated!');
+      } else {
+        console.warn('Failed to enable customer on MikroTik:', result.error);
+      }
+    } catch (error) {
+      console.error('Error enabling customer on MikroTik:', error);
+      // Don't throw - recharge was successful, MikroTik enable is best-effort
+    }
   };
 
   if (loading) {
