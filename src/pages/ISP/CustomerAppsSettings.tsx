@@ -560,12 +560,12 @@ export default function CustomerAppsSettings() {
 
       {/* Link Dialog */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingLink ? 'Edit Link' : 'Add New Link'}</DialogTitle>
             <DialogDescription>Configure the link details</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
             <div className="space-y-2">
               <Label>Category</Label>
               <Select
@@ -598,14 +598,13 @@ export default function CustomerAppsSettings() {
                 placeholder="https://..."
               />
             </div>
-            <div className="space-y-2">
-              <Label>Icon URL (Optional)</Label>
-              <Input
-                value={linkForm.icon_url}
-                onChange={(e) => setLinkForm(prev => ({ ...prev, icon_url: e.target.value }))}
-                placeholder="https://..."
-              />
-            </div>
+            <ImageUploader
+              label="Link Icon"
+              value={linkForm.icon_url}
+              onChange={(url) => setLinkForm(prev => ({ ...prev, icon_url: url }))}
+              folderPath="customer-apps/link-icons"
+              placeholder="Upload or enter icon URL"
+            />
             <div className="space-y-2">
               <Label>Description (Optional)</Label>
               <Input

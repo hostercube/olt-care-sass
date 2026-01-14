@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,25 +12,53 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useReferralSystem } from '@/hooks/useReferralSystem';
 import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
-import { Gift, Users, DollarSign, TrendingUp, Settings, List, Loader2, Save } from 'lucide-react';
+import { useTenantContext } from '@/hooks/useSuperAdmin';
+import { supabase } from '@/integrations/supabase/client';
+import { 
+  Gift, Users, DollarSign, TrendingUp, Settings, List, Loader2, Save, 
+  Search, Filter, ChevronLeft, ChevronRight, Wallet, ArrowDownToLine
+} from 'lucide-react';
 import { format } from 'date-fns';
 
+const ITEMS_PER_PAGE = 10;
+
 export default function ReferralManagement() {
-  const { config, referrals, loading, saveConfig, updateReferralStatus } = useReferralSystem();
+  const { config, referrals, loading, saveConfig, updateReferralStatus, refetch } = useReferralSystem();
   const { formatCurrency } = useLanguageCurrency();
+  const { tenantId } = useTenantContext();
+  
+  // Form state
   const [formData, setFormData] = useState({
-    is_enabled: config?.is_enabled || false,
-    bonus_type: config?.bonus_type || 'fixed',
-    bonus_amount: config?.bonus_amount || 0,
-    bonus_percentage: config?.bonus_percentage || 0,
-    min_referrals_for_bonus: config?.min_referrals_for_bonus || 1,
-    bonus_validity_days: config?.bonus_validity_days || 30,
-    terms_and_conditions: config?.terms_and_conditions || '',
+    is_enabled: false,
+    bonus_type: 'fixed',
+    bonus_amount: 0,
+    bonus_percentage: 0,
+    min_referrals_for_bonus: 1,
+    bonus_validity_days: 30,
+    terms_and_conditions: '',
   });
   const [saving, setSaving] = useState(false);
 
+  // Search/Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Customer wallet tracking
+  const [customerWallets, setCustomerWallets] = useState<Array<{
+    customer_id: string;
+    customer_name: string;
+    customer_code: string;
+    wallet_balance: number;
+    total_referrals: number;
+    total_bonus_earned: number;
+  }>>([]);
+  const [loadingWallets, setLoadingWallets] = useState(false);
+  const [walletSearch, setWalletSearch] = useState('');
+  const [walletPage, setWalletPage] = useState(1);
+
   // Update form when config loads
-  useState(() => {
+  useEffect(() => {
     if (config) {
       setFormData({
         is_enabled: config.is_enabled,
@@ -42,7 +70,60 @@ export default function ReferralManagement() {
         terms_and_conditions: config.terms_and_conditions || '',
       });
     }
-  });
+  }, [config]);
+
+  // Fetch customer wallets
+  useEffect(() => {
+    const fetchCustomerWallets = async () => {
+      if (!tenantId) return;
+      setLoadingWallets(true);
+      try {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('id, name, customer_code, wallet_balance')
+          .eq('tenant_id', tenantId)
+          .gt('wallet_balance', 0)
+          .order('wallet_balance', { ascending: false });
+
+        if (error) throw error;
+
+        // Get referral counts for each customer
+        const walletsWithStats = await Promise.all(
+          (data || []).map(async (customer) => {
+            const { count } = await supabase
+              .from('customer_referrals')
+              .select('*', { count: 'exact', head: true })
+              .eq('referrer_customer_id', customer.id);
+            
+            const { data: bonusData } = await supabase
+              .from('customer_referrals')
+              .select('bonus_amount')
+              .eq('referrer_customer_id', customer.id)
+              .eq('status', 'bonus_paid');
+
+            const totalBonus = bonusData?.reduce((sum, r) => sum + (r.bonus_amount || 0), 0) || 0;
+
+            return {
+              customer_id: customer.id,
+              customer_name: customer.name,
+              customer_code: customer.customer_code,
+              wallet_balance: customer.wallet_balance || 0,
+              total_referrals: count || 0,
+              total_bonus_earned: totalBonus
+            };
+          })
+        );
+
+        setCustomerWallets(walletsWithStats);
+      } catch (error) {
+        console.error('Error fetching wallets:', error);
+      } finally {
+        setLoadingWallets(false);
+      }
+    };
+
+    fetchCustomerWallets();
+  }, [tenantId]);
 
   const handleSaveConfig = async () => {
     setSaving(true);
@@ -50,11 +131,49 @@ export default function ReferralManagement() {
     setSaving(false);
   };
 
+  // Filtered referrals
+  const filteredReferrals = useMemo(() => {
+    return referrals.filter(r => {
+      const matchesSearch = searchQuery === '' || 
+        r.referrer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.referrer?.customer_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.referred?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.referred_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.referral_code?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [referrals, searchQuery, statusFilter]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredReferrals.length / ITEMS_PER_PAGE);
+  const paginatedReferrals = filteredReferrals.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // Filtered wallets
+  const filteredWallets = useMemo(() => {
+    return customerWallets.filter(w =>
+      w.customer_name.toLowerCase().includes(walletSearch.toLowerCase()) ||
+      w.customer_code.toLowerCase().includes(walletSearch.toLowerCase())
+    );
+  }, [customerWallets, walletSearch]);
+
+  const totalWalletPages = Math.ceil(filteredWallets.length / ITEMS_PER_PAGE);
+  const paginatedWallets = filteredWallets.slice(
+    (walletPage - 1) * ITEMS_PER_PAGE,
+    walletPage * ITEMS_PER_PAGE
+  );
+
   // Stats
   const totalReferrals = referrals.length;
   const activeReferrals = referrals.filter(r => r.status === 'active').length;
   const pendingReferrals = referrals.filter(r => r.status === 'pending').length;
   const totalBonusPaid = referrals.filter(r => r.status === 'bonus_paid').reduce((sum, r) => sum + r.bonus_amount, 0);
+  const totalWalletBalance = customerWallets.reduce((sum, w) => sum + w.wallet_balance, 0);
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -63,7 +182,13 @@ export default function ReferralManagement() {
       active: 'default',
       bonus_paid: 'default',
     };
-    return <Badge variant={variants[status] || 'secondary'}>{status}</Badge>;
+    const labels: Record<string, string> = {
+      pending: 'Pending',
+      signed_up: 'Signed Up',
+      active: 'Active',
+      bonus_paid: 'Bonus Paid',
+    };
+    return <Badge variant={variants[status] || 'secondary'}>{labels[status] || status}</Badge>;
   };
 
   if (loading) {
@@ -79,7 +204,7 @@ export default function ReferralManagement() {
   return (
     <DashboardLayout title="Referral Management" subtitle="Manage customer referral program">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -132,15 +257,31 @@ export default function ReferralManagement() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-500/10">
+                <Wallet className="h-5 w-5 text-purple-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Wallet</p>
+                <p className="text-2xl font-bold">{formatCurrency(totalWalletBalance)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs defaultValue="settings" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" /> Settings
           </TabsTrigger>
           <TabsTrigger value="referrals" className="flex items-center gap-2">
             <List className="h-4 w-4" /> Referrals ({referrals.length})
+          </TabsTrigger>
+          <TabsTrigger value="wallets" className="flex items-center gap-2">
+            <Wallet className="h-4 w-4" /> Customer Wallets ({customerWallets.length})
           </TabsTrigger>
         </TabsList>
 
@@ -248,8 +389,37 @@ export default function ReferralManagement() {
         <TabsContent value="referrals">
           <Card>
             <CardHeader>
-              <CardTitle>All Referrals</CardTitle>
-              <CardDescription>Track and manage customer referrals</CardDescription>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <CardTitle>All Referrals</CardTitle>
+                  <CardDescription>Track and manage customer referrals</CardDescription>
+                </div>
+                {/* Search and Filter */}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search referrals..."
+                      value={searchQuery}
+                      onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                      className="pl-9 w-full sm:w-64"
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="w-full sm:w-40">
+                      <Filter className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="signed_up">Signed Up</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="bonus_paid">Bonus Paid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="rounded-lg border">
@@ -266,14 +436,14 @@ export default function ReferralManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {referrals.length === 0 ? (
+                    {paginatedReferrals.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          No referrals yet
+                          {searchQuery || statusFilter !== 'all' ? 'No matching referrals found' : 'No referrals yet'}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      referrals.map((referral) => (
+                      paginatedReferrals.map((referral) => (
                         <TableRow key={referral.id}>
                           <TableCell>
                             <div>
@@ -312,6 +482,134 @@ export default function ReferralManagement() {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredReferrals.length)} of {filteredReferrals.length}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="flex items-center px-3 text-sm">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="wallets">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Customer Wallets</CardTitle>
+                  <CardDescription>View customer wallet balances and referral bonuses</CardDescription>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search customers..."
+                    value={walletSearch}
+                    onChange={(e) => { setWalletSearch(e.target.value); setWalletPage(1); }}
+                    className="pl-9 w-full sm:w-64"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingWallets ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Customer Code</TableHead>
+                          <TableHead>Wallet Balance</TableHead>
+                          <TableHead>Total Referrals</TableHead>
+                          <TableHead>Total Bonus Earned</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedWallets.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                              No customers with wallet balance
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          paginatedWallets.map((wallet) => (
+                            <TableRow key={wallet.customer_id}>
+                              <TableCell className="font-medium">{wallet.customer_name}</TableCell>
+                              <TableCell>
+                                <code className="text-xs bg-muted px-2 py-1 rounded">{wallet.customer_code}</code>
+                              </TableCell>
+                              <TableCell className="font-bold text-green-600">
+                                {formatCurrency(wallet.wallet_balance)}
+                              </TableCell>
+                              <TableCell>{wallet.total_referrals}</TableCell>
+                              <TableCell>{formatCurrency(wallet.total_bonus_earned)}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Pagination */}
+                  {totalWalletPages > 1 && (
+                    <div className="flex items-center justify-between mt-4">
+                      <p className="text-sm text-muted-foreground">
+                        Showing {(walletPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(walletPage * ITEMS_PER_PAGE, filteredWallets.length)} of {filteredWallets.length}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setWalletPage(p => Math.max(1, p - 1))}
+                          disabled={walletPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="flex items-center px-3 text-sm">
+                          Page {walletPage} of {totalWalletPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setWalletPage(p => Math.min(totalWalletPages, p + 1))}
+                          disabled={walletPage === totalWalletPages}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
