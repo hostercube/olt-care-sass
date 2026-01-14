@@ -9,10 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  Phone, Mail, MessageSquare, HelpCircle, Clock, Globe, Send, FileQuestion, 
+import {
+  Phone, Mail, MessageSquare, HelpCircle, Clock, Globe, Send, FileQuestion,
   CheckCircle, Ticket, Plus, Filter, ChevronRight, RefreshCw,
-  User, MessageCircle, Loader2
+  User, MessageCircle, Loader2, Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -72,7 +72,23 @@ export default function CustomerSupport() {
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  
+
+  const formatTicketNumber = (n?: string) => {
+    if (!n) return '';
+    if (n.length <= 14) return n;
+    return `${n.slice(0, 10)}…${n.slice(-4)}`;
+  };
+
+  const copyTicketNumber = async (n?: string) => {
+    if (!n) return;
+    try {
+      await navigator.clipboard.writeText(n);
+      toast.success('Ticket number copied');
+    } catch {
+      toast.error('Failed to copy');
+    }
+  };
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -353,9 +369,18 @@ export default function CustomerSupport() {
                     <Button variant="ghost" size="sm" onClick={() => setSelectedTicket(null)} className="mb-2">
                       ← Back to tickets
                     </Button>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 min-w-0">
                       <Badge className={getStatusColor(selectedTicket.status)}>{selectedTicket.status}</Badge>
-                      {selectedTicket.ticket_number}
+                      <span className="font-mono truncate">{formatTicketNumber(selectedTicket.ticket_number)}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => copyTicketNumber(selectedTicket.ticket_number)}
+                        aria-label="Copy ticket number"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
                     </CardTitle>
                     <p className="text-lg font-medium mt-1">{selectedTicket.subject}</p>
                     <p className="text-sm text-muted-foreground">
@@ -476,7 +501,7 @@ export default function CustomerSupport() {
                             <div className={`h-3 w-3 rounded-full ${getStatusColor(ticket.status)}`} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="font-mono text-sm text-muted-foreground">{ticket.ticket_number}</span>
+                                <span className="font-mono text-sm text-muted-foreground">{formatTicketNumber(ticket.ticket_number)}</span>
                                 <Badge variant={getPriorityColor(ticket.priority) as any} className="text-[10px]">
                                   {ticket.priority}
                                 </Badge>

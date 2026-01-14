@@ -56,13 +56,25 @@ export default function CustomerDashboardContent() {
 
   const isOnline = customer?.status === 'active';
 
-  const expiryDate = (() => {
-    const raw = customer?.expiry_date;
+  const parseDateValue = (raw: unknown): Date | null => {
     if (!raw || typeof raw !== 'string') return null;
-    // Prefer ISO parsing (DB timestamps are usually ISO). Fallback to Date ctor.
-    const d = raw.includes('T') ? parseISO(raw) : new Date(raw);
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    // parseISO handles both date-only (YYYY-MM-DD) and full timestamps.
+    const iso = parseISO(trimmed);
+    if (isValid(iso)) return iso;
+
+    const d = new Date(trimmed);
     return isValid(d) ? d : null;
-  })();
+  };
+
+  const safeFormat = (raw: unknown, fmt: string, fallback = 'N/A') => {
+    const d = raw instanceof Date ? raw : parseDateValue(raw);
+    return d ? format(d, fmt) : fallback;
+  };
+
+  const expiryDate = parseDateValue(customer?.expiry_date);
 
   const daysUntilExpiry = expiryDate ? differenceInDays(expiryDate, new Date()) : null;
 
@@ -730,7 +742,7 @@ export default function CustomerDashboardContent() {
                   <span className="text-xs">Start Date</span>
                 </div>
                 <p className="font-semibold text-sm">
-                  {customer?.connection_date ? format(new Date(customer.connection_date), 'dd MMM yyyy') : 'N/A'}
+                  {safeFormat(customer?.connection_date, 'dd MMM yyyy')}
                 </p>
               </div>
               <div className="p-3 rounded-xl bg-muted/50 border">
@@ -739,7 +751,7 @@ export default function CustomerDashboardContent() {
                   <span className="text-xs">Expiry Date</span>
                 </div>
                 <p className={`font-semibold text-sm ${daysUntilExpiry !== null && daysUntilExpiry <= 0 ? 'text-red-600' : ''}`}>
-                  {expiryDate ? format(expiryDate, 'dd MMM yyyy') : 'N/A'}
+                  {safeFormat(expiryDate, 'dd MMM yyyy')}
                 </p>
               </div>
             </div>
@@ -857,7 +869,7 @@ export default function CustomerDashboardContent() {
                     </div>
                     <div>
                       <p className="font-medium text-sm">{recharge.months || 1} Month(s)</p>
-                      <p className="text-xs text-muted-foreground">{format(new Date(recharge.recharge_date), 'dd MMM yyyy')}</p>
+                      <p className="text-xs text-muted-foreground">{safeFormat(recharge.recharge_date, 'dd MMM yyyy')}</p>
                     </div>
                   </div>
                   <div className="text-right">
