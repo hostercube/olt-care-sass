@@ -8005,8 +8005,6 @@ export type Database = {
         Args: { p_customer_id: string }
         Returns: {
           address: string
-          area_id: string
-          area_name: string
           connection_date: string
           customer_code: string
           download_speed: number
@@ -8014,30 +8012,19 @@ export type Database = {
           email: string
           expiry_date: string
           id: string
-          last_caller_id: string
-          last_ip_address: string
           last_payment_date: string
-          mikrotik_id: string
           monthly_bill: number
           name: string
-          nid_number: string
-          notes: string
-          onu_id: string
-          onu_index: number
           onu_mac: string
-          package_id: string
           package_name: string
           package_price: number
-          package_speed: number
-          package_validity_days: number
           phone: string
-          pon_port: string
-          pppoe_password: string
           pppoe_username: string
-          router_mac: string
-          speed_unit: string
           status: string
           tenant_id: string
+          tenant_logo_url: string
+          tenant_name: string
+          tenant_primary_color: string
           upload_speed: number
         }[]
       }

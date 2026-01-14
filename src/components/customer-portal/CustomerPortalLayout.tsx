@@ -106,20 +106,13 @@ export function CustomerPortalLayout() {
 
           setCustomer({
             ...c,
-            package: c.package_id ? {
-              id: c.package_id,
+            package: c.package_name ? {
               name: c.package_name,
-              speed: c.package_speed,
               price: c.package_price,
-              validity_days: c.package_validity_days,
               download_speed: c.download_speed,
               upload_speed: c.upload_speed,
-              speed_unit: c.speed_unit,
             } : null,
-            area: c.area_id ? {
-              id: c.area_id,
-              name: c.area_name,
-            } : null,
+            area: null, // Area not returned by RPC
           });
         } else {
           // Use session data as fallback
