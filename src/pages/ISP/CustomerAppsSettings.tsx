@@ -52,8 +52,18 @@ export default function CustomerAppsSettings() {
     maintenance_message: '',
   });
 
-  const [linkForm, setLinkForm] = useState({
-    category: 'custom' as const,
+  const [linkForm, setLinkForm] = useState<{
+    category: 'live_tv' | 'ftp' | 'news' | 'custom';
+    title: string;
+    url: string;
+    icon_url: string;
+    description: string;
+    is_active: boolean;
+    sort_order: number;
+    requires_login: boolean;
+    open_in_browser: boolean;
+  }>({
+    category: 'custom',
     title: '',
     url: '',
     icon_url: '',
@@ -102,7 +112,7 @@ export default function CustomerAppsSettings() {
     if (link) {
       setEditingLink(link);
       setLinkForm({
-        category: link.category,
+        category: link.category as 'live_tv' | 'ftp' | 'news' | 'custom',
         title: link.title,
         url: link.url,
         icon_url: link.icon_url || '',

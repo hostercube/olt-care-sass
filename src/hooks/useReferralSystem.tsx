@@ -35,8 +35,8 @@ export function useReferralSystem() {
         .from('customer_referrals')
         .select(`
           *,
-          referrer:referrer_customer_id(name, customer_code),
-          referred:referred_customer_id(name, customer_code)
+          referrer:customers!customer_referrals_referrer_customer_id_fkey(name, customer_code),
+          referred:customers!customer_referrals_referred_customer_id_fkey(name, customer_code)
         `)
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false });
