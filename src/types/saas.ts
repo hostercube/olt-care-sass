@@ -23,6 +23,7 @@ export type ModuleName =
   | 'isp_tickets'
   | 'isp_referral'
   | 'isp_customer_apps'
+  | 'isp_withdraw_requests'
   | 'landing_page'
   | 'customer_location'
   | 'sms_alerts'

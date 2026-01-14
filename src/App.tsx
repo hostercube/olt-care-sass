@@ -90,6 +90,7 @@ import ISPEmailTemplates from "./pages/ISP/EmailTemplates";
 import CustomerLocation from "./pages/ISP/CustomerLocation";
 import ReferralManagement from "./pages/ISP/ReferralManagement";
 import CustomerAppsSettings from "./pages/ISP/CustomerAppsSettings";
+import WithdrawRequests from "./pages/ISP/WithdrawRequests";
 import LocationCapture from "./pages/LocationCapture";
 
 // Customer Portal Pages
@@ -619,6 +620,15 @@ const App = () => (
                   <TenantAccessGuard>
                     <ModuleAccessGuard module="isp_customer_apps" moduleName="Customer Apps">
                       <CustomerAppsSettings />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/withdraw-requests" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_referral" moduleName="Withdraw Requests">
+                      <WithdrawRequests />
                     </ModuleAccessGuard>
                   </TenantAccessGuard>
                 </ProtectedRoute>
