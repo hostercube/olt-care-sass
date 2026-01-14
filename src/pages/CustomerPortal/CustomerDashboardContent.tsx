@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Wifi, WifiOff, CreditCard, Calendar, Package, Timer,
   Gauge, AlertCircle, History, TrendingUp, ChevronRight,
   Sparkles, Zap, Clock, ArrowUpRight, Shield, Star,
   Router, Network, Signal, RefreshCw, Power,
-  ArrowDownToLine, ArrowUpFromLine, Activity, Copy, Eye, EyeOff
+  ArrowDownToLine, ArrowUpFromLine, Activity, Copy, Eye, EyeOff,
+  ArrowRightLeft, CheckCircle2, Loader2
 } from 'lucide-react';
 import { format, differenceInDays, isValid, parseISO } from 'date-fns';
 import { toast } from 'sonner';
@@ -30,6 +32,17 @@ interface BandwidthData {
   upload: number;
 }
 
+interface ISPPackage {
+  id: string;
+  name: string;
+  price: number;
+  download_speed: number;
+  upload_speed: number;
+  speed_unit: string;
+  validity_days: number;
+  description: string | null;
+}
+
 export default function CustomerDashboardContent() {
   const navigate = useNavigate();
   const context = useOutletContext<{ customer: any; tenantBranding: any }>();
@@ -39,6 +52,12 @@ export default function CustomerDashboardContent() {
   const [bandwidthData, setBandwidthData] = useState<BandwidthData[]>([]);
   const [loadingDevice, setLoadingDevice] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Package management states
+  const [availablePackages, setAvailablePackages] = useState<ISPPackage[]>([]);
+  const [loadingPackages, setLoadingPackages] = useState(false);
+  const [showPackageDialog, setShowPackageDialog] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<ISPPackage | null>(null);
 
   // Handle case when customer data is not available
   if (!customer) {
@@ -258,6 +277,29 @@ export default function CustomerDashboardContent() {
     }
   }, [customer?.pppoe_username, customer?.tenant_id, customer?.onu_id]);
 
+  // Fetch available packages for tenant
+  const fetchAvailablePackages = useCallback(async () => {
+    if (!customer?.tenant_id) return;
+    
+    setLoadingPackages(true);
+    try {
+      const { data, error } = await supabase
+        .from('isp_packages')
+        .select('id, name, price, download_speed, upload_speed, speed_unit, validity_days, description')
+        .eq('tenant_id', customer.tenant_id)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+      
+      if (!error && data) {
+        setAvailablePackages(data as ISPPackage[]);
+      }
+    } catch (err) {
+      console.error('Error fetching packages:', err);
+    } finally {
+      setLoadingPackages(false);
+    }
+  }, [customer?.tenant_id]);
+
   useEffect(() => {
     const fetchData = async () => {
       if (!customer?.id) return;
@@ -274,7 +316,8 @@ export default function CustomerDashboardContent() {
 
     fetchData();
     fetchDeviceInfo();
-  }, [customer?.id, fetchDeviceInfo]);
+    fetchAvailablePackages();
+  }, [customer?.id, fetchDeviceInfo, fetchAvailablePackages]);
 
   // Poll bandwidth every 5 seconds
   useEffect(() => {
@@ -333,6 +376,21 @@ export default function CustomerDashboardContent() {
     return 'text-red-500';
   };
 
+  // Handle package change - navigates to pay page with selected package
+  const handleSelectPackage = (pkg: ISPPackage) => {
+    setSelectedPackage(pkg);
+    setShowPackageDialog(true);
+  };
+
+  const handleConfirmPackageChange = () => {
+    if (!selectedPackage) return;
+    
+    // Store the selected package ID in sessionStorage so PayBill page can pick it up
+    sessionStorage.setItem('pending_package_change', selectedPackage.id);
+    toast.success(`Package "${selectedPackage.name}" selected. Complete payment to activate.`);
+    setShowPackageDialog(false);
+    navigate('/portal/pay');
+  };
   return (
     <div className="space-y-6 pb-8">
       {/* Welcome Hero Section */}
@@ -924,6 +982,178 @@ export default function CustomerDashboardContent() {
           )}
         </CardContent>
       </Card>
+
+      {/* Available Packages Section */}
+      <Card className="border-2">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-purple-500/10">
+                <ArrowRightLeft className="h-5 w-5 text-purple-600" />
+              </div>
+              Available Packages
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Upgrade or change your package anytime
+            </CardDescription>
+          </div>
+          <Button variant="ghost" size="icon" onClick={fetchAvailablePackages} disabled={loadingPackages}>
+            <RefreshCw className={`h-4 w-4 ${loadingPackages ? 'animate-spin' : ''}`} />
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {loadingPackages ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : availablePackages.length === 0 ? (
+            <div className="text-center py-8">
+              <Package className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-muted-foreground">No packages available</p>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {availablePackages.map((pkg) => {
+                const isCurrentPackage = customer?.package_id === pkg.id || customer?.package?.id === pkg.id;
+                
+                return (
+                  <div
+                    key={pkg.id}
+                    className={`relative p-4 rounded-xl border-2 transition-all ${
+                      isCurrentPackage
+                        ? 'border-primary bg-primary/5 shadow-lg'
+                        : 'border-border hover:border-primary/50 hover:shadow-md'
+                    }`}
+                  >
+                    {isCurrentPackage && (
+                      <Badge className="absolute -top-2 left-3 bg-primary text-primary-foreground text-[10px]">
+                        Current Plan
+                      </Badge>
+                    )}
+                    
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-bold text-lg">{pkg.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {pkg.download_speed}/{pkg.upload_speed} {pkg.speed_unit || 'Mbps'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold text-primary">৳{pkg.price}</p>
+                        <p className="text-[10px] text-muted-foreground">/month</p>
+                      </div>
+                    </div>
+                    
+                    {pkg.description && (
+                      <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{pkg.description}</p>
+                    )}
+                    
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+                      <Clock className="h-3 w-3" />
+                      <span>{pkg.validity_days || 30} days validity</span>
+                    </div>
+                    
+                    <Button
+                      variant={isCurrentPackage ? 'secondary' : 'default'}
+                      size="sm"
+                      className="w-full"
+                      onClick={() => handleSelectPackage(pkg)}
+                      disabled={isCurrentPackage}
+                    >
+                      {isCurrentPackage ? (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Current Plan
+                        </>
+                      ) : (
+                        <>
+                          <ArrowRightLeft className="h-4 w-4 mr-2" />
+                          Change to This
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Package Change Confirmation Dialog */}
+      <Dialog open={showPackageDialog} onOpenChange={setShowPackageDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-5 w-5 text-primary" />
+              Change Package
+            </DialogTitle>
+            <DialogDescription>
+              You are about to change your package. Complete payment to activate the new package.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedPackage && (
+            <div className="space-y-4">
+              {/* Current Package */}
+              <div className="p-4 rounded-lg bg-muted/50 border">
+                <p className="text-xs text-muted-foreground mb-1">Current Package</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold">{customer?.package?.name || 'N/A'}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {customer?.package?.download_speed || 0}/{customer?.package?.upload_speed || 0} Mbps
+                    </p>
+                  </div>
+                  <p className="font-bold">৳{customer?.monthly_bill || customer?.package?.price || 0}</p>
+                </div>
+              </div>
+              
+              {/* Arrow */}
+              <div className="flex justify-center">
+                <div className="p-2 rounded-full bg-primary/10">
+                  <ArrowRightLeft className="h-5 w-5 text-primary" />
+                </div>
+              </div>
+              
+              {/* New Package */}
+              <div className="p-4 rounded-lg bg-primary/5 border-2 border-primary/30">
+                <p className="text-xs text-primary mb-1">New Package</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold">{selectedPackage.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedPackage.download_speed}/{selectedPackage.upload_speed} {selectedPackage.speed_unit || 'Mbps'}
+                    </p>
+                  </div>
+                  <p className="font-bold text-primary text-xl">৳{selectedPackage.price}</p>
+                </div>
+              </div>
+              
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-600">What happens next?</p>
+                    <p className="text-muted-foreground text-xs mt-1">
+                      You'll be redirected to the payment page. Once payment is complete, your new package will be activated automatically including MikroTik settings.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPackageDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmPackageChange}>
+              Continue to Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
