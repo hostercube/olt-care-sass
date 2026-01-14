@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,18 +34,30 @@ const THEME_COLOR_MAP: Record<string, string> = {
 export default function TenantLogin() {
   const navigate = useNavigate();
   const { tenantSlug: urlSlug } = useParams<{ tenantSlug: string }>();
+  const [searchParams] = useSearchParams();
   const { effectiveSlug: contextSlug } = useCustomDomainContext();
-  
+
   // Priority: URL param > context (from custom domain)
   const tenantSlug = urlSlug || contextSlug;
-  
+
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [tenantLoading, setTenantLoading] = useState(true);
   const [tenantError, setTenantError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('customer');
-  
+
+  const debug = searchParams.get('debug') === '1';
+  const backendHost = (() => {
+    const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    if (!url) return 'missing';
+    try {
+      return new URL(url).host;
+    } catch {
+      return url;
+    }
+  })();
+
   const [branding, setBranding] = useState<TenantBranding>({
     company_name: 'ISP Portal',
     subtitle: 'Internet Service Provider',
@@ -145,9 +157,9 @@ export default function TenantLogin() {
 
     try {
       const usernameInput = credentials.username.trim();
-      const passwordInput = credentials.password.trim();
+      const passwordRaw = credentials.password; // do NOT trim; PPPoE passwords can be space-sensitive
 
-      if (!usernameInput || !passwordInput) {
+      if (!usernameInput || !passwordRaw) {
         toast.error('Please enter both username and password');
         setLoading(false);
         return;
@@ -161,41 +173,60 @@ export default function TenantLogin() {
         pppoe_username: string;
       };
 
-      // Use secure RPC function for authentication (bypasses RLS securely)
-      const { data, error } = await supabase
-        .rpc('authenticate_customer', {
+      const normalizeCustomers = (data: unknown) => {
+        if (Array.isArray(data)) return data as CustomerAuth[];
+        if (data && typeof data === 'object') return [data as CustomerAuth];
+        return [] as CustomerAuth[];
+      };
+
+      const attempt = async (passwordCandidate: string) => {
+        return supabase.rpc('authenticate_customer' as any, {
           p_tenant_id: tenantId,
           p_username: usernameInput,
-          p_password: passwordInput
+          p_password: passwordCandidate,
         });
+      };
 
-      const customers = data as CustomerAuth[] | null;
+      let { data, error } = await attempt(passwordRaw);
+
+      if (!error) {
+        const customersFirst = normalizeCustomers(data);
+        const trimmed = passwordRaw.trim();
+        if (customersFirst.length === 0 && trimmed !== passwordRaw) {
+          ({ data, error } = await attempt(trimmed));
+        }
+      }
 
       if (error) {
-        console.error('Login query error:', error);
-        toast.error('Login failed. Please try again.');
+        console.error('Customer login RPC error:', error);
+        toast.error(error.message || 'Login failed. Please try again.');
         return;
       }
 
-      if (!customers || customers.length === 0) {
+      const customers = normalizeCustomers(data);
+
+      if (customers.length === 0) {
         toast.error('Invalid PPPoE username or password');
         return;
       }
 
       const customer = customers[0];
 
-      localStorage.setItem('customer_session', JSON.stringify({
-        id: customer.id,
-        name: customer.name,
-        tenant_id: customer.tenant_id,
-        pppoe_username: customer.pppoe_username,
-      }));
+      localStorage.setItem(
+        'customer_session',
+        JSON.stringify({
+          id: customer.id,
+          name: customer.name,
+          tenant_id: customer.tenant_id,
+          pppoe_username: customer.pppoe_username,
+        })
+      );
 
       toast.success('Login successful!');
       navigate('/portal/dashboard');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login error:', err);
-      toast.error('Login failed. Please try again.');
+      toast.error(err?.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -361,7 +392,7 @@ export default function TenantLogin() {
                 </TabsList>
               </Tabs>
             </CardHeader>
-            
+
             <CardContent className="pt-6">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 {/* Customer Login */}
@@ -461,6 +492,29 @@ export default function TenantLogin() {
                 </TabsContent>
 
                 {/* Staff Login */}
+
+          {debug && (
+            <Card className="border-border/50">
+              <CardHeader className="py-4">
+                <CardTitle className="text-sm">Debug</CardTitle>
+                <CardDescription className="text-xs">
+                  Confirm which backend this portal is connected to.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-xs space-y-1">
+                <div>
+                  <span className="text-muted-foreground">Backend host:</span> {backendHost}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Project ID:</span>{' '}
+                  {import.meta.env.VITE_SUPABASE_PROJECT_ID || 'missing'}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Mode:</span> {import.meta.env.MODE}
+                </div>
+              </CardContent>
+            </Card>
+          )}
                 <TabsContent value="staff" className="mt-0">
                   <form onSubmit={handleStaffLogin} className="space-y-4">
                     <div className="space-y-2">
