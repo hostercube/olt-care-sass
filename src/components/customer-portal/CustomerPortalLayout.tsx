@@ -53,20 +53,38 @@ export function CustomerPortalLayout() {
           return;
         }
 
-        // Fetch customer data - use service role bypass by selecting via RPC or direct query
-        const { data: customerData, error } = await supabase
-          .from('customers')
-          .select('*, package:isp_packages(*)')
-          .eq('id', id)
-          .maybeSingle();
+        // Fetch customer data using RPC function (bypasses RLS)
+        const { data: rpcResult, error } = await supabase
+          .rpc('get_customer_profile', { p_customer_id: id });
 
         if (error) {
-          console.error('Error fetching customer:', error);
-          // Don't logout on error - use session data as fallback
+          console.error('Error fetching customer via RPC:', error);
         }
         
-        if (customerData) {
-          setCustomer(customerData);
+        let effectiveTenantId = tenant_id;
+        
+        if (rpcResult && Array.isArray(rpcResult) && rpcResult.length > 0) {
+          // Convert RPC result to customer object with package nested
+          const c = rpcResult[0];
+          effectiveTenantId = c.tenant_id || tenant_id;
+          
+          setCustomer({
+            ...c,
+            package: c.package_id ? {
+              id: c.package_id,
+              name: c.package_name,
+              speed: c.package_speed,
+              price: c.package_price,
+              validity_days: c.package_validity_days,
+              download_speed: c.download_speed,
+              upload_speed: c.upload_speed,
+              speed_unit: c.speed_unit,
+            } : null,
+            area: c.area_id ? {
+              id: c.area_id,
+              name: c.area_name,
+            } : null,
+          });
         } else {
           // Use session data as fallback
           setCustomer({
@@ -78,8 +96,7 @@ export function CustomerPortalLayout() {
           });
         }
 
-        // Fetch tenant branding - use tenant_id from session or customerData
-        const effectiveTenantId = customerData?.tenant_id || tenant_id;
+        // Fetch tenant branding - use tenant_id from RPC result or session
         if (effectiveTenantId) {
           const { data: tenantData } = await supabase
             .from('tenants')
