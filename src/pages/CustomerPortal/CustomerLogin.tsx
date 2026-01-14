@@ -11,6 +11,13 @@ import { useTenantBrandingById } from '@/hooks/useTenantBranding';
 import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
 import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 
+type CustomerAuth = {
+  id: string;
+  name: string;
+  tenant_id: string;
+  pppoe_username: string;
+};
+
 export default function CustomerLogin() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -19,30 +26,27 @@ export default function CustomerLogin() {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaReset, setCaptchaReset] = useState(0);
-  const { settings: platformSettings, loading: settingsLoading } = usePlatformSettings();
+  const { settings: platformSettings } = usePlatformSettings();
   
-  const { branding, loading: brandingLoading } = useTenantBrandingById(tenantId);
+  const { branding } = useTenantBrandingById(tenantId);
 
   const [credentials, setCredentials] = useState({
-    username: '', // PPPoE username
-    password: '', // PPPoE password
+    username: '',
+    password: '',
   });
 
   const tenantSlug = searchParams.get('tenant');
 
-  // Use platform-level CAPTCHA settings
   const captchaSiteKey = platformSettings.captchaSiteKey?.trim() || '';
   const captchaEnabled = platformSettings.enableCaptcha === true && captchaSiteKey.length > 10;
 
   useEffect(() => {
-    // Check if already logged in
     const session = localStorage.getItem('customer_session');
     if (session) {
       navigate('/portal/dashboard');
       return;
     }
 
-    // Fetch tenant ID from slug if provided
     const fetchTenantData = async () => {
       if (tenantSlug) {
         const { data } = await supabase
@@ -59,7 +63,6 @@ export default function CustomerLogin() {
     fetchTenantData();
   }, [tenantSlug, navigate]);
 
-  // Apply favicon if available
   useEffect(() => {
     if (branding.favicon_url) {
       const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
@@ -96,66 +99,76 @@ export default function CustomerLogin() {
     setLoading(true);
 
     try {
-      // Find customer by PPPoE username (case-insensitive)
-      let query = supabase
-        .from('customers')
-        .select(`
-          id,
-          name,
-          phone,
-          email,
-          address,
-          status,
-          expiry_date,
-          due_amount,
-          monthly_bill,
-          pppoe_username,
-          pppoe_password,
-          tenant_id,
-          package_id,
-          area_id,
-          mikrotik_id,
-          onu_id,
-          customer_code
-        `)
-        .ilike('pppoe_username', usernameInput);
-
-      // Filter by tenant if specified
+      // Use secure RPC function for authentication (bypasses RLS securely)
       if (tenantId) {
-        query = query.eq('tenant_id', tenantId);
+        const { data, error } = await supabase
+          .rpc('authenticate_customer', {
+            p_tenant_id: tenantId,
+            p_username: usernameInput,
+            p_password: passwordInput
+          });
+
+        const customers = data as CustomerAuth[] | null;
+
+        if (error) {
+          console.error('Login query error:', error);
+          toast.error('Login failed. Please try again.');
+          resetCaptcha();
+          return;
+        }
+
+        if (!customers || customers.length === 0) {
+          toast.error('Invalid PPPoE username or password');
+          resetCaptcha();
+          return;
+        }
+
+        const customer = customers[0];
+
+        localStorage.setItem('customer_session', JSON.stringify({
+          id: customer.id,
+          name: customer.name,
+          tenant_id: customer.tenant_id,
+          pppoe_username: customer.pppoe_username,
+        }));
+
+        toast.success('Login successful!');
+        navigate('/portal/dashboard');
+      } else {
+        // No tenant specified - try global auth
+        const { data, error } = await supabase
+          .rpc('authenticate_customer_global' as any, {
+            p_username: usernameInput,
+            p_password: passwordInput
+          });
+
+        const customers = data as CustomerAuth[] | null;
+
+        if (error) {
+          console.error('Login query error:', error);
+          toast.error('Login failed. Please try again.');
+          resetCaptcha();
+          return;
+        }
+
+        if (!customers || customers.length === 0) {
+          toast.error('Invalid PPPoE username or password');
+          resetCaptcha();
+          return;
+        }
+
+        const customer = customers[0];
+
+        localStorage.setItem('customer_session', JSON.stringify({
+          id: customer.id,
+          name: customer.name,
+          tenant_id: customer.tenant_id,
+          pppoe_username: customer.pppoe_username,
+        }));
+
+        toast.success('Login successful!');
+        navigate('/portal/dashboard');
       }
-
-      const { data: customers, error } = await query;
-
-      if (error) {
-        console.error('Login query error:', error);
-        toast.error('Login failed. Please try again.');
-        resetCaptcha();
-        return;
-      }
-
-      // Find customer with matching password
-      const customer = customers?.find(c => 
-        c.pppoe_password === passwordInput ||
-        c.pppoe_password?.trim() === passwordInput
-      );
-
-      if (!customer) {
-        toast.error('Invalid PPPoE username or password');
-        resetCaptcha();
-        return;
-      }
-
-      // Store customer session
-      localStorage.setItem('customer_session', JSON.stringify({
-        id: customer.id,
-        name: customer.name,
-        tenant_id: customer.tenant_id,
-        pppoe_username: customer.pppoe_username,
-      }));
-
-      toast.success('Login successful!');
-      navigate('/portal/dashboard');
     } catch (err) {
       console.error('Login error:', err);
       toast.error('Login failed. Please try again.');
@@ -167,12 +180,10 @@ export default function CustomerLogin() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-background to-accent/10 flex flex-col">
-      {/* Top accent bar */}
       <div className="h-1 bg-gradient-to-r from-primary via-primary/60 to-primary/30" />
       
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-md space-y-6">
-          {/* Logo and branding */}
           <div className="text-center space-y-4">
             <div className="mx-auto h-20 w-20 rounded-2xl bg-gradient-to-br from-primary to-primary/60 shadow-lg shadow-primary/20 flex items-center justify-center overflow-hidden">
               {branding.logo_url ? (
@@ -189,7 +200,6 @@ export default function CustomerLogin() {
             </div>
           </div>
 
-          {/* Login Card */}
           <Card className="border-border/50 shadow-xl">
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-xl">Sign In</CardTitle>
@@ -279,7 +289,6 @@ export default function CustomerLogin() {
             </CardFooter>
           </Card>
 
-          {/* Features */}
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center p-3 rounded-lg bg-card border border-border/50">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
@@ -303,7 +312,6 @@ export default function CustomerLogin() {
         </div>
       </div>
 
-      {/* Footer */}
       <div className="text-center py-4 text-sm text-muted-foreground border-t bg-card/50">
         <p>© {new Date().getFullYear()} {branding.company_name || 'ISP Portal'}. All rights reserved.</p>
       </div>

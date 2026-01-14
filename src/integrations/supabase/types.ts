@@ -7931,6 +7931,44 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      authenticate_customer: {
+        Args: { p_password: string; p_tenant_id: string; p_username: string }
+        Returns: {
+          address: string
+          area_id: string
+          customer_code: string
+          due_amount: number
+          email: string
+          expiry_date: string
+          id: string
+          monthly_bill: number
+          name: string
+          package_id: string
+          phone: string
+          pppoe_username: string
+          status: string
+          tenant_id: string
+        }[]
+      }
+      authenticate_customer_global: {
+        Args: { p_password: string; p_username: string }
+        Returns: {
+          address: string
+          area_id: string
+          customer_code: string
+          due_amount: number
+          email: string
+          expiry_date: string
+          id: string
+          monthly_bill: number
+          name: string
+          package_id: string
+          phone: string
+          pppoe_username: string
+          status: string
+          tenant_id: string
+        }[]
+      }
       count_sub_resellers: { Args: { p_reseller_id: string }; Returns: number }
       export_tenant_data: { Args: { _tenant_id: string }; Returns: Json }
       generate_bill_number: { Args: { _tenant_id: string }; Returns: string }
