@@ -88,6 +88,8 @@ import ConnectionRequests from "./pages/ISP/ConnectionRequests";
 import ISPSMSTemplates from "./pages/ISP/SMSTemplates";
 import ISPEmailTemplates from "./pages/ISP/EmailTemplates";
 import CustomerLocation from "./pages/ISP/CustomerLocation";
+import ReferralManagement from "./pages/ISP/ReferralManagement";
+import CustomerAppsSettings from "./pages/ISP/CustomerAppsSettings";
 import LocationCapture from "./pages/LocationCapture";
 
 // Customer Portal Pages
@@ -100,6 +102,8 @@ import CustomerRecharges from "./pages/CustomerPortal/CustomerRecharges";
 import CustomerUsage from "./pages/CustomerPortal/CustomerUsage";
 import CustomerProfilePage from "./pages/CustomerPortal/CustomerProfile";
 import CustomerSupport from "./pages/CustomerPortal/CustomerSupport";
+import CustomerPackages from "./pages/CustomerPortal/CustomerPackages";
+import CustomerReferral from "./pages/CustomerPortal/CustomerReferral";
 
 // Reseller Portal Pages
 import ResellerLogin from "./pages/ResellerPortal/ResellerLogin";
@@ -601,6 +605,24 @@ const App = () => (
                   </TenantAccessGuard>
                 </ProtectedRoute>
               } />
+              <Route path="/isp/referrals" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_referral" moduleName="Referral System">
+                      <ReferralManagement />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
+              <Route path="/isp/customer-apps" element={
+                <ProtectedRoute>
+                  <TenantAccessGuard>
+                    <ModuleAccessGuard module="isp_customer_apps" moduleName="Customer Apps">
+                      <CustomerAppsSettings />
+                    </ModuleAccessGuard>
+                  </TenantAccessGuard>
+                </ProtectedRoute>
+              } />
 
               {/* Customer Portal Routes */}
               <Route path="/portal/login" element={<CustomerLogin />} />
@@ -627,6 +649,8 @@ const App = () => (
                 <Route path="usage" element={<CustomerUsage />} />
                 <Route path="profile" element={<CustomerProfilePage />} />
                 <Route path="support" element={<CustomerSupport />} />
+                <Route path="packages" element={<CustomerPackages />} />
+                <Route path="referral" element={<CustomerReferral />} />
               </Route>
 
               {/* Reseller Portal Routes */}
