@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,8 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Phone, Mail, MessageSquare, HelpCircle, Clock, Globe, Send, FileQuestion, 
-  AlertCircle, CheckCircle, Ticket, Plus, Filter, ChevronRight, RefreshCw,
-  Calendar, User, MessageCircle, Loader2
+  CheckCircle, Ticket, Plus, Filter, ChevronRight, RefreshCw,
+  User, MessageCircle, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';

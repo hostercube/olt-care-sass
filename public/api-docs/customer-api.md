@@ -1,18 +1,20 @@
 # Customer Mobile App - Complete API Documentation
 
-This document provides comprehensive API documentation for integrating a customer mobile app (Android/iOS) with the ISP Management System. The app communicates directly with the Supabase backend.
+This document provides comprehensive API documentation for integrating a customer mobile app (Android/iOS) with the ISP Management System. The app communicates directly with the Supabase backend and VPS polling server for device management.
 
 ## Table of Contents
 
 1. [Setup & Configuration](#setup--configuration)
 2. [Authentication](#authentication)
 3. [Customer Profile](#customer-profile)
-4. [Package & Recharge](#package--recharge)
-5. [Billing](#billing)
-6. [Payment Integration](#payment-integration)
-7. [Support Tickets](#support-tickets)
-8. [Realtime Updates](#realtime-updates)
-9. [Error Handling](#error-handling)
+4. [Device Management](#device-management)
+5. [Package & Recharge](#package--recharge)
+6. [Billing](#billing)
+7. [Payment Integration](#payment-integration)
+8. [Support Tickets](#support-tickets)
+9. [Live Bandwidth Monitoring](#live-bandwidth-monitoring)
+10. [Realtime Updates](#realtime-updates)
+11. [Error Handling](#error-handling)
 
 ---
 
@@ -249,6 +251,324 @@ class ProfileService {
     final expiry = DateTime.parse(expiryDate);
     final now = DateTime.now();
     return expiry.difference(now).inDays;
+  }
+}
+```
+
+---
+
+## Device Management
+
+The device management endpoints allow customers to view and control their network devices (Router/ONU). These operations require communication with the VPS polling server.
+
+### Get VPS URL from Tenant Settings
+
+```dart
+class DeviceService {
+  final supabase = Supabase.instance.client;
+  
+  /// Get the VPS polling server URL for the tenant
+  Future<String?> getVpsUrl(String tenantId) async {
+    try {
+      final tenant = await supabase
+          .from('tenants')
+          .select('vps_url')
+          .eq('id', tenantId)
+          .single();
+      
+      return tenant['vps_url'] as String?;
+    } catch (e) {
+      print('Error fetching VPS URL: $e');
+      return null;
+    }
+  }
+}
+```
+
+### Get Connection Details (PPPoE Session)
+
+```dart
+/// Get PPPoE session information from MikroTik
+Future<Map<String, dynamic>?> getConnectionDetails({
+  required String vpsUrl,
+  required String routerId,
+  required String pppoeUsername,
+}) async {
+  try {
+    final response = await http.get(
+      Uri.parse('$vpsUrl/api/mikrotik/$routerId/pppoe-sessions'),
+    );
+    
+    if (response.statusCode == 200) {
+      final List<dynamic> sessions = jsonDecode(response.body);
+      
+      // Find the customer's session
+      final session = sessions.firstWhere(
+        (s) => s['name'] == pppoeUsername,
+        orElse: () => null,
+      );
+      
+      return session != null ? {
+        'isOnline': true,
+        'ipAddress': session['address'] ?? 'N/A',
+        'uptime': session['uptime'] ?? 'N/A',
+        'callerId': session['caller-id'] ?? 'N/A',
+        'service': session['service'] ?? 'N/A',
+      } : {
+        'isOnline': false,
+        'ipAddress': 'N/A',
+        'uptime': 'N/A',
+      };
+    }
+    return null;
+  } catch (e) {
+    print('Error fetching connection details: $e');
+    return null;
+  }
+}
+```
+
+### Get Device Info (ONU Details from OLT)
+
+```dart
+/// Get ONU device information
+Future<Map<String, dynamic>?> getOnuInfo({
+  required String vpsUrl,
+  required String oltId,
+  required String ponPort,
+  required int onuIndex,
+}) async {
+  try {
+    final response = await http.get(
+      Uri.parse('$vpsUrl/api/olt/$oltId/onu/$ponPort/$onuIndex/info'),
+    );
+    
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return {
+        'name': data['name'] ?? 'Unknown',
+        'macAddress': data['mac_address'] ?? 'N/A',
+        'serialNumber': data['serial_number'] ?? 'N/A',
+        'status': data['status'] ?? 'unknown',
+        'rxPower': data['rx_power']?.toDouble() ?? 0.0,
+        'txPower': data['tx_power']?.toDouble() ?? 0.0,
+        'distance': data['distance'] ?? 'N/A',
+        'lastOnline': data['last_online'],
+      };
+    }
+    return null;
+  } catch (e) {
+    print('Error fetching ONU info: $e');
+    return null;
+  }
+}
+```
+
+### Reboot Router
+
+```dart
+/// Reboot MikroTik router (requires VPS support)
+Future<Map<String, dynamic>> rebootRouter({
+  required String vpsUrl,
+  required String routerId,
+  required String pppoeUsername,
+}) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$vpsUrl/api/mikrotik/$routerId/reboot-user'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'username': pppoeUsername}),
+    );
+    
+    if (response.statusCode == 200) {
+      return {'success': true, 'message': 'Router reboot initiated'};
+    }
+    return {'success': false, 'message': 'Failed to reboot router'};
+  } catch (e) {
+    return {'success': false, 'message': 'Connection error: $e'};
+  }
+}
+```
+
+### Reboot ONU
+
+```dart
+/// Reboot ONU device
+Future<Map<String, dynamic>> rebootOnu({
+  required String vpsUrl,
+  required String oltId,
+  required String ponPort,
+  required int onuIndex,
+}) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$vpsUrl/api/olt/$oltId/onu/$ponPort/$onuIndex/reboot'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode == 200) {
+      return {'success': true, 'message': 'ONU reboot initiated'};
+    }
+    return {'success': false, 'message': 'Failed to reboot ONU'};
+  } catch (e) {
+    return {'success': false, 'message': 'Connection error: $e'};
+  }
+}
+```
+
+### Reset Router (Disconnect PPPoE Session)
+
+```dart
+/// Reset PPPoE session (force reconnect)
+Future<Map<String, dynamic>> resetRouter({
+  required String vpsUrl,
+  required String routerId,
+  required String pppoeUsername,
+}) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$vpsUrl/api/mikrotik/$routerId/disconnect-pppoe'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'username': pppoeUsername}),
+    );
+    
+    if (response.statusCode == 200) {
+      return {'success': true, 'message': 'Session reset successful. Reconnecting...'};
+    }
+    return {'success': false, 'message': 'Failed to reset session'};
+  } catch (e) {
+    return {'success': false, 'message': 'Connection error: $e'};
+  }
+}
+```
+
+### Reset ONU
+
+```dart
+/// Reset ONU device
+Future<Map<String, dynamic>> resetOnu({
+  required String vpsUrl,
+  required String oltId,
+  required String ponPort,
+  required int onuIndex,
+}) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$vpsUrl/api/olt/$oltId/onu/$ponPort/$onuIndex/reset'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    
+    if (response.statusCode == 200) {
+      return {'success': true, 'message': 'ONU reset successful'};
+    }
+    return {'success': false, 'message': 'Failed to reset ONU'};
+  } catch (e) {
+    return {'success': false, 'message': 'Connection error: $e'};
+  }
+}
+```
+
+### Get Device Status (Combined)
+
+```dart
+/// Get complete device status including Router and ONU
+Future<Map<String, dynamic>> getFullDeviceStatus({
+  required String customerId,
+  required String tenantId,
+  required String vpsUrl,
+}) async {
+  try {
+    // 1. Get customer details
+    final customer = await supabase
+        .from('customers')
+        .select('''
+          pppoe_username,
+          mikrotik_id,
+          onu_mac,
+          router_mac,
+          onu_id,
+          onu_index,
+          pon_port,
+          mikrotik:mikrotik_routers(
+            id, name, ip_address
+          ),
+          onu:onus(
+            id, name, mac_address, serial_number, rx_power, tx_power, status,
+            olt:olts(id, name)
+          )
+        ''')
+        .eq('id', customerId)
+        .single();
+    
+    final result = {
+      'pppoeUsername': customer['pppoe_username'],
+      'routerMac': customer['router_mac'],
+      'onuMac': customer['onu_mac'],
+      'router': null,
+      'onu': null,
+      'session': null,
+    };
+    
+    // 2. Get router info
+    if (customer['mikrotik'] != null) {
+      result['router'] = {
+        'name': customer['mikrotik']['name'],
+        'ipAddress': customer['mikrotik']['ip_address'],
+      };
+    }
+    
+    // 3. Get ONU info
+    if (customer['onu'] != null) {
+      final onu = customer['onu'];
+      result['onu'] = {
+        'name': onu['name'],
+        'macAddress': onu['mac_address'],
+        'serialNumber': onu['serial_number'],
+        'rxPower': onu['rx_power'],
+        'txPower': onu['tx_power'],
+        'status': onu['status'],
+        'oltName': onu['olt']?['name'],
+      };
+    }
+    
+    // 4. Get live session info from MikroTik
+    if (customer['mikrotik_id'] != null && customer['pppoe_username'] != null) {
+      result['session'] = await getConnectionDetails(
+        vpsUrl: vpsUrl,
+        routerId: customer['mikrotik_id'],
+        pppoeUsername: customer['pppoe_username'],
+      );
+    }
+    
+    return result;
+  } catch (e) {
+    print('Error getting device status: $e');
+    return {};
+  }
+}
+```
+
+### Signal Quality Helper
+
+```dart
+/// Interpret ONU power readings
+class SignalQuality {
+  static String getRxQuality(double rxPower) {
+    if (rxPower >= -25) return 'excellent';
+    if (rxPower >= -28) return 'good';
+    if (rxPower >= -30) return 'fair';
+    return 'poor';
+  }
+  
+  static Color getRxColor(double rxPower) {
+    if (rxPower >= -25) return Colors.green;
+    if (rxPower >= -28) return Colors.blue;
+    if (rxPower >= -30) return Colors.orange;
+    return Colors.red;
+  }
+  
+  static String formatPower(double power) {
+    return '${power.toStringAsFixed(2)} dBm';
   }
 }
 ```
@@ -744,6 +1064,231 @@ class SupportService {
 
 ---
 
+## Live Bandwidth Monitoring
+
+Monitor real-time bandwidth usage from MikroTik router.
+
+### Get Live Bandwidth
+
+```dart
+class BandwidthService {
+  Timer? _pollingTimer;
+  final StreamController<Map<String, dynamic>> _bandwidthController = 
+      StreamController<Map<String, dynamic>>.broadcast();
+  
+  Stream<Map<String, dynamic>> get bandwidthStream => _bandwidthController.stream;
+  
+  /// Start polling for live bandwidth data
+  void startMonitoring({
+    required String vpsUrl,
+    required String routerId,
+    required String pppoeUsername,
+    int intervalSeconds = 5,
+  }) {
+    // Initial fetch
+    _fetchBandwidth(vpsUrl, routerId, pppoeUsername);
+    
+    // Start polling
+    _pollingTimer = Timer.periodic(
+      Duration(seconds: intervalSeconds),
+      (_) => _fetchBandwidth(vpsUrl, routerId, pppoeUsername),
+    );
+  }
+  
+  void stopMonitoring() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+  }
+  
+  Future<void> _fetchBandwidth(String vpsUrl, String routerId, String username) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$vpsUrl/api/mikrotik/$routerId/user-bandwidth/$username'),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _bandwidthController.add({
+          'downloadMbps': _bytesToMbps(data['rx_byte'] ?? 0),
+          'uploadMbps': _bytesToMbps(data['tx_byte'] ?? 0),
+          'downloadBytes': data['rx_byte'] ?? 0,
+          'uploadBytes': data['tx_byte'] ?? 0,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      print('Bandwidth fetch error: $e');
+    }
+  }
+  
+  double _bytesToMbps(int bytes) {
+    return (bytes * 8) / 1000000; // Convert bytes to Mbps
+  }
+  
+  void dispose() {
+    stopMonitoring();
+    _bandwidthController.close();
+  }
+}
+```
+
+### Bandwidth UI Widget Example
+
+```dart
+class BandwidthWidget extends StatefulWidget {
+  final String vpsUrl;
+  final String routerId;
+  final String pppoeUsername;
+  
+  const BandwidthWidget({
+    required this.vpsUrl,
+    required this.routerId,
+    required this.pppoeUsername,
+  });
+  
+  @override
+  State<BandwidthWidget> createState() => _BandwidthWidgetState();
+}
+
+class _BandwidthWidgetState extends State<BandwidthWidget> {
+  final BandwidthService _bandwidthService = BandwidthService();
+  List<Map<String, dynamic>> _history = [];
+  
+  @override
+  void initState() {
+    super.initState();
+    _bandwidthService.startMonitoring(
+      vpsUrl: widget.vpsUrl,
+      routerId: widget.routerId,
+      pppoeUsername: widget.pppoeUsername,
+    );
+    
+    _bandwidthService.bandwidthStream.listen((data) {
+      setState(() {
+        _history.add(data);
+        if (_history.length > 20) {
+          _history.removeAt(0);
+        }
+      });
+    });
+  }
+  
+  @override
+  void dispose() {
+    _bandwidthService.dispose();
+    super.dispose();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    final latest = _history.isNotEmpty ? _history.last : null;
+    
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Live Bandwidth', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildSpeedIndicator(
+                  'Download',
+                  latest?['downloadMbps'] ?? 0.0,
+                  Colors.green,
+                  Icons.arrow_downward,
+                ),
+                _buildSpeedIndicator(
+                  'Upload',
+                  latest?['uploadMbps'] ?? 0.0,
+                  Colors.blue,
+                  Icons.arrow_upward,
+                ),
+              ],
+            ),
+            // Add chart here using fl_chart or charts_flutter
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildSpeedIndicator(String label, double mbps, Color color, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 32),
+        SizedBox(height: 4),
+        Text(
+          '${mbps.toStringAsFixed(2)} Mbps',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+        ),
+        Text(label, style: TextStyle(color: Colors.grey)),
+      ],
+    );
+  }
+}
+```
+
+### Get Usage Statistics
+
+```dart
+/// Get bandwidth usage statistics for a period
+Future<Map<String, dynamic>?> getUsageStats({
+  required String customerId,
+  required String period, // 'day', 'week', 'month'
+}) async {
+  try {
+    // This would typically come from stored bandwidth readings
+    DateTime startDate;
+    final now = DateTime.now();
+    
+    switch (period) {
+      case 'day':
+        startDate = DateTime(now.year, now.month, now.day);
+        break;
+      case 'week':
+        startDate = now.subtract(Duration(days: 7));
+        break;
+      case 'month':
+        startDate = DateTime(now.year, now.month, 1);
+        break;
+      default:
+        startDate = DateTime(now.year, now.month, now.day);
+    }
+    
+    final readings = await supabase
+        .from('bandwidth_readings')
+        .select('download_bytes, upload_bytes, recorded_at')
+        .eq('customer_id', customerId)
+        .gte('recorded_at', startDate.toIso8601String())
+        .order('recorded_at');
+    
+    int totalDownload = 0;
+    int totalUpload = 0;
+    
+    for (final reading in readings) {
+      totalDownload += reading['download_bytes'] as int? ?? 0;
+      totalUpload += reading['upload_bytes'] as int? ?? 0;
+    }
+    
+    return {
+      'period': period,
+      'totalDownloadGB': totalDownload / (1024 * 1024 * 1024),
+      'totalUploadGB': totalUpload / (1024 * 1024 * 1024),
+      'totalGB': (totalDownload + totalUpload) / (1024 * 1024 * 1024),
+      'readings': readings.length,
+    };
+  } catch (e) {
+    print('Error fetching usage stats: $e');
+    return null;
+  }
+}
+```
+
+---
+
 ## Realtime Updates
 
 ### Subscribe to Profile Changes
@@ -904,6 +1449,140 @@ class CustomerAppService {
 
 ---
 
+## Complete Device Management Example
+
+```dart
+class CustomerDeviceManager {
+  final DeviceService _deviceService = DeviceService();
+  final BandwidthService _bandwidthService = BandwidthService();
+  
+  String? _vpsUrl;
+  Map<String, dynamic>? _deviceStatus;
+  
+  /// Initialize device management
+  Future<void> initialize(String tenantId) async {
+    _vpsUrl = await _deviceService.getVpsUrl(tenantId);
+  }
+  
+  /// Get all device information
+  Future<Map<String, dynamic>> getDeviceInfo(String customerId, String tenantId) async {
+    if (_vpsUrl == null) {
+      return {'error': 'VPS not configured'};
+    }
+    
+    _deviceStatus = await _deviceService.getFullDeviceStatus(
+      customerId: customerId,
+      tenantId: tenantId,
+      vpsUrl: _vpsUrl!,
+    );
+    
+    return _deviceStatus ?? {};
+  }
+  
+  /// Start bandwidth monitoring
+  void startBandwidthMonitoring(String routerId, String username) {
+    if (_vpsUrl == null) return;
+    
+    _bandwidthService.startMonitoring(
+      vpsUrl: _vpsUrl!,
+      routerId: routerId,
+      pppoeUsername: username,
+    );
+  }
+  
+  /// Reboot user's router
+  Future<Map<String, dynamic>> rebootMyRouter() async {
+    if (_vpsUrl == null || _deviceStatus == null) {
+      return {'success': false, 'message': 'Not initialized'};
+    }
+    
+    return await _deviceService.rebootRouter(
+      vpsUrl: _vpsUrl!,
+      routerId: _deviceStatus!['router']?['id'] ?? '',
+      pppoeUsername: _deviceStatus!['pppoeUsername'] ?? '',
+    );
+  }
+  
+  /// Reset PPPoE session
+  Future<Map<String, dynamic>> resetMyConnection() async {
+    if (_vpsUrl == null || _deviceStatus == null) {
+      return {'success': false, 'message': 'Not initialized'};
+    }
+    
+    return await _deviceService.resetRouter(
+      vpsUrl: _vpsUrl!,
+      routerId: _deviceStatus!['router']?['id'] ?? '',
+      pppoeUsername: _deviceStatus!['pppoeUsername'] ?? '',
+    );
+  }
+  
+  /// Reboot ONU
+  Future<Map<String, dynamic>> rebootMyOnu() async {
+    if (_vpsUrl == null || _deviceStatus == null) {
+      return {'success': false, 'message': 'Not initialized'};
+    }
+    
+    final onu = _deviceStatus!['onu'];
+    if (onu == null) {
+      return {'success': false, 'message': 'No ONU configured'};
+    }
+    
+    return await _deviceService.rebootOnu(
+      vpsUrl: _vpsUrl!,
+      oltId: onu['oltId'] ?? '',
+      ponPort: onu['ponPort'] ?? '',
+      onuIndex: onu['onuIndex'] ?? 0,
+    );
+  }
+  
+  void dispose() {
+    _bandwidthService.dispose();
+  }
+}
+```
+
+---
+
+## API Endpoints Summary
+
+### Supabase Database Tables
+
+| Table | Purpose | Key Fields |
+|-------|---------|------------|
+| `customers` | Customer profiles | id, tenant_id, pppoe_username, status, expiry_date |
+| `isp_packages` | Available packages | id, name, speed, price, validity_days |
+| `customer_recharges` | Recharge history | customer_id, amount, months, new_expiry |
+| `customer_bills` | Billing history | customer_id, bill_number, status, amount |
+| `customer_payments` | Payment records | customer_id, amount, payment_method |
+| `support_tickets` | Support tickets | customer_id, ticket_number, status, subject |
+| `ticket_comments` | Ticket replies | ticket_id, comment, created_by_name |
+| `tenants` | ISP settings | id, vps_url, name |
+| `mikrotik_routers` | Router config | id, name, ip_address |
+| `onus` | ONU devices | id, mac_address, rx_power, tx_power |
+| `olts` | OLT devices | id, name, ip_address |
+
+### VPS Polling Server Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/mikrotik/:routerId/pppoe-sessions` | GET | Get active PPPoE sessions |
+| `/api/mikrotik/:routerId/user-bandwidth/:username` | GET | Get live bandwidth for user |
+| `/api/mikrotik/:routerId/reboot-user` | POST | Reboot user's router |
+| `/api/mikrotik/:routerId/disconnect-pppoe` | POST | Reset PPPoE session |
+| `/api/mikrotik/:routerId/enable-pppoe` | POST | Enable PPPoE user |
+| `/api/olt/:oltId/onu/:ponPort/:onuIndex/info` | GET | Get ONU details |
+| `/api/olt/:oltId/onu/:ponPort/:onuIndex/reboot` | POST | Reboot ONU |
+| `/api/olt/:oltId/onu/:ponPort/:onuIndex/reset` | POST | Reset ONU |
+
+### RPC Functions
+
+| Function | Purpose | Parameters |
+|----------|---------|------------|
+| `authenticate_customer_global` | Login with PPPoE | p_username, p_password |
+| `authenticate_customer` | Login for specific tenant | p_tenant_id, p_username, p_password |
+
+---
+
 ## Security Notes
 
 1. **No Edge Functions Required**: All operations use Supabase client directly
@@ -911,9 +1590,51 @@ class CustomerAppService {
 3. **Session Storage**: Use secure storage for customer sessions on mobile
 4. **Password Handling**: Passwords are compared server-side via RPC functions
 5. **Realtime Subscriptions**: Auto-filter to customer's own data only
+6. **VPS Communication**: Device management goes through authenticated VPS polling server
+7. **Rate Limiting**: Implement rate limiting for device control operations
+
+---
+
+## Dependencies
+
+### Flutter/Dart
+
+```yaml
+dependencies:
+  supabase_flutter: ^2.0.0
+  shared_preferences: ^2.2.0
+  http: ^1.1.0
+  fl_chart: ^0.65.0  # For bandwidth graphs
+```
+
+### Android (Kotlin)
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("io.github.jan-tennert.supabase:postgrest-kt:2.0.0")
+    implementation("io.github.jan-tennert.supabase:realtime-kt:2.0.0")
+    implementation("io.ktor:ktor-client-android:2.3.0")
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.github.PhilJay:MPAndroidChart:v3.1.0") // For graphs
+}
+```
 
 ---
 
 ## Support
 
 For integration support, contact your ISP administrator or refer to the main documentation.
+
+### Quick Start Checklist
+
+1. ✅ Set up Supabase client with project URL and anon key
+2. ✅ Implement authentication using `authenticate_customer_global` RPC
+3. ✅ Store customer session securely
+4. ✅ Fetch customer profile with package and area details
+5. ✅ Get VPS URL from tenant settings
+6. ✅ Implement device status fetching
+7. ✅ Add recharge functionality with payment integration
+8. ✅ Implement support ticket system
+9. ✅ Add live bandwidth monitoring
+10. ✅ Set up realtime subscriptions for updates
