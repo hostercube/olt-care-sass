@@ -57,6 +57,7 @@ Content-Type: application/json
     "package_id": "uuid",
     "monthly_bill": 1000,
     "balance": 500,
+    "wallet_balance": 250,
     "expire_date": "2025-02-15",
     "referral_code": "ABC123"
   }
@@ -93,6 +94,7 @@ POST /rpc/get_customer_profile
   "status": "active",
   "monthly_bill": 1000,
   "balance": 500,
+  "wallet_balance": 250,
   "expire_date": "2025-02-15",
   "package_name": "Premium 50Mbps",
   "package_price": 1000,
@@ -182,6 +184,12 @@ POST /rpc/get_customer_apps_links
   }
 ]
 ```
+
+**Categories:**
+- `live_tv` - Live TV streaming links
+- `ftp` - FTP server links
+- `news` - News section links
+- `custom` - Custom/other links
 
 ---
 
@@ -307,12 +315,12 @@ POST /rpc/get_referral_config
 {
   "id": "uuid",
   "is_enabled": true,
-  "referrer_bonus_amount": 100,
-  "referrer_bonus_type": "credit",
-  "referee_bonus_amount": 50,
-  "referee_bonus_type": "discount",
-  "min_subscription_months": 1,
-  "max_referrals_per_month": 10
+  "bonus_type": "fixed",
+  "bonus_amount": 100,
+  "bonus_percentage": 0,
+  "min_referrals_for_bonus": 1,
+  "bonus_validity_days": 30,
+  "terms_and_conditions": "..."
 }
 ```
 
@@ -333,9 +341,135 @@ POST /rpc/track_referral_signup
 }
 ```
 
+### Get Customer Referrals
+Get list of referrals made by a customer.
+
+```http
+GET /customer_referrals?referrer_customer_id=eq.{customer_id}&order=created_at.desc
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "referral_code": "ABC123XY",
+    "referred_name": "John Doe",
+    "referred_phone": "01XXXXXXXXX",
+    "status": "active",
+    "bonus_amount": 100,
+    "bonus_paid_at": null,
+    "created_at": "2025-01-10T10:00:00Z"
+  }
+]
+```
+
 ---
 
-## 8. Support Tickets
+## 8. Wallet System
+
+### Get Wallet Balance
+Get customer's current wallet balance.
+
+**RPC Function:** `get_customer_wallet_balance`
+
+```http
+POST /rpc/get_customer_wallet_balance
+
+{
+  "p_customer_id": "uuid"
+}
+```
+
+**Response:**
+```json
+250.00
+```
+
+### Get Wallet Transactions
+Get customer's wallet transaction history.
+
+**RPC Function:** `get_customer_wallet_transactions`
+
+```http
+POST /rpc/get_customer_wallet_transactions
+
+{
+  "p_customer_id": "uuid"
+}
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "amount": 100,
+    "transaction_type": "referral_bonus",
+    "reference_type": "referral",
+    "reference_id": "uuid",
+    "status": "completed",
+    "notes": "Referral bonus for customer signup",
+    "created_at": "2025-01-10T10:00:00Z"
+  }
+]
+```
+
+### Create Withdraw Request
+Submit a withdraw request from wallet balance.
+
+**RPC Function:** `create_withdraw_request`
+
+```http
+POST /rpc/create_withdraw_request
+
+{
+  "p_customer_id": "uuid",
+  "p_amount": 100,
+  "p_payment_method": "bkash",
+  "p_payment_details": {
+    "account_number": "01XXXXXXXXX"
+  }
+}
+```
+
+**Response:**
+```json
+"withdraw_request_uuid"
+```
+
+### Get Withdraw Requests
+Get customer's withdraw request history.
+
+**RPC Function:** `get_customer_withdraw_requests`
+
+```http
+POST /rpc/get_customer_withdraw_requests
+
+{
+  "p_customer_id": "uuid"
+}
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "amount": 100,
+    "payment_method": "bkash",
+    "payment_details": {"account_number": "01XXXXXXXXX"},
+    "status": "pending",
+    "rejection_reason": null,
+    "processed_at": null,
+    "created_at": "2025-01-10T10:00:00Z"
+  }
+]
+```
+
+---
+
+## 9. Support Tickets
 
 ### Create Support Ticket
 Create a new support ticket.
@@ -363,7 +497,7 @@ GET /support_tickets?customer_id=eq.{customer_id}&order=created_at.desc
 
 ---
 
-## 9. Connection Request
+## 10. Connection Request
 
 ### Submit Connection Request
 Submit a new internet connection request.
@@ -385,13 +519,13 @@ POST /connection_requests
 
 ---
 
-## 10. Tenant Branding
+## 11. Tenant Branding
 
 ### Get Tenant Info
 Retrieve tenant branding information for the app.
 
 ```http
-GET /tenants?id=eq.{tenant_id}&select=company_name,logo_url,favicon_url,subtitle,theme_color
+GET /tenants?id=eq.{tenant_id}&select=company_name,logo_url,favicon_url,subtitle,theme_color,subdomain,custom_domain,landing_page_enabled
 ```
 
 **Response:**
@@ -402,9 +536,40 @@ GET /tenants?id=eq.{tenant_id}&select=company_name,logo_url,favicon_url,subtitle
     "logo_url": "https://example.com/logo.png",
     "favicon_url": "https://example.com/favicon.ico",
     "subtitle": "Fast & Reliable Internet",
-    "theme_color": "#3B82F6"
+    "theme_color": "#3B82F6",
+    "subdomain": "myisp",
+    "custom_domain": "isp.example.com",
+    "landing_page_enabled": true
   }
 ]
+```
+
+### Get Referral Link Domain
+For generating referral links, use this priority:
+1. Custom domain (if available): `https://{custom_domain}/?ref={referral_code}`
+2. Subdomain (if available): `https://{subdomain}.isppoint.com/?ref={referral_code}`
+3. Fallback to main domain: `https://isppoint.com/?ref={referral_code}`
+
+---
+
+## 12. Image Upload
+
+### Upload Image to Storage
+Upload images for profile, icons, etc.
+
+```javascript
+// Using Supabase Storage
+const { data, error } = await supabase.storage
+  .from('tenant-assets')
+  .upload(`customer-apps/${fileName}`, file, {
+    cacheControl: '3600',
+    upsert: false
+  });
+
+// Get public URL
+const { data: urlData } = supabase.storage
+  .from('tenant-assets')
+  .getPublicUrl(data.path);
 ```
 
 ---
@@ -426,6 +591,7 @@ Common error codes:
 - `403` - Forbidden (insufficient permissions)
 - `404` - Not found
 - `422` - Validation error
+- `INSUFFICIENT_BALANCE` - Not enough wallet balance
 
 ---
 
@@ -464,6 +630,29 @@ const { data, error } = await supabase.rpc('customer_portal_login', {
 const { data: profile } = await supabase.rpc('get_customer_profile', {
   p_customer_id: customerId
 })
+
+// Get app config
+const { data: config } = await supabase.rpc('get_customer_apps_config', {
+  p_tenant_id: tenantId
+})
+
+// Get referral stats
+const { data: stats } = await supabase.rpc('get_customer_referral_stats', {
+  p_customer_id: customerId
+})
+
+// Get wallet balance
+const { data: balance } = await supabase.rpc('get_customer_wallet_balance', {
+  p_customer_id: customerId
+})
+
+// Submit withdraw request
+const { data: requestId } = await supabase.rpc('create_withdraw_request', {
+  p_customer_id: customerId,
+  p_amount: 100,
+  p_payment_method: 'bkash',
+  p_payment_details: { account_number: '01XXXXXXXXX' }
+})
 ```
 
 ### Flutter/Dart
@@ -481,6 +670,81 @@ final response = await supabase.rpc('customer_portal_login', params: {
 final profile = await supabase.rpc('get_customer_profile', params: {
   'p_customer_id': customerId,
 });
+
+// Get app config
+final config = await supabase.rpc('get_customer_apps_config', params: {
+  'p_tenant_id': tenantId,
+});
+
+// Get referral stats
+final stats = await supabase.rpc('get_customer_referral_stats', params: {
+  'p_customer_id': customerId,
+});
+
+// Get wallet balance
+final balance = await supabase.rpc('get_customer_wallet_balance', params: {
+  'p_customer_id': customerId,
+});
+
+// Submit withdraw request
+final requestId = await supabase.rpc('create_withdraw_request', params: {
+  'p_customer_id': customerId,
+  'p_amount': 100,
+  'p_payment_method': 'bkash',
+  'p_payment_details': {'account_number': '01XXXXXXXXX'},
+});
+```
+
+### Kotlin/Android
+```kotlin
+val supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+// Login
+val response = supabase.rpc("customer_portal_login", mapOf(
+    "p_tenant_id" to tenantId,
+    "p_identifier" to phone,
+    "p_password" to password
+))
+
+// Get profile
+val profile = supabase.rpc("get_customer_profile", mapOf(
+    "p_customer_id" to customerId
+))
+
+// Get wallet balance
+val balance = supabase.rpc("get_customer_wallet_balance", mapOf(
+    "p_customer_id" to customerId
+))
+```
+
+---
+
+## Feature Flags
+
+Before displaying features, check the app config:
+
+```javascript
+const config = await supabase.rpc('get_customer_apps_config', { p_tenant_id: tenantId });
+
+// Check feature availability
+const showLiveTV = config.live_tv_enabled;
+const showFTP = config.ftp_enabled;
+const showNews = config.news_enabled;
+const showReferral = config.referral_enabled;
+const showSpeedTest = config.speed_test_enabled;
+
+// Check maintenance mode
+if (config.maintenance_mode) {
+  showMaintenanceScreen(config.maintenance_message);
+}
+
+// Check force update
+if (config.force_update_enabled) {
+  const currentVersion = getAppVersion();
+  if (isVersionLower(currentVersion, config.min_app_version)) {
+    showForceUpdateDialog();
+  }
+}
 ```
 
 ---
