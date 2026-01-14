@@ -7,7 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Gift, Copy, Users, DollarSign, CheckCircle, Clock, Share2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Gift, Copy, Users, DollarSign, CheckCircle, Clock, Share2, Wallet, ArrowDownCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -35,15 +38,31 @@ interface ReferralRecord {
   created_at: string;
 }
 
+const ITEMS_PER_PAGE = 10;
+
 export default function CustomerReferral() {
   const context = useOutletContext<CustomerContext>();
   const customer = context?.customer;
 
   const [referralCode, setReferralCode] = useState<string>('');
+  const [referralLink, setReferralLink] = useState<string>('');
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
+  const [filteredReferrals, setFilteredReferrals] = useState<ReferralRecord[]>([]);
   const [bonusPerReferral, setBonusPerReferral] = useState<number>(0);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  
+  // Pagination & Filter
+  const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  
+  // Withdraw dialog
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawMethod, setWithdrawMethod] = useState('bkash');
+  const [withdrawAccount, setWithdrawAccount] = useState('');
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const fetchReferralData = useCallback(async () => {
     if (!customer?.id || !customer?.tenant_id) return;
@@ -58,6 +77,19 @@ export default function CustomerReferral() {
       }
       setReferralCode(code || '');
 
+      // Get tenant domain for referral link
+      const { data: domainData } = await supabase
+        .rpc('get_tenant_referral_domain', { p_tenant_id: customer.tenant_id });
+      
+      if (domainData && code) {
+        const domain = domainData as string;
+        if (domain.includes('/')) {
+          setReferralLink(`https://${domain}?ref=${code}`);
+        } else {
+          setReferralLink(`https://${domain}?ref=${code}`);
+        }
+      }
+
       // Fetch referral stats
       const { data: statsData } = await supabase
         .rpc('get_customer_referral_stats', { p_customer_id: customer.id });
@@ -66,13 +98,18 @@ export default function CustomerReferral() {
         setStats(statsData[0]);
       }
 
+      // Fetch wallet balance
+      const { data: balanceData } = await supabase
+        .rpc('get_customer_wallet_balance', { p_customer_id: customer.id });
+      setWalletBalance(Number(balanceData) || 0);
+
       // Fetch referral config for bonus amount
       const { data: configData } = await supabase
         .rpc('get_referral_config', { p_tenant_id: customer.tenant_id });
       
       if (configData) {
         const config = typeof configData === 'string' ? JSON.parse(configData) : configData;
-        setBonusPerReferral(config?.referrer_bonus_amount || 0);
+        setBonusPerReferral(config?.bonus_amount || 0);
       }
 
       // Fetch referral history
@@ -80,8 +117,7 @@ export default function CustomerReferral() {
         .from('customer_referrals')
         .select('id, referred_name, referred_phone, status, bonus_amount, bonus_paid_at, created_at')
         .eq('referrer_customer_id', customer.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
+        .order('created_at', { ascending: false });
 
       setReferrals(referralData || []);
     } catch (error) {
@@ -95,6 +131,22 @@ export default function CustomerReferral() {
     fetchReferralData();
   }, [fetchReferralData]);
 
+  // Filter and paginate referrals
+  useEffect(() => {
+    let filtered = referrals;
+    if (statusFilter !== 'all') {
+      filtered = referrals.filter(r => r.status === statusFilter);
+    }
+    setFilteredReferrals(filtered);
+    setCurrentPage(1);
+  }, [referrals, statusFilter]);
+
+  const paginatedReferrals = filteredReferrals.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+  const totalPages = Math.ceil(filteredReferrals.length / ITEMS_PER_PAGE);
+
   const copyReferralCode = () => {
     if (referralCode) {
       navigator.clipboard.writeText(referralCode);
@@ -102,12 +154,20 @@ export default function CustomerReferral() {
     }
   };
 
+  const copyReferralLink = () => {
+    if (referralLink) {
+      navigator.clipboard.writeText(referralLink);
+      toast.success('Referral link copied!');
+    }
+  };
+
   const shareReferralLink = () => {
-    const shareText = `Join using my referral code: ${referralCode}`;
+    const shareText = `Join using my referral link: ${referralLink}`;
     if (navigator.share) {
       navigator.share({
         title: 'Join with my referral',
         text: shareText,
+        url: referralLink,
       });
     } else {
       navigator.clipboard.writeText(shareText);
@@ -115,14 +175,56 @@ export default function CustomerReferral() {
     }
   };
 
+  const handleWithdraw = async () => {
+    if (!customer?.id) return;
+    
+    const amount = parseFloat(withdrawAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+    if (amount > walletBalance) {
+      toast.error('Insufficient wallet balance');
+      return;
+    }
+    if (!withdrawAccount) {
+      toast.error('Please enter account number');
+      return;
+    }
+
+    setWithdrawing(true);
+    try {
+      const { error } = await supabase.rpc('create_withdraw_request', {
+        p_customer_id: customer.id,
+        p_amount: amount,
+        p_payment_method: withdrawMethod,
+        p_payment_details: { account_number: withdrawAccount }
+      });
+
+      if (error) throw error;
+
+      toast.success('Withdraw request submitted successfully!');
+      setWithdrawDialogOpen(false);
+      setWithdrawAmount('');
+      setWithdrawAccount('');
+      fetchReferralData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to submit withdraw request');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
+      case 'bonus_paid':
         return <Badge className="bg-green-500">Completed</Badge>;
       case 'pending':
         return <Badge variant="secondary">Pending</Badge>;
       case 'activated':
-        return <Badge className="bg-blue-500">Activated</Badge>;
+      case 'active':
+        return <Badge className="bg-blue-500">Active</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -154,27 +256,55 @@ export default function CustomerReferral() {
         </p>
       </div>
 
+      {/* Wallet Balance Card */}
+      <Card className="border-green-500/30 bg-gradient-to-r from-green-500/5 to-green-500/10">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-full bg-green-500/20">
+                <Wallet className="h-6 w-6 text-green-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Wallet Balance</p>
+                <p className="text-2xl font-bold text-green-500">৳{walletBalance.toFixed(2)}</p>
+              </div>
+            </div>
+            <Button onClick={() => setWithdrawDialogOpen(true)} disabled={walletBalance <= 0}>
+              <ArrowDownCircle className="h-4 w-4 mr-2" />
+              Withdraw
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Referral Code Card */}
       <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-primary/10">
         <CardHeader>
-          <CardTitle>Your Referral Code</CardTitle>
+          <CardTitle>Your Referral Link</CardTitle>
           <CardDescription>
-            Share this code with friends to earn ৳{bonusPerReferral} per successful referral
+            Share this link with friends to earn ৳{bonusPerReferral} per successful referral
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-2">
             <Input 
-              value={referralCode} 
+              value={referralLink || referralCode} 
               readOnly 
-              className="text-lg font-mono font-bold text-center bg-background"
+              className="text-sm font-mono bg-background"
             />
-            <Button variant="outline" size="icon" onClick={copyReferralCode}>
+            <Button variant="outline" size="icon" onClick={copyReferralLink}>
               <Copy className="h-4 w-4" />
             </Button>
             <Button variant="default" onClick={shareReferralLink}>
               <Share2 className="h-4 w-4 mr-2" />
               Share
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Code:</span>
+            <code className="bg-muted px-2 py-1 rounded font-mono">{referralCode}</code>
+            <Button variant="ghost" size="sm" onClick={copyReferralCode}>
+              <Copy className="h-3 w-3" />
             </Button>
           </div>
         </CardContent>
@@ -234,48 +364,144 @@ export default function CustomerReferral() {
       {/* Referral History */}
       <Card>
         <CardHeader>
-          <CardTitle>Referral History</CardTitle>
-          <CardDescription>People who signed up using your referral code</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Referral History</CardTitle>
+              <CardDescription>People who signed up using your referral code</CardDescription>
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="Filter" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
-          {referrals.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Bonus</TableHead>
-                  <TableHead>Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {referrals.map((referral) => (
-                  <TableRow key={referral.id}>
-                    <TableCell className="font-medium">{referral.referred_name || 'N/A'}</TableCell>
-                    <TableCell>{referral.referred_phone || 'N/A'}</TableCell>
-                    <TableCell>{getStatusBadge(referral.status)}</TableCell>
-                    <TableCell>
-                      {referral.bonus_paid_at ? (
-                        <span className="text-green-600 font-medium">৳{referral.bonus_amount}</span>
-                      ) : (
-                        <span className="text-muted-foreground">Pending</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{format(new Date(referral.created_at), 'dd MMM yyyy')}</TableCell>
+          {paginatedReferrals.length > 0 ? (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Bonus</TableHead>
+                    <TableHead>Date</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginatedReferrals.map((referral) => (
+                    <TableRow key={referral.id}>
+                      <TableCell className="font-medium">{referral.referred_name || 'N/A'}</TableCell>
+                      <TableCell>{referral.referred_phone || 'N/A'}</TableCell>
+                      <TableCell>{getStatusBadge(referral.status)}</TableCell>
+                      <TableCell>
+                        {referral.bonus_paid_at ? (
+                          <span className="text-green-600 font-medium">৳{referral.bonus_amount}</span>
+                        ) : (
+                          <span className="text-muted-foreground">Pending</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{format(new Date(referral.created_at), 'dd MMM yyyy')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <Gift className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p>No referrals yet</p>
-              <p className="text-sm">Share your referral code to start earning!</p>
+              <p className="text-sm">Share your referral link to start earning!</p>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Withdraw Dialog */}
+      <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw Funds</DialogTitle>
+            <DialogDescription>
+              Available balance: ৳{walletBalance.toFixed(2)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Amount</Label>
+              <Input
+                type="number"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                placeholder="Enter amount"
+                max={walletBalance}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Method</Label>
+              <Select value={withdrawMethod} onValueChange={setWithdrawMethod}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bkash">bKash</SelectItem>
+                  <SelectItem value="nagad">Nagad</SelectItem>
+                  <SelectItem value="rocket">Rocket</SelectItem>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Account Number</Label>
+              <Input
+                value={withdrawAccount}
+                onChange={(e) => setWithdrawAccount(e.target.value)}
+                placeholder="Enter account/mobile number"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWithdrawDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleWithdraw} disabled={withdrawing}>
+              {withdrawing ? 'Submitting...' : 'Submit Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

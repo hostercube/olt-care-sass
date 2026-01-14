@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useCustomerApps } from '@/hooks/useCustomerApps';
 import { LINK_CATEGORIES, type CustomerAppsLink } from '@/types/customerApps';
+import { ImageUploader } from '@/components/landing/ImageUploader';
 import {
   Smartphone, Settings, Link as LinkIcon, Tv, Server, Newspaper, Plus, Pencil, Trash2,
   Loader2, Save, Image, Palette, Bell, Shield, ExternalLink, Upload
@@ -216,20 +217,22 @@ export default function CustomerAppsSettings() {
                     placeholder="My ISP App"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>App Icon URL</Label>
-                  <Input
+                <div className="md:col-span-2">
+                  <ImageUploader
+                    label="App Icon"
                     value={formData.app_icon_url}
-                    onChange={(e) => setFormData(prev => ({ ...prev, app_icon_url: e.target.value }))}
-                    placeholder="https://example.com/icon.png"
+                    onChange={(url) => setFormData(prev => ({ ...prev, app_icon_url: url }))}
+                    folderPath="customer-apps/icons"
+                    placeholder="Upload app icon (512x512 recommended)"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Splash Screen URL</Label>
-                  <Input
+                <div className="md:col-span-2">
+                  <ImageUploader
+                    label="Splash Screen"
                     value={formData.splash_screen_url}
-                    onChange={(e) => setFormData(prev => ({ ...prev, splash_screen_url: e.target.value }))}
-                    placeholder="https://example.com/splash.png"
+                    onChange={(url) => setFormData(prev => ({ ...prev, splash_screen_url: url }))}
+                    folderPath="customer-apps/splash"
+                    placeholder="Upload splash screen image"
                   />
                 </div>
               </div>
@@ -290,12 +293,13 @@ export default function CustomerAppsSettings() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Dashboard Banner Image URL</Label>
-                  <Input
+                <div className="md:col-span-2">
+                  <ImageUploader
+                    label="Dashboard Banner Image"
                     value={formData.dashboard_banner_url}
-                    onChange={(e) => setFormData(prev => ({ ...prev, dashboard_banner_url: e.target.value }))}
-                    placeholder="https://example.com/banner.png"
+                    onChange={(url) => setFormData(prev => ({ ...prev, dashboard_banner_url: url }))}
+                    folderPath="customer-apps/banners"
+                    placeholder="Upload dashboard banner (1200x400 recommended)"
                   />
                 </div>
                 <div className="space-y-2">

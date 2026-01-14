@@ -2098,6 +2098,129 @@ export type Database = {
           },
         ]
       }
+      customer_wallet_transactions: {
+        Row: {
+          amount: number
+          created_at: string | null
+          customer_id: string
+          id: string
+          notes: string | null
+          processed_at: string | null
+          processed_by: string | null
+          reference_id: string | null
+          reference_type: string | null
+          status: string | null
+          tenant_id: string
+          transaction_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          customer_id: string
+          id?: string
+          notes?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          reference_id?: string | null
+          reference_type?: string | null
+          status?: string | null
+          tenant_id: string
+          transaction_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          customer_id?: string
+          id?: string
+          notes?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          reference_id?: string | null
+          reference_type?: string | null
+          status?: string | null
+          tenant_id?: string
+          transaction_type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_wallet_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_wallet_transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_withdraw_requests: {
+        Row: {
+          amount: number
+          created_at: string | null
+          customer_id: string
+          id: string
+          payment_details: Json | null
+          payment_method: string | null
+          processed_at: string | null
+          processed_by: string | null
+          rejection_reason: string | null
+          status: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          customer_id: string
+          id?: string
+          payment_details?: Json | null
+          payment_method?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          rejection_reason?: string | null
+          status?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          customer_id?: string
+          id?: string
+          payment_details?: Json | null
+          payment_method?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          rejection_reason?: string | null
+          status?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_withdraw_requests_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_withdraw_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string | null
@@ -2138,6 +2261,7 @@ export type Database = {
           status: Database["public"]["Enums"]["customer_status"]
           tenant_id: string
           updated_at: string
+          wallet_balance: number | null
         }
         Insert: {
           address?: string | null
@@ -2178,6 +2302,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["customer_status"]
           tenant_id: string
           updated_at?: string
+          wallet_balance?: number | null
         }
         Update: {
           address?: string | null
@@ -2218,6 +2343,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["customer_status"]
           tenant_id?: string
           updated_at?: string
+          wallet_balance?: number | null
         }
         Relationships: [
           {
@@ -8227,6 +8353,17 @@ export type Database = {
         }
         Returns: undefined
       }
+      add_wallet_transaction: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_notes?: string
+          p_reference_id?: string
+          p_reference_type?: string
+          p_type: string
+        }
+        Returns: string
+      }
       authenticate_customer: {
         Args: { p_password: string; p_tenant_id: string; p_username: string }
         Returns: {
@@ -8278,6 +8415,15 @@ export type Database = {
           id: string
           ticket_number: string
         }[]
+      }
+      create_withdraw_request: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_payment_details?: Json
+          p_payment_method: string
+        }
+        Returns: string
       }
       export_tenant_data: { Args: { _tenant_id: string }; Returns: Json }
       generate_bill_number: { Args: { _tenant_id: string }; Returns: string }
@@ -8354,6 +8500,57 @@ export type Database = {
           total_referrals: number
         }[]
       }
+      get_customer_wallet_balance: {
+        Args: { p_customer_id: string }
+        Returns: number
+      }
+      get_customer_wallet_transactions: {
+        Args: { p_customer_id: string; p_limit?: number }
+        Returns: {
+          amount: number
+          created_at: string | null
+          customer_id: string
+          id: string
+          notes: string | null
+          processed_at: string | null
+          processed_by: string | null
+          reference_id: string | null
+          reference_type: string | null
+          status: string | null
+          tenant_id: string
+          transaction_type: string
+          updated_at: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "customer_wallet_transactions"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_customer_withdraw_requests: {
+        Args: { p_customer_id: string }
+        Returns: {
+          amount: number
+          created_at: string | null
+          customer_id: string
+          id: string
+          payment_details: Json | null
+          payment_method: string | null
+          processed_at: string | null
+          processed_by: string | null
+          rejection_reason: string | null
+          status: string | null
+          tenant_id: string
+          updated_at: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "customer_withdraw_requests"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_enabled_payment_methods: {
         Args: never
         Returns: {
@@ -8409,6 +8606,7 @@ export type Database = {
           status: Database["public"]["Enums"]["customer_status"]
           tenant_id: string
           updated_at: string
+          wallet_balance: number | null
         }[]
         SetofOptions: {
           from: "*"
@@ -8427,6 +8625,10 @@ export type Database = {
           parent_id: string
           role: string
         }[]
+      }
+      get_tenant_referral_domain: {
+        Args: { p_tenant_id: string }
+        Returns: string
       }
       get_user_tenant_id: { Args: never; Returns: string }
       get_user_tenant_ids: { Args: never; Returns: string[] }
@@ -8506,6 +8708,14 @@ export type Database = {
           _trx_id: string
         }
         Returns: Json
+      }
+      process_withdraw_request: {
+        Args: {
+          p_action: string
+          p_rejection_reason?: string
+          p_request_id: string
+        }
+        Returns: boolean
       }
       queue_subscription_reminders: { Args: never; Returns: undefined }
       reseller_pay_customer: {
