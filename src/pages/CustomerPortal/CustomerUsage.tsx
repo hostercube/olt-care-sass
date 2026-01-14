@@ -7,15 +7,17 @@ import { Gauge, Download, Upload, Wifi, Activity, Signal, Clock, Zap } from 'luc
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 
+type BandwidthPoint = { time: string; rx: number; tx: number };
+
 export default function CustomerUsage() {
   const context = useOutletContext<{ customer: any }>();
   const customer = context?.customer;
-  const [bandwidthData, setBandwidthData] = useState<{ time: string; rx: number; tx: number }[]>([]);
+  const [bandwidthData, setBandwidthData] = useState<BandwidthPoint[]>([]);
 
   useEffect(() => {
     // Generate simulated bandwidth data
-    const generateData = () => {
-      const data = [];
+    const generateData = (): BandwidthPoint[] => {
+      const data: BandwidthPoint[] = [];
       const now = new Date();
       for (let i = 30; i >= 0; i--) {
         const time = new Date(now.getTime() - i * 60000);
@@ -31,8 +33,8 @@ export default function CustomerUsage() {
 
     // Refresh periodically
     const interval = setInterval(() => {
-      setBandwidthData(prev => {
-        const newData = [...prev.slice(1)];
+      setBandwidthData((prev: BandwidthPoint[]) => {
+        const newData: BandwidthPoint[] = [...prev.slice(1)];
         newData.push({
           time: format(new Date(), 'HH:mm'),
           rx: Math.floor(Math.random() * 50 + 10),
