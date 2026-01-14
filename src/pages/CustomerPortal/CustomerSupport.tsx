@@ -79,25 +79,19 @@ export default function CustomerSupport() {
 
   const fetchTickets = useCallback(async () => {
     if (!customer?.id) return;
-    
+
     setLoading(true);
     try {
-      let query = supabase
-        .from('support_tickets')
-        .select('*')
-        .eq('customer_id', customer.id)
-        .order('created_at', { ascending: false });
-
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter as 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed');
-      }
-
-      const { data, error } = await query;
+      const { data, error } = await supabase.rpc('list_customer_support_tickets', {
+        p_customer_id: customer.id,
+        p_status: statusFilter,
+      });
 
       if (error) throw error;
-      setTickets(data || []);
+      setTickets((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching tickets:', err);
+      toast.error('Failed to load tickets');
     } finally {
       setLoading(false);
     }
@@ -123,17 +117,16 @@ export default function CustomerSupport() {
   const fetchTicketComments = async (ticketId: string) => {
     setCommentsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('ticket_comments')
-        .select('*')
-        .eq('ticket_id', ticketId)
-        .eq('is_internal', false)
-        .order('created_at', { ascending: true });
+      const { data, error } = await supabase.rpc('list_customer_ticket_comments', {
+        p_customer_id: customer.id,
+        p_ticket_id: ticketId,
+      });
 
       if (error) throw error;
-      setTicketComments(data || []);
+      setTicketComments((data as any[]) || []);
     } catch (err) {
       console.error('Error fetching comments:', err);
+      toast.error('Failed to load conversation');
     } finally {
       setCommentsLoading(false);
     }
@@ -152,32 +145,26 @@ export default function CustomerSupport() {
 
     setSubmitting(true);
     try {
-      // Generate ticket number
-      const ticketNumber = `TKT${Date.now().toString(36).toUpperCase()}`;
-
-      const { error } = await supabase.from('support_tickets').insert({
-        tenant_id: customer.tenant_id,
-        ticket_number: ticketNumber,
-        customer_id: customer.id,
-        customer_name: customer.name,
-        customer_phone: customer.phone,
-        customer_email: customer.email,
-        subject: newTicketForm.subject,
-        description: newTicketForm.description || null,
-        category: newTicketForm.category || null,
-        priority: newTicketForm.priority,
-        status: 'open',
+      const { data, error } = await supabase.rpc('create_customer_support_ticket', {
+        p_customer_id: customer.id,
+        p_subject: newTicketForm.subject,
+        p_description: newTicketForm.description || null,
+        p_category: newTicketForm.category || null,
+        p_priority: newTicketForm.priority,
       });
 
       if (error) throw error;
 
-      toast.success(`Ticket ${ticketNumber} created successfully!`);
+      const row = Array.isArray(data) ? data[0] : data;
+      const ticketNumber = row?.ticket_number || 'Ticket';
+
+      toast.success(`${ticketNumber} created successfully!`);
       setNewTicketForm({ subject: '', description: '', category: '', priority: 'medium' });
       setShowNewTicket(false);
       fetchTickets();
     } catch (err: any) {
       console.error('Error creating ticket:', err);
-      toast.error(err.message || 'Failed to create ticket');
+      toast.error(err?.message || 'Failed to create ticket');
     } finally {
       setSubmitting(false);
     }
@@ -188,12 +175,11 @@ export default function CustomerSupport() {
 
     setSendingReply(true);
     try {
-      const { error } = await supabase.from('ticket_comments').insert({
-        ticket_id: selectedTicket.id,
-        tenant_id: customer.tenant_id,
-        comment: replyMessage,
-        is_internal: false,
-        created_by_name: customer.name,
+      const { error } = await supabase.rpc('add_customer_ticket_comment', {
+        p_customer_id: customer.id,
+        p_ticket_id: selectedTicket.id,
+        p_comment: replyMessage,
+        p_created_by_name: customer.name,
       });
 
       if (error) throw error;
@@ -201,9 +187,9 @@ export default function CustomerSupport() {
       toast.success('Reply sent');
       setReplyMessage('');
       fetchTicketComments(selectedTicket.id);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error sending reply:', err);
-      toast.error('Failed to send reply');
+      toast.error(err?.message || 'Failed to send reply');
     } finally {
       setSendingReply(false);
     }
