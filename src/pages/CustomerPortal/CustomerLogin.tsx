@@ -26,6 +26,17 @@ export default function CustomerLogin() {
   const [captchaReset, setCaptchaReset] = useState(0);
   const { settings: platformSettings } = usePlatformSettings();
 
+  const debug = searchParams.get('debug') === '1';
+  const backendHost = (() => {
+    const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    if (!url) return 'missing';
+    try {
+      return new URL(url).host;
+    } catch {
+      return url;
+    }
+  })();
+
   const [credentials, setCredentials] = useState({
     username: '',
     password: '',
@@ -50,11 +61,11 @@ export default function CustomerLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const usernameInput = credentials.username.trim();
-    const passwordInput = credentials.password.trim();
 
-    if (!usernameInput || !passwordInput) {
+    const usernameInput = credentials.username.trim();
+    const passwordRaw = credentials.password; // do NOT trim; PPPoE passwords can be space-sensitive
+
+    if (!usernameInput || !passwordRaw) {
       toast.error('Please enter both username and password');
       return;
     }
@@ -66,24 +77,42 @@ export default function CustomerLogin() {
 
     setLoading(true);
 
-    try {
-      // Use global auth - find customer from any tenant by PPPoE credentials
-      const { data, error } = await supabase
-        .rpc('authenticate_customer_global' as any, {
-          p_username: usernameInput,
-          p_password: passwordInput
-        });
+    const normalizeCustomers = (data: unknown) => {
+      if (Array.isArray(data)) return data as CustomerAuth[];
+      if (data && typeof data === 'object') return [data as CustomerAuth];
+      return [] as CustomerAuth[];
+    };
 
-      const customers = data as CustomerAuth[] | null;
+    const attempt = async (passwordCandidate: string) => {
+      return supabase.rpc('authenticate_customer_global' as any, {
+        p_username: usernameInput,
+        p_password: passwordCandidate,
+      });
+    };
+
+    try {
+      // Try exact password first
+      let { data, error } = await attempt(passwordRaw);
+
+      // If user accidentally typed leading/trailing spaces, try trimmed variant as fallback
+      if (!error) {
+        const customersFirst = normalizeCustomers(data);
+        const trimmed = passwordRaw.trim();
+        if (customersFirst.length === 0 && trimmed !== passwordRaw) {
+          ({ data, error } = await attempt(trimmed));
+        }
+      }
 
       if (error) {
-        console.error('Login query error:', error);
-        toast.error('Login failed. Please try again.');
+        console.error('Customer login RPC error:', error);
+        toast.error(error.message || 'Login failed. Please try again.');
         resetCaptcha();
         return;
       }
 
-      if (!customers || customers.length === 0) {
+      const customers = normalizeCustomers(data);
+
+      if (customers.length === 0) {
         toast.error('Invalid PPPoE username or password');
         resetCaptcha();
         return;
@@ -91,18 +120,21 @@ export default function CustomerLogin() {
 
       const customer = customers[0];
 
-      localStorage.setItem('customer_session', JSON.stringify({
-        id: customer.id,
-        name: customer.name,
-        tenant_id: customer.tenant_id,
-        pppoe_username: customer.pppoe_username,
-      }));
+      localStorage.setItem(
+        'customer_session',
+        JSON.stringify({
+          id: customer.id,
+          name: customer.name,
+          tenant_id: customer.tenant_id,
+          pppoe_username: customer.pppoe_username,
+        })
+      );
 
       toast.success('Login successful!');
       navigate('/portal/dashboard');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login error:', err);
-      toast.error('Login failed. Please try again.');
+      toast.error(err?.message || 'Login failed. Please try again.');
       resetCaptcha();
     } finally {
       setLoading(false);
@@ -228,6 +260,29 @@ export default function CustomerLogin() {
               )}
             </CardFooter>
           </Card>
+
+          {debug && (
+            <Card className="border-border/50">
+              <CardHeader className="py-4">
+                <CardTitle className="text-sm">Debug</CardTitle>
+                <CardDescription className="text-xs">
+                  Confirm which backend this build is connected to.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-xs space-y-1">
+                <div>
+                  <span className="text-muted-foreground">Backend host:</span> {backendHost}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Project ID:</span>{' '}
+                  {import.meta.env.VITE_SUPABASE_PROJECT_ID || 'missing'}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Mode:</span> {import.meta.env.MODE}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center p-3 rounded-lg bg-card border border-border/50">
