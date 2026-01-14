@@ -5,9 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-import { Wifi, User, Lock, Loader2, Eye, EyeOff, Shield, Zap, Clock } from 'lucide-react';
+import { Wifi, User, Lock, Loader2, Eye, EyeOff, Shield, Zap, Clock, ArrowLeft, Home } from 'lucide-react';
 import { toast } from 'sonner';
-import { useTenantBrandingById } from '@/hooks/useTenantBranding';
 import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
 import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 
@@ -23,19 +22,14 @@ export default function CustomerLogin() {
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [tenantId, setTenantId] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaReset, setCaptchaReset] = useState(0);
   const { settings: platformSettings } = usePlatformSettings();
-  
-  const { branding } = useTenantBrandingById(tenantId);
 
   const [credentials, setCredentials] = useState({
     username: '',
     password: '',
   });
-
-  const tenantSlug = searchParams.get('tenant');
 
   const captchaSiteKey = platformSettings.captchaSiteKey?.trim() || '';
   const captchaEnabled = platformSettings.enableCaptcha === true && captchaSiteKey.length > 10;
@@ -46,34 +40,8 @@ export default function CustomerLogin() {
       navigate('/portal/dashboard');
       return;
     }
-
-    const fetchTenantData = async () => {
-      if (tenantSlug) {
-        const { data } = await supabase
-          .from('tenants')
-          .select('id')
-          .or(`subdomain.eq.${tenantSlug},custom_domain.eq.${tenantSlug}`)
-          .single();
-        if (data) {
-          setTenantId(data.id);
-        }
-      }
-    };
-
-    fetchTenantData();
-  }, [tenantSlug, navigate]);
-
-  useEffect(() => {
-    if (branding.favicon_url) {
-      const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
-      if (link) {
-        link.href = branding.favicon_url;
-      }
-    }
-    if (branding.company_name) {
-      document.title = `${branding.company_name} - Customer Portal`;
-    }
-  }, [branding]);
+    document.title = 'Customer Login - ISP Portal';
+  }, [navigate]);
 
   const resetCaptcha = () => {
     setCaptchaToken(null);
@@ -99,76 +67,39 @@ export default function CustomerLogin() {
     setLoading(true);
 
     try {
-      // Use secure RPC function for authentication (bypasses RLS securely)
-      if (tenantId) {
-        const { data, error } = await supabase
-          .rpc('authenticate_customer', {
-            p_tenant_id: tenantId,
-            p_username: usernameInput,
-            p_password: passwordInput
-          });
+      // Use global auth - find customer from any tenant by PPPoE credentials
+      const { data, error } = await supabase
+        .rpc('authenticate_customer_global' as any, {
+          p_username: usernameInput,
+          p_password: passwordInput
+        });
 
-        const customers = data as CustomerAuth[] | null;
+      const customers = data as CustomerAuth[] | null;
 
-        if (error) {
-          console.error('Login query error:', error);
-          toast.error('Login failed. Please try again.');
-          resetCaptcha();
-          return;
-        }
-
-        if (!customers || customers.length === 0) {
-          toast.error('Invalid PPPoE username or password');
-          resetCaptcha();
-          return;
-        }
-
-        const customer = customers[0];
-
-        localStorage.setItem('customer_session', JSON.stringify({
-          id: customer.id,
-          name: customer.name,
-          tenant_id: customer.tenant_id,
-          pppoe_username: customer.pppoe_username,
-        }));
-
-        toast.success('Login successful!');
-        navigate('/portal/dashboard');
-      } else {
-        // No tenant specified - try global auth
-        const { data, error } = await supabase
-          .rpc('authenticate_customer_global' as any, {
-            p_username: usernameInput,
-            p_password: passwordInput
-          });
-
-        const customers = data as CustomerAuth[] | null;
-
-        if (error) {
-          console.error('Login query error:', error);
-          toast.error('Login failed. Please try again.');
-          resetCaptcha();
-          return;
-        }
-
-        if (!customers || customers.length === 0) {
-          toast.error('Invalid PPPoE username or password');
-          resetCaptcha();
-          return;
-        }
-
-        const customer = customers[0];
-
-        localStorage.setItem('customer_session', JSON.stringify({
-          id: customer.id,
-          name: customer.name,
-          tenant_id: customer.tenant_id,
-          pppoe_username: customer.pppoe_username,
-        }));
-
-        toast.success('Login successful!');
-        navigate('/portal/dashboard');
+      if (error) {
+        console.error('Login query error:', error);
+        toast.error('Login failed. Please try again.');
+        resetCaptcha();
+        return;
       }
+
+      if (!customers || customers.length === 0) {
+        toast.error('Invalid PPPoE username or password');
+        resetCaptcha();
+        return;
+      }
+
+      const customer = customers[0];
+
+      localStorage.setItem('customer_session', JSON.stringify({
+        id: customer.id,
+        name: customer.name,
+        tenant_id: customer.tenant_id,
+        pppoe_username: customer.pppoe_username,
+      }));
+
+      toast.success('Login successful!');
+      navigate('/portal/dashboard');
     } catch (err) {
       console.error('Login error:', err);
       toast.error('Login failed. Please try again.');
@@ -182,28 +113,37 @@ export default function CustomerLogin() {
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-background to-accent/10 flex flex-col">
       <div className="h-1 bg-gradient-to-r from-primary via-primary/60 to-primary/30" />
       
+      {/* Back to Home Button */}
+      <div className="absolute top-4 left-4 z-10">
+        <Button
+          variant="ghost"
+          onClick={() => navigate('/')}
+          className="gap-2 text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <Home className="h-4 w-4" />
+          <span className="hidden sm:inline">Back to Home</span>
+        </Button>
+      </div>
+      
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-md space-y-6">
           <div className="text-center space-y-4">
             <div className="mx-auto h-20 w-20 rounded-2xl bg-gradient-to-br from-primary to-primary/60 shadow-lg shadow-primary/20 flex items-center justify-center overflow-hidden">
-              {branding.logo_url ? (
-                <img src={branding.logo_url} alt={branding.company_name || 'Logo'} className="h-full w-full object-contain p-1" />
-              ) : (
-                <Wifi className="h-10 w-10 text-primary-foreground" />
-              )}
+              <Wifi className="h-10 w-10 text-primary-foreground" />
             </div>
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-                {branding.company_name || 'Customer Portal'}
+                Customer Portal
               </h1>
-              <p className="text-muted-foreground mt-1">{branding.subtitle || 'Internet Service Provider'}</p>
+              <p className="text-muted-foreground mt-1">Sign in with your PPPoE credentials</p>
             </div>
           </div>
 
           <Card className="border-border/50 shadow-xl">
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-xl">Sign In</CardTitle>
-              <CardDescription>Enter your PPPoE credentials to continue</CardDescription>
+              <CardDescription>Enter your PPPoE username and password</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleLogin} className="space-y-4">
@@ -215,7 +155,7 @@ export default function CustomerLogin() {
                       id="username"
                       value={credentials.username}
                       onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-                      placeholder="Enter your username"
+                      placeholder="Enter your PPPoE username"
                       className="pl-10 h-11"
                       required
                       autoComplete="username"
@@ -232,7 +172,7 @@ export default function CustomerLogin() {
                       type={showPassword ? 'text' : 'password'}
                       value={credentials.password}
                       onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                      placeholder="Enter your password"
+                      placeholder="Enter your PPPoE password"
                       className="pl-10 pr-10 h-11"
                       required
                       autoComplete="current-password"
@@ -313,7 +253,7 @@ export default function CustomerLogin() {
       </div>
 
       <div className="text-center py-4 text-sm text-muted-foreground border-t bg-card/50">
-        <p>© {new Date().getFullYear()} {branding.company_name || 'ISP Portal'}. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} ISP Portal. All rights reserved.</p>
       </div>
     </div>
   );
