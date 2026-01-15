@@ -474,23 +474,28 @@ export default function CustomerPayBill() {
     if (walletDeduction > 0) notes += ` (Wallet: ৳${walletDeduction})`;
     if (txId) notes += ` | TxID: ${txId}`;
 
-    // Create recharge record with total amount
-    await supabase.from('customer_recharges').insert({
-      tenant_id: tenantId,
-      customer_id: customerId,
-      amount: totalBeforeWallet,
-      months: selectedMonths,
-      payment_method: walletDeduction > 0 && amount > 0 
+    // Create recharge record using RPC (bypasses RLS)
+    const { error: rechargeError } = await supabase.rpc('create_customer_self_recharge', {
+      p_customer_id: customerId,
+      p_tenant_id: tenantId,
+      p_amount: totalBeforeWallet,
+      p_months: selectedMonths,
+      p_payment_method: walletDeduction > 0 && amount > 0 
         ? `wallet+${paymentMethod}` 
         : (walletDeduction > 0 ? 'wallet' : paymentMethod),
-      old_expiry: oldExpiry,
-      new_expiry: format(newExpiry, 'yyyy-MM-dd'),
-      discount: discountAmount,
-      notes,
-      status: rechargeStatus,
-      collected_by_type: 'customer_self',
-      collected_by_name: customer?.name || 'Customer',
+      p_old_expiry: oldExpiry || null,
+      p_new_expiry: format(newExpiry, 'yyyy-MM-dd'),
+      p_discount: discountAmount,
+      p_notes: notes,
+      p_status: rechargeStatus,
+      p_collected_by_type: 'customer_self',
+      p_collected_by_name: customer?.name || 'Customer',
     });
+
+    if (rechargeError) {
+      console.error('Recharge insert error:', rechargeError);
+      throw new Error('Failed to create recharge record');
+    }
 
     // Only update customer data if not pending manual verification
     if (!isPendingManual) {

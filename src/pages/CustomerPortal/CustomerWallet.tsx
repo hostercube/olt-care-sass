@@ -100,8 +100,12 @@ export default function CustomerWallet() {
       
       if (customerData) {
         setCustomer(customerData);
-        setWalletBalance(customerData.wallet_balance || 0);
       }
+
+      // Fetch wallet balance using RPC (includes referral bonus)
+      const { data: walletData } = await supabase
+        .rpc('get_customer_wallet_balance', { p_customer_id: id });
+      setWalletBalance(Number(walletData) || 0);
 
       // Fetch wallet transactions
       const { data: txData } = await supabase
@@ -112,7 +116,8 @@ export default function CustomerWallet() {
         .limit(50);
       
       if (txData) {
-        setTransactions(txData as WalletTransaction[]);
+        // Use any type to avoid issues with auto-generated types during migration
+        setTransactions(txData as any);
       }
 
       // Fetch enabled payment gateways for tenant using RPC
@@ -249,15 +254,19 @@ export default function CustomerWallet() {
     setIsSubmitting(true);
 
     try {
-      // Create pending top up request with TxID
-      await supabase.from('customer_wallet_transactions').insert({
-        customer_id: id,
-        tenant_id: tenant_id,
-        transaction_type: 'topup_pending',
-        amount: amount,
-        notes: `Manual top up via ${getGatewayDisplayName(selectedMethod as PaymentMethod)} | TxID: ${manualTxId}`,
-        status: 'pending',
+      // Create pending top up request with TxID using RPC (bypasses RLS)
+      const { error: topupError } = await supabase.rpc('create_customer_wallet_topup_request', {
+        p_customer_id: id,
+        p_tenant_id: tenant_id,
+        p_amount: amount,
+        p_payment_method: getGatewayDisplayName(selectedMethod as PaymentMethod),
+        p_transaction_id: manualTxId,
       });
+
+      if (topupError) {
+        console.error('Top up request error:', topupError);
+        throw new Error('Failed to submit top up request');
+      }
       
       setShowManualTxDialog(false);
       setManualTxId('');
