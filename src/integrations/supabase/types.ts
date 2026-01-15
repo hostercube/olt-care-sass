@@ -8642,6 +8642,19 @@ export type Database = {
           role: string
         }[]
       }
+      get_tenant_enabled_payment_gateways: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          bkash_mode: string
+          display_name: string
+          gateway: string
+          id: string
+          instructions: string
+          is_enabled: boolean
+          sandbox_mode: boolean
+          sort_order: number
+        }[]
+      }
       get_tenant_referral_domain: {
         Args: { p_tenant_id: string }
         Returns: string
