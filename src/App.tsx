@@ -105,6 +105,7 @@ import CustomerProfilePage from "./pages/CustomerPortal/CustomerProfile";
 import CustomerSupport from "./pages/CustomerPortal/CustomerSupport";
 import CustomerPackages from "./pages/CustomerPortal/CustomerPackages";
 import CustomerReferral from "./pages/CustomerPortal/CustomerReferral";
+import CustomerWallet from "./pages/CustomerPortal/CustomerWallet";
 
 // Reseller Portal Pages
 import ResellerLogin from "./pages/ResellerPortal/ResellerLogin";
@@ -661,6 +662,7 @@ const App = () => (
                 <Route path="support" element={<CustomerSupport />} />
                 <Route path="packages" element={<CustomerPackages />} />
                 <Route path="referral" element={<CustomerReferral />} />
+                <Route path="wallet" element={<CustomerWallet />} />
               </Route>
 
               {/* Reseller Portal Routes */}

@@ -9,7 +9,7 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import {
   LayoutDashboard, CreditCard, History, User,
   LogOut, Menu, X, Wifi, ChevronRight, HelpCircle, Gauge,
-  AlertCircle, Package, Gift
+  AlertCircle, Package, Gift, Wallet
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -210,8 +210,9 @@ export function CustomerPortalLayout() {
     { label: 'Packages', href: '/portal/packages', icon: Package },
     { label: 'Pay Bill', href: '/portal/pay', icon: CreditCard },
     { label: 'Recharge History', href: '/portal/recharges', icon: History },
+    { label: 'Wallet & Top Up', href: '/portal/wallet', icon: Wallet },
     { label: 'Usage & Speed', href: '/portal/usage', icon: Gauge },
-    { label: 'Referral & Wallet', href: '/portal/referral', icon: Gift, hidden: !isReferralEnabled },
+    { label: 'Referral & Bonus', href: '/portal/referral', icon: Gift, hidden: !isReferralEnabled },
     { label: 'My Profile', href: '/portal/profile', icon: User },
     { label: 'Support', href: '/portal/support', icon: HelpCircle },
   ].filter(item => !item.hidden);
@@ -274,6 +275,19 @@ export function CustomerPortalLayout() {
               </div>
             </div>
           </div>
+          {/* Wallet Balance */}
+          {(customer?.wallet_balance > 0 || isReferralEnabled) && (
+            <Link 
+              to="/portal/wallet" 
+              className="mt-3 flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 hover:border-green-500/40 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-medium text-green-700 dark:text-green-400">Wallet</span>
+              </div>
+              <span className="text-sm font-bold text-green-600">৳{(customer?.wallet_balance || 0).toFixed(2)}</span>
+            </Link>
+          )}
         </div>
 
         {/* Navigation */}
