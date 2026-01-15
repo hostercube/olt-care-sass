@@ -206,57 +206,42 @@ export default function ReferralManagement() {
   const handleApproveReferral = async (referral: any) => {
     try {
       // Get config for bonus calculation
-      const bonus = config?.bonus_type === 'fixed' 
-        ? config?.bonus_amount || 0 
+      const bonus = config?.bonus_type === 'fixed'
+        ? config?.bonus_amount || 0
         : 0;
 
       // Update referral status
       const { error: referralError } = await supabase
         .from('customer_referrals')
-        .update({ 
-          status: 'active', 
+        .update({
+          status: 'active',
           bonus_amount: bonus,
           bonus_paid_at: new Date().toISOString(),
-          updated_at: new Date().toISOString() 
+          updated_at: new Date().toISOString(),
         })
         .eq('id', referral.id);
-      
+
       if (referralError) throw referralError;
 
-      // Add bonus to referrer's wallet
+      // Credit bonus using RPC (bypasses RLS + creates wallet transaction)
       if (bonus > 0 && referral.referrer_customer_id) {
-        const { data: customerData, error: fetchError } = await supabase
-          .from('customers')
-          .select('wallet_balance, referral_bonus_balance')
-          .eq('id', referral.referrer_customer_id)
-          .single();
-        
-        if (fetchError) {
-          console.error('Error fetching customer:', fetchError);
-          toast.error('Referral approved but failed to credit wallet');
-          refetch();
-          return;
-        }
-        
-        const currentBalance = customerData?.wallet_balance || 0;
-        const currentBonus = customerData?.referral_bonus_balance || 0;
-        
-        const { error: updateError } = await supabase
-          .from('customers')
-          .update({ 
-            wallet_balance: currentBalance + bonus,
-            referral_bonus_balance: currentBonus + bonus
-          })
-          .eq('id', referral.referrer_customer_id);
-        
-        if (updateError) {
-          console.error('Error updating wallet:', updateError);
+        const { error: walletError } = await supabase.rpc('add_wallet_transaction', {
+          p_customer_id: referral.referrer_customer_id,
+          p_amount: bonus,
+          p_type: 'referral_bonus',
+          p_reference_id: referral.id,
+          p_reference_type: 'customer_referral',
+          p_notes: `Referral bonus for code ${referral.referral_code || ''}`.trim(),
+        });
+
+        if (walletError) {
+          console.error('Error crediting wallet via RPC:', walletError);
           toast.error('Referral approved but failed to credit wallet');
           refetch();
           return;
         }
       }
-      
+
       toast.success('Referral approved and bonus credited to wallet');
       refetch();
     } catch (error: any) {

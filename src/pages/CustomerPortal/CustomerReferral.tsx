@@ -115,17 +115,17 @@ export default function CustomerReferral() {
       // Fetch referral config for bonus amount and settings
       const { data: configData } = await supabase
         .from('referral_configs')
-        .select('bonus_amount, bonus_type, bonus_percentage, withdraw_enabled, use_wallet_for_recharge')
+        .select('is_enabled, bonus_amount, bonus_type, bonus_percentage, withdraw_enabled, use_wallet_for_recharge')
         .eq('tenant_id', customer.tenant_id)
         .maybeSingle();
       
-      if (configData) {
+      if (configData && configData.is_enabled === true) {
         setBonusPerReferral(configData.bonus_amount || 0);
-        // Use explicit boolean check - if false, keep false; only default to false if null/undefined
+        // Use explicit boolean check - if false, keep false
         setWithdrawEnabled(configData.withdraw_enabled === true);
         setUseWalletForRecharge(configData.use_wallet_for_recharge !== false);
       } else {
-        // No config exists - defaults to disabled
+        // Disabled or no config exists
         setWithdrawEnabled(false);
         setUseWalletForRecharge(true);
       }
