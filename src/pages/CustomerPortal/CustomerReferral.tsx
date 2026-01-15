@@ -51,6 +51,8 @@ export default function CustomerReferral() {
   const [filteredReferrals, setFilteredReferrals] = useState<ReferralRecord[]>([]);
   const [bonusPerReferral, setBonusPerReferral] = useState<number>(0);
   const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [withdrawEnabled, setWithdrawEnabled] = useState<boolean>(true);
+  const [useWalletForRecharge, setUseWalletForRecharge] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
   
   // Pagination & Filter
@@ -109,13 +111,17 @@ export default function CustomerReferral() {
         .rpc('get_customer_wallet_balance', { p_customer_id: customer.id });
       setWalletBalance(Number(balanceData) || 0);
 
-      // Fetch referral config for bonus amount
+      // Fetch referral config for bonus amount and settings
       const { data: configData } = await supabase
-        .rpc('get_referral_config', { p_tenant_id: customer.tenant_id });
+        .from('referral_configs')
+        .select('bonus_amount, bonus_type, bonus_percentage, withdraw_enabled, use_wallet_for_recharge')
+        .eq('tenant_id', customer.tenant_id)
+        .maybeSingle();
       
       if (configData) {
-        const config = typeof configData === 'string' ? JSON.parse(configData) : configData;
-        setBonusPerReferral(config?.bonus_amount || 0);
+        setBonusPerReferral(configData.bonus_amount || 0);
+        setWithdrawEnabled(configData.withdraw_enabled ?? true);
+        setUseWalletForRecharge(configData.use_wallet_for_recharge ?? true);
       }
 
       // Fetch referral history
@@ -228,6 +234,8 @@ export default function CustomerReferral() {
         return <Badge className="bg-green-500">Completed</Badge>;
       case 'pending':
         return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-700">Pending</Badge>;
+      case 'approved':
+        return <Badge variant="secondary" className="bg-blue-500/20 text-blue-700">Approved</Badge>;
       case 'activated':
       case 'active':
         return <Badge className="bg-blue-500">Active</Badge>;
@@ -267,7 +275,7 @@ export default function CustomerReferral() {
       {/* Wallet Balance Card */}
       <Card className="border-green-500/30 bg-gradient-to-r from-green-500/5 to-green-500/10">
         <CardContent className="py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-full bg-green-500/20">
                 <Wallet className="h-6 w-6 text-green-500" />
@@ -275,12 +283,22 @@ export default function CustomerReferral() {
               <div>
                 <p className="text-sm text-muted-foreground">Wallet Balance</p>
                 <p className="text-2xl font-bold text-green-500">৳{walletBalance.toFixed(2)}</p>
+                {useWalletForRecharge && walletBalance > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    You can use this balance when paying your bills
+                  </p>
+                )}
               </div>
             </div>
-            <Button onClick={() => setWithdrawDialogOpen(true)} disabled={walletBalance <= 0}>
-              <ArrowDownCircle className="h-4 w-4 mr-2" />
-              Withdraw
-            </Button>
+            {withdrawEnabled && (
+              <Button 
+                onClick={() => setWithdrawDialogOpen(true)} 
+                disabled={walletBalance <= 0}
+              >
+                <ArrowDownCircle className="h-4 w-4 mr-2" />
+                Withdraw
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -319,13 +337,13 @@ export default function CustomerReferral() {
       </Card>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-6">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Referrals</p>
-                <p className="text-2xl font-bold">{stats?.total_referrals || 0}</p>
+                <p className="text-sm text-muted-foreground">Total</p>
+                <p className="text-2xl font-bold">{referrals.length || stats?.total_referrals || 0}</p>
               </div>
               <Users className="h-8 w-8 text-muted-foreground" />
             </div>
@@ -336,8 +354,10 @@ export default function CustomerReferral() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Successful</p>
-                <p className="text-2xl font-bold text-green-600">{stats?.successful_referrals || 0}</p>
+                <p className="text-sm text-muted-foreground">Active</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {referrals.filter(r => r.status === 'active' || r.status === 'bonus_paid').length || stats?.successful_referrals || 0}
+                </p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500" />
             </div>
@@ -348,8 +368,24 @@ export default function CustomerReferral() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
+                <p className="text-sm text-muted-foreground">Approved</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {referrals.filter(r => r.status === 'approved').length}
+                </p>
+              </div>
+              <CheckCircle className="h-8 w-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats?.pending_referrals || 0}</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  {referrals.filter(r => r.status === 'pending').length || stats?.pending_referrals || 0}
+                </p>
               </div>
               <Clock className="h-8 w-8 text-yellow-500" />
             </div>
@@ -361,7 +397,9 @@ export default function CustomerReferral() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Rejected</p>
-                <p className="text-2xl font-bold text-red-600">{stats?.rejected_referrals || 0}</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {referrals.filter(r => r.status === 'rejected').length || stats?.rejected_referrals || 0}
+                </p>
               </div>
               <X className="h-8 w-8 text-red-500" />
             </div>
@@ -372,8 +410,10 @@ export default function CustomerReferral() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Earned</p>
-                <p className="text-2xl font-bold text-primary">৳{stats?.total_bonus_earned || 0}</p>
+                <p className="text-sm text-muted-foreground">Earned</p>
+                <p className="text-2xl font-bold text-primary">
+                  ৳{referrals.filter(r => r.status === 'active' || r.status === 'bonus_paid').reduce((sum, r) => sum + (r.bonus_amount || 0), 0)}
+                </p>
               </div>
               <DollarSign className="h-8 w-8 text-primary" />
             </div>
@@ -396,6 +436,7 @@ export default function CustomerReferral() {
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="rejected">Rejected</SelectItem>

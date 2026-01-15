@@ -10,15 +10,18 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useReferralSystem } from '@/hooks/useReferralSystem';
 import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Gift, Users, DollarSign, TrendingUp, Settings, List, Loader2, Save, 
-  Search, Filter, ChevronLeft, ChevronRight, Wallet, ArrowDownToLine, X
+  Search, Filter, ChevronLeft, ChevronRight, Wallet, ArrowDownToLine, X,
+  MoreHorizontal, CheckCircle, XCircle, Clock
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const ITEMS_PER_PAGE = 10;
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -37,6 +40,8 @@ export default function ReferralManagement() {
     min_referrals_for_bonus: 1,
     bonus_validity_days: 30,
     terms_and_conditions: '',
+    withdraw_enabled: true,
+    use_wallet_for_recharge: true,
   });
   const [saving, setSaving] = useState(false);
 
@@ -71,6 +76,8 @@ export default function ReferralManagement() {
         min_referrals_for_bonus: config.min_referrals_for_bonus,
         bonus_validity_days: config.bonus_validity_days,
         terms_and_conditions: config.terms_and_conditions || '',
+        withdraw_enabled: (config as any).withdraw_enabled ?? true,
+        use_wallet_for_recharge: (config as any).use_wallet_for_recharge ?? true,
       });
     }
   }, [config]);
@@ -177,6 +184,7 @@ export default function ReferralManagement() {
   const activeReferrals = referrals.filter(r => r.status === 'active' || r.status === 'bonus_paid').length;
   const pendingReferrals = referrals.filter(r => r.status === 'pending').length;
   const rejectedReferrals = referrals.filter(r => r.status === 'rejected').length;
+  const approvedReferrals = referrals.filter(r => r.status === 'approved').length;
   const totalBonusPaid = referrals.filter(r => r.status === 'bonus_paid' || r.status === 'active').reduce((sum, r) => sum + r.bonus_amount, 0);
   const totalWalletBalance = customerWallets.reduce((sum, w) => sum + w.wallet_balance, 0);
 
@@ -184,6 +192,7 @@ export default function ReferralManagement() {
     const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
       pending: 'secondary',
       signed_up: 'outline',
+      approved: 'outline',
       active: 'default',
       bonus_paid: 'default',
       rejected: 'destructive',
@@ -191,11 +200,91 @@ export default function ReferralManagement() {
     const labels: Record<string, string> = {
       pending: 'Pending',
       signed_up: 'Signed Up',
+      approved: 'Approved',
       active: 'Active',
       bonus_paid: 'Bonus Paid',
       rejected: 'Rejected',
     };
     return <Badge variant={variants[status] || 'secondary'}>{labels[status] || status}</Badge>;
+  };
+
+  // Handle referral actions
+  const handleApproveReferral = async (referralId: string) => {
+    try {
+      const { error } = await supabase
+        .from('customer_referrals')
+        .update({ status: 'approved', updated_at: new Date().toISOString() })
+        .eq('id', referralId);
+      
+      if (error) throw error;
+      toast.success('Referral approved');
+      refetch();
+    } catch (error: any) {
+      toast.error('Failed to approve referral');
+      console.error(error);
+    }
+  };
+
+  const handleRejectReferral = async (referralId: string) => {
+    try {
+      const { error } = await supabase
+        .from('customer_referrals')
+        .update({ status: 'rejected', updated_at: new Date().toISOString() })
+        .eq('id', referralId);
+      
+      if (error) throw error;
+      toast.success('Referral rejected');
+      refetch();
+    } catch (error: any) {
+      toast.error('Failed to reject referral');
+      console.error(error);
+    }
+  };
+
+  const handleActivateReferral = async (referral: any) => {
+    try {
+      // Get config for bonus calculation
+      const bonus = config?.bonus_type === 'fixed' 
+        ? config?.bonus_amount || 0 
+        : 0;
+
+      const { error } = await supabase
+        .from('customer_referrals')
+        .update({ 
+          status: 'active', 
+          bonus_amount: bonus,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', referral.id);
+      
+      if (error) throw error;
+
+      // Add bonus to referrer's wallet
+      if (bonus > 0 && referral.referrer_customer_id) {
+        const { data: customerData } = await supabase
+          .from('customers')
+          .select('wallet_balance, referral_bonus_balance')
+          .eq('id', referral.referrer_customer_id)
+          .single();
+        
+        const currentBalance = customerData?.wallet_balance || 0;
+        const currentBonus = customerData?.referral_bonus_balance || 0;
+        
+        await supabase
+          .from('customers')
+          .update({ 
+            wallet_balance: currentBalance + bonus,
+            referral_bonus_balance: currentBonus + bonus
+          })
+          .eq('id', referral.referrer_customer_id);
+      }
+      
+      toast.success('Referral activated and bonus credited');
+      refetch();
+    } catch (error: any) {
+      toast.error('Failed to activate referral');
+      console.error(error);
+    }
   };
 
   if (loading) {
@@ -398,6 +487,37 @@ export default function ReferralManagement() {
                 />
               </div>
 
+              {/* Additional Settings */}
+              <div className="space-y-4 pt-4 border-t">
+                <h4 className="font-medium">Additional Options</h4>
+                
+                <div className="flex items-center justify-between p-4 rounded-lg border">
+                  <div>
+                    <Label className="text-base font-medium">Enable Withdraw Requests</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Allow customers to request wallet balance withdrawals
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.withdraw_enabled}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, withdraw_enabled: checked }))}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border">
+                  <div>
+                    <Label className="text-base font-medium">Use Wallet for Recharge</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Allow customers to use wallet balance when paying bills
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.use_wallet_for_recharge}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, use_wallet_for_recharge: checked }))}
+                  />
+                </div>
+              </div>
+
               <Button onClick={handleSaveConfig} disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
                 Save Configuration
@@ -433,6 +553,7 @@ export default function ReferralManagement() {
                     <SelectContent>
                       <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
                       <SelectItem value="signed_up">Signed Up</SelectItem>
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="bonus_paid">Bonus Paid</SelectItem>
@@ -487,15 +608,51 @@ export default function ReferralManagement() {
                           <TableCell>{formatCurrency(referral.bonus_amount)}</TableCell>
                           <TableCell>{format(new Date(referral.created_at), 'dd MMM yyyy')}</TableCell>
                           <TableCell>
-                            {referral.status === 'active' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => updateReferralStatus(referral.id, 'bonus_paid', true)}
-                              >
-                                Mark Paid
-                              </Button>
-                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {referral.status === 'pending' && (
+                                  <>
+                                    <DropdownMenuItem onClick={() => handleApproveReferral(referral.id)}>
+                                      <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                                      Approve
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleRejectReferral(referral.id)}>
+                                      <XCircle className="h-4 w-4 mr-2 text-red-500" />
+                                      Reject
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                {referral.status === 'approved' && (
+                                  <>
+                                    <DropdownMenuItem onClick={() => handleActivateReferral(referral)}>
+                                      <TrendingUp className="h-4 w-4 mr-2 text-blue-500" />
+                                      Activate & Credit Bonus
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleRejectReferral(referral.id)}>
+                                      <XCircle className="h-4 w-4 mr-2 text-red-500" />
+                                      Reject
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                {referral.status === 'active' && (
+                                  <DropdownMenuItem onClick={() => updateReferralStatus(referral.id, 'bonus_paid', true)}>
+                                    <DollarSign className="h-4 w-4 mr-2 text-green-500" />
+                                    Mark Bonus Paid
+                                  </DropdownMenuItem>
+                                )}
+                                {(referral.status === 'rejected') && (
+                                  <DropdownMenuItem onClick={() => handleApproveReferral(referral.id)}>
+                                    <Clock className="h-4 w-4 mr-2 text-yellow-500" />
+                                    Re-approve
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
                         </TableRow>
                       ))
