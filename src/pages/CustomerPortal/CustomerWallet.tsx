@@ -4,12 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+} from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Wallet, Plus, ArrowDownToLine, History, Loader2, 
   CreditCard, Smartphone, Banknote, CheckCircle, XCircle,
-  AlertCircle, ExternalLink
+  AlertCircle, ExternalLink, Receipt
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -58,6 +62,10 @@ export default function CustomerWallet() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [topUpSuccess, setTopUpSuccess] = useState(false);
   const [topUpFailed, setTopUpFailed] = useState(false);
+  
+  // Manual payment TxID dialog
+  const [showManualTxDialog, setShowManualTxDialog] = useState(false);
+  const [manualTxId, setManualTxId] = useState('');
 
   // Check for payment callback status
   useEffect(() => {
@@ -171,8 +179,18 @@ export default function CustomerWallet() {
       return;
     }
 
-    const { id, tenant_id } = JSON.parse(session);
+    // For manual payment, show TxID dialog first
+    if (!isOnlineGateway(selectedMethod)) {
+      setShowManualTxDialog(true);
+      return;
+    }
 
+    const { id, tenant_id } = JSON.parse(session);
+    await processOnlineTopUp(id, tenant_id, amount);
+  };
+
+  // Process online payment gateway for top-up
+  const processOnlineTopUp = async (customerId: string, tenantId: string, amount: number) => {
     setIsSubmitting(true);
 
     try {
@@ -181,50 +199,73 @@ export default function CustomerWallet() {
       const cancelUrl = `${baseUrl}/portal/wallet`;
       const gatewayCallbackUrl = getPaymentCallbackUrl(selectedMethod);
 
-      if (isOnlineGateway(selectedMethod)) {
-        const response = await initiatePayment({
-          gateway: selectedMethod,
-          amount: amount,
-          tenant_id: tenant_id,
-          customer_id: id,
-          description: `Wallet Top Up - ${customer?.name || 'Customer'}`,
-          gateway_callback_url: gatewayCallbackUrl,
-          return_url: returnUrl,
-          cancel_url: cancelUrl,
-          customer_name: customer?.name || '',
-          customer_email: customer?.email || '',
-          customer_phone: customer?.phone || '',
-          payment_for: 'customer_bill',
-        });
+      const response = await initiatePayment({
+        gateway: selectedMethod as PaymentMethod,
+        amount: amount,
+        tenant_id: tenantId,
+        customer_id: customerId,
+        description: `Wallet Top Up - ${customer?.name || 'Customer'}`,
+        gateway_callback_url: gatewayCallbackUrl,
+        return_url: returnUrl,
+        cancel_url: cancelUrl,
+        customer_name: customer?.name || '',
+        customer_email: customer?.email || '',
+        customer_phone: customer?.phone || '',
+        payment_for: 'customer_bill',
+      });
 
-        if (response.success && response.checkout_url) {
-          toast.success(`Redirecting to ${getGatewayDisplayName(selectedMethod)}...`);
-          setTimeout(() => {
-            redirectToCheckout(response.checkout_url!);
-          }, 500);
-        } else {
-          throw new Error(response.error || 'Payment initiation failed');
-        }
+      if (response.success && response.checkout_url) {
+        toast.success(`Redirecting to ${getGatewayDisplayName(selectedMethod as PaymentMethod)}...`);
+        setTimeout(() => {
+          redirectToCheckout(response.checkout_url!);
+        }, 500);
       } else {
-        // Manual payment - create pending top up request
-        const session = localStorage.getItem('customer_session');
-        const { tenant_id: sessionTenantId } = JSON.parse(session || '{}');
-        
-        await supabase.from('customer_wallet_transactions').insert({
-          customer_id: id,
-          tenant_id: sessionTenantId,
-          transaction_type: 'topup_pending',
-          amount: amount,
-          notes: `Manual top up request via ${getGatewayDisplayName(selectedMethod)}`,
-          status: 'pending',
-        });
-        
-        toast.success('Top up request submitted. Please complete the manual payment.');
-        fetchData();
+        throw new Error(response.error || 'Payment initiation failed');
       }
     } catch (error: any) {
       console.error('Top up error:', error);
       toast.error(error.message || 'Top up failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle manual payment submission with TxID
+  const handleManualTopUpSubmit = async () => {
+    if (!manualTxId.trim()) {
+      toast.error('Please enter a transaction ID');
+      return;
+    }
+
+    const session = localStorage.getItem('customer_session');
+    if (!session) {
+      navigate('/portal/login');
+      return;
+    }
+
+    const { id, tenant_id } = JSON.parse(session);
+    const amount = getFinalAmount();
+
+    setIsSubmitting(true);
+
+    try {
+      // Create pending top up request with TxID
+      await supabase.from('customer_wallet_transactions').insert({
+        customer_id: id,
+        tenant_id: tenant_id,
+        transaction_type: 'topup_pending',
+        amount: amount,
+        notes: `Manual top up via ${getGatewayDisplayName(selectedMethod as PaymentMethod)} | TxID: ${manualTxId}`,
+        status: 'pending',
+      });
+      
+      setShowManualTxDialog(false);
+      setManualTxId('');
+      toast.success('Top up request submitted for verification!');
+      fetchData();
+    } catch (error: any) {
+      console.error('Manual top up error:', error);
+      toast.error(error.message || 'Failed to submit top up request');
     } finally {
       setIsSubmitting(false);
     }
@@ -481,6 +522,75 @@ export default function CustomerWallet() {
           )}
         </CardContent>
       </Card>
+
+      {/* Manual Payment TxID Dialog */}
+      <Dialog open={showManualTxDialog} onOpenChange={setShowManualTxDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-primary" />
+              Enter Transaction Details
+            </DialogTitle>
+            <DialogDescription>
+              Please enter your payment transaction ID for verification
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-muted/50">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-muted-foreground">Top Up Amount</span>
+                <span className="font-bold text-lg text-primary">৳{getFinalAmount()}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Payment Method</span>
+                <span className="font-medium">{gateways.find(g => g.gateway === selectedMethod)?.display_name || selectedMethod}</span>
+              </div>
+            </div>
+            
+            {gateways.find(g => g.gateway === selectedMethod)?.instructions && (
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  {gateways.find(g => g.gateway === selectedMethod)?.instructions}
+                </p>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="walletTxId">Transaction ID (TxID)</Label>
+              <Input
+                id="walletTxId"
+                value={manualTxId}
+                onChange={(e) => setManualTxId(e.target.value)}
+                placeholder="e.g. TRX123456789"
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter the transaction ID from your payment confirmation
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowManualTxDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleManualTopUpSubmit} disabled={isSubmitting || !manualTxId.trim()}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Submit for Verification
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
