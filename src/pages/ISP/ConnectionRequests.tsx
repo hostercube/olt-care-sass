@@ -46,13 +46,11 @@ import {
 import { TablePagination } from '@/components/ui/table-pagination';
 import { 
   Phone, Mail, MapPin, Calendar, Clock, User, Package, FileText,
-  MoreVertical, Eye, Check, X, UserPlus, Loader2, Search,
-  Filter, Download, RefreshCw, AlertCircle, CheckCircle2, XCircle,
+  MoreVertical, Eye, Check, X, Loader2, Search,
+  Filter, RefreshCw, CheckCircle2, XCircle,
   MessageSquare, CreditCard, Gift
 } from 'lucide-react';
 import { useConnectionRequests } from '@/hooks/useConnectionRequests';
-import { useTenantContext } from '@/hooks/useSuperAdmin';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -64,9 +62,7 @@ const STATUS_COLORS: Record<string, { variant: 'default' | 'secondary' | 'destru
 };
 
 export default function ConnectionRequests() {
-  const { requests, loading, refetch, approveRequest, rejectRequest, completeRequest, updateRequest } = useConnectionRequests();
-  const { tenantId } = useTenantContext();
-  
+  const { requests, loading, refetch, approveRequest, rejectRequest } = useConnectionRequests();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
@@ -74,7 +70,6 @@ export default function ConnectionRequests() {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
-  const [createCustomerDialogOpen, setCreateCustomerDialogOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   
   // Pagination
@@ -122,54 +117,6 @@ export default function ConnectionRequests() {
       setSelectedRequest(null);
     }
     setProcessing(false);
-  };
-
-  const handleCreateCustomer = async () => {
-    if (!selectedRequest || !tenantId) return;
-    setProcessing(true);
-    
-    try {
-      // Generate customer code
-      const { data: countData } = await supabase
-        .from('customers')
-        .select('id', { count: 'exact' })
-        .eq('tenant_id', tenantId);
-      
-      const customerCode = `C${String((countData?.length || 0) + 1).padStart(6, '0')}`;
-      
-      // Create customer
-      const { data: customer, error } = await supabase
-        .from('customers')
-        .insert({
-          tenant_id: tenantId,
-          customer_code: customerCode,
-          name: selectedRequest.customer_name,
-          phone: selectedRequest.phone,
-          email: selectedRequest.email,
-          address: selectedRequest.address,
-          nid_number: selectedRequest.nid_number,
-          area_id: selectedRequest.area_id,
-          package_id: selectedRequest.package_id,
-          connection_date: new Date().toISOString().split('T')[0],
-          status: 'active',
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Complete the request
-      await completeRequest(selectedRequest.id, customer.id);
-      
-      toast.success('গ্রাহক সফলভাবে তৈরি হয়েছে');
-      setCreateCustomerDialogOpen(false);
-      setSelectedRequest(null);
-    } catch (err) {
-      console.error('Error creating customer:', err);
-      toast.error('গ্রাহক তৈরি করতে সমস্যা হয়েছে');
-    } finally {
-      setProcessing(false);
-    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -374,18 +321,6 @@ export default function ConnectionRequests() {
                                   </DropdownMenuItem>
                                 </>
                               )}
-                              {request.status === 'approved' && !request.customer_id && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => {
-                                    setSelectedRequest(request);
-                                    setCreateCustomerDialogOpen(true);
-                                  }} className="text-blue-600">
-                                    <UserPlus className="h-4 w-4 mr-2" />
-                                    গ্রাহক তৈরি করুন
-                                  </DropdownMenuItem>
-                                </>
-                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -548,20 +483,6 @@ export default function ConnectionRequests() {
                 </div>
               )}
               
-              {selectedRequest.status === 'approved' && !selectedRequest.customer_id && (
-                <div className="pt-4 border-t">
-                  <Button 
-                    onClick={() => {
-                      setDetailsOpen(false);
-                      setCreateCustomerDialogOpen(true);
-                    }}
-                    className="w-full"
-                  >
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    গ্রাহক অ্যাকাউন্ট তৈরি করুন
-                  </Button>
-                </div>
-              )}
             </div>
           )}
         </SheetContent>
@@ -639,56 +560,6 @@ export default function ConnectionRequests() {
         </DialogContent>
       </Dialog>
 
-      {/* Create Customer Dialog */}
-      <Dialog open={createCustomerDialogOpen} onOpenChange={setCreateCustomerDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>গ্রাহক অ্যাকাউন্ট তৈরি করুন</DialogTitle>
-            <DialogDescription>
-              এই আবেদনের তথ্য দিয়ে একটি নতুন গ্রাহক অ্যাকাউন্ট তৈরি হবে
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="space-y-3">
-              <div className="flex justify-between p-3 rounded-lg bg-muted">
-                <span className="text-sm text-muted-foreground">নাম</span>
-                <span className="font-medium">{selectedRequest?.customer_name}</span>
-              </div>
-              <div className="flex justify-between p-3 rounded-lg bg-muted">
-                <span className="text-sm text-muted-foreground">ফোন</span>
-                <span className="font-medium">{selectedRequest?.phone}</span>
-              </div>
-              {selectedRequest?.email && (
-                <div className="flex justify-between p-3 rounded-lg bg-muted">
-                  <span className="text-sm text-muted-foreground">ইমেইল</span>
-                  <span className="font-medium">{selectedRequest?.email}</span>
-                </div>
-              )}
-              {selectedRequest?.isp_packages && (
-                <div className="flex justify-between p-3 rounded-lg bg-muted">
-                  <span className="text-sm text-muted-foreground">প্যাকেজ</span>
-                  <span className="font-medium">{selectedRequest?.isp_packages.name}</span>
-                </div>
-              )}
-              {selectedRequest?.areas && (
-                <div className="flex justify-between p-3 rounded-lg bg-muted">
-                  <span className="text-sm text-muted-foreground">এলাকা</span>
-                  <span className="font-medium">{selectedRequest?.areas.name}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateCustomerDialogOpen(false)} disabled={processing}>
-              বাতিল
-            </Button>
-            <Button onClick={handleCreateCustomer} disabled={processing}>
-              {processing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserPlus className="h-4 w-4 mr-2" />}
-              গ্রাহক তৈরি করুন
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 }
