@@ -275,19 +275,17 @@ export function CustomerPortalLayout() {
               </div>
             </div>
           </div>
-          {/* Wallet Balance */}
-          {(customer?.wallet_balance > 0 || isReferralEnabled) && (
-            <Link 
-              to="/portal/wallet" 
-              className="mt-3 flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 hover:border-green-500/40 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-green-600" />
-                <span className="text-sm font-medium text-green-700 dark:text-green-400">Wallet</span>
-              </div>
-              <span className="text-sm font-bold text-green-600">৳{(customer?.wallet_balance || 0).toFixed(2)}</span>
-            </Link>
-          )}
+          {/* Wallet Balance - Always show */}
+          <Link 
+            to="/portal/wallet" 
+            className="mt-3 flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 hover:border-green-500/40 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-green-600" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-400">Wallet</span>
+            </div>
+            <span className="text-sm font-bold text-green-600">৳{(customer?.wallet_balance || 0).toFixed(2)}</span>
+          </Link>
         </div>
 
         {/* Navigation */}

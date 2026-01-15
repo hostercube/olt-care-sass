@@ -65,13 +65,9 @@ export default function CustomerPackages() {
       return;
     }
 
-    // Store selected package for the payment page
+    // Store only package ID for the payment page (it will fetch full details)
     sessionStorage.setItem('pending_package_change', JSON.stringify({
-      packageId: pkg.id,
-      packageName: pkg.name,
-      packagePrice: pkg.price,
-      downloadSpeed: pkg.download_speed,
-      uploadSpeed: pkg.upload_speed
+      packageId: pkg.id
     }));
 
     navigate('/portal/pay');
