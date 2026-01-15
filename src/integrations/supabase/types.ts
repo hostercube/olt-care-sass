@@ -5447,6 +5447,8 @@ export type Database = {
           tenant_id: string
           terms_and_conditions: string | null
           updated_at: string | null
+          use_wallet_for_recharge: boolean | null
+          withdraw_enabled: boolean | null
         }
         Insert: {
           bonus_amount?: number | null
@@ -5461,6 +5463,8 @@ export type Database = {
           tenant_id: string
           terms_and_conditions?: string | null
           updated_at?: string | null
+          use_wallet_for_recharge?: boolean | null
+          withdraw_enabled?: boolean | null
         }
         Update: {
           bonus_amount?: number | null
@@ -5475,6 +5479,8 @@ export type Database = {
           tenant_id?: string
           terms_and_conditions?: string | null
           updated_at?: string | null
+          use_wallet_for_recharge?: boolean | null
+          withdraw_enabled?: boolean | null
         }
         Relationships: [
           {
