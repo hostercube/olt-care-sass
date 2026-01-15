@@ -4,11 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+} from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   CreditCard, Smartphone, Banknote, CheckCircle, Loader2, 
   ExternalLink, XCircle, ArrowLeft, AlertCircle, Calendar, Zap, Package,
-  Clock, Wifi, ArrowRightLeft, Wallet
+  Clock, Wifi, ArrowRightLeft, Wallet, Receipt
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
@@ -70,6 +75,10 @@ export default function CustomerPayBill() {
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [useWalletEnabled, setUseWalletEnabled] = useState<boolean>(false);
   const [useWalletBalance, setUseWalletBalance] = useState<boolean>(false);
+  
+  // Manual payment TxID dialog
+  const [showManualTxDialog, setShowManualTxDialog] = useState(false);
+  const [manualTxId, setManualTxId] = useState('');
 
   // Check for payment callback status and pending package change
   useEffect(() => {
@@ -84,10 +93,18 @@ export default function CustomerPayBill() {
       toast.error('Payment could not be processed');
     }
     
-    // Check for pending package change from dashboard
-    const pendingPkgId = sessionStorage.getItem('pending_package_change');
-    if (pendingPkgId) {
-      setIsPackageChange(true);
+    // Check for pending package change from session storage (JSON format)
+    const pendingPkgData = sessionStorage.getItem('pending_package_change');
+    if (pendingPkgData) {
+      try {
+        const parsed = JSON.parse(pendingPkgData);
+        if (parsed?.packageId) {
+          setIsPackageChange(true);
+        }
+      } catch {
+        // If it's not JSON, it might be just an ID (old format)
+        setIsPackageChange(true);
+      }
     }
   }, [searchParams]);
 
@@ -133,17 +150,34 @@ export default function CustomerPayBill() {
       }
 
       // Check for pending package change and fetch that package
-      const pendingPkgId = sessionStorage.getItem('pending_package_change');
-      if (pendingPkgId) {
-        const { data: pkgData } = await supabase
-          .from('isp_packages')
-          .select('id, name, price, download_speed, upload_speed, speed_unit, validity_days')
-          .eq('id', pendingPkgId)
-          .single();
-        
-        if (pkgData) {
-          setPendingPackageChange(pkgData as ISPPackage);
-          setIsPackageChange(true);
+      const pendingPkgData = sessionStorage.getItem('pending_package_change');
+      if (pendingPkgData) {
+        try {
+          const parsed = JSON.parse(pendingPkgData);
+          const pkgId = parsed?.packageId || pendingPkgData; // Support both JSON and legacy ID format
+          
+          const { data: pkgData } = await supabase
+            .from('isp_packages')
+            .select('id, name, price, download_speed, upload_speed, speed_unit, validity_days')
+            .eq('id', pkgId)
+            .single();
+          
+          if (pkgData) {
+            setPendingPackageChange(pkgData as ISPPackage);
+            setIsPackageChange(true);
+          }
+        } catch {
+          // Legacy format - treat as direct ID
+          const { data: pkgData } = await supabase
+            .from('isp_packages')
+            .select('id, name, price, download_speed, upload_speed, speed_unit, validity_days')
+            .eq('id', pendingPkgData)
+            .single();
+          
+          if (pkgData) {
+            setPendingPackageChange(pkgData as ISPPackage);
+            setIsPackageChange(true);
+          }
         }
       }
 
@@ -220,8 +254,8 @@ export default function CustomerPayBill() {
   };
 
   const handlePayment = async () => {
-    if (!selectedMethod || !customer) {
-      toast.error('Please select a payment method');
+    if (!customer) {
+      toast.error('Customer data not loaded');
       return;
     }
 
@@ -238,7 +272,7 @@ export default function CustomerPayBill() {
     if (total <= 0 && walletDeduction > 0) {
       setIsSubmitting(true);
       try {
-        await processRecharge(id, tenant_id, 0, walletDeduction);
+        await processRecharge(id, tenant_id, 0, walletDeduction, 'wallet', 'completed');
         setPaymentSuccess(true);
       } catch (error: any) {
         console.error('Wallet payment error:', error);
@@ -249,6 +283,55 @@ export default function CustomerPayBill() {
       return;
     }
 
+    if (!selectedMethod) {
+      toast.error('Please select a payment method');
+      return;
+    }
+
+    // For manual payment, show TxID dialog first
+    if (selectedMethod === 'manual' || !isOnlineGateway(selectedMethod)) {
+      setShowManualTxDialog(true);
+      return;
+    }
+
+    // Proceed with online payment
+    await processOnlinePayment(id, tenant_id, total, walletDeduction);
+  };
+
+  // Handle manual payment submission with TxID
+  const handleManualPaymentSubmit = async () => {
+    if (!manualTxId.trim()) {
+      toast.error('Please enter a transaction ID');
+      return;
+    }
+
+    const session = localStorage.getItem('customer_session');
+    if (!session) {
+      navigate('/portal/login');
+      return;
+    }
+
+    const { id, tenant_id } = JSON.parse(session);
+    const { total, walletDeduction } = calculatePricing();
+
+    setIsSubmitting(true);
+    try {
+      // Create pending recharge for verification
+      await processRecharge(id, tenant_id, total, walletDeduction, selectedMethod || 'manual', 'pending_manual', manualTxId);
+      setShowManualTxDialog(false);
+      setManualTxId('');
+      toast.success('Payment submitted for verification!');
+      navigate('/portal/recharges');
+    } catch (error: any) {
+      console.error('Manual payment error:', error);
+      toast.error(error.message || 'Payment submission failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Process online payment gateway
+  const processOnlinePayment = async (customerId: string, tenantId: string, total: number, walletDeduction: number) => {
     setIsSubmitting(true);
 
     try {
@@ -259,39 +342,33 @@ export default function CustomerPayBill() {
 
       const pkgName = isPackageChange && pendingPackageChange ? pendingPackageChange.name : customer.package?.name || 'Standard';
 
-      if (isOnlineGateway(selectedMethod)) {
-        // Online payment - initiate gateway
-        const response = await initiatePayment({
-          gateway: selectedMethod,
-          amount: total,
-          tenant_id: tenant_id,
-          customer_id: id,
-          description: `${isPackageChange ? 'Package Change: ' : ''}${pkgName} - ${selectedMonths} Month(s) - ${customer.customer_code || customer.name}`,
-          gateway_callback_url: gatewayCallbackUrl,
-          return_url: returnUrl,
-          cancel_url: cancelUrl,
-          customer_name: customer.name,
-          customer_email: customer.email || '',
-          customer_phone: customer.phone || '',
-          payment_for: 'customer_bill',
-        });
+      // Online payment - initiate gateway
+      const response = await initiatePayment({
+        gateway: selectedMethod as PaymentMethod,
+        amount: total,
+        tenant_id: tenantId,
+        customer_id: customerId,
+        description: `${isPackageChange ? 'Package Change: ' : ''}${pkgName} - ${selectedMonths} Month(s) - ${customer.customer_code || customer.name}`,
+        gateway_callback_url: gatewayCallbackUrl,
+        return_url: returnUrl,
+        cancel_url: cancelUrl,
+        customer_name: customer.name,
+        customer_email: customer.email || '',
+        customer_phone: customer.phone || '',
+        payment_for: 'customer_bill',
+      });
 
-        if (response.success && response.checkout_url) {
-          toast.success(`Redirecting to ${getGatewayDisplayName(selectedMethod)}...`);
-          setTimeout(() => {
-            redirectToCheckout(response.checkout_url!);
-          }, 500);
-        } else if (response.success && !response.checkout_url) {
-          // Process recharge with wallet deduction
-          await processRecharge(id, tenant_id, total, walletDeduction);
-          setPaymentSuccess(true);
-        } else {
-          throw new Error(response.error || 'Payment initiation failed');
-        }
-      } else {
-        // For manual payment methods, create a pending payment with wallet deduction
-        await processRecharge(id, tenant_id, total, walletDeduction);
+      if (response.success && response.checkout_url) {
+        toast.success(`Redirecting to ${getGatewayDisplayName(selectedMethod as PaymentMethod)}...`);
+        setTimeout(() => {
+          redirectToCheckout(response.checkout_url!);
+        }, 500);
+      } else if (response.success && !response.checkout_url) {
+        // Process recharge with wallet deduction - auto completed for online
+        await processRecharge(customerId, tenantId, total, walletDeduction, selectedMethod || 'online', 'completed');
         setPaymentSuccess(true);
+      } else {
+        throw new Error(response.error || 'Payment initiation failed');
       }
     } catch (error: any) {
       console.error('Payment error:', error);
@@ -301,15 +378,26 @@ export default function CustomerPayBill() {
     }
   };
 
-  const processRecharge = async (customerId: string, tenantId: string, amount: number, walletDeduction: number = 0) => {
+  const processRecharge = async (
+    customerId: string, 
+    tenantId: string, 
+    amount: number, 
+    walletDeduction: number = 0,
+    paymentMethod: string = 'online',
+    rechargeStatus: string = 'completed',
+    txId?: string
+  ) => {
     const { newExpiry, discountAmount, totalBeforeWallet } = calculatePricing();
     const oldExpiry = customer?.expiry_date;
     const targetPackage = isPackageChange && pendingPackageChange ? pendingPackageChange : customer?.package;
     const oldPackageId = customer?.package_id;
     const newPackageId = isPackageChange && pendingPackageChange ? pendingPackageChange.id : oldPackageId;
     
-    // Deduct wallet balance if applicable
-    if (walletDeduction > 0) {
+    // For pending_manual status, don't process wallet or update customer yet
+    const isPendingManual = rechargeStatus === 'pending_manual';
+    
+    // Only deduct wallet balance if not pending
+    if (!isPendingManual && walletDeduction > 0) {
       const { data: walletResult, error: walletError } = await supabase.rpc('use_wallet_for_recharge', {
         p_customer_id: customerId,
         p_amount: walletDeduction,
@@ -322,58 +410,64 @@ export default function CustomerPayBill() {
       }
     }
 
-    // Create recharge record with total amount (including wallet portion)
+    // Build notes
+    let notes = isPackageChange 
+      ? `Package change from ${customer?.package?.name || 'N/A'} to ${pendingPackageChange?.name || 'N/A'}` 
+      : 'Customer portal self-recharge';
+    if (walletDeduction > 0) notes += ` (Wallet: ৳${walletDeduction})`;
+    if (txId) notes += ` | TxID: ${txId}`;
+
+    // Create recharge record with total amount
     await supabase.from('customer_recharges').insert({
       tenant_id: tenantId,
       customer_id: customerId,
-      amount: totalBeforeWallet, // Record full amount
+      amount: totalBeforeWallet,
       months: selectedMonths,
       payment_method: walletDeduction > 0 && amount > 0 
-        ? `wallet+${selectedMethod}` 
-        : (walletDeduction > 0 ? 'wallet' : selectedMethod),
+        ? `wallet+${paymentMethod}` 
+        : (walletDeduction > 0 ? 'wallet' : paymentMethod),
       old_expiry: oldExpiry,
       new_expiry: format(newExpiry, 'yyyy-MM-dd'),
       discount: discountAmount,
-      notes: `${isPackageChange 
-        ? `Package change from ${customer?.package?.name || 'N/A'} to ${pendingPackageChange?.name || 'N/A'}` 
-        : 'Customer portal self-recharge'}${walletDeduction > 0 ? ` (Wallet: ৳${walletDeduction})` : ''}`,
-      status: 'completed',
+      notes,
+      status: rechargeStatus,
       collected_by_type: 'customer_self',
       collected_by_name: customer?.name || 'Customer',
     });
 
-    // Build customer update object
-    const customerUpdate: any = {
-      expiry_date: format(newExpiry, 'yyyy-MM-dd'),
-      last_payment_date: format(new Date(), 'yyyy-MM-dd'),
-      due_amount: 0,
-      status: 'active',
-    };
-    
-    // If package is changing, update package details
-    if (isPackageChange && pendingPackageChange) {
-      customerUpdate.package_id = pendingPackageChange.id;
-      customerUpdate.monthly_bill = pendingPackageChange.price;
+    // Only update customer data if not pending manual verification
+    if (!isPendingManual) {
+      const customerUpdate: any = {
+        expiry_date: format(newExpiry, 'yyyy-MM-dd'),
+        last_payment_date: format(new Date(), 'yyyy-MM-dd'),
+        due_amount: 0,
+        status: 'active',
+      };
+      
+      if (isPackageChange && pendingPackageChange) {
+        customerUpdate.package_id = pendingPackageChange.id;
+        customerUpdate.monthly_bill = pendingPackageChange.price;
+      }
+
+      await supabase.from('customers').update(customerUpdate).eq('id', customerId);
+
+      // Create payment record only for completed payments
+      await supabase.from('customer_payments').insert({
+        tenant_id: tenantId,
+        customer_id: customerId,
+        amount,
+        payment_method: paymentMethod,
+        notes: isPackageChange 
+          ? `Package change: ${pendingPackageChange?.name} - ${selectedMonths} month(s)` 
+          : `Self-recharge for ${selectedMonths} month(s)`,
+      });
+
+      // Clear the pending package change from session storage
+      sessionStorage.removeItem('pending_package_change');
+
+      // Auto-enable customer on MikroTik
+      await enableCustomerOnMikroTik(customerId, tenantId, isPackageChange ? targetPackage?.name : undefined);
     }
-
-    await supabase.from('customers').update(customerUpdate).eq('id', customerId);
-
-    // Create payment record
-    await supabase.from('customer_payments').insert({
-      tenant_id: tenantId,
-      customer_id: customerId,
-      amount,
-      payment_method: selectedMethod,
-      notes: isPackageChange 
-        ? `Package change: ${pendingPackageChange?.name} - ${selectedMonths} month(s)` 
-        : `Self-recharge for ${selectedMonths} month(s)`,
-    });
-
-    // Clear the pending package change from session storage
-    sessionStorage.removeItem('pending_package_change');
-
-    // Auto-enable customer on MikroTik and update package profile if configured
-    await enableCustomerOnMikroTik(customerId, tenantId, isPackageChange ? targetPackage?.name : undefined);
   };
 
   // Function to enable customer on MikroTik after successful recharge
@@ -788,6 +882,75 @@ export default function CustomerPayBill() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Manual Payment TxID Dialog */}
+      <Dialog open={showManualTxDialog} onOpenChange={setShowManualTxDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-primary" />
+              Enter Transaction Details
+            </DialogTitle>
+            <DialogDescription>
+              Please enter your payment transaction ID for verification
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-muted/50">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-muted-foreground">Amount to Pay</span>
+                <span className="font-bold text-lg text-primary">৳{calculatePricing().total}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Payment Method</span>
+                <span className="font-medium">{gateways.find(g => g.gateway === selectedMethod)?.display_name || selectedMethod}</span>
+              </div>
+            </div>
+            
+            {gateways.find(g => g.gateway === selectedMethod)?.instructions && (
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  {gateways.find(g => g.gateway === selectedMethod)?.instructions}
+                </p>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="txId">Transaction ID (TxID)</Label>
+              <Input
+                id="txId"
+                value={manualTxId}
+                onChange={(e) => setManualTxId(e.target.value)}
+                placeholder="e.g. TRX123456789"
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter the transaction ID from your payment confirmation
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowManualTxDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleManualPaymentSubmit} disabled={isSubmitting || !manualTxId.trim()}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Submit for Verification
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

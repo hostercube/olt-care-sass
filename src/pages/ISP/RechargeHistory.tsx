@@ -51,6 +51,7 @@ interface CustomerRecharge {
   paid_by: string | null;
   paid_by_name: string | null;
   original_payment_method: string | null;
+  rejection_reason?: string | null;
   customer?: { 
     id: string; 
     name: string; 
@@ -118,6 +119,11 @@ export default function RechargeHistory() {
   const [selectedRecharge, setSelectedRecharge] = useState<CustomerRecharge | null>(null);
   const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
   const [editLoading, setEditLoading] = useState(false);
+  
+  // Verify/Reject Manual Payment Dialog State
+  const [showVerifyDialog, setShowVerifyDialog] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -207,9 +213,13 @@ export default function RechargeHistory() {
       result = result.filter(r => r.payment_method === paymentMethodFilter);
     }
 
-    // Status filter (due vs completed)
+    // Status filter (due vs completed vs pending_manual)
     if (statusFilter !== 'all') {
-      result = result.filter(r => r.status === statusFilter);
+      if (statusFilter === 'pending_manual') {
+        result = result.filter(r => r.status === 'pending_manual');
+      } else {
+        result = result.filter(r => r.status === statusFilter);
+      }
     }
 
     return result;
@@ -231,8 +241,9 @@ export default function RechargeHistory() {
     const byOnline = filteredRecharges.filter(r => ['online_payment', 'auto'].includes(r.collected_by_type || '')).length;
     const dueRecharges = filteredRecharges.filter(r => r.status === 'due').length;
     const paidFromDue = filteredRecharges.filter(r => r.original_payment_method === 'due' && r.status === 'completed').length;
+    const pendingManual = recharges.filter(r => r.status === 'pending_manual').length;
     const todayTotal = recharges.filter(r => r.recharge_date.startsWith(new Date().toISOString().split('T')[0])).length;
-    return { totalAmount, totalDiscount, byAdmin, byStaff, byReseller, byOnline, dueRecharges, paidFromDue, todayTotal, total: filteredRecharges.length };
+    return { totalAmount, totalDiscount, byAdmin, byStaff, byReseller, byOnline, dueRecharges, paidFromDue, pendingManual, todayTotal, total: filteredRecharges.length };
   }, [filteredRecharges, recharges]);
 
   // Reset page when filters change
@@ -298,6 +309,113 @@ export default function RechargeHistory() {
     setSelectedRecharge(recharge);
     setEditPaymentMethod('cash');
     setShowEditDueDialog(true);
+  };
+
+  // Open verify dialog for pending manual payment
+  const openVerifyDialog = (recharge: CustomerRecharge, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedRecharge(recharge);
+    setShowVerifyDialog(true);
+  };
+
+  // Open reject dialog for pending manual payment
+  const openRejectDialog = (recharge: CustomerRecharge, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedRecharge(recharge);
+    setRejectReason('');
+    setShowRejectDialog(true);
+  };
+
+  // Verify pending manual payment
+  const handleVerifyManualPayment = async () => {
+    if (!selectedRecharge || !tenantId) return;
+    
+    setEditLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Update recharge status to completed
+      const { error } = await supabase
+        .from('customer_recharges')
+        .update({
+          status: 'completed',
+          paid_at: new Date().toISOString(),
+          paid_by: user?.id || null,
+          paid_by_name: currentUser.name || 'Admin',
+        })
+        .eq('id', selectedRecharge.id);
+      
+      if (error) throw error;
+      
+      // Update customer expiry date and status
+      if (selectedRecharge.customer_id && selectedRecharge.new_expiry) {
+        await supabase
+          .from('customers')
+          .update({
+            expiry_date: selectedRecharge.new_expiry,
+            last_payment_date: format(new Date(), 'yyyy-MM-dd'),
+            status: 'active',
+            due_amount: 0,
+          })
+          .eq('id', selectedRecharge.customer_id);
+        
+        // Create payment record
+        await supabase.from('customer_payments').insert({
+          tenant_id: tenantId,
+          customer_id: selectedRecharge.customer_id,
+          amount: selectedRecharge.amount,
+          payment_method: selectedRecharge.payment_method,
+          notes: `Manual payment verified: ${selectedRecharge.notes || ''}`,
+        });
+      }
+      
+      toast.success('Payment verified successfully!');
+      setShowVerifyDialog(false);
+      setSelectedRecharge(null);
+      fetchRecharges();
+    } catch (err) {
+      console.error('Error verifying payment:', err);
+      toast.error('Failed to verify payment');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // Reject pending manual payment
+  const handleRejectManualPayment = async () => {
+    if (!selectedRecharge || !rejectReason.trim()) {
+      toast.error('Please enter a rejection reason');
+      return;
+    }
+    
+    setEditLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Update recharge status to rejected
+      const { error } = await supabase
+        .from('customer_recharges')
+        .update({
+          status: 'rejected',
+          notes: `${selectedRecharge.notes || ''} | Rejected: ${rejectReason}`,
+          paid_by: user?.id || null,
+          paid_by_name: currentUser.name || 'Admin',
+        })
+        .eq('id', selectedRecharge.id);
+      
+      if (error) throw error;
+      
+      toast.success('Payment rejected');
+      setShowRejectDialog(false);
+      setSelectedRecharge(null);
+      setRejectReason('');
+      fetchRecharges();
+    } catch (err) {
+      console.error('Error rejecting payment:', err);
+      toast.error('Failed to reject payment');
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   // Export CSV
@@ -518,6 +636,8 @@ export default function RechargeHistory() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="due">Due</SelectItem>
+                <SelectItem value="pending_manual">Pending Verification</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
             <Input
@@ -701,6 +821,25 @@ export default function RechargeHistory() {
                                 <Check className="h-4 w-4 mr-1" />
                                 Mark Paid
                               </Button>
+                            ) : recharge.status === 'pending_manual' ? (
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="bg-green-500/10 hover:bg-green-500/20 text-green-600"
+                                  onClick={(e) => openVerifyDialog(recharge, e)}
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="bg-red-500/10 hover:bg-red-500/20 text-red-600"
+                                  onClick={(e) => openRejectDialog(recharge, e)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
@@ -785,6 +924,74 @@ export default function RechargeHistory() {
               {editLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <CheckCircle2 className="h-4 w-4 mr-2" />
               Mark as Paid
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Verify Manual Payment Dialog */}
+      <Dialog open={showVerifyDialog} onOpenChange={setShowVerifyDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Verify Manual Payment</DialogTitle>
+            <DialogDescription>
+              Confirm this payment is valid and activate the customer
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRecharge && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted/50 rounded-md space-y-2">
+                <p className="font-medium">{selectedRecharge.customer?.name}</p>
+                <p className="text-sm text-muted-foreground">Amount: ৳{selectedRecharge.amount.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">Method: {selectedRecharge.payment_method}</p>
+                {selectedRecharge.notes && (
+                  <p className="text-sm text-blue-600 bg-blue-50 dark:bg-blue-900/20 p-2 rounded">{selectedRecharge.notes}</p>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVerifyDialog(false)}>Cancel</Button>
+            <Button onClick={handleVerifyManualPayment} disabled={editLoading} className="bg-green-600 hover:bg-green-700">
+              {editLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Check className="h-4 w-4 mr-2" />
+              Verify Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Manual Payment Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Payment</DialogTitle>
+            <DialogDescription>
+              Enter a reason for rejecting this payment
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRecharge && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted/50 rounded-md">
+                <p className="font-medium">{selectedRecharge.customer?.name}</p>
+                <p className="text-sm text-muted-foreground">Amount: ৳{selectedRecharge.amount.toLocaleString()}</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Rejection Reason</Label>
+                <Input 
+                  value={rejectReason} 
+                  onChange={(e) => setRejectReason(e.target.value)} 
+                  placeholder="e.g. Invalid TxID, Payment not found"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>Cancel</Button>
+            <Button onClick={handleRejectManualPayment} disabled={editLoading || !rejectReason.trim()} variant="destructive">
+              {editLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <X className="h-4 w-4 mr-2" />
+              Reject
             </Button>
           </DialogFooter>
         </DialogContent>
