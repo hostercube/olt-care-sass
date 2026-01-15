@@ -141,11 +141,9 @@ export function CustomerPortalLayout() {
               .select('*')
               .eq('tenant_id', effectiveTenantId)
               .maybeSingle(),
+            // Use RPC (SECURITY DEFINER) so customer portal doesn't depend on direct table RLS
             supabase
-              .from('referral_configs')
-              .select('is_enabled')
-              .eq('tenant_id', effectiveTenantId)
-              .maybeSingle()
+              .rpc('get_referral_config', { p_tenant_id: effectiveTenantId })
           ]);
 
           const { data: tenantData, error: tenantErr } = tenantResult;
@@ -171,7 +169,8 @@ export function CustomerPortalLayout() {
           if (appsConfigResult.data) {
             setAppsConfig(appsConfigResult.data);
           }
-          
+
+          // referralConfigResult is JSON from RPC
           if (referralConfigResult.data) {
             setReferralConfig(referralConfigResult.data);
           }
@@ -197,20 +196,14 @@ export function CustomerPortalLayout() {
   };
 
   // Build navigation items dynamically based on apps config and referral config
-  // Referral is shown if either:
-  // 1. customer_apps_config.referral_enabled is true, OR
-  // 2. referral_configs.is_enabled is true, OR
-  // 3. No config exists yet (default to showing - let tenant disable if not wanted)
-  // Only hide if explicitly set to false
-  const isReferralExplicitlyDisabled = 
-    (appsConfig !== null && appsConfig.referral_enabled === false) && 
-    (referralConfig !== null && referralConfig.is_enabled === false);
-  
-  const isReferralEnabled = !isReferralExplicitlyDisabled && 
-    (appsConfig?.referral_enabled === true || referralConfig?.is_enabled === true || 
-     (appsConfig === null && referralConfig === null) || 
-     referralConfig?.is_enabled === true);
-  
+  // Rule:
+  // - If referral setting exists and is_enabled=false => hide referral
+  // - Show referral if referral is_enabled=true
+  // - If referral config couldn't be loaded, fall back to appsConfig.referral_enabled
+  const isReferralEnabled =
+    referralConfig?.is_enabled === true ||
+    (referralConfig == null && appsConfig?.referral_enabled === true);
+
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/portal/dashboard', icon: LayoutDashboard },
     { label: 'Packages', href: '/portal/packages', icon: Package },
