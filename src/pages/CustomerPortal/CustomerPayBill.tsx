@@ -147,31 +147,18 @@ export default function CustomerPayBill() {
         }
       }
 
-      // Fetch enabled payment gateways for tenant
-      let { data: gatewayData } = await supabase
-        .from('tenant_payment_gateways')
-        .select('*')
-        .eq('tenant_id', tenant_id)
-        .eq('is_enabled', true)
-        .order('sort_order', { ascending: true });
-
-      // If no tenant-specific gateways, fall back to global payment_gateway_settings
-      if (!gatewayData || gatewayData.length === 0) {
-        const { data: globalGateways } = await supabase
-          .from('payment_gateway_settings')
-          .select('id, gateway, display_name, is_enabled, sandbox_mode, instructions')
-          .eq('is_enabled', true)
-          .order('sort_order', { ascending: true });
-        
-        if (globalGateways && globalGateways.length > 0) {
-          gatewayData = globalGateways as any;
-        }
+      // Fetch enabled payment gateways for tenant using RPC
+      const { data: gatewayData, error: gatewayError } = await supabase
+        .rpc('get_tenant_enabled_payment_gateways', { p_tenant_id: tenant_id });
+      
+      if (gatewayError) {
+        console.error('Error fetching payment gateways:', gatewayError);
       }
 
       if (gatewayData && gatewayData.length > 0) {
-        setGateways(gatewayData);
+        setGateways(gatewayData as TenantGateway[]);
         // Auto-select first gateway
-        setSelectedMethod(gatewayData[0].gateway as PaymentMethod);
+        setSelectedMethod((gatewayData as any)[0].gateway as PaymentMethod);
       }
 
     } catch (err) {

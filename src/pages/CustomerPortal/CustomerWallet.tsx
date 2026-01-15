@@ -34,6 +34,11 @@ interface WalletTransaction {
   notes: string | null;
   status: string;
   created_at: string;
+  updated_at: string;
+  reference_id?: string | null;
+  reference_type?: string | null;
+  processed_at?: string | null;
+  processed_by?: string | null;
 }
 
 const TOP_UP_AMOUNTS = [50, 100, 200, 500, 1000];
@@ -102,30 +107,17 @@ export default function CustomerWallet() {
         setTransactions(txData as WalletTransaction[]);
       }
 
-      // Fetch enabled payment gateways for tenant
-      let { data: gatewayData } = await supabase
-        .from('tenant_payment_gateways')
-        .select('*')
-        .eq('tenant_id', tenant_id)
-        .eq('is_enabled', true)
-        .order('sort_order', { ascending: true });
-
-      // If no tenant-specific gateways, fall back to global payment_gateway_settings
-      if (!gatewayData || gatewayData.length === 0) {
-        const { data: globalGateways } = await supabase
-          .from('payment_gateway_settings')
-          .select('id, gateway, display_name, is_enabled, sandbox_mode, instructions')
-          .eq('is_enabled', true)
-          .order('sort_order', { ascending: true });
-        
-        if (globalGateways && globalGateways.length > 0) {
-          gatewayData = globalGateways as any;
-        }
+      // Fetch enabled payment gateways for tenant using RPC
+      const { data: gatewayData, error: gatewayError } = await supabase
+        .rpc('get_tenant_enabled_payment_gateways', { p_tenant_id: tenant_id });
+      
+      if (gatewayError) {
+        console.error('Error fetching payment gateways:', gatewayError);
       }
 
       if (gatewayData && gatewayData.length > 0) {
-        setGateways(gatewayData);
-        setSelectedMethod(gatewayData[0].gateway as PaymentMethod);
+        setGateways(gatewayData as TenantGateway[]);
+        setSelectedMethod((gatewayData as any)[0].gateway as PaymentMethod);
       }
 
     } catch (err) {
