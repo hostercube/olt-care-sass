@@ -116,35 +116,92 @@ export default function CustomerPayBill() {
         return;
       }
 
-      const { id, tenant_id } = JSON.parse(session);
-      
-      // Fetch customer data with package
-      const { data: customerData, error: customerError } = await supabase
-        .from('customers')
-        .select(`
-          *,
-          package:isp_packages(*)
-        `)
-        .eq('id', id)
-        .maybeSingle();
+      let parsedSession;
+      try {
+        parsedSession = JSON.parse(session);
+      } catch {
+        localStorage.removeItem('customer_session');
+        navigate('/portal/login');
+        return;
+      }
 
-      if (customerError) {
-        console.error('Error:', customerError);
+      const { id, tenant_id } = parsedSession;
+      
+      if (!id || !tenant_id) {
+        navigate('/portal/login');
+        return;
+      }
+      
+      // First try to fetch customer data using RPC (bypasses RLS issues)
+      const { data: rpcResult, error: rpcError } = await supabase
+        .rpc('get_customer_profile', { p_customer_id: id });
+      
+      let customerData: any = null;
+      let effectiveTenantId = tenant_id;
+      
+      if (rpcResult && Array.isArray(rpcResult) && rpcResult.length > 0) {
+        // Convert RPC result to customer object with package nested
+        const c = rpcResult[0];
+        effectiveTenantId = c.tenant_id || tenant_id;
+        customerData = {
+          ...c,
+          id: c.id,
+          tenant_id: effectiveTenantId,
+          package: c.package_name ? {
+            id: null, // Will fetch separately if needed
+            name: c.package_name,
+            price: c.package_price,
+            download_speed: c.download_speed,
+            upload_speed: c.upload_speed,
+            speed_unit: 'Mbps',
+            validity_days: 30,
+          } : null,
+        };
+      } else {
+        // Fallback: Fetch customer data directly
+        const { data: directData, error: customerError } = await supabase
+          .from('customers')
+          .select(`
+            *,
+            package:isp_packages(*)
+          `)
+          .eq('id', id)
+          .maybeSingle();
+
+        if (customerError) {
+          console.error('Error fetching customer:', customerError);
+        }
+        
+        customerData = directData;
       }
       
       if (customerData) {
         setCustomer(customerData);
-        setWalletBalance(customerData.wallet_balance || 0);
+        
+        // Fetch wallet balance using RPC (includes all wallet credits)
+        const { data: walletData } = await supabase
+          .rpc('get_customer_wallet_balance', { p_customer_id: id });
+        setWalletBalance(Number(walletData) || 0);
+      } else {
+        // Use session data as basic fallback
+        setCustomer({
+          id,
+          tenant_id,
+          name: parsedSession.name || 'Customer',
+          package: null,
+          expiry_date: null,
+        });
       }
       
       // Fetch referral config to check if wallet usage is enabled
       const { data: referralConfig } = await supabase
-        .rpc('get_referral_config', { p_tenant_id: tenant_id });
+        .rpc('get_referral_config', { p_tenant_id: effectiveTenantId });
       
       if (referralConfig && (referralConfig as any).use_wallet_for_recharge === true) {
         setUseWalletEnabled(true);
         // Auto-enable wallet usage if balance exists
-        if (customerData?.wallet_balance > 0) {
+        const currentWalletBal = Number((await supabase.rpc('get_customer_wallet_balance', { p_customer_id: id })).data) || 0;
+        if (currentWalletBal > 0) {
           setUseWalletBalance(true);
         }
       }
@@ -183,7 +240,7 @@ export default function CustomerPayBill() {
 
       // Fetch enabled payment gateways for tenant using RPC
       const { data: gatewayData, error: gatewayError } = await supabase
-        .rpc('get_tenant_enabled_payment_gateways', { p_tenant_id: tenant_id });
+        .rpc('get_tenant_enabled_payment_gateways', { p_tenant_id: effectiveTenantId });
       
       if (gatewayError) {
         console.error('Error fetching payment gateways:', gatewayError);
