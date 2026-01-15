@@ -14,6 +14,7 @@ export function useReferralSystem() {
     if (!tenantId) return;
 
     try {
+      // Fetch directly from table for admin panel (has RLS access)
       const { data, error } = await supabase
         .from('referral_configs')
         .select('*')
@@ -21,7 +22,17 @@ export function useReferralSystem() {
         .maybeSingle();
 
       if (error) throw error;
-      setConfig(data);
+      
+      // If no config exists, set defaults
+      if (data) {
+        setConfig({
+          ...data,
+          withdraw_enabled: data.withdraw_enabled ?? false,
+          use_wallet_for_recharge: data.use_wallet_for_recharge ?? true,
+        });
+      } else {
+        setConfig(null);
+      }
     } catch (error) {
       console.error('Error fetching referral config:', error);
     }

@@ -197,11 +197,12 @@ export function CustomerPortalLayout() {
 
   // Build navigation items dynamically based on apps config and referral config
   // Rule:
-  // - If referral setting exists and is_enabled=false => hide referral
-  // - Show referral if referral is_enabled=true
-  // - If referral config couldn't be loaded, fall back to appsConfig.referral_enabled
+  // - If referral config exists and is_enabled=false => hide referral
+  // - Show referral if referral config is_enabled=true
+  // - If referral config couldn't be loaded or doesn't exist, fall back to appsConfig.referral_enabled
+  // - Explicitly check for === true to avoid showing when disabled
   const isReferralEnabled =
-    referralConfig?.is_enabled === true ||
+    (referralConfig && referralConfig.is_enabled === true) ||
     (referralConfig == null && appsConfig?.referral_enabled === true);
 
   const navItems: NavItem[] = [

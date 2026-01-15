@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Gift, Copy, Users, DollarSign, CheckCircle, Clock, Share2, Wallet, ArrowDownCircle, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Gift, Copy, Users, DollarSign, CheckCircle, Clock, Share2, Wallet, ArrowDownCircle, ChevronLeft, ChevronRight, X, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -39,11 +39,21 @@ interface ReferralRecord {
   created_at: string;
 }
 
+interface ReferralConfig {
+  is_enabled: boolean;
+  bonus_type: string;
+  bonus_amount: number;
+  bonus_percentage: number;
+  withdraw_enabled: boolean;
+  use_wallet_for_recharge: boolean;
+}
+
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 export default function CustomerReferral() {
   const context = useOutletContext<CustomerContext>();
   const customer = context?.customer;
+  const navigate = useNavigate();
 
   const [referralCode, setReferralCode] = useState<string>('');
   const [referralLink, setReferralLink] = useState<string>('');
@@ -54,6 +64,7 @@ export default function CustomerReferral() {
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [withdrawEnabled, setWithdrawEnabled] = useState<boolean>(false);
   const [useWalletForRecharge, setUseWalletForRecharge] = useState<boolean>(true);
+  const [referralEnabled, setReferralEnabled] = useState<boolean | null>(null); // null = loading
   const [loading, setLoading] = useState(true);
   
   // Pagination & Filter
@@ -72,6 +83,24 @@ export default function CustomerReferral() {
     if (!customer?.id || !customer?.tenant_id) return;
 
     try {
+      // First fetch referral config using RPC to check if enabled
+      const { data: configData } = await supabase
+        .rpc('get_referral_config', { p_tenant_id: customer.tenant_id });
+      
+      const config = configData as unknown as ReferralConfig | null;
+      
+      // If referral is disabled, set state and return early
+      if (!config || config.is_enabled !== true) {
+        setReferralEnabled(false);
+        setLoading(false);
+        return;
+      }
+      
+      setReferralEnabled(true);
+      setBonusPerReferral(config.bonus_amount || 0);
+      setWithdrawEnabled(config.withdraw_enabled === true);
+      setUseWalletForRecharge(config.use_wallet_for_recharge !== false);
+
       // Fetch or generate referral code
       let code = customer.referral_code;
       if (!code) {
@@ -111,24 +140,6 @@ export default function CustomerReferral() {
       const { data: balanceData } = await supabase
         .rpc('get_customer_wallet_balance', { p_customer_id: customer.id });
       setWalletBalance(Number(balanceData) || 0);
-
-      // Fetch referral config for bonus amount and settings
-      const { data: configData } = await supabase
-        .from('referral_configs')
-        .select('is_enabled, bonus_amount, bonus_type, bonus_percentage, withdraw_enabled, use_wallet_for_recharge')
-        .eq('tenant_id', customer.tenant_id)
-        .maybeSingle();
-      
-      if (configData && configData.is_enabled === true) {
-        setBonusPerReferral(configData.bonus_amount || 0);
-        // Use explicit boolean check - if false, keep false
-        setWithdrawEnabled(configData.withdraw_enabled === true);
-        setUseWalletForRecharge(configData.use_wallet_for_recharge !== false);
-      } else {
-        // Disabled or no config exists
-        setWithdrawEnabled(false);
-        setUseWalletForRecharge(true);
-      }
 
       // Fetch referral history
       const { data: referralData } = await supabase
@@ -259,6 +270,22 @@ export default function CustomerReferral() {
           ))}
         </div>
         <Skeleton className="h-64" />
+      </div>
+    );
+  }
+
+  // If referral is disabled, show message
+  if (referralEnabled === false) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 space-y-4">
+        <AlertCircle className="h-16 w-16 text-muted-foreground" />
+        <h2 className="text-xl font-semibold text-muted-foreground">Referral Program Unavailable</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          The referral program is currently not available. Please contact support for more information.
+        </p>
+        <Button variant="outline" onClick={() => navigate('/portal/dashboard')}>
+          Go to Dashboard
+        </Button>
       </div>
     );
   }
