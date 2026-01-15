@@ -51,7 +51,7 @@ export default function CustomerReferral() {
   const [filteredReferrals, setFilteredReferrals] = useState<ReferralRecord[]>([]);
   const [bonusPerReferral, setBonusPerReferral] = useState<number>(0);
   const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [withdrawEnabled, setWithdrawEnabled] = useState<boolean>(true);
+  const [withdrawEnabled, setWithdrawEnabled] = useState<boolean>(false);
   const [useWalletForRecharge, setUseWalletForRecharge] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
   
@@ -231,14 +231,11 @@ export default function CustomerReferral() {
     switch (status) {
       case 'completed':
       case 'bonus_paid':
-        return <Badge className="bg-green-500">Completed</Badge>;
-      case 'pending':
-        return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-700">Pending</Badge>;
-      case 'approved':
-        return <Badge variant="secondary" className="bg-blue-500/20 text-blue-700">Approved</Badge>;
       case 'activated':
       case 'active':
-        return <Badge className="bg-blue-500">Active</Badge>;
+        return <Badge className="bg-green-500">Active</Badge>;
+      case 'pending':
+        return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-700">Pending</Badge>;
       case 'rejected':
         return <Badge variant="destructive">Rejected</Badge>;
       default:
@@ -336,8 +333,8 @@ export default function CustomerReferral() {
         </CardContent>
       </Card>
 
-      {/* Stats Grid */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-6">
+      {/* Stats Grid - Simplified: Total, Active, Pending, Rejected, Earned */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -360,20 +357,6 @@ export default function CustomerReferral() {
                 </p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Approved</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {referrals.filter(r => r.status === 'approved').length}
-                </p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
@@ -436,9 +419,7 @@ export default function CustomerReferral() {
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
