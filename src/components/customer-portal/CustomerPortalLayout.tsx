@@ -197,8 +197,19 @@ export function CustomerPortalLayout() {
   };
 
   // Build navigation items dynamically based on apps config and referral config
-  // Referral is shown if either customer_apps_config.referral_enabled OR referral_configs.is_enabled is true
-  const isReferralEnabled = appsConfig?.referral_enabled || referralConfig?.is_enabled;
+  // Referral is shown if either:
+  // 1. customer_apps_config.referral_enabled is true, OR
+  // 2. referral_configs.is_enabled is true, OR
+  // 3. No config exists yet (default to showing - let tenant disable if not wanted)
+  // Only hide if explicitly set to false
+  const isReferralExplicitlyDisabled = 
+    (appsConfig !== null && appsConfig.referral_enabled === false) && 
+    (referralConfig !== null && referralConfig.is_enabled === false);
+  
+  const isReferralEnabled = !isReferralExplicitlyDisabled && 
+    (appsConfig?.referral_enabled === true || referralConfig?.is_enabled === true || 
+     (appsConfig === null && referralConfig === null) || 
+     referralConfig?.is_enabled === true);
   
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/portal/dashboard', icon: LayoutDashboard },
