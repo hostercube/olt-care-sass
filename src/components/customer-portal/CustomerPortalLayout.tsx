@@ -38,6 +38,7 @@ export function CustomerPortalLayout() {
   const [customer, setCustomer] = useState<any>(null);
   const [tenantBranding, setTenantBranding] = useState<any>(null);
   const [appsConfig, setAppsConfig] = useState<any>(null);
+  const [referralConfig, setReferralConfig] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
@@ -129,7 +130,7 @@ export function CustomerPortalLayout() {
 
         // Fetch tenant branding - use tenant_id from RPC result or session
         if (effectiveTenantId) {
-          const [tenantResult, appsConfigResult] = await Promise.all([
+          const [tenantResult, appsConfigResult, referralConfigResult] = await Promise.all([
             supabase
               .from('tenants')
               .select('company_name, logo_url, favicon_url, subtitle, theme_color')
@@ -138,6 +139,11 @@ export function CustomerPortalLayout() {
             supabase
               .from('customer_apps_config')
               .select('*')
+              .eq('tenant_id', effectiveTenantId)
+              .maybeSingle(),
+            supabase
+              .from('referral_configs')
+              .select('is_enabled')
               .eq('tenant_id', effectiveTenantId)
               .maybeSingle()
           ]);
@@ -165,6 +171,10 @@ export function CustomerPortalLayout() {
           if (appsConfigResult.data) {
             setAppsConfig(appsConfigResult.data);
           }
+          
+          if (referralConfigResult.data) {
+            setReferralConfig(referralConfigResult.data);
+          }
         }
       } catch (err) {
         console.error('Error in customer portal layout:', err);
@@ -186,14 +196,17 @@ export function CustomerPortalLayout() {
     navigate('/portal/login');
   };
 
-  // Build navigation items dynamically based on apps config
+  // Build navigation items dynamically based on apps config and referral config
+  // Referral is shown if either customer_apps_config.referral_enabled OR referral_configs.is_enabled is true
+  const isReferralEnabled = appsConfig?.referral_enabled || referralConfig?.is_enabled;
+  
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/portal/dashboard', icon: LayoutDashboard },
     { label: 'Packages', href: '/portal/packages', icon: Package },
     { label: 'Pay Bill', href: '/portal/pay', icon: CreditCard },
     { label: 'Recharge History', href: '/portal/recharges', icon: History },
     { label: 'Usage & Speed', href: '/portal/usage', icon: Gauge },
-    { label: 'Referral & Wallet', href: '/portal/referral', icon: Gift, hidden: !appsConfig?.referral_enabled },
+    { label: 'Referral & Wallet', href: '/portal/referral', icon: Gift, hidden: !isReferralEnabled },
     { label: 'My Profile', href: '/portal/profile', icon: User },
     { label: 'Support', href: '/portal/support', icon: HelpCircle },
   ].filter(item => !item.hidden);
