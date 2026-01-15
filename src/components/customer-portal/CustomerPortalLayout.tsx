@@ -41,6 +41,7 @@ export function CustomerPortalLayout() {
   const [referralConfig, setReferralConfig] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
     hasSession: false,
     sessionParseOk: false,
@@ -117,6 +118,11 @@ export function CustomerPortalLayout() {
             } : null,
             area: null, // Area not returned by RPC
           });
+
+          // Fetch the actual wallet balance from RPC (consistent with referral page)
+          const { data: walletData } = await supabase
+            .rpc('get_customer_wallet_balance', { p_customer_id: id });
+          setWalletBalance(Number(walletData) || 0);
         } else {
           // Use session data as fallback
           setCustomer({
@@ -284,7 +290,7 @@ export function CustomerPortalLayout() {
               <Wallet className="h-4 w-4 text-green-600" />
               <span className="text-sm font-medium text-green-700 dark:text-green-400">Wallet</span>
             </div>
-            <span className="text-sm font-bold text-green-600">৳{(customer?.wallet_balance || 0).toFixed(2)}</span>
+            <span className="text-sm font-bold text-green-600">৳{walletBalance.toFixed(2)}</span>
           </Link>
         </div>
 

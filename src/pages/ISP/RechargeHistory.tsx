@@ -569,6 +569,21 @@ export default function RechargeHistory() {
             </div>
           </CardContent>
         </Card>
+        {stats.pendingManual > 0 && (
+          <Card className="cursor-pointer hover:bg-muted/50 border-orange-500/30" onClick={() => { setStatusFilter('pending_manual'); setTodayOnly(false); }}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-orange-500/10">
+                  <Clock className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pending</p>
+                  <p className="text-xl font-bold text-orange-600">{stats.pendingManual}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Main Content */}
@@ -791,15 +806,33 @@ export default function RechargeHistory() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Badge 
-                                variant={recharge.status === 'due' ? 'secondary' : 'default'}
-                                className={recharge.status === 'due' ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500' : 'bg-green-500/10 text-green-600'}
+                                variant={
+                                  recharge.status === 'due' ? 'secondary' : 
+                                  recharge.status === 'pending_manual' ? 'outline' :
+                                  recharge.status === 'rejected' ? 'destructive' :
+                                  'default'
+                                }
+                                className={
+                                  recharge.status === 'due' ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500' : 
+                                  recharge.status === 'pending_manual' ? 'bg-orange-500/10 text-orange-600 border-orange-500' :
+                                  recharge.status === 'rejected' ? '' :
+                                  'bg-green-500/10 text-green-600'
+                                }
                               >
-                                {recharge.status === 'due' ? 'Due' : 'Paid'}
+                                {recharge.status === 'due' ? 'Due' : 
+                                 recharge.status === 'pending_manual' ? 'Pending' : 
+                                 recharge.status === 'rejected' ? 'Rejected' : 
+                                 'Paid'}
                               </Badge>
                               {recharge.original_payment_method === 'due' && recharge.status === 'completed' && (
                                 <span className="text-xs text-muted-foreground">(was Due)</span>
                               )}
                             </div>
+                            {recharge.status === 'pending_manual' && recharge.notes && (
+                              <p className="text-xs text-muted-foreground mt-1 max-w-[150px] truncate" title={recharge.notes}>
+                                {recharge.notes}
+                              </p>
+                            )}
                             {recharge.paid_at && (
                               <p className="text-xs text-muted-foreground mt-1">
                                 Paid: {format(new Date(recharge.paid_at), 'dd MMM, hh:mm a')}
