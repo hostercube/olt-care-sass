@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { 
   CreditCard, Smartphone, Banknote, CheckCircle, Loader2, 
   ExternalLink, XCircle, ArrowLeft, AlertCircle, Calendar, Zap, Package,
-  Clock, Wifi, ArrowRightLeft
+  Clock, Wifi, ArrowRightLeft, Wallet
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
@@ -65,6 +65,11 @@ export default function CustomerPayBill() {
   // Package change support
   const [pendingPackageChange, setPendingPackageChange] = useState<ISPPackage | null>(null);
   const [isPackageChange, setIsPackageChange] = useState(false);
+  
+  // Wallet balance usage
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [useWalletEnabled, setUseWalletEnabled] = useState<boolean>(false);
+  const [useWalletBalance, setUseWalletBalance] = useState<boolean>(false);
 
   // Check for payment callback status and pending package change
   useEffect(() => {
@@ -112,6 +117,19 @@ export default function CustomerPayBill() {
       
       if (customerData) {
         setCustomer(customerData);
+        setWalletBalance(customerData.wallet_balance || 0);
+      }
+      
+      // Fetch referral config to check if wallet usage is enabled
+      const { data: referralConfig } = await supabase
+        .rpc('get_referral_config', { p_tenant_id: tenant_id });
+      
+      if (referralConfig && (referralConfig as any).use_wallet_for_recharge === true) {
+        setUseWalletEnabled(true);
+        // Auto-enable wallet usage if balance exists
+        if (customerData?.wallet_balance > 0) {
+          setUseWalletBalance(true);
+        }
       }
 
       // Check for pending package change and fetch that package
@@ -184,7 +202,14 @@ export default function CustomerPayBill() {
     const option = RECHARGE_OPTIONS.find(o => o.months === selectedMonths) || RECHARGE_OPTIONS[0];
     const subtotal = packagePrice * option.months;
     const discountAmount = Math.round((subtotal * option.discount) / 100);
-    const total = subtotal - discountAmount;
+    const totalBeforeWallet = subtotal - discountAmount;
+    
+    // Calculate wallet deduction
+    const walletDeduction = useWalletBalance && useWalletEnabled 
+      ? Math.min(walletBalance, totalBeforeWallet) 
+      : 0;
+    const total = totalBeforeWallet - walletDeduction;
+    
     const validityDays = (targetPackage?.validity_days || 30) * option.months;
     // For package changes, start fresh from today
     const newExpiry = isPackageChange 
@@ -193,7 +218,7 @@ export default function CustomerPayBill() {
           ? addDays(new Date(customer.expiry_date), validityDays)
           : addDays(new Date(), validityDays));
 
-    return { subtotal, discountAmount, total, validityDays, newExpiry, packagePrice };
+    return { subtotal, discountAmount, total, totalBeforeWallet, validityDays, newExpiry, packagePrice, walletDeduction };
   };
 
   const handlePayment = async () => {
@@ -209,7 +234,22 @@ export default function CustomerPayBill() {
     }
 
     const { id, tenant_id } = JSON.parse(session);
-    const { total } = calculatePricing();
+    const { total, walletDeduction } = calculatePricing();
+
+    // If fully covered by wallet, no payment method needed
+    if (total <= 0 && walletDeduction > 0) {
+      setIsSubmitting(true);
+      try {
+        await processRecharge(id, tenant_id, 0, walletDeduction);
+        setPaymentSuccess(true);
+      } catch (error: any) {
+        console.error('Wallet payment error:', error);
+        toast.error(error.message || 'Payment failed');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -244,15 +284,15 @@ export default function CustomerPayBill() {
             redirectToCheckout(response.checkout_url!);
           }, 500);
         } else if (response.success && !response.checkout_url) {
-          // Process recharge
-          await processRecharge(id, tenant_id, total);
+          // Process recharge with wallet deduction
+          await processRecharge(id, tenant_id, total, walletDeduction);
           setPaymentSuccess(true);
         } else {
           throw new Error(response.error || 'Payment initiation failed');
         }
       } else {
-        // For manual payment methods, create a pending payment
-        await processRecharge(id, tenant_id, total);
+        // For manual payment methods, create a pending payment with wallet deduction
+        await processRecharge(id, tenant_id, total, walletDeduction);
         setPaymentSuccess(true);
       }
     } catch (error: any) {
@@ -263,26 +303,42 @@ export default function CustomerPayBill() {
     }
   };
 
-  const processRecharge = async (customerId: string, tenantId: string, amount: number) => {
-    const { newExpiry, discountAmount } = calculatePricing();
+  const processRecharge = async (customerId: string, tenantId: string, amount: number, walletDeduction: number = 0) => {
+    const { newExpiry, discountAmount, totalBeforeWallet } = calculatePricing();
     const oldExpiry = customer?.expiry_date;
     const targetPackage = isPackageChange && pendingPackageChange ? pendingPackageChange : customer?.package;
     const oldPackageId = customer?.package_id;
     const newPackageId = isPackageChange && pendingPackageChange ? pendingPackageChange.id : oldPackageId;
+    
+    // Deduct wallet balance if applicable
+    if (walletDeduction > 0) {
+      const { data: walletResult, error: walletError } = await supabase.rpc('use_wallet_for_recharge', {
+        p_customer_id: customerId,
+        p_amount: walletDeduction,
+        p_notes: `Used for ${isPackageChange ? 'package change' : 'recharge'} - ${selectedMonths} month(s)`
+      });
+      
+      if (walletError) {
+        console.error('Wallet deduction error:', walletError);
+        throw new Error('Failed to deduct wallet balance');
+      }
+    }
 
-    // Create recharge record
+    // Create recharge record with total amount (including wallet portion)
     await supabase.from('customer_recharges').insert({
       tenant_id: tenantId,
       customer_id: customerId,
-      amount,
+      amount: totalBeforeWallet, // Record full amount
       months: selectedMonths,
-      payment_method: selectedMethod,
+      payment_method: walletDeduction > 0 && amount > 0 
+        ? `wallet+${selectedMethod}` 
+        : (walletDeduction > 0 ? 'wallet' : selectedMethod),
       old_expiry: oldExpiry,
       new_expiry: format(newExpiry, 'yyyy-MM-dd'),
       discount: discountAmount,
-      notes: isPackageChange 
+      notes: `${isPackageChange 
         ? `Package change from ${customer?.package?.name || 'N/A'} to ${pendingPackageChange?.name || 'N/A'}` 
-        : 'Customer portal self-recharge',
+        : 'Customer portal self-recharge'}${walletDeduction > 0 ? ` (Wallet: ৳${walletDeduction})` : ''}`,
       status: 'completed',
       collected_by_type: 'customer_self',
       collected_by_name: customer?.name || 'Customer',
@@ -477,7 +533,10 @@ export default function CustomerPayBill() {
     );
   }
 
-  const { subtotal, discountAmount, total, newExpiry, packagePrice } = calculatePricing();
+  const { subtotal, discountAmount, total, totalBeforeWallet, newExpiry, packagePrice, walletDeduction } = calculatePricing();
+
+  // Check if payment method is needed (not fully covered by wallet)
+  const needsPaymentMethod = total > 0;
 
   return (
     <div className="space-y-6">
@@ -651,9 +710,30 @@ export default function CustomerPayBill() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Wallet Usage Option */}
+          {useWalletEnabled && walletBalance > 0 && (
+            <div className="p-4 rounded-lg border-2 border-green-500/30 bg-green-500/5">
+              <label className="flex items-center justify-between cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <Wallet className="h-5 w-5 text-green-600" />
+                  <div>
+                    <p className="font-medium">Use Wallet Balance</p>
+                    <p className="text-sm text-muted-foreground">Available: ৳{walletBalance.toFixed(2)}</p>
+                  </div>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={useWalletBalance} 
+                  onChange={(e) => setUseWalletBalance(e.target.checked)}
+                  className="h-5 w-5 rounded accent-green-600"
+                />
+              </label>
+            </div>
+          )}
+
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">{customer?.package?.name} × {selectedMonths} month(s)</span>
+              <span className="text-muted-foreground">{isPackageChange && pendingPackageChange ? pendingPackageChange.name : customer?.package?.name} × {selectedMonths} month(s)</span>
               <span>৳{subtotal}</span>
             </div>
             {discountAmount > 0 && (
@@ -662,8 +742,14 @@ export default function CustomerPayBill() {
                 <span>-৳{discountAmount}</span>
               </div>
             )}
+            {walletDeduction > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>Wallet Balance</span>
+                <span>-৳{walletDeduction}</span>
+              </div>
+            )}
             <div className="border-t pt-2 flex justify-between text-lg font-bold">
-              <span>Total</span>
+              <span>Total to Pay</span>
               <span className="text-primary">৳{total}</span>
             </div>
           </div>
@@ -679,12 +765,17 @@ export default function CustomerPayBill() {
             className="w-full h-12 text-lg" 
             size="lg"
             onClick={handlePayment}
-            disabled={!selectedMethod || isSubmitting}
+            disabled={(needsPaymentMethod && !selectedMethod) || isSubmitting}
           >
             {isSubmitting ? (
               <>
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                 Processing...
+              </>
+            ) : total <= 0 ? (
+              <>
+                <Wallet className="h-5 w-5 mr-2" />
+                Pay with Wallet
               </>
             ) : (
               <>

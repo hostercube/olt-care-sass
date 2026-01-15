@@ -5446,6 +5446,7 @@ export type Database = {
           id: string
           is_enabled: boolean | null
           min_referrals_for_bonus: number | null
+          min_withdraw_amount: number | null
           referral_link_prefix: string | null
           tenant_id: string
           terms_and_conditions: string | null
@@ -5462,6 +5463,7 @@ export type Database = {
           id?: string
           is_enabled?: boolean | null
           min_referrals_for_bonus?: number | null
+          min_withdraw_amount?: number | null
           referral_link_prefix?: string | null
           tenant_id: string
           terms_and_conditions?: string | null
@@ -5478,6 +5480,7 @@ export type Database = {
           id?: string
           is_enabled?: boolean | null
           min_referrals_for_bonus?: number | null
+          min_withdraw_amount?: number | null
           referral_link_prefix?: string | null
           tenant_id?: string
           terms_and_conditions?: string | null
@@ -8750,6 +8753,15 @@ export type Database = {
           p_description?: string
           p_from_reseller_id: string
           p_to_reseller_id: string
+        }
+        Returns: Json
+      }
+      use_wallet_for_recharge: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_notes?: string
+          p_reference_id?: string
         }
         Returns: Json
       }
