@@ -580,7 +580,16 @@ export default function ReferralManagement() {
                           <TableCell>
                             <code className="text-xs bg-muted px-2 py-1 rounded">{referral.referral_code}</code>
                           </TableCell>
-                          <TableCell>{getStatusBadge(referral.status)}</TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              {getStatusBadge(referral.status)}
+                              {referral.status === 'rejected' && (referral as any).notes && (
+                                <p className="text-xs text-red-500 max-w-32 truncate" title={(referral as any).notes}>
+                                  {(referral as any).notes}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>{formatCurrency(referral.bonus_amount)}</TableCell>
                           <TableCell>{format(new Date(referral.created_at), 'dd MMM yyyy')}</TableCell>
                           <TableCell>

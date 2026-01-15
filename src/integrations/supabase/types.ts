@@ -2000,6 +2000,7 @@ export type Database = {
           referred_name: string | null
           referred_phone: string | null
           referrer_customer_id: string
+          rejection_reason: string | null
           status: string | null
           tenant_id: string
           updated_at: string | null
@@ -2016,6 +2017,7 @@ export type Database = {
           referred_name?: string | null
           referred_phone?: string | null
           referrer_customer_id: string
+          rejection_reason?: string | null
           status?: string | null
           tenant_id: string
           updated_at?: string | null
@@ -2032,6 +2034,7 @@ export type Database = {
           referred_name?: string | null
           referred_phone?: string | null
           referrer_customer_id?: string
+          rejection_reason?: string | null
           status?: string | null
           tenant_id?: string
           updated_at?: string | null

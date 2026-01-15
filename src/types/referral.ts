@@ -30,6 +30,7 @@ export interface CustomerReferral {
   referred_phone: string | null;
   referred_email: string | null;
   notes: string | null;
+  rejection_reason: string | null;
   created_at: string;
   updated_at: string;
   // Joined

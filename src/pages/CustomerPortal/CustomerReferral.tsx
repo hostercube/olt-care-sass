@@ -35,6 +35,7 @@ interface ReferralRecord {
   status: string;
   bonus_amount: number;
   bonus_paid_at: string | null;
+  notes: string | null;
   created_at: string;
 }
 
@@ -127,7 +128,7 @@ export default function CustomerReferral() {
       // Fetch referral history
       const { data: referralData } = await supabase
         .from('customer_referrals')
-        .select('id, referred_name, referred_phone, status, bonus_amount, bonus_paid_at, created_at')
+        .select('id, referred_name, referred_phone, status, bonus_amount, bonus_paid_at, notes, created_at')
         .eq('referrer_customer_id', customer.id)
         .order('created_at', { ascending: false });
 
@@ -443,12 +444,19 @@ export default function CustomerReferral() {
                     <TableRow key={referral.id}>
                       <TableCell className="font-medium">{referral.referred_name || 'N/A'}</TableCell>
                       <TableCell>{referral.referred_phone || 'N/A'}</TableCell>
-                      <TableCell>{getStatusBadge(referral.status)}</TableCell>
                       <TableCell>
-                        {referral.bonus_paid_at ? (
+                        <div className="space-y-1">
+                          {getStatusBadge(referral.status)}
+                          {referral.status === 'rejected' && referral.notes && (
+                            <p className="text-xs text-red-500">{referral.notes}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {referral.status === 'active' || referral.status === 'bonus_paid' ? (
                           <span className="text-green-600 font-medium">৳{referral.bonus_amount}</span>
                         ) : (
-                          <span className="text-muted-foreground">Pending</span>
+                          <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
                       <TableCell>{format(new Date(referral.created_at), 'dd MMM yyyy')}</TableCell>
