@@ -349,14 +349,19 @@ export default function RechargeHistory() {
       
       // Update customer expiry date and status
       if (selectedRecharge.customer_id && selectedRecharge.new_expiry) {
+        // Check if this was a package change by parsing notes
+        const isPackageChange = selectedRecharge.notes?.toLowerCase().includes('package change');
+        
+        const customerUpdate: Record<string, any> = {
+          expiry_date: selectedRecharge.new_expiry,
+          last_payment_date: format(new Date(), 'yyyy-MM-dd'),
+          status: 'active',
+          due_amount: 0,
+        };
+
         await supabase
           .from('customers')
-          .update({
-            expiry_date: selectedRecharge.new_expiry,
-            last_payment_date: format(new Date(), 'yyyy-MM-dd'),
-            status: 'active',
-            due_amount: 0,
-          })
+          .update(customerUpdate)
           .eq('id', selectedRecharge.customer_id);
         
         // Create payment record
@@ -365,7 +370,7 @@ export default function RechargeHistory() {
           customer_id: selectedRecharge.customer_id,
           amount: selectedRecharge.amount,
           payment_method: selectedRecharge.payment_method,
-          notes: `Manual payment verified: ${selectedRecharge.notes || ''}`,
+          notes: `Manual payment verified${isPackageChange ? ' (Package Change)' : ''}: ${selectedRecharge.notes || ''}`,
         });
       }
       
@@ -392,12 +397,13 @@ export default function RechargeHistory() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Update recharge status to rejected
+      // Update recharge status to rejected with dedicated rejection_reason field
       const { error } = await supabase
         .from('customer_recharges')
         .update({
           status: 'rejected',
-          notes: `${selectedRecharge.notes || ''} | Rejected: ${rejectReason}`,
+          rejection_reason: rejectReason,
+          notes: selectedRecharge.notes ? `${selectedRecharge.notes} | Rejected: ${rejectReason}` : `Rejected: ${rejectReason}`,
           paid_by: user?.id || null,
           paid_by_name: currentUser.name || 'Admin',
         })
@@ -569,21 +575,19 @@ export default function RechargeHistory() {
             </div>
           </CardContent>
         </Card>
-        {stats.pendingManual > 0 && (
-          <Card className="cursor-pointer hover:bg-muted/50 border-orange-500/30" onClick={() => { setStatusFilter('pending_manual'); setTodayOnly(false); }}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-500/10">
-                  <Clock className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Pending</p>
-                  <p className="text-xl font-bold text-orange-600">{stats.pendingManual}</p>
-                </div>
+        <Card className="cursor-pointer hover:bg-muted/50 border-orange-500/30" onClick={() => { setStatusFilter('pending_manual'); setTodayOnly(false); }}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <Clock className="h-5 w-5 text-orange-500" />
               </div>
-            </CardContent>
-          </Card>
-        )}
+              <div>
+                <p className="text-xs text-muted-foreground">Pending</p>
+                <p className="text-xl font-bold text-orange-600">{stats.pendingManual}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Main Content */}
