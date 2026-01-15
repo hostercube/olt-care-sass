@@ -38,7 +38,7 @@ interface ReferralRecord {
   created_at: string;
 }
 
-const ITEMS_PER_PAGE = 10;
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 export default function CustomerReferral() {
   const context = useOutletContext<CustomerContext>();
@@ -55,6 +55,7 @@ export default function CustomerReferral() {
   
   // Pagination & Filter
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   
   // Withdraw dialog
@@ -147,10 +148,10 @@ export default function CustomerReferral() {
   }, [referrals, statusFilter]);
 
   const paginatedReferrals = filteredReferrals.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
   );
-  const totalPages = Math.ceil(filteredReferrals.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredReferrals.length / pageSize);
 
   const copyReferralCode = () => {
     if (referralCode) {
@@ -435,29 +436,45 @@ export default function CustomerReferral() {
               </Table>
               
               {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Page {currentPage} of {totalPages}
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
+              {filteredReferrals.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>Show</span>
+                    <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                      <SelectTrigger className="w-[70px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAGE_SIZE_OPTIONS.map(size => (
+                          <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span>of {filteredReferrals.length} entries</span>
                   </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm px-2">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </>

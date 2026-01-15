@@ -16,11 +16,12 @@ import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Gift, Users, DollarSign, TrendingUp, Settings, List, Loader2, Save, 
-  Search, Filter, ChevronLeft, ChevronRight, Wallet, ArrowDownToLine
+  Search, Filter, ChevronLeft, ChevronRight, Wallet, ArrowDownToLine, X
 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const ITEMS_PER_PAGE = 10;
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 export default function ReferralManagement() {
   const { config, referrals, loading, saveConfig, updateReferralStatus, refetch } = useReferralSystem();
@@ -43,6 +44,7 @@ export default function ReferralManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE);
 
   // Customer wallet tracking
   const [customerWallets, setCustomerWallets] = useState<Array<{
@@ -56,6 +58,7 @@ export default function ReferralManagement() {
   const [loadingWallets, setLoadingWallets] = useState(false);
   const [walletSearch, setWalletSearch] = useState('');
   const [walletPage, setWalletPage] = useState(1);
+  const [walletPageSize, setWalletPageSize] = useState(ITEMS_PER_PAGE);
 
   // Update form when config loads
   useEffect(() => {
@@ -148,10 +151,10 @@ export default function ReferralManagement() {
   }, [referrals, searchQuery, statusFilter]);
 
   // Pagination
-  const totalPages = Math.ceil(filteredReferrals.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredReferrals.length / itemsPerPage);
   const paginatedReferrals = filteredReferrals.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
 
   // Filtered wallets
@@ -162,17 +165,19 @@ export default function ReferralManagement() {
     );
   }, [customerWallets, walletSearch]);
 
-  const totalWalletPages = Math.ceil(filteredWallets.length / ITEMS_PER_PAGE);
+  const totalWalletPages = Math.ceil(filteredWallets.length / walletPageSize);
   const paginatedWallets = filteredWallets.slice(
-    (walletPage - 1) * ITEMS_PER_PAGE,
-    walletPage * ITEMS_PER_PAGE
+    (walletPage - 1) * walletPageSize,
+    walletPage * walletPageSize
   );
+
 
   // Stats
   const totalReferrals = referrals.length;
-  const activeReferrals = referrals.filter(r => r.status === 'active').length;
+  const activeReferrals = referrals.filter(r => r.status === 'active' || r.status === 'bonus_paid').length;
   const pendingReferrals = referrals.filter(r => r.status === 'pending').length;
-  const totalBonusPaid = referrals.filter(r => r.status === 'bonus_paid').reduce((sum, r) => sum + r.bonus_amount, 0);
+  const rejectedReferrals = referrals.filter(r => r.status === 'rejected').length;
+  const totalBonusPaid = referrals.filter(r => r.status === 'bonus_paid' || r.status === 'active').reduce((sum, r) => sum + r.bonus_amount, 0);
   const totalWalletBalance = customerWallets.reduce((sum, w) => sum + w.wallet_balance, 0);
 
   const getStatusBadge = (status: string) => {
@@ -181,12 +186,14 @@ export default function ReferralManagement() {
       signed_up: 'outline',
       active: 'default',
       bonus_paid: 'default',
+      rejected: 'destructive',
     };
     const labels: Record<string, string> = {
       pending: 'Pending',
       signed_up: 'Signed Up',
       active: 'Active',
       bonus_paid: 'Bonus Paid',
+      rejected: 'Rejected',
     };
     return <Badge variant={variants[status] || 'secondary'}>{labels[status] || status}</Badge>;
   };
@@ -204,7 +211,7 @@ export default function ReferralManagement() {
   return (
     <DashboardLayout title="Referral Management" subtitle="Manage customer referral program">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -212,7 +219,7 @@ export default function ReferralManagement() {
                 <Users className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Referrals</p>
+                <p className="text-sm text-muted-foreground">Total</p>
                 <p className="text-2xl font-bold">{totalReferrals}</p>
               </div>
             </div>
@@ -226,7 +233,7 @@ export default function ReferralManagement() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Active</p>
-                <p className="text-2xl font-bold">{activeReferrals}</p>
+                <p className="text-2xl font-bold text-green-600">{activeReferrals}</p>
               </div>
             </div>
           </CardContent>
@@ -239,7 +246,20 @@ export default function ReferralManagement() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold">{pendingReferrals}</p>
+                <p className="text-2xl font-bold text-yellow-600">{pendingReferrals}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-red-500/10">
+                <X className="h-5 w-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Rejected</p>
+                <p className="text-2xl font-bold text-red-600">{rejectedReferrals}</p>
               </div>
             </div>
           </CardContent>
@@ -252,7 +272,7 @@ export default function ReferralManagement() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Bonus Paid</p>
-                <p className="text-2xl font-bold">{formatCurrency(totalBonusPaid)}</p>
+                <p className="text-2xl font-bold text-blue-600">{formatCurrency(totalBonusPaid)}</p>
               </div>
             </div>
           </CardContent>
@@ -265,7 +285,7 @@ export default function ReferralManagement() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Wallet</p>
-                <p className="text-2xl font-bold">{formatCurrency(totalWalletBalance)}</p>
+                <p className="text-2xl font-bold text-purple-600">{formatCurrency(totalWalletBalance)}</p>
               </div>
             </div>
           </CardContent>
@@ -416,6 +436,7 @@ export default function ReferralManagement() {
                       <SelectItem value="signed_up">Signed Up</SelectItem>
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="bonus_paid">Bonus Paid</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -484,32 +505,33 @@ export default function ReferralManagement() {
               </div>
 
               {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredReferrals.length)} of {filteredReferrals.length}
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="flex items-center px-3 text-sm">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
+              {filteredReferrals.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>Show</span>
+                    <Select value={String(itemsPerPage)} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
+                      <SelectTrigger className="w-[70px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAGE_SIZE_OPTIONS.map(size => (
+                          <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span>of {filteredReferrals.length} entries</span>
                   </div>
+                  {totalPages > 1 && (
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="flex items-center px-3 text-sm">Page {currentPage} of {totalPages}</span>
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -580,32 +602,33 @@ export default function ReferralManagement() {
                   </div>
 
                   {/* Pagination */}
-                  {totalWalletPages > 1 && (
-                    <div className="flex items-center justify-between mt-4">
-                      <p className="text-sm text-muted-foreground">
-                        Showing {(walletPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(walletPage * ITEMS_PER_PAGE, filteredWallets.length)} of {filteredWallets.length}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setWalletPage(p => Math.max(1, p - 1))}
-                          disabled={walletPage === 1}
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <span className="flex items-center px-3 text-sm">
-                          Page {walletPage} of {totalWalletPages}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setWalletPage(p => Math.min(totalWalletPages, p + 1))}
-                          disabled={walletPage === totalWalletPages}
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
+                  {filteredWallets.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-4">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>Show</span>
+                        <Select value={String(walletPageSize)} onValueChange={(v) => { setWalletPageSize(Number(v)); setWalletPage(1); }}>
+                          <SelectTrigger className="w-[70px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAGE_SIZE_OPTIONS.map(size => (
+                              <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span>of {filteredWallets.length} entries</span>
                       </div>
+                      {totalWalletPages > 1 && (
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setWalletPage(p => Math.max(1, p - 1))} disabled={walletPage === 1}>
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <span className="flex items-center px-3 text-sm">Page {walletPage} of {totalWalletPages}</span>
+                          <Button variant="outline" size="sm" onClick={() => setWalletPage(p => Math.min(totalWalletPages, p + 1))} disabled={walletPage === totalWalletPages}>
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
