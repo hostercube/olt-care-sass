@@ -46,6 +46,7 @@ interface ReferralConfig {
   bonus_percentage: number;
   withdraw_enabled: boolean;
   use_wallet_for_recharge: boolean;
+  min_withdraw_amount: number;
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -64,6 +65,7 @@ export default function CustomerReferral() {
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [withdrawEnabled, setWithdrawEnabled] = useState<boolean>(false);
   const [useWalletForRecharge, setUseWalletForRecharge] = useState<boolean>(true);
+  const [minWithdrawAmount, setMinWithdrawAmount] = useState<number>(100);
   const [referralEnabled, setReferralEnabled] = useState<boolean | null>(null); // null = loading
   const [loading, setLoading] = useState(true);
   
@@ -100,6 +102,7 @@ export default function CustomerReferral() {
       setBonusPerReferral(config.bonus_amount || 0);
       setWithdrawEnabled(config.withdraw_enabled === true);
       setUseWalletForRecharge(config.use_wallet_for_recharge !== false);
+      setMinWithdrawAmount(config.min_withdraw_amount || 100);
 
       // Fetch or generate referral code
       let code = customer.referral_code;
@@ -216,6 +219,10 @@ export default function CustomerReferral() {
       toast.error('Insufficient wallet balance');
       return;
     }
+    if (amount < minWithdrawAmount) {
+      toast.error(`Minimum withdraw amount is ৳${minWithdrawAmount}`);
+      return;
+    }
     if (!withdrawAccount) {
       toast.error('Please enter account number');
       return;
@@ -323,13 +330,19 @@ export default function CustomerReferral() {
             {withdrawEnabled && (
               <Button 
                 onClick={() => setWithdrawDialogOpen(true)} 
-                disabled={walletBalance <= 0}
+                disabled={walletBalance < minWithdrawAmount}
+                title={walletBalance < minWithdrawAmount ? `Minimum ৳${minWithdrawAmount} required` : ''}
               >
                 <ArrowDownCircle className="h-4 w-4 mr-2" />
                 Withdraw
               </Button>
             )}
           </div>
+          {withdrawEnabled && walletBalance > 0 && walletBalance < minWithdrawAmount && (
+            <p className="text-xs text-yellow-600 mt-2">
+              Minimum ৳{minWithdrawAmount} required for withdrawal. You can still use balance for recharge.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -366,8 +379,8 @@ export default function CustomerReferral() {
         </CardContent>
       </Card>
 
-      {/* Stats Grid - Simplified: Total, Active, Pending, Rejected, Earned */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
+      {/* Stats Grid - Simplified: Total, Pending, Rejected, Earned (removed Active) */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -376,20 +389,6 @@ export default function CustomerReferral() {
                 <p className="text-2xl font-bold">{referrals.length || stats?.total_referrals || 0}</p>
               </div>
               <Users className="h-8 w-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Active</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {referrals.filter(r => r.status === 'active' || r.status === 'bonus_paid').length || stats?.successful_referrals || 0}
-                </p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>

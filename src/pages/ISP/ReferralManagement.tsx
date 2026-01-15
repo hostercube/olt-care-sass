@@ -16,7 +16,7 @@ import { useLanguageCurrency } from '@/hooks/useLanguageCurrency';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { 
-  Gift, Users, DollarSign, TrendingUp, Settings, List, Loader2, Save, 
+  Gift, Users, DollarSign, Settings, List, Loader2, Save, 
   Search, Filter, ChevronLeft, ChevronRight, Wallet, X, CheckCircle, XCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -41,6 +41,7 @@ export default function ReferralManagement() {
     terms_and_conditions: '',
     withdraw_enabled: false,
     use_wallet_for_recharge: true,
+    min_withdraw_amount: 100,
   });
   const [saving, setSaving] = useState(false);
 
@@ -77,6 +78,7 @@ export default function ReferralManagement() {
         terms_and_conditions: config.terms_and_conditions || '',
         withdraw_enabled: config.withdraw_enabled === true,
         use_wallet_for_recharge: config.use_wallet_for_recharge !== false,
+        min_withdraw_amount: (config as any).min_withdraw_amount || 100,
       });
     }
   }, [config]);
@@ -110,7 +112,14 @@ export default function ReferralManagement() {
               .eq('referrer_customer_id', customer.id)
               .eq('status', 'bonus_paid');
 
-            const totalBonus = bonusData?.reduce((sum, r) => sum + (r.bonus_amount || 0), 0) || 0;
+            // Count total bonus from active/bonus_paid referrals (not just bonus_paid)
+            const { data: allBonusData } = await supabase
+              .from('customer_referrals')
+              .select('bonus_amount, status')
+              .eq('referrer_customer_id', customer.id)
+              .in('status', ['active', 'bonus_paid']);
+
+            const totalBonus = allBonusData?.reduce((sum, r) => sum + (r.bonus_amount || 0), 0) || 0;
 
             return {
               customer_id: customer.id,
@@ -178,9 +187,8 @@ export default function ReferralManagement() {
   );
 
 
-  // Stats - Simplified
+  // Stats - Simplified (removed Active from display)
   const totalReferrals = referrals.length;
-  const activeReferrals = referrals.filter(r => r.status === 'active' || r.status === 'bonus_paid').length;
   const pendingReferrals = referrals.filter(r => r.status === 'pending').length;
   const rejectedReferrals = referrals.filter(r => r.status === 'rejected').length;
   const totalBonusPaid = referrals.filter(r => r.status === 'bonus_paid' || r.status === 'active').reduce((sum, r) => sum + r.bonus_amount, 0);
@@ -278,8 +286,8 @@ export default function ReferralManagement() {
 
   return (
     <DashboardLayout title="Referral Management" subtitle="Manage customer referral program">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+      {/* Stats Cards - Removed Active stat */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -289,19 +297,6 @@ export default function ReferralManagement() {
               <div>
                 <p className="text-sm text-muted-foreground">Total</p>
                 <p className="text-2xl font-bold">{totalReferrals}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <TrendingUp className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Active</p>
-                <p className="text-2xl font-bold text-green-600">{activeReferrals}</p>
               </div>
             </div>
           </CardContent>
@@ -468,8 +463,21 @@ export default function ReferralManagement() {
 
               {/* Additional Settings */}
               <div className="space-y-4 pt-4 border-t">
-                <h4 className="font-medium">Additional Options</h4>
+                <h4 className="font-medium">Wallet & Withdraw Options</h4>
                 
+                <div className="flex items-center justify-between p-4 rounded-lg border">
+                  <div>
+                    <Label className="text-base font-medium">Use Wallet for Recharge</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Allow customers to use wallet balance when paying bills
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.use_wallet_for_recharge}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, use_wallet_for_recharge: checked }))}
+                  />
+                </div>
+
                 <div className="flex items-center justify-between p-4 rounded-lg border">
                   <div>
                     <Label className="text-base font-medium">Enable Withdraw Requests</Label>
@@ -483,18 +491,20 @@ export default function ReferralManagement() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-4 rounded-lg border">
-                  <div>
-                    <Label className="text-base font-medium">Use Wallet for Recharge</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Allow customers to use wallet balance when paying bills
+                {formData.withdraw_enabled && (
+                  <div className="space-y-2 p-4 rounded-lg border bg-muted/20">
+                    <Label>Minimum Withdraw Amount (৳)</Label>
+                    <Input
+                      type="number"
+                      value={formData.min_withdraw_amount}
+                      onChange={(e) => setFormData(prev => ({ ...prev, min_withdraw_amount: parseFloat(e.target.value) || 100 }))}
+                      placeholder="e.g., 100"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Customers must have at least this amount to request a withdrawal
                     </p>
                   </div>
-                  <Switch
-                    checked={formData.use_wallet_for_recharge}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, use_wallet_for_recharge: checked }))}
-                  />
-                </div>
+                )}
               </div>
 
               <Button onClick={handleSaveConfig} disabled={saving}>
