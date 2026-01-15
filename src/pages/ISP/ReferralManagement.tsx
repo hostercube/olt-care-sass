@@ -30,7 +30,7 @@ export default function ReferralManagement() {
   const { formatCurrency } = useLanguageCurrency();
   const { tenantId } = useTenantContext();
   
-  // Form state
+  // Form state - defaults to disabled for withdraw
   const [formData, setFormData] = useState({
     is_enabled: false,
     bonus_type: 'fixed',
@@ -39,7 +39,7 @@ export default function ReferralManagement() {
     min_referrals_for_bonus: 1,
     bonus_validity_days: 30,
     terms_and_conditions: '',
-    withdraw_enabled: true,
+    withdraw_enabled: false,
     use_wallet_for_recharge: true,
   });
   const [saving, setSaving] = useState(false);
@@ -75,8 +75,8 @@ export default function ReferralManagement() {
         min_referrals_for_bonus: config.min_referrals_for_bonus,
         bonus_validity_days: config.bonus_validity_days,
         terms_and_conditions: config.terms_and_conditions || '',
-        withdraw_enabled: (config as any).withdraw_enabled ?? true,
-        use_wallet_for_recharge: (config as any).use_wallet_for_recharge ?? true,
+        withdraw_enabled: config.withdraw_enabled === true,
+        use_wallet_for_recharge: config.use_wallet_for_recharge !== false,
       });
     }
   }, [config]);
@@ -210,7 +210,8 @@ export default function ReferralManagement() {
         ? config?.bonus_amount || 0 
         : 0;
 
-      const { error } = await supabase
+      // Update referral status
+      const { error: referralError } = await supabase
         .from('customer_referrals')
         .update({ 
           status: 'active', 
@@ -220,26 +221,40 @@ export default function ReferralManagement() {
         })
         .eq('id', referral.id);
       
-      if (error) throw error;
+      if (referralError) throw referralError;
 
       // Add bonus to referrer's wallet
       if (bonus > 0 && referral.referrer_customer_id) {
-        const { data: customerData } = await supabase
+        const { data: customerData, error: fetchError } = await supabase
           .from('customers')
           .select('wallet_balance, referral_bonus_balance')
           .eq('id', referral.referrer_customer_id)
           .single();
         
+        if (fetchError) {
+          console.error('Error fetching customer:', fetchError);
+          toast.error('Referral approved but failed to credit wallet');
+          refetch();
+          return;
+        }
+        
         const currentBalance = customerData?.wallet_balance || 0;
         const currentBonus = customerData?.referral_bonus_balance || 0;
         
-        await supabase
+        const { error: updateError } = await supabase
           .from('customers')
           .update({ 
             wallet_balance: currentBalance + bonus,
             referral_bonus_balance: currentBonus + bonus
           })
           .eq('id', referral.referrer_customer_id);
+        
+        if (updateError) {
+          console.error('Error updating wallet:', updateError);
+          toast.error('Referral approved but failed to credit wallet');
+          refetch();
+          return;
+        }
       }
       
       toast.success('Referral approved and bonus credited to wallet');

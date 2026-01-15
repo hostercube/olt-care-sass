@@ -11,8 +11,8 @@ export interface ReferralConfig {
   bonus_validity_days: number;
   referral_link_prefix: string | null;
   terms_and_conditions: string | null;
-  withdraw_enabled?: boolean;
-  use_wallet_for_recharge?: boolean;
+  withdraw_enabled: boolean;
+  use_wallet_for_recharge: boolean;
   created_at: string;
   updated_at: string;
 }

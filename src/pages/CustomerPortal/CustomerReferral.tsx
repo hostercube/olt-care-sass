@@ -121,8 +121,13 @@ export default function CustomerReferral() {
       
       if (configData) {
         setBonusPerReferral(configData.bonus_amount || 0);
-        setWithdrawEnabled(configData.withdraw_enabled ?? true);
-        setUseWalletForRecharge(configData.use_wallet_for_recharge ?? true);
+        // Use explicit boolean check - if false, keep false; only default to false if null/undefined
+        setWithdrawEnabled(configData.withdraw_enabled === true);
+        setUseWalletForRecharge(configData.use_wallet_for_recharge !== false);
+      } else {
+        // No config exists - defaults to disabled
+        setWithdrawEnabled(false);
+        setUseWalletForRecharge(true);
       }
 
       // Fetch referral history
