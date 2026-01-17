@@ -37,6 +37,8 @@ interface TopupRequest {
   status: string;
   rejection_reason: string | null;
   processed_at: string | null;
+  processed_by: string | null;
+  processed_by_name?: string | null;
   created_at: string;
 }
 
@@ -126,16 +128,30 @@ export default function ResellerWallet() {
       const result = await resellerApi.fetchPaymentGateways();
       if (result.success && result.gateways) {
         setPaymentGateways(result.gateways);
-        // Default to first online gateway if available
-        const onlineGateways = result.gateways.filter((g: PaymentGateway) => 
-          g.gateway !== 'manual' && g.gateway !== 'rocket'
+        
+        // Categorize gateways
+        const autoGateways = result.gateways.filter((g: PaymentGateway) => 
+          g.is_enabled && 
+          g.gateway !== 'manual' && 
+          g.gateway !== 'rocket' &&
+          g.gateway !== 'bank_transfer' &&
+          g.gateway !== 'cash'
         );
-        if (onlineGateways.length > 0) {
-          setPaymentMethod(onlineGateways[0].gateway);
+        const hasManual = result.gateways.some((g: PaymentGateway) => 
+          g.gateway === 'manual' && g.is_enabled
+        );
+        
+        // Set default mode based on what's available
+        if (autoGateways.length > 0) {
+          setPaymentMethod(autoGateways[0].gateway);
           setPaymentMode('online');
-        } else {
+        } else if (hasManual) {
           setPaymentMode('manual');
-          setPaymentMethod('bkash');
+          // Set first enabled gateway for manual
+          const manualMethods = result.gateways.filter((g: PaymentGateway) => g.is_enabled);
+          if (manualMethods.length > 0) {
+            setPaymentMethod(manualMethods[0].gateway);
+          }
         }
       }
     } catch (err) {
@@ -303,39 +319,51 @@ export default function ResellerWallet() {
     return labels[gateway.toLowerCase()] || gateway;
   };
 
-  const onlineGateways = paymentGateways.filter(g => 
-    g.gateway !== 'manual' && g.gateway !== 'rocket'
-  );
+  // Categorize gateways: online (auto) vs manual
+  const onlineGateways = useMemo(() => {
+    return paymentGateways.filter(g => 
+      g.is_enabled && 
+      g.gateway !== 'manual' && 
+      g.gateway !== 'rocket' &&
+      g.gateway !== 'bank_transfer' &&
+      g.gateway !== 'cash'
+    );
+  }, [paymentGateways]);
+
+  // Check if manual payment gateway is enabled by tenant
+  const manualGatewayEnabled = useMemo(() => {
+    return paymentGateways.some(g => g.gateway === 'manual' && g.is_enabled);
+  }, [paymentGateways]);
+
   const hasOnlineGateways = onlineGateways.length > 0;
 
-  // Get available manual payment methods from tenant gateways
+  // Get available manual payment methods - ONLY from tenant's enabled gateways
   const manualPaymentMethods = useMemo(() => {
-    const defaultMethods = [
-      { value: 'bkash', label: 'bKash' },
-      { value: 'nagad', label: 'Nagad' },
-      { value: 'rocket', label: 'Rocket' },
-      { value: 'bank_transfer', label: 'Bank Transfer' },
-      { value: 'cash', label: 'Cash' },
-    ];
-
-    // If gateways are loaded, show active ones first
-    if (paymentGateways.length > 0) {
-      const activeGateways = paymentGateways
-        .filter(g => g.is_enabled)
-        .map(g => ({ value: g.gateway, label: g.display_name }));
-      
-      // Add default methods that aren't in active gateways
-      const allMethods = [...activeGateways];
-      defaultMethods.forEach(dm => {
-        if (!allMethods.find(m => m.value === dm.value)) {
-          allMethods.push(dm);
-        }
-      });
-      return allMethods;
+    // Only show methods that are enabled by tenant
+    const enabledManualMethods = paymentGateways
+      .filter(g => g.is_enabled && (
+        g.gateway === 'manual' ||
+        g.gateway === 'bkash' ||
+        g.gateway === 'nagad' ||
+        g.gateway === 'rocket' ||
+        g.gateway === 'bank_transfer' ||
+        g.gateway === 'cash'
+      ))
+      .map(g => ({ value: g.gateway, label: g.display_name }));
+    
+    // If manual gateway is enabled but no specific methods, show common ones
+    if (manualGatewayEnabled && enabledManualMethods.length === 0) {
+      return [
+        { value: 'bkash', label: 'bKash' },
+        { value: 'nagad', label: 'Nagad' },
+        { value: 'rocket', label: 'Rocket' },
+        { value: 'bank_transfer', label: 'Bank Transfer' },
+        { value: 'cash', label: 'Cash' },
+      ];
     }
-
-    return defaultMethods;
-  }, [paymentGateways]);
+    
+    return enabledManualMethods.length > 0 ? enabledManualMethods : [];
+  }, [paymentGateways, manualGatewayEnabled]);
 
   if (loading || !session) {
     return (
@@ -503,28 +531,45 @@ export default function ResellerWallet() {
                   {paginatedRequests.map((request) => (
                     <div 
                       key={request.id} 
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg border bg-muted/30"
+                      className="flex flex-col gap-3 p-4 rounded-lg border bg-muted/30"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <Banknote className="h-5 w-5 text-primary" />
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Banknote className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-semibold">৳{request.amount.toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {getGatewayLabel(request.payment_method)} • TxID: {request.transaction_id || 'N/A'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold">৳{request.amount.toLocaleString()}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {getGatewayLabel(request.payment_method)} • TxID: {request.transaction_id || 'N/A'}
-                          </p>
+                        <div className="flex items-center gap-3 sm:flex-row-reverse">
+                          {getStatusBadge(request.status)}
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(request.created_at), 'dd MMM yyyy, hh:mm a')}
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 sm:flex-row-reverse">
-                        {getStatusBadge(request.status)}
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(request.created_at), 'dd MMM yyyy, hh:mm a')}
-                        </span>
-                      </div>
-                      {request.status === 'rejected' && request.rejection_reason && (
-                        <div className="w-full mt-2 p-2 rounded bg-red-500/10 text-sm text-red-600">
-                          Reason: {request.rejection_reason}
+                      
+                      {/* Show processed info for approved/rejected */}
+                      {request.status !== 'pending' && request.processed_at && (
+                        <div className={`text-xs px-3 py-2 rounded ${
+                          request.status === 'approved' 
+                            ? 'bg-green-500/10 text-green-600' 
+                            : 'bg-red-500/10 text-red-600'
+                        }`}>
+                          <span className="font-medium">
+                            {request.status === 'approved' ? 'Approved' : 'Rejected'}
+                          </span>
+                          {request.processed_by_name && (
+                            <span> by {request.processed_by_name}</span>
+                          )}
+                          <span> on {format(new Date(request.processed_at), 'dd MMM yyyy, hh:mm a')}</span>
+                          {request.status === 'rejected' && request.rejection_reason && (
+                            <span className="block mt-1">Reason: {request.rejection_reason}</span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -595,17 +640,28 @@ export default function ResellerWallet() {
                 </div>
               </div>
 
-              {/* Payment Mode Selection */}
+              {/* Payment Mode Selection - Only show enabled modes */}
+              {!hasOnlineGateways && !manualGatewayEnabled ? (
+                <div className="text-center py-4 border rounded-lg">
+                  <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">No payment methods enabled</p>
+                  <p className="text-sm text-muted-foreground">Please contact your ISP admin</p>
+                </div>
+              ) : (
               <Tabs value={paymentMode} onValueChange={(v) => setPaymentMode(v as 'online' | 'manual')}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="online" disabled={!hasOnlineGateways}>
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Pay Online
-                  </TabsTrigger>
-                  <TabsTrigger value="manual">
-                    <Banknote className="h-4 w-4 mr-2" />
-                    Manual Payment
-                  </TabsTrigger>
+                <TabsList className={`grid w-full ${hasOnlineGateways && manualGatewayEnabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {hasOnlineGateways && (
+                    <TabsTrigger value="online">
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Pay Online
+                    </TabsTrigger>
+                  )}
+                  {manualGatewayEnabled && (
+                    <TabsTrigger value="manual">
+                      <Banknote className="h-4 w-4 mr-2" />
+                      Manual Payment
+                    </TabsTrigger>
+                  )}
                 </TabsList>
 
                 <TabsContent value="online" className="space-y-4 mt-4">
@@ -682,6 +738,7 @@ export default function ResellerWallet() {
                   </div>
                 </TabsContent>
               </Tabs>
+              )}
             </div>
 
             <DialogFooter>

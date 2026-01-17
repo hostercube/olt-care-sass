@@ -1561,7 +1561,31 @@ export function setupResellerRoutes(app, supabase) {
         return res.status(500).json({ success: false, error: error.message });
       }
       
-      res.json({ success: true, topupRequests: data || [] });
+      // Fetch processed_by names for requests that have been processed
+      const processedRequests = data?.filter(r => r.processed_by) || [];
+      const userIds = [...new Set(processedRequests.map(r => r.processed_by))];
+      
+      let userNames = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', userIds);
+        
+        if (profiles) {
+          profiles.forEach(p => {
+            userNames[p.id] = p.full_name || 'Admin';
+          });
+        }
+      }
+      
+      // Add processed_by_name to each request
+      const enrichedData = (data || []).map(r => ({
+        ...r,
+        processed_by_name: r.processed_by ? (userNames[r.processed_by] || 'Admin') : null,
+      }));
+      
+      res.json({ success: true, topupRequests: enrichedData });
     } catch (error) {
       logger.error('Error fetching topup requests:', error);
       res.status(500).json({ success: false, error: error.message });

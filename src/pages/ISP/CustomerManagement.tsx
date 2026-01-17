@@ -30,7 +30,7 @@ import { BulkActionsToolbar } from '@/components/isp/BulkActionsToolbar';
 import { 
   Users, UserPlus, Search, MoreHorizontal, Eye, Edit, Trash2, 
   RefreshCw, UserCheck, UserX, Clock, Ban, Download, Upload,
-  Filter, CreditCard, RotateCcw, X, Store
+  Filter, CreditCard, RotateCcw, X, Store, LogIn
 } from 'lucide-react';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -831,6 +831,21 @@ export default function CustomerManagement() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="bg-popover border border-border">
+                                  <DropdownMenuItem onClick={() => {
+                                    // Auto-login to customer portal
+                                    const session = {
+                                      id: customer.id,
+                                      tenant_id: customer.tenant_id,
+                                      name: customer.name,
+                                      phone: customer.phone,
+                                      logged_in_at: new Date().toISOString(),
+                                    };
+                                    localStorage.setItem('customer_session', JSON.stringify(session));
+                                    window.open('/portal/dashboard', '_blank');
+                                  }}>
+                                    <LogIn className="h-4 w-4 mr-2" />
+                                    Auto Login Portal
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => navigate(`/isp/customers/${customer.id}`)}>
                                     <Eye className="h-4 w-4 mr-2" />
                                     View Profile

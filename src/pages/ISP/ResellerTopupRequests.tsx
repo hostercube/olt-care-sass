@@ -40,6 +40,7 @@ interface TopupRequest {
   notes: string | null;
   status: string;
   rejection_reason: string | null;
+  processed_by: string | null;
   processed_at: string | null;
   created_at: string;
   reseller?: {
@@ -48,6 +49,9 @@ interface TopupRequest {
     phone: string | null;
     balance: number;
   };
+  processed_by_user?: {
+    full_name: string | null;
+  } | null;
 }
 
 export default function ResellerTopupRequests() {
@@ -106,7 +110,34 @@ export default function ResellerTopupRequests() {
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      setRequests((data as TopupRequest[]) || []);
+      
+      // Fetch processed_by user names
+      const processedUserIds = [...new Set((data || [])
+        .filter(r => r.processed_by)
+        .map(r => r.processed_by)
+      )];
+      
+      let userNames: Record<string, string> = {};
+      if (processedUserIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', processedUserIds);
+        
+        if (profiles) {
+          profiles.forEach((p: any) => {
+            userNames[p.id] = p.full_name || 'Admin';
+          });
+        }
+      }
+      
+      // Enrich data with processed_by_user
+      const enrichedData = (data || []).map(r => ({
+        ...r,
+        processed_by_user: r.processed_by ? { full_name: userNames[r.processed_by] || 'Admin' } : null,
+      }));
+      
+      setRequests((enrichedData as TopupRequest[]) || []);
     } catch (err) {
       console.error('Error fetching topup requests:', err);
       toast.error('Failed to load top-up requests');
@@ -155,11 +186,12 @@ export default function ResellerTopupRequests() {
         description: `Manual wallet top-up approved - TxID: ${selectedRequest.transaction_id || 'N/A'}`,
       });
       
-      // Update request status
+      // Update request status with processed_by
       const { error: statusError } = await supabase
         .from('reseller_topup_requests')
         .update({
           status: 'approved',
+          processed_by: user?.id,
           processed_at: new Date().toISOString(),
         })
         .eq('id', selectedRequest.id);
@@ -193,6 +225,7 @@ export default function ResellerTopupRequests() {
         .update({
           status: 'rejected',
           rejection_reason: rejectionReason,
+          processed_by: user?.id,
           processed_at: new Date().toISOString(),
         })
         .eq('id', selectedRequest.id);
@@ -394,6 +427,7 @@ export default function ResellerTopupRequests() {
                             <TableHead>Payment Method</TableHead>
                             <TableHead>TxID</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Processed By</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
@@ -411,6 +445,20 @@ export default function ResellerTopupRequests() {
                               <TableCell className="capitalize">{request.payment_method || 'N/A'}</TableCell>
                               <TableCell className="font-mono text-sm">{request.transaction_id || 'N/A'}</TableCell>
                               <TableCell>{getStatusBadge(request.status)}</TableCell>
+                              <TableCell>
+                                {request.processed_by_user?.full_name ? (
+                                  <div>
+                                    <p className="text-sm">{request.processed_by_user.full_name}</p>
+                                    {request.processed_at && (
+                                      <p className="text-xs text-muted-foreground">
+                                        {format(new Date(request.processed_at), 'dd MMM, hh:mm a')}
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
                               <TableCell className="text-sm">
                                 {format(new Date(request.created_at), 'dd MMM yyyy, hh:mm a')}
                               </TableCell>
