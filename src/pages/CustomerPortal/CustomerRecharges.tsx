@@ -8,12 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { 
   History, Calendar, CreditCard, Loader2, Search, 
-  ChevronLeft, ChevronRight, TrendingUp, Filter, Download,
-  Banknote, Clock, CheckCircle
+  TrendingUp, Banknote, Clock, CheckCircle, XCircle, AlertCircle
 } from 'lucide-react';
-import { format, startOfYear, endOfYear, getYear } from 'date-fns';
-
-const ITEMS_PER_PAGE = 10;
+import { format, getYear } from 'date-fns';
+import { TablePagination } from '@/components/ui/table-pagination';
 
 export default function CustomerRecharges() {
   const context = useOutletContext<{ customer: any }>();
@@ -21,6 +19,7 @@ export default function CustomerRecharges() {
   const [recharges, setRecharges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,12 +65,20 @@ export default function CustomerRecharges() {
         const matchesSearch = 
           (recharge.transaction_id || '').toLowerCase().includes(query) ||
           (recharge.payment_method || '').toLowerCase().includes(query) ||
-          String(recharge.amount).includes(query);
+          String(recharge.amount).includes(query) ||
+          (recharge.notes || '').toLowerCase().includes(query);
         if (!matchesSearch) return false;
       }
       
       // Status filter
-      if (statusFilter !== 'all' && recharge.status !== statusFilter) return false;
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'pending') {
+          // Include both pending and pending_manual
+          if (recharge.status !== 'pending' && recharge.status !== 'pending_manual') return false;
+        } else {
+          if (recharge.status !== statusFilter) return false;
+        }
+      }
       
       // Year filter
       if (yearFilter !== 'all') {
@@ -87,21 +94,26 @@ export default function CustomerRecharges() {
   }, [recharges, searchQuery, statusFilter, yearFilter, methodFilter]);
 
   // Pagination
-  const totalPages = Math.ceil(filteredRecharges.length / ITEMS_PER_PAGE);
-  const paginatedRecharges = filteredRecharges.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const paginatedRecharges = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredRecharges.slice(startIndex, startIndex + pageSize);
+  }, [filteredRecharges, currentPage, pageSize]);
 
   // Stats
   const stats = useMemo(() => {
     const total = filteredRecharges.reduce((sum, r) => sum + (r.amount || 0), 0);
     const completed = filteredRecharges.filter(r => r.status === 'completed').length;
-    const pending = filteredRecharges.filter(r => r.status === 'pending').length;
+    const pending = filteredRecharges.filter(r => r.status === 'pending' || r.status === 'pending_manual').length;
+    const rejected = filteredRecharges.filter(r => r.status === 'rejected').length;
     const avgAmount = filteredRecharges.length > 0 ? total / filteredRecharges.length : 0;
     
-    return { total, completed, pending, count: filteredRecharges.length, avgAmount };
+    return { total, completed, pending, rejected, count: filteredRecharges.length, avgAmount };
   }, [filteredRecharges]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, yearFilter, methodFilter]);
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -119,8 +131,53 @@ export default function CustomerRecharges() {
         return <CreditCard className="h-4 w-4" />;
       case 'cash':
         return <Banknote className="h-4 w-4" />;
+      case 'wallet':
+        return <CreditCard className="h-4 w-4 text-purple-500" />;
       default:
         return <CreditCard className="h-4 w-4" />;
+    }
+  };
+
+  const getStatusBadge = (status: string, rejectionReason?: string) => {
+    switch (status) {
+      case 'completed':
+        return (
+          <Badge className="bg-green-600 hover:bg-green-700">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Completed
+          </Badge>
+        );
+      case 'pending':
+      case 'pending_manual':
+        return (
+          <Badge variant="outline" className="border-orange-500 text-orange-600 bg-orange-500/10">
+            <Clock className="h-3 w-3 mr-1" />
+            Pending Verification
+          </Badge>
+        );
+      case 'rejected':
+        return (
+          <div className="space-y-1">
+            <Badge variant="destructive">
+              <XCircle className="h-3 w-3 mr-1" />
+              Rejected
+            </Badge>
+            {rejectionReason && (
+              <p className="text-xs text-destructive">{rejectionReason}</p>
+            )}
+          </div>
+        );
+      case 'due':
+        return (
+          <Badge variant="secondary" className="bg-yellow-500/10 text-yellow-600 border-yellow-500">
+            <AlertCircle className="h-3 w-3 mr-1" />
+            Due
+          </Badge>
+        );
+      default:
+        return (
+          <Badge className="bg-green-600">{status || 'completed'}</Badge>
+        );
     }
   };
 
@@ -143,7 +200,7 @@ export default function CustomerRecharges() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-500/10 to-transparent">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -186,6 +243,20 @@ export default function CustomerRecharges() {
           </CardContent>
         </Card>
 
+        <Card className="border-2 border-orange-500/30 bg-gradient-to-br from-orange-500/10 to-transparent">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-orange-500/20">
+                <Clock className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Pending</p>
+                <p className="text-xl font-bold text-orange-600">{stats.pending}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border-2 border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-transparent">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -208,27 +279,28 @@ export default function CustomerRecharges() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by transaction ID, method..."
+                placeholder="Search by transaction ID, method, notes..."
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
             </div>
             
             <div className="flex flex-wrap gap-2">
-              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
-                <SelectTrigger className="w-[130px]">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="due">Due</SelectItem>
                 </SelectContent>
               </Select>
 
-              <Select value={yearFilter} onValueChange={(v) => { setYearFilter(v); setCurrentPage(1); }}>
+              <Select value={yearFilter} onValueChange={setYearFilter}>
                 <SelectTrigger className="w-[120px]">
                   <SelectValue placeholder="Year" />
                 </SelectTrigger>
@@ -240,7 +312,7 @@ export default function CustomerRecharges() {
                 </SelectContent>
               </Select>
 
-              <Select value={methodFilter} onValueChange={(v) => { setMethodFilter(v); setCurrentPage(1); }}>
+              <Select value={methodFilter} onValueChange={setMethodFilter}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="Method" />
                 </SelectTrigger>
@@ -283,11 +355,28 @@ export default function CustomerRecharges() {
       ) : (
         <div className="space-y-3">
           {paginatedRecharges.map((recharge) => (
-            <Card key={recharge.id} className="hover:shadow-md transition-all border-2 hover:border-primary/30">
+            <Card 
+              key={recharge.id} 
+              className={`hover:shadow-md transition-all border-2 hover:border-primary/30 ${
+                recharge.status === 'pending_manual' || recharge.status === 'pending' 
+                  ? 'border-orange-500/30' 
+                  : recharge.status === 'rejected'
+                  ? 'border-red-500/30'
+                  : ''
+              }`}
+            >
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500/20 to-green-500/10 flex items-center justify-center border border-green-500/30">
+                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center border ${
+                      recharge.status === 'completed' 
+                        ? 'bg-gradient-to-br from-green-500/20 to-green-500/10 border-green-500/30'
+                        : recharge.status === 'pending_manual' || recharge.status === 'pending'
+                        ? 'bg-gradient-to-br from-orange-500/20 to-orange-500/10 border-orange-500/30'
+                        : recharge.status === 'rejected'
+                        ? 'bg-gradient-to-br from-red-500/20 to-red-500/10 border-red-500/30'
+                        : 'bg-gradient-to-br from-green-500/20 to-green-500/10 border-green-500/30'
+                    }`}>
                       {getMethodIcon(recharge.payment_method)}
                     </div>
                     <div>
@@ -313,19 +402,18 @@ export default function CustomerRecharges() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-xl text-green-600">+৳{recharge.amount}</p>
-                    <Badge 
-                      variant={recharge.status === 'completed' ? 'default' : recharge.status === 'pending' ? 'secondary' : 'destructive'}
-                      className={recharge.status === 'completed' ? 'bg-green-600' : ''}
-                    >
-                      {recharge.status || 'completed'}
-                    </Badge>
+                  <div className="text-right space-y-1">
+                    <p className={`font-bold text-xl ${
+                      recharge.status === 'rejected' ? 'text-muted-foreground line-through' : 'text-green-600'
+                    }`}>
+                      {recharge.status !== 'rejected' && '+'} ৳{recharge.amount}
+                    </p>
+                    {getStatusBadge(recharge.status, recharge.rejection_reason)}
                   </div>
                 </div>
                 
                 {/* Expiry info */}
-                {(recharge.old_expiry || recharge.new_expiry) && (
+                {(recharge.old_expiry || recharge.new_expiry) && recharge.status !== 'rejected' && (
                   <div className="mt-3 pt-3 border-t flex flex-wrap gap-4 text-sm">
                     {recharge.old_expiry && (
                       <div className="flex items-center gap-2">
@@ -344,9 +432,19 @@ export default function CustomerRecharges() {
                   </div>
                 )}
 
-                {recharge.transaction_id && (
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    Transaction ID: <span className="font-mono">{recharge.transaction_id}</span>
+                {/* Transaction ID & Notes */}
+                {(recharge.transaction_id || recharge.notes) && (
+                  <div className="mt-2 space-y-1">
+                    {recharge.transaction_id && (
+                      <div className="text-xs text-muted-foreground">
+                        Transaction ID: <span className="font-mono bg-muted px-1 rounded">{recharge.transaction_id}</span>
+                      </div>
+                    )}
+                    {recharge.notes && (recharge.status === 'pending_manual' || recharge.status === 'pending') && (
+                      <div className="text-xs text-orange-600 bg-orange-500/10 p-2 rounded">
+                        Note: {recharge.notes}
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -356,57 +454,15 @@ export default function CustomerRecharges() {
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredRecharges.length)} of {filteredRecharges.length}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={currentPage === pageNum ? 'default' : 'outline'}
-                    size="sm"
-                    className="w-8 h-8 p-0"
-                    onClick={() => setCurrentPage(pageNum)}
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+      {filteredRecharges.length > 0 && (
+        <TablePagination
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalItems={filteredRecharges.length}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[10, 20, 50, 100]}
+        />
       )}
     </div>
   );
