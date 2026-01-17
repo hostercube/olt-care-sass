@@ -221,11 +221,16 @@ export default function GatewaySettings() {
         });
       }
       
-      // For bKash, ensure bkash_mode is in config 
+      // For bKash, keep mode in dedicated column; DO NOT store in config JSON
+      const bkashMode = gateway === 'bkash'
+        ? (config.config?.bkash_mode || 'tokenized')
+        : undefined;
+
+      // Ensure bkash_mode never pollutes the config JSON (it breaks “has credentials” detection)
       if (gateway === 'bkash') {
-        configData.bkash_mode = config.config?.bkash_mode || 'tokenized';
+        delete (configData as any).bkash_mode;
       }
-      
+
       const updateData: any = {
         is_enabled: config.is_enabled,
         sandbox_mode: config.sandbox_mode,
@@ -233,10 +238,10 @@ export default function GatewaySettings() {
         instructions: config.instructions || null,
         transaction_fee_percent: config.transaction_fee_percent || 0,
       };
-      
+
       // Save bkash_mode to column directly for bKash gateway
       if (gateway === 'bkash') {
-        updateData.bkash_mode = configData.bkash_mode;
+        updateData.bkash_mode = bkashMode;
       }
       
       console.log('Saving gateway config:', { gateway, id: config.id, updateData, configKeys: Object.keys(configData) });
