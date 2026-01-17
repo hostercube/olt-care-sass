@@ -39,6 +39,7 @@ export default function ResellerTransactions() {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [gatewayFilter, setGatewayFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -126,6 +127,13 @@ export default function ResellerTransactions() {
       result = result.filter((tx) => tx.type === typeFilter);
     }
 
+    // Gateway filter - check description for gateway mentions
+    if (gatewayFilter !== 'all') {
+      result = result.filter((tx) => 
+        tx.description?.toLowerCase().includes(gatewayFilter.toLowerCase())
+      );
+    }
+
     // Date filter
     if (dateFrom || dateTo) {
       const from = safeParse(dateFrom);
@@ -141,7 +149,7 @@ export default function ResellerTransactions() {
     }
 
     return result;
-  }, [transactions, searchTerm, typeFilter, dateFrom, dateTo]);
+  }, [transactions, searchTerm, typeFilter, gatewayFilter, dateFrom, dateTo]);
 
   // Filter recharge history
   const filteredRecharges = useMemo(() => {
@@ -188,7 +196,7 @@ export default function ResellerTransactions() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, typeFilter, sourceFilter, dateFrom, dateTo, activeTab]);
+  }, [searchTerm, typeFilter, sourceFilter, gatewayFilter, dateFrom, dateTo, activeTab]);
 
   const getRechargeSourceLabel = (method: string | null) => {
     if (!method) return 'Manual';
@@ -372,7 +380,7 @@ export default function ResellerTransactions() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Filters */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                   <div className="relative lg:col-span-2">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -394,6 +402,19 @@ export default function ResellerTransactions() {
                           {TRANSACTION_TYPE_LABELS[type]}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={gatewayFilter} onValueChange={setGatewayFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Gateways" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Gateways</SelectItem>
+                      <SelectItem value="bkash">bKash</SelectItem>
+                      <SelectItem value="nagad">Nagad</SelectItem>
+                      <SelectItem value="rocket">Rocket</SelectItem>
+                      <SelectItem value="sslcommerz">SSLCommerz</SelectItem>
+                      <SelectItem value="manual">Manual</SelectItem>
                     </SelectContent>
                   </Select>
                   <Input
