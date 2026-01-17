@@ -714,6 +714,27 @@ export default function ResellerWallet() {
                     </Select>
                   </div>
 
+                  {/* Gateway Instructions - Show payment instructions from tenant */}
+                  {(() => {
+                    const selectedGateway = paymentGateways.find(g => g.gateway === paymentMethod);
+                    if (selectedGateway?.instructions) {
+                      return (
+                        <div className="p-4 rounded-lg border-2 border-primary/30 bg-primary/5">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                            <div className="space-y-2">
+                              <p className="font-semibold text-primary">Payment Instructions</p>
+                              <div className="text-sm text-foreground whitespace-pre-wrap">
+                                {selectedGateway.instructions}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
                   {/* Transaction ID */}
                   <div>
                     <Label>Transaction ID / Reference *</Label>
