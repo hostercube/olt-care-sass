@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, FileBarChart, Download, Calendar, TrendingUp, TrendingDown, Users, DollarSign } from 'lucide-react';
+import { TablePagination } from '@/components/ui/table-pagination';
+import { Loader2, FileBarChart, Download, Calendar, TrendingUp, TrendingDown, Users, DollarSign, RefreshCcw } from 'lucide-react';
 import { useResellerPortal } from '@/hooks/useResellerPortal';
 import { ResellerPortalLayout } from '@/components/reseller/ResellerPortalLayout';
+import { format } from 'date-fns';
 
 export default function ResellerReports() {
   const navigate = useNavigate();
@@ -20,12 +22,15 @@ export default function ResellerReports() {
     transactions,
     subResellers,
     logout,
+    refetch,
     hasPermission,
   } = useResellerPortal();
 
   const [reportType, setReportType] = useState<string>('collections');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   useEffect(() => {
     if (!loading && !session) {
@@ -98,6 +103,66 @@ export default function ResellerReports() {
     };
   }, [filteredTransactions, customers]);
 
+  // Paginated data for customers
+  const paginatedCustomers = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return customers.slice(startIndex, startIndex + pageSize);
+  }, [customers, currentPage, pageSize]);
+
+  // Paginated transactions
+  const paginatedTransactions = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredTransactions.slice(startIndex, startIndex + pageSize);
+  }, [filteredTransactions, currentPage, pageSize]);
+
+  // Reset page when report type changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [reportType, dateFrom, dateTo]);
+
+  // Export to CSV
+  const exportCSV = () => {
+    let headers: string[] = [];
+    let rows: string[][] = [];
+
+    if (reportType === 'collections') {
+      headers = ['Month', 'Transactions', 'Credits', 'Expenses', 'Net'];
+      rows = reportData.monthlyData.map(([month, data]) => [
+        month,
+        data.count.toString(),
+        data.income.toLocaleString(),
+        data.expense.toLocaleString(),
+        (data.income - data.expense).toLocaleString()
+      ]);
+    } else if (reportType === 'customers') {
+      headers = ['Name', 'Package', 'Status', 'Monthly Bill', 'Expiry'];
+      rows = customers.map(c => [
+        c.name,
+        c.package?.name || '-',
+        c.status,
+        (c.monthly_bill || 0).toString(),
+        c.expiry_date || '-'
+      ]);
+    } else if (reportType === 'transactions') {
+      headers = ['Date', 'Type', 'Description', 'Amount', 'Balance After'];
+      rows = filteredTransactions.map(tx => [
+        format(new Date(tx.created_at), 'yyyy-MM-dd HH:mm'),
+        tx.type,
+        tx.description || '-',
+        tx.amount.toString(),
+        tx.balance_after.toString()
+      ]);
+    }
+
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${reportType}-report-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+  };
+
   if (loading || !session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -116,6 +181,16 @@ export default function ResellerReports() {
           <div>
             <h1 className="text-2xl font-bold">Reports</h1>
             <p className="text-muted-foreground">View your business reports and analytics</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={refetch}>
+              <RefreshCcw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportCSV}>
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
           </div>
         </div>
 
@@ -312,15 +387,21 @@ export default function ResellerReports() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {customers.slice(0, 20).map((customer) => (
+                        {paginatedCustomers.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                              No customers found
+                            </TableCell>
+                          </TableRow>
+                        ) : paginatedCustomers.map((customer) => (
                           <TableRow key={customer.id}>
                             <TableCell className="font-medium">{customer.name}</TableCell>
                             <TableCell>{customer.package?.name || '-'}</TableCell>
                             <TableCell>
                               <span className={`px-2 py-1 rounded text-xs ${
-                                customer.status === 'active' ? 'bg-green-100 text-green-700' :
-                                customer.status === 'expired' ? 'bg-red-100 text-red-700' :
-                                'bg-gray-100 text-gray-700'
+                                customer.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                customer.status === 'expired' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
                               }`}>
                                 {customer.status}
                               </span>
@@ -330,7 +411,7 @@ export default function ResellerReports() {
                             </TableCell>
                             <TableCell>
                               {customer.expiry_date 
-                                ? new Date(customer.expiry_date).toLocaleDateString()
+                                ? format(new Date(customer.expiry_date), 'dd MMM yyyy')
                                 : '-'
                               }
                             </TableCell>
@@ -339,6 +420,14 @@ export default function ResellerReports() {
                       </TableBody>
                     </Table>
                   </div>
+                  <TablePagination
+                    totalItems={customers.length}
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                    pageSizeOptions={[10, 20, 50, 100]}
+                  />
                 </CardContent>
               </Card>
             )}
@@ -348,10 +437,10 @@ export default function ResellerReports() {
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <FileBarChart className="h-5 w-5" />
-                    Transaction History
+                    Transaction History ({filteredTransactions.length})
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                   <div className="rounded-md border overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -364,45 +453,55 @@ export default function ResellerReports() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredTransactions.length === 0 ? (
+                        {paginatedTransactions.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                               No transactions found
                             </TableCell>
                           </TableRow>
-                        ) : (
-                          filteredTransactions.map((tx) => (
-                            <TableRow key={tx.id}>
-                              <TableCell className="text-sm">
-                                {new Date(tx.created_at).toLocaleDateString()}
-                              </TableCell>
-                              <TableCell>
-                                <span className={`px-2 py-1 rounded text-xs capitalize ${
-                                  tx.type === 'recharge' ? 'bg-green-100 text-green-700' :
-                                  tx.type === 'customer_payment' ? 'bg-blue-100 text-blue-700' :
-                                  tx.type === 'commission' ? 'bg-purple-100 text-purple-700' :
-                                  'bg-gray-100 text-gray-700'
-                                }`}>
-                                  {tx.type.replace('_', ' ')}
-                                </span>
-                              </TableCell>
-                              <TableCell className="max-w-[200px] truncate">
-                                {tx.description || '-'}
-                              </TableCell>
-                              <TableCell className={`text-right font-medium ${
-                                tx.amount > 0 ? 'text-green-600' : 'text-red-600'
+                        ) : paginatedTransactions.map((tx) => (
+                          <TableRow key={tx.id}>
+                            <TableCell className="text-sm">
+                              {format(new Date(tx.created_at), 'dd MMM yyyy')}
+                              <br />
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(tx.created_at), 'hh:mm a')}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded text-xs capitalize ${
+                                tx.type === 'recharge' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                tx.type === 'customer_payment' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                tx.type === 'commission' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
+                                'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
                               }`}>
-                                {tx.amount > 0 ? '+' : ''}৳{tx.amount.toLocaleString()}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                ৳{tx.balance_after.toLocaleString()}
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
+                                {tx.type.replace('_', ' ')}
+                              </span>
+                            </TableCell>
+                            <TableCell className="max-w-[200px] truncate">
+                              {tx.description || '-'}
+                            </TableCell>
+                            <TableCell className={`text-right font-medium ${
+                              tx.amount > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {tx.amount > 0 ? '+' : ''}৳{tx.amount.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              ৳{tx.balance_after.toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>
+                  <TablePagination
+                    totalItems={filteredTransactions.length}
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                    pageSizeOptions={[10, 20, 50, 100]}
+                  />
                 </CardContent>
               </Card>
             )}

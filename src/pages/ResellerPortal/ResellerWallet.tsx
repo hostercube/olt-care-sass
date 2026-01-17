@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,11 +10,15 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { 
   Wallet, Plus, History, Loader2, 
   Banknote, CheckCircle, XCircle, Clock,
-  AlertCircle, Send, CreditCard, Smartphone
+  AlertCircle, Send, CreditCard, Smartphone, Filter, Search, RefreshCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -72,6 +76,13 @@ export default function ResellerWallet() {
   const [paymentMethod, setPaymentMethod] = useState('manual');
   const [notes, setNotes] = useState('');
   const [paymentMode, setPaymentMode] = useState<'online' | 'manual'>('online');
+
+  // Filters for history
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [gatewayFilter, setGatewayFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Handle payment status from URL
   useEffect(() => {
@@ -140,6 +151,46 @@ export default function ResellerWallet() {
       fetchPaymentGateways();
     }
   }, [session, fetchTopupRequests, fetchPaymentGateways]);
+
+  // Filter topup requests
+  const filteredRequests = useMemo(() => {
+    let result = [...topupRequests];
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(r => 
+        r.transaction_id?.toLowerCase().includes(query) ||
+        r.payment_method?.toLowerCase().includes(query) ||
+        r.amount.toString().includes(query)
+      );
+    }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      result = result.filter(r => r.status === statusFilter);
+    }
+
+    // Gateway filter
+    if (gatewayFilter !== 'all') {
+      result = result.filter(r => 
+        r.payment_method?.toLowerCase() === gatewayFilter.toLowerCase()
+      );
+    }
+
+    return result;
+  }, [topupRequests, searchQuery, statusFilter, gatewayFilter]);
+
+  // Paginated requests
+  const paginatedRequests = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredRequests.slice(startIndex, startIndex + pageSize);
+  }, [filteredRequests, currentPage, pageSize]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, gatewayFilter]);
 
   const getFinalAmount = () => {
     if (customAmount && parseFloat(customAmount) > 0) {
@@ -223,7 +274,7 @@ export default function ResellerWallet() {
         return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Rejected</Badge>;
       case 'pending':
       default:
-        return <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+        return <Badge variant="outline" className="text-amber-600 border-amber-400"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
     }
   };
 
@@ -238,10 +289,53 @@ export default function ResellerWallet() {
     }
   };
 
+  const getGatewayLabel = (gateway: string | null) => {
+    if (!gateway) return 'Manual';
+    const labels: Record<string, string> = {
+      bkash: 'bKash',
+      nagad: 'Nagad',
+      rocket: 'Rocket',
+      sslcommerz: 'SSLCommerz',
+      manual: 'Manual',
+      bank_transfer: 'Bank Transfer',
+      cash: 'Cash',
+    };
+    return labels[gateway.toLowerCase()] || gateway;
+  };
+
   const onlineGateways = paymentGateways.filter(g => 
     g.gateway !== 'manual' && g.gateway !== 'rocket'
   );
   const hasOnlineGateways = onlineGateways.length > 0;
+
+  // Get available manual payment methods from tenant gateways
+  const manualPaymentMethods = useMemo(() => {
+    const defaultMethods = [
+      { value: 'bkash', label: 'bKash' },
+      { value: 'nagad', label: 'Nagad' },
+      { value: 'rocket', label: 'Rocket' },
+      { value: 'bank_transfer', label: 'Bank Transfer' },
+      { value: 'cash', label: 'Cash' },
+    ];
+
+    // If gateways are loaded, show active ones first
+    if (paymentGateways.length > 0) {
+      const activeGateways = paymentGateways
+        .filter(g => g.is_enabled)
+        .map(g => ({ value: g.gateway, label: g.display_name }));
+      
+      // Add default methods that aren't in active gateways
+      const allMethods = [...activeGateways];
+      defaultMethods.forEach(dm => {
+        if (!allMethods.find(m => m.value === dm.value)) {
+          allMethods.push(dm);
+        }
+      });
+      return allMethods;
+    }
+
+    return defaultMethods;
+  }, [paymentGateways]);
 
   if (loading || !session) {
     return (
@@ -252,6 +346,8 @@ export default function ResellerWallet() {
   }
 
   const pendingCount = topupRequests.filter(r => r.status === 'pending').length;
+  const approvedCount = topupRequests.filter(r => r.status === 'approved').length;
+  const rejectedCount = topupRequests.filter(r => r.status === 'rejected').length;
 
   return (
     <ResellerPortalLayout reseller={reseller} onLogout={logout} hasPermission={hasPermission}>
@@ -262,10 +358,16 @@ export default function ResellerWallet() {
             <h1 className="text-2xl font-bold">My Wallet</h1>
             <p className="text-muted-foreground">Manage your balance and request top-ups</p>
           </div>
-          <Button onClick={() => setShowTopupDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Top Up Balance
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => { fetchTopupRequests(); refetch?.(); }}>
+              <RefreshCcw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button onClick={() => setShowTopupDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Top Up Balance
+            </Button>
+          </div>
         </div>
 
         {/* Balance Card */}
@@ -313,7 +415,7 @@ export default function ResellerWallet() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-xs text-muted-foreground mb-1">Approved</p>
-                <p className="text-2xl font-bold text-green-600">{topupRequests.filter(r => r.status === 'approved').length}</p>
+                <p className="text-2xl font-bold text-green-600">{approvedCount}</p>
               </div>
             </CardContent>
           </Card>
@@ -321,63 +423,124 @@ export default function ResellerWallet() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-xs text-muted-foreground mb-1">Rejected</p>
-                <p className="text-2xl font-bold text-red-600">{topupRequests.filter(r => r.status === 'rejected').length}</p>
+                <p className="text-2xl font-bold text-red-600">{rejectedCount}</p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Top-up History */}
+        {/* Top-up History with Filters */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-primary" />
-              Top-up Request History
-            </CardTitle>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5 text-primary" />
+                Top-up Request History ({filteredRequests.length})
+              </CardTitle>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* Filters */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="relative lg:col-span-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by TxID, amount..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <Filter className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={gatewayFilter} onValueChange={setGatewayFilter}>
+                <SelectTrigger>
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="All Gateways" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Gateways</SelectItem>
+                  <SelectItem value="bkash">bKash</SelectItem>
+                  <SelectItem value="nagad">Nagad</SelectItem>
+                  <SelectItem value="rocket">Rocket</SelectItem>
+                  <SelectItem value="sslcommerz">SSLCommerz</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Request List */}
             {loadingRequests ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
-            ) : topupRequests.length === 0 ? (
+            ) : filteredRequests.length === 0 ? (
               <div className="text-center py-8">
                 <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                <p className="text-muted-foreground">No top-up requests yet</p>
-                <p className="text-sm text-muted-foreground">Request a top-up to add balance to your wallet</p>
+                <p className="text-muted-foreground">
+                  {topupRequests.length === 0 
+                    ? 'No top-up requests yet' 
+                    : 'No matching requests found'}
+                </p>
+                {topupRequests.length === 0 && (
+                  <p className="text-sm text-muted-foreground">Request a top-up to add balance to your wallet</p>
+                )}
               </div>
             ) : (
-              <div className="space-y-3">
-                {topupRequests.map((request) => (
-                  <div 
-                    key={request.id} 
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg border bg-muted/30"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Banknote className="h-5 w-5 text-primary" />
+              <>
+                <div className="space-y-3">
+                  {paginatedRequests.map((request) => (
+                    <div 
+                      key={request.id} 
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg border bg-muted/30"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <Banknote className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-semibold">৳{request.amount.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {getGatewayLabel(request.payment_method)} • TxID: {request.transaction_id || 'N/A'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-semibold">৳{request.amount.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {request.payment_method || 'Manual'} • TxID: {request.transaction_id || 'N/A'}
-                        </p>
+                      <div className="flex items-center gap-3 sm:flex-row-reverse">
+                        {getStatusBadge(request.status)}
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(request.created_at), 'dd MMM yyyy, hh:mm a')}
+                        </span>
                       </div>
+                      {request.status === 'rejected' && request.rejection_reason && (
+                        <div className="w-full mt-2 p-2 rounded bg-red-500/10 text-sm text-red-600">
+                          Reason: {request.rejection_reason}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-3 sm:flex-row-reverse">
-                      {getStatusBadge(request.status)}
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(request.created_at), 'dd MMM yyyy, hh:mm a')}
-                      </span>
-                    </div>
-                    {request.status === 'rejected' && request.rejection_reason && (
-                      <div className="w-full mt-2 p-2 rounded bg-red-500/10 text-sm text-red-600">
-                        Reason: {request.rejection_reason}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                <TablePagination
+                  totalItems={filteredRequests.length}
+                  currentPage={currentPage}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                  pageSizeOptions={[10, 20, 50, 100]}
+                />
+              </>
             )}
           </CardContent>
         </Card>
@@ -478,20 +641,21 @@ export default function ResellerWallet() {
                 </TabsContent>
 
                 <TabsContent value="manual" className="space-y-4 mt-4">
-                  {/* Manual Payment Method */}
+                  {/* Manual Payment Method - Show active gateways from tenant */}
                   <div>
                     <Label>Payment Method</Label>
-                    <select 
-                      className="w-full mt-1 p-2 rounded-lg border bg-background"
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                    >
-                      <option value="bkash">bKash</option>
-                      <option value="nagad">Nagad</option>
-                      <option value="rocket">Rocket</option>
-                      <option value="bank_transfer">Bank Transfer</option>
-                      <option value="cash">Cash</option>
-                    </select>
+                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select payment method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {manualPaymentMethods.map(method => (
+                          <SelectItem key={method.value} value={method.value}>
+                            {method.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Transaction ID */}
