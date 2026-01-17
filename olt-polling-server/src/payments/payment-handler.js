@@ -951,8 +951,12 @@ export async function initiatePayment(supabase, gateway, paymentData) {
 
   if (tenantGateway) {
     const tenantConfig = tenantGateway.config || {};
-    const hasCredentials = Object.keys(tenantConfig).length > 0 && 
-      Object.values(tenantConfig).some(v => v && v.toString().trim() !== '');
+
+    // IMPORTANT: bkash_mode is NOT a credential (it can be present even when keys are missing)
+    const tenantCredentialEntries = Object.entries(tenantConfig).filter(([k]) => k !== 'bkash_mode');
+    const hasCredentials =
+      tenantCredentialEntries.length > 0 &&
+      tenantCredentialEntries.some(([, v]) => v && v.toString().trim() !== '');
     
     if (hasCredentials) {
       // Tenant has credentials configured, use them

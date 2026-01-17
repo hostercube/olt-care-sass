@@ -150,14 +150,20 @@ export default function ISPGatewaySettings() {
           }
         });
       }
-      
+
+      // bKash: keep mode in column only (don’t store in config JSON)
+      const bkashMode = gateway === 'bkash' ? (configData.bkash_mode || 'tokenized') : undefined;
+      if (gateway === 'bkash') {
+        delete configData.bkash_mode;
+      }
+
       await updateGateway(config.id, {
         is_enabled: config.is_enabled,
         sandbox_mode: config.sandbox_mode,
         config: configData,
         instructions: config.instructions,
         transaction_fee_percent: config.transaction_fee_percent || 0,
-        bkash_mode: gateway === 'bkash' ? (configData.bkash_mode || 'tokenized') : undefined,
+        bkash_mode: bkashMode,
       });
     } finally {
       setSavingGateway(null);
