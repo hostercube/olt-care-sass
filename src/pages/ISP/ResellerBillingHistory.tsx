@@ -11,12 +11,13 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useResellerSystem } from '@/hooks/useResellerSystem';
 import { 
   Loader2, Wallet, ArrowDownLeft, ArrowUpRight, RefreshCw,
-  Download, Filter, Calendar, Search
+  Download, Filter, Calendar, Search, CreditCard
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { TRANSACTION_TYPE_LABELS } from '@/types/reseller';
@@ -32,6 +33,7 @@ interface Transaction {
   from_reseller_id: string | null;
   to_reseller_id: string | null;
   customer_id: string | null;
+  payment_method?: string | null;
   created_at: string;
   reseller?: { id: string; name: string; level: number };
   from_reseller?: { id: string; name: string } | null;
@@ -51,7 +53,12 @@ export default function ResellerBillingHistory() {
   const [selectedReseller, setSelectedReseller] = useState('all');
   const [selectedLevel, setSelectedLevel] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
+  const [selectedGateway, setSelectedGateway] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const fetchTransactions = async () => {
     if (!tenantId || contextLoading) return;
@@ -106,7 +113,7 @@ export default function ResellerBillingHistory() {
     }
   }, [tenantId, contextLoading, dateFrom, dateTo, selectedReseller, selectedType]);
 
-  // Filter by level and search
+  // Filter by level, gateway and search
   const filteredTransactions = useMemo(() => {
     let filtered = transactions;
 
@@ -114,6 +121,14 @@ export default function ResellerBillingHistory() {
     if (selectedLevel !== 'all') {
       const level = parseInt(selectedLevel);
       filtered = filtered.filter(t => t.reseller?.level === level);
+    }
+
+    // Filter by gateway/payment method
+    if (selectedGateway !== 'all') {
+      filtered = filtered.filter(t => 
+        t.payment_method?.toLowerCase() === selectedGateway.toLowerCase() ||
+        t.description?.toLowerCase().includes(selectedGateway.toLowerCase())
+      );
     }
 
     // Search filter
@@ -128,7 +143,18 @@ export default function ResellerBillingHistory() {
     }
 
     return filtered;
-  }, [transactions, selectedLevel, searchQuery]);
+  }, [transactions, selectedLevel, selectedGateway, searchQuery]);
+
+  // Paginated data
+  const paginatedTransactions = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredTransactions.slice(startIndex, startIndex + pageSize);
+  }, [filteredTransactions, currentPage, pageSize]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedLevel, selectedGateway, searchQuery, selectedType, selectedReseller, dateFrom, dateTo]);
 
   // Summary stats
   const summaryStats = useMemo(() => {
@@ -283,7 +309,7 @@ export default function ResellerBillingHistory() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4">
             <div className="space-y-2">
               <Label>From Date</Label>
               <Input
@@ -339,11 +365,28 @@ export default function ResellerBillingHistory() {
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="recharge">Recharge</SelectItem>
+                  <SelectItem value="topup">Top-up</SelectItem>
                   <SelectItem value="transfer_in">Transfer In</SelectItem>
                   <SelectItem value="transfer_out">Transfer Out</SelectItem>
                   <SelectItem value="customer_payment">Customer Payment</SelectItem>
                   <SelectItem value="commission">Commission</SelectItem>
                   <SelectItem value="deduction">Deduction</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Gateway</Label>
+              <Select value={selectedGateway} onValueChange={setSelectedGateway}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Gateways" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Gateways</SelectItem>
+                  <SelectItem value="bkash">bKash</SelectItem>
+                  <SelectItem value="nagad">Nagad</SelectItem>
+                  <SelectItem value="rocket">Rocket</SelectItem>
+                  <SelectItem value="sslcommerz">SSLCommerz</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -409,7 +452,7 @@ export default function ResellerBillingHistory() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredTransactions.map((tx) => (
+                  paginatedTransactions.map((tx) => (
                     <TableRow key={tx.id}>
                       <TableCell className="text-sm">
                         <div>
@@ -473,11 +516,13 @@ export default function ResellerBillingHistory() {
           </div>
 
           {/* Pagination */}
-          {filteredTransactions.length > 50 && (
-            <p className="text-sm text-muted-foreground text-center">
-              Showing first 500 transactions. Apply filters to narrow down results.
-            </p>
-          )}
+          <TablePagination
+            totalItems={filteredTransactions.length}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
         </CardContent>
       </Card>
     </DashboardLayout>
