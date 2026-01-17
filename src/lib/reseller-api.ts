@@ -197,3 +197,20 @@ export async function updateResellerArea(areaId: string, data: any) {
 export async function deleteResellerArea(areaId: string) {
   return apiRequest(`/areas/${areaId}`, 'DELETE');
 }
+
+// ============= Balance Top-up Requests =============
+
+export interface TopupRequestData {
+  amount: number;
+  payment_method?: string;
+  transaction_id?: string;
+  notes?: string;
+}
+
+export async function createTopupRequest(data: TopupRequestData) {
+  return apiRequest('/topup-request', 'POST', data);
+}
+
+export async function fetchTopupRequests(status?: string, limit?: number) {
+  return apiRequest('/topup-requests', 'GET', { status, limit });
+}

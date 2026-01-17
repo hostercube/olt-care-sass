@@ -117,6 +117,7 @@ import ResellerSubResellers from "./pages/ResellerPortal/ResellerSubResellers";
 import ResellerAreas from "./pages/ResellerPortal/ResellerAreas";
 import ResellerProfile from "./pages/ResellerPortal/ResellerProfile";
 import ResellerReports from "./pages/ResellerPortal/ResellerReports";
+import ResellerWallet from "./pages/ResellerPortal/ResellerWallet";
 
 // Additional Pages
 import Onboarding from "./pages/Onboarding";
@@ -669,6 +670,7 @@ const App = () => (
               <Route path="/reseller/login" element={<ResellerLogin />} />
               <Route path="/reseller/dashboard" element={<ResellerDashboard />} />
               <Route path="/reseller/billing" element={<ResellerBilling />} />
+              <Route path="/reseller/wallet" element={<ResellerWallet />} />
               <Route path="/reseller/customers" element={<ResellerCustomers />} />
               <Route path="/reseller/areas" element={<ResellerAreas />} />
               <Route path="/reseller/transactions" element={<ResellerTransactions />} />
