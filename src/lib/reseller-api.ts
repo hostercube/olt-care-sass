@@ -214,3 +214,18 @@ export async function createTopupRequest(data: TopupRequestData) {
 export async function fetchTopupRequests(status?: string, limit?: number) {
   return apiRequest('/topup-requests', 'GET', { status, limit });
 }
+
+export async function fetchPaymentGateways() {
+  return apiRequest('/payment-gateways');
+}
+
+export interface TopupPaymentData {
+  amount: number;
+  gateway: string;
+  return_url: string;
+  cancel_url: string;
+}
+
+export async function initiateTopupPayment(data: TopupPaymentData) {
+  return apiRequest('/topup-payment', 'POST', data);
+}
