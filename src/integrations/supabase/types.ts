@@ -8508,23 +8508,42 @@ export type Database = {
         }[]
       }
       count_sub_resellers: { Args: { p_reseller_id: string }; Returns: number }
-      create_customer_self_recharge: {
-        Args: {
-          p_amount: number
-          p_collected_by_name?: string
-          p_collected_by_type?: string
-          p_customer_id: string
-          p_discount?: number
-          p_months: number
-          p_new_expiry: string
-          p_notes?: string
-          p_old_expiry: string
-          p_payment_method: string
-          p_status?: string
-          p_tenant_id: string
-        }
-        Returns: string
-      }
+      create_customer_self_recharge:
+        | {
+            Args: {
+              p_amount: number
+              p_collected_by_name?: string
+              p_collected_by_type?: string
+              p_customer_id: string
+              p_discount?: number
+              p_months: number
+              p_new_expiry: string
+              p_notes?: string
+              p_old_expiry: string
+              p_payment_method: string
+              p_status?: string
+              p_tenant_id: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_amount: number
+              p_collected_by_name?: string
+              p_collected_by_type?: string
+              p_customer_id: string
+              p_discount?: number
+              p_months: number
+              p_new_expiry: string
+              p_notes?: string
+              p_old_expiry: string
+              p_payment_method: string
+              p_status?: string
+              p_tenant_id: string
+              p_transaction_id?: string
+            }
+            Returns: string
+          }
       create_customer_support_ticket: {
         Args: {
           p_category?: string

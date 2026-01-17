@@ -52,6 +52,7 @@ interface CustomerRecharge {
   paid_by_name: string | null;
   original_payment_method: string | null;
   rejection_reason?: string | null;
+  transaction_id?: string | null;
   customer?: { 
     id: string; 
     name: string; 
@@ -334,6 +335,36 @@ export default function RechargeHistory() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Check if payment included wallet balance (notes contains "Wallet: ৳X")
+      const walletMatch = selectedRecharge.notes?.match(/\(Wallet: ৳(\d+(?:\.\d+)?)\)/);
+      const walletDeduction = walletMatch ? parseFloat(walletMatch[1]) : 0;
+      
+      // If wallet was used, process the deduction now
+      if (walletDeduction > 0 && selectedRecharge.customer_id) {
+        const { data: walletResult, error: walletError } = await supabase.rpc('use_wallet_for_recharge', {
+          p_customer_id: selectedRecharge.customer_id,
+          p_amount: walletDeduction,
+          p_notes: `Wallet used for verified manual payment`,
+          p_reference_id: null,
+        });
+        
+        if (walletError) {
+          console.error('Wallet deduction error:', walletError);
+          toast.error('Failed to deduct wallet balance - customer may not have sufficient balance');
+          setEditLoading(false);
+          return;
+        }
+        
+        // Check the function response for success status
+        const walletResponse = walletResult as { success?: boolean; error?: string } | null;
+        if (walletResponse && walletResponse.success === false) {
+          console.error('Wallet deduction failed:', walletResponse.error);
+          toast.error(walletResponse.error || 'Failed to deduct wallet balance');
+          setEditLoading(false);
+          return;
+        }
+      }
+      
       // Update recharge status to completed
       const { error } = await supabase
         .from('customer_recharges')
@@ -370,7 +401,7 @@ export default function RechargeHistory() {
           customer_id: selectedRecharge.customer_id,
           amount: selectedRecharge.amount,
           payment_method: selectedRecharge.payment_method,
-          notes: `Manual payment verified${isPackageChange ? ' (Package Change)' : ''}: ${selectedRecharge.notes || ''}`,
+          notes: `Manual payment verified${isPackageChange ? ' (Package Change)' : ''}${walletDeduction > 0 ? ` (Wallet: ৳${walletDeduction})` : ''}: ${selectedRecharge.notes || ''}`,
         });
       }
       
@@ -736,6 +767,7 @@ export default function RechargeHistory() {
                       <TableHead>Customer</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Payment</TableHead>
+                      <TableHead>TxID</TableHead>
                       <TableHead>Months</TableHead>
                       <TableHead>Old Expiry</TableHead>
                       <TableHead>New Expiry</TableHead>
@@ -748,7 +780,7 @@ export default function RechargeHistory() {
                   <TableBody>
                     {paginatedRecharges.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                           No recharges found
                         </TableCell>
                       </TableRow>
@@ -786,6 +818,15 @@ export default function RechargeHistory() {
                                recharge.payment_method === 'online' ? 'Online' :
                                recharge.payment_method || 'Cash'}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {recharge.transaction_id ? (
+                              <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded max-w-[100px] truncate block" title={recharge.transaction_id}>
+                                {recharge.transaction_id}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">-</span>
+                            )}
                           </TableCell>
                           <TableCell>{recharge.months || 1}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">
@@ -979,10 +1020,20 @@ export default function RechargeHistory() {
             <div className="space-y-4">
               <div className="p-3 bg-muted/50 rounded-md space-y-2">
                 <p className="font-medium">{selectedRecharge.customer?.name}</p>
+                <p className="text-sm text-muted-foreground">Code: {selectedRecharge.customer?.customer_code}</p>
                 <p className="text-sm text-muted-foreground">Amount: ৳{selectedRecharge.amount.toLocaleString()}</p>
                 <p className="text-sm text-muted-foreground">Method: {selectedRecharge.payment_method}</p>
+                {selectedRecharge.transaction_id && (
+                  <div className="text-sm bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                    <span className="text-muted-foreground">Transaction ID:</span>{' '}
+                    <span className="font-mono font-semibold text-blue-600">{selectedRecharge.transaction_id}</span>
+                  </div>
+                )}
                 {selectedRecharge.notes && (
                   <p className="text-sm text-blue-600 bg-blue-50 dark:bg-blue-900/20 p-2 rounded">{selectedRecharge.notes}</p>
+                )}
+                {selectedRecharge.new_expiry && (
+                  <p className="text-sm text-green-600">New Expiry: {format(new Date(selectedRecharge.new_expiry), 'dd MMM yyyy')}</p>
                 )}
               </div>
             </div>

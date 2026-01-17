@@ -504,6 +504,7 @@ export default function CustomerPayBill() {
       p_status: rechargeStatus,
       p_collected_by_type: 'customer_self',
       p_collected_by_name: customer?.name || 'Customer',
+      p_transaction_id: txId || null,
     });
 
     if (rechargeError) {
