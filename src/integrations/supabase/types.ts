@@ -8577,6 +8577,7 @@ export type Database = {
         Returns: string
       }
       export_tenant_data: { Args: { _tenant_id: string }; Returns: Json }
+      gateway_has_credentials: { Args: { p_config: Json }; Returns: boolean }
       generate_bill_number: { Args: { _tenant_id: string }; Returns: string }
       generate_customer_code: { Args: { _tenant_id: string }; Returns: string }
       generate_customer_referral_code: {

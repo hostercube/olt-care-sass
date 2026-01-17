@@ -310,13 +310,14 @@ export default function GatewaySettings() {
             <Switch
               checked={config.is_enabled}
               onCheckedChange={async (v) => {
-                // Warn if enabling without credentials
-                if (v && missingCreds.length > 0) {
+                // Block enabling without credentials (except manual/rocket)
+                if (v && missingCreds.length > 0 && gateway !== 'manual' && gateway !== 'rocket') {
                   toast({
                     variant: 'destructive',
-                    title: 'Warning',
-                    description: `Missing credentials: ${missingCreds.join(', ')}. Payments will fail until configured.`
+                    title: 'Cannot Enable Gateway',
+                    description: `Please configure required credentials first: ${missingCreds.join(', ')}`
                   });
+                  return; // Don't enable
                 }
                 setPaymentConfigs({
                   ...paymentConfigs,
