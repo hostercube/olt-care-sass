@@ -339,7 +339,9 @@ export default function PaymentManagement() {
                         <TableHead>Tenant</TableHead>
                         <TableHead>Transaction ID</TableHead>
                         <TableHead>Payment Method</TableHead>
-                        <TableHead>Amount</TableHead>
+                        <TableHead>Net Amount</TableHead>
+                        <TableHead>Fee</TableHead>
+                        <TableHead>Total</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
@@ -356,6 +358,12 @@ export default function PaymentManagement() {
                           <TableCell className="font-mono">{payment.transaction_id || '-'}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{payment.payment_method.toUpperCase()}</Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">৳{(payment.net_amount || payment.amount).toLocaleString()}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {payment.gateway_fee > 0 ? (
+                              <span className="text-xs">৳{payment.gateway_fee.toLocaleString()} ({payment.fee_percent}%)</span>
+                            ) : '-'}
                           </TableCell>
                           <TableCell className="font-medium">৳{payment.amount.toLocaleString()}</TableCell>
                           <TableCell>{format(new Date(payment.created_at), 'PP')}</TableCell>
@@ -497,13 +505,15 @@ export default function PaymentManagement() {
                 </div>
               </CardHeader>
               <CardContent>
-                <Table>
+              <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Tenant</TableHead>
                       <TableHead>Transaction ID</TableHead>
                       <TableHead>Method</TableHead>
-                      <TableHead>Amount</TableHead>
+                      <TableHead>Net Amount</TableHead>
+                      <TableHead>Fee</TableHead>
+                      <TableHead>Total</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -512,11 +522,11 @@ export default function PaymentManagement() {
                   <TableBody>
                     {paymentsLoading ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
+                        <TableCell colSpan={10} className="text-center py-8">Loading...</TableCell>
                       </TableRow>
                     ) : paginatedPayments.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                           No payments found
                         </TableCell>
                       </TableRow>
@@ -532,6 +542,12 @@ export default function PaymentManagement() {
                           <TableCell className="font-mono">{payment.transaction_id || '-'}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{payment.payment_method.toUpperCase()}</Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">৳{(payment.net_amount || payment.amount).toLocaleString()}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {payment.gateway_fee > 0 ? (
+                              <span className="text-xs">৳{payment.gateway_fee.toLocaleString()} ({payment.fee_percent}%)</span>
+                            ) : '-'}
                           </TableCell>
                           <TableCell className="font-medium">৳{payment.amount.toLocaleString()}</TableCell>
                           <TableCell>{getStatusBadge(payment.status)}</TableCell>
@@ -817,9 +833,21 @@ export default function PaymentManagement() {
                     <p className="font-mono">{selectedPayment.transaction_id || '-'}</p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Amount</Label>
-                    <p className="font-bold text-lg">৳{selectedPayment.amount.toLocaleString()}</p>
+                    <Label className="text-muted-foreground">Net Amount</Label>
+                    <p className="font-bold text-lg">৳{(selectedPayment.net_amount || selectedPayment.amount).toLocaleString()}</p>
                   </div>
+                  {selectedPayment.gateway_fee > 0 && (
+                    <>
+                      <div>
+                        <Label className="text-muted-foreground">Gateway Fee ({selectedPayment.fee_percent}%)</Label>
+                        <p className="text-muted-foreground">৳{selectedPayment.gateway_fee.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Total Charged</Label>
+                        <p className="font-bold text-lg text-primary">৳{selectedPayment.amount.toLocaleString()}</p>
+                      </div>
+                    </>
+                  )}
                   <div>
                     <Label className="text-muted-foreground">Method</Label>
                     <p>{selectedPayment.payment_method.toUpperCase()}</p>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -126,6 +126,83 @@ const getMissingCredentials = (gateway: string, config: Record<string, any> | nu
   });
   return missing;
 };
+
+// Memoized input field component to prevent focus loss on parent re-render
+const GatewayInputFieldSA = memo(function GatewayInputFieldSA({
+  gatewayId,
+  fieldKey,
+  label,
+  type,
+  placeholder,
+  value,
+  onChange,
+  showPassword,
+  onTogglePassword,
+}: {
+  gatewayId: string;
+  fieldKey: string;
+  label: string;
+  type: 'text' | 'password' | 'textarea';
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  showPassword: boolean;
+  onTogglePassword: () => void;
+}) {
+  // Use local state to handle input without losing focus
+  const [localValue, setLocalValue] = useState(value);
+  
+  // Sync local state when parent value changes (e.g., after save/fetch)
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    setLocalValue(newValue);
+    onChange(newValue);
+  }, [onChange]);
+
+  if (type === 'textarea') {
+    return (
+      <div className="space-y-2">
+        <Label>{label}</Label>
+        <Textarea
+          value={localValue}
+          onChange={handleChange}
+          placeholder={placeholder}
+          rows={3}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="relative">
+        <Input
+          type={type === 'password' && !showPassword ? 'password' : 'text'}
+          value={localValue}
+          onChange={handleChange}
+          placeholder={placeholder}
+          className="pr-10"
+        />
+        {type === 'password' && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="absolute right-0 top-0 h-full px-3"
+            onClick={onTogglePassword}
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+});
 
 export default function GatewaySettings() {
   const { gateways, loading: gatewaysLoading, updateGateway, fetchGateways, createGateway } = usePaymentGateways();
@@ -379,45 +456,26 @@ export default function GatewaySettings() {
           )}
 
           {gatewayDef.fields.map(field => (
-            <div key={field.key} className="space-y-2">
-              <Label>{field.label}</Label>
-              {field.type === 'textarea' ? (
-                <Textarea
-                  value={config.config?.[field.key] || ''}
-                  onChange={(e) => setPaymentConfigs({
-                    ...paymentConfigs,
-                    [gateway]: { ...config, config: { ...config.config, [field.key]: e.target.value } }
-                  })}
-                  placeholder={field.placeholder}
-                  rows={3}
-                />
-              ) : (
-                <div className="relative">
-                  <Input
-                    type={field.type === 'password' && !showPasswords[`${gateway}-${field.key}`] ? 'password' : 'text'}
-                    value={config.config?.[field.key] || ''}
-                    onChange={(e) => setPaymentConfigs({
-                      ...paymentConfigs,
-                      [gateway]: { ...config, config: { ...config.config, [field.key]: e.target.value } }
-                    })}
-                    placeholder={field.placeholder}
-                    className="pr-10"
-                  />
-                  {field.type === 'password' && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3"
-                      onClick={() => togglePasswordVisibility(`${gateway}-${field.key}`)}
-                    >
-                      {showPasswords[`${gateway}-${field.key}`] ? 
-                        <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
+            <GatewayInputFieldSA
+              key={field.key}
+              gatewayId={gateway}
+              fieldKey={field.key}
+              label={field.label}
+              type={field.type}
+              placeholder={field.placeholder}
+              value={config.config?.[field.key] || ''}
+              onChange={(value) => {
+                setPaymentConfigs(prev => ({
+                  ...prev,
+                  [gateway]: {
+                    ...prev[gateway],
+                    config: { ...prev[gateway].config, [field.key]: value }
+                  }
+                }));
+              }}
+              showPassword={showPasswords[`${gateway}-${field.key}`] || false}
+              onTogglePassword={() => togglePasswordVisibility(`${gateway}-${field.key}`)}
+            />
           ))}
 
           {gateway !== 'manual' && (

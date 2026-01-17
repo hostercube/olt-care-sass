@@ -1282,10 +1282,16 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
     return { success: false, error: 'Failed to update payment' };
   }
 
-// Handle customer bill payment - AUTO RECHARGE with reseller commission
+// IMPORTANT: Use net_amount (original amount without gateway fee) for recharges/topups
+  // payment.amount = total charged (includes fee)
+  // payment.net_amount = original amount (what customer actually gets credited)
+  const creditAmount = payment.net_amount || payment.amount; // Fallback to amount if net_amount not set
+
+  // Handle customer bill payment - AUTO RECHARGE with reseller commission
   if (isSuccess && paymentFor === 'customer_bill' && customerId) {
     try {
-      await processCustomerAutoRecharge(supabase, customerId, payment.amount, payment.tenant_id, payment.id);
+      logger.info(`Auto-recharge using net_amount: ${creditAmount} (total charged: ${payment.amount}, fee: ${payment.gateway_fee || 0})`);
+      await processCustomerAutoRecharge(supabase, customerId, creditAmount, payment.tenant_id, payment.id);
     } catch (rechargeError) {
       logger.error('Auto recharge failed:', rechargeError);
       // Don't fail the callback, just log the error
@@ -1299,8 +1305,9 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
     
     if (resellerId) {
       try {
-        await processResellerAutoTopup(supabase, resellerId, payment.amount, payment.tenant_id, payment.id, topupRequestId);
-        logger.info(`Reseller ${resellerId} wallet auto-credited with ${payment.amount}`);
+        logger.info(`Reseller topup using net_amount: ${creditAmount} (total charged: ${payment.amount}, fee: ${payment.gateway_fee || 0})`);
+        await processResellerAutoTopup(supabase, resellerId, creditAmount, payment.tenant_id, payment.id, topupRequestId);
+        logger.info(`Reseller ${resellerId} wallet auto-credited with ${creditAmount}`);
       } catch (topupError) {
         logger.error('Reseller auto topup failed:', topupError);
       }
