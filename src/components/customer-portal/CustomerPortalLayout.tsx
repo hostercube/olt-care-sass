@@ -119,10 +119,9 @@ export function CustomerPortalLayout() {
             area: null, // Area not returned by RPC
           });
 
-          // Fetch the actual wallet balance from RPC (consistent with referral page)
-          const { data: walletData } = await supabase
-            .rpc('get_customer_wallet_balance', { p_customer_id: id });
-          setWalletBalance(Number(walletData) || 0);
+          // Fetch both wallet_balance and referral_bonus_balance to show total
+          const totalBalance = (Number(c.wallet_balance) || 0) + (Number(c.referral_bonus_balance) || 0);
+          setWalletBalance(totalBalance);
         } else {
           // Use session data as fallback
           setCustomer({
