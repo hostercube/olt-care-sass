@@ -131,6 +131,12 @@ export function CustomerPortalLayout() {
             pppoe_username: pppoe_username || '',
             status: 'active',
           });
+          
+          // Fallback: Fetch wallet balance using dedicated RPC
+          const { data: walletData } = await supabase
+            .rpc('get_customer_wallet_balance', { p_customer_id: id });
+          const totalBalance = Number(walletData) || 0;
+          setWalletBalance(totalBalance);
         }
 
         // Fetch tenant branding - use tenant_id from RPC result or session

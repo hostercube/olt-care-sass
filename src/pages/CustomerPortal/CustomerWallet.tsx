@@ -110,13 +110,32 @@ export default function CustomerWallet() {
         setWalletBalance(wb);
         setReferralBalance(rb);
         setTotalBalance(wb + rb);
-      } else if (customerError) {
-        console.error('Error fetching customer via RPC:', customerError);
+      } else {
+        if (customerError) {
+          console.error('Error fetching customer via RPC:', customerError);
+        }
         
-        // Fallback: Fetch combined balance using RPC
-        const { data: walletData } = await supabase
-          .rpc('get_customer_wallet_balance', { p_customer_id: id });
-        setTotalBalance(Number(walletData) || 0);
+        // Fallback: Fetch customer record directly and combined balance using RPC
+        const [customerResult, walletResult] = await Promise.all([
+          supabase.from('customers').select('wallet_balance, referral_bonus_balance, tenant_id').eq('id', id).maybeSingle(),
+          supabase.rpc('get_customer_wallet_balance', { p_customer_id: id })
+        ]);
+        
+        if (customerResult.data) {
+          const wb = Number(customerResult.data.wallet_balance) || 0;
+          const rb = Number(customerResult.data.referral_bonus_balance) || 0;
+          setWalletBalance(wb);
+          setReferralBalance(rb);
+          setTotalBalance(wb + rb);
+          effectiveTenantId = customerResult.data.tenant_id || sessionTenantId;
+        } else {
+          // Last fallback - just use the combined balance RPC
+          const total = Number(walletResult.data) || 0;
+          setTotalBalance(total);
+          // If we can't break down, treat it as wallet balance
+          setWalletBalance(total);
+          setReferralBalance(0);
+        }
       }
 
       // Fetch wallet transactions using RPC (bypasses RLS)
