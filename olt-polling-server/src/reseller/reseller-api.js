@@ -1380,6 +1380,80 @@ export function setupResellerRoutes(app, supabase) {
     }
   });
   
+  // ============= Reseller Balance Top-up Requests =============
+  
+  // Create balance topup request
+  app.post('/api/reseller/topup-request', authMiddleware, async (req, res) => {
+    try {
+      const { amount, payment_method, transaction_id, notes } = req.body;
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ success: false, error: 'Invalid amount' });
+      }
+      
+      // Create topup request
+      const { data: topupRequest, error } = await supabase
+        .from('reseller_topup_requests')
+        .insert({
+          reseller_id: req.reseller.id,
+          tenant_id: req.reseller.tenant_id,
+          amount: parseFloat(amount),
+          payment_method: payment_method || null,
+          transaction_id: transaction_id || null,
+          notes: notes || null,
+          status: 'pending',
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        logger.error('Error creating topup request:', error);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      
+      logger.info(`Reseller ${req.reseller.id} created topup request for ${amount}`);
+      res.json({ success: true, topupRequest });
+    } catch (error) {
+      logger.error('Error creating topup request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // Get reseller's own topup requests
+  app.get('/api/reseller/topup-requests', authMiddleware, async (req, res) => {
+    try {
+      const { status, limit } = req.query;
+      
+      let query = supabase
+        .from('reseller_topup_requests')
+        .select('*')
+        .eq('reseller_id', req.reseller.id)
+        .order('created_at', { ascending: false });
+      
+      if (status && status !== 'all') {
+        query = query.eq('status', status);
+      }
+      
+      if (limit) {
+        query = query.limit(parseInt(limit));
+      } else {
+        query = query.limit(100);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        logger.error('Error fetching topup requests:', error);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      
+      res.json({ success: true, topupRequests: data || [] });
+    } catch (error) {
+      logger.error('Error fetching topup requests:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
   // Also add routes without /api prefix for nginx proxy
   app.get('/reseller/profile', (req, res) => {
     req.url = '/api/reseller/profile';
@@ -1463,6 +1537,14 @@ export function setupResellerRoutes(app, supabase) {
   });
   app.post('/reseller/sub-reseller/deduct-balance', (req, res) => {
     req.url = '/api/reseller/sub-reseller/deduct-balance';
+    app.handle(req, res);
+  });
+  app.post('/reseller/topup-request', (req, res) => {
+    req.url = '/api/reseller/topup-request';
+    app.handle(req, res);
+  });
+  app.get('/reseller/topup-requests', (req, res) => {
+    req.url = '/api/reseller/topup-requests';
     app.handle(req, res);
   });
   

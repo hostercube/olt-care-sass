@@ -32,6 +32,7 @@ export function ResellerPortalLayout({ children, reseller, onLogout, hasPermissi
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/reseller/dashboard', icon: LayoutDashboard, show: true },
     { label: 'Billing Summary', href: '/reseller/billing', icon: ReceiptText, show: true },
+    { label: 'My Wallet', href: '/reseller/wallet', icon: Wallet, show: true },
     { label: 'My Customers', href: '/reseller/customers', icon: Users, show: true },
     { 
       label: 'Areas', 
@@ -49,7 +50,7 @@ export function ResellerPortalLayout({ children, reseller, onLogout, hasPermissi
     { 
       label: 'Reports', 
       href: '/reseller/reports', 
-      icon: Wallet,
+      icon: ReceiptText,
       show: !!reseller?.can_view_reports
     },
     { label: 'My Profile', href: '/reseller/profile', icon: Settings, show: true },

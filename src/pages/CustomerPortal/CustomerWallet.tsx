@@ -89,40 +89,46 @@ export default function CustomerWallet() {
         return;
       }
 
-      const { id, tenant_id } = JSON.parse(session);
+      const { id, tenant_id: sessionTenantId } = JSON.parse(session);
       
-      // Fetch customer data
-      const { data: customerData } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+      // Fetch customer data using RPC (bypasses RLS)
+      const { data: customerRpcData, error: customerError } = await supabase
+        .rpc('get_customer_profile', { p_customer_id: id });
       
-      if (customerData) {
-        setCustomer(customerData);
+      let effectiveTenantId = sessionTenantId;
+      
+      if (customerRpcData && Array.isArray(customerRpcData) && customerRpcData.length > 0) {
+        const c = customerRpcData[0];
+        effectiveTenantId = c.tenant_id || sessionTenantId;
+        setCustomer(c);
+      } else if (customerError) {
+        console.error('Error fetching customer via RPC:', customerError);
       }
 
       // Fetch wallet balance using RPC (includes referral bonus)
-      const { data: walletData } = await supabase
+      const { data: walletData, error: walletError } = await supabase
         .rpc('get_customer_wallet_balance', { p_customer_id: id });
+      
+      if (walletError) {
+        console.error('Error fetching wallet balance:', walletError);
+      }
       setWalletBalance(Number(walletData) || 0);
 
-      // Fetch wallet transactions
-      const { data: txData } = await supabase
-        .from('customer_wallet_transactions')
-        .select('*')
-        .eq('customer_id', id)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      // Fetch wallet transactions using RPC (bypasses RLS)
+      const { data: txData, error: txError } = await supabase
+        .rpc('get_customer_wallet_transactions', { p_customer_id: id, p_limit: 50 });
+      
+      if (txError) {
+        console.error('Error fetching wallet transactions:', txError);
+      }
       
       if (txData) {
-        // Use any type to avoid issues with auto-generated types during migration
         setTransactions(txData as any);
       }
 
       // Fetch enabled payment gateways for tenant using RPC
       const { data: gatewayData, error: gatewayError } = await supabase
-        .rpc('get_tenant_enabled_payment_gateways', { p_tenant_id: tenant_id });
+        .rpc('get_tenant_enabled_payment_gateways', { p_tenant_id: effectiveTenantId });
       
       if (gatewayError) {
         console.error('Error fetching payment gateways:', gatewayError);
