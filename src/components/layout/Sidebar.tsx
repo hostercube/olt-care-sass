@@ -86,6 +86,7 @@ const resellerItems: NavItem[] = [
   { title: 'resellers_list', href: '/isp/resellers', icon: UserCheck, requiredModule: 'isp_resellers' },
   { title: 'reseller_roles', href: '/isp/reseller-roles', icon: Shield, requiredModule: 'isp_resellers' },
   { title: 'reseller_billing', href: '/isp/reseller-billing', icon: Wallet, requiredModule: 'isp_resellers' },
+  { title: 'reseller_topup', href: '/isp/reseller-topup-requests', icon: CreditCard, requiredModule: 'isp_resellers' },
 ];
 
 // Network & Infrastructure - MikroTik, OLT related

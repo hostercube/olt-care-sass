@@ -47,7 +47,8 @@ interface TopupRequest {
 }
 
 export default function ResellerTopupRequests() {
-  const { user, tenantId } = useAuth();
+  const { user } = useAuth();
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const [requests, setRequests] = useState<TopupRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,6 +61,25 @@ export default function ResellerTopupRequests() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Fetch tenant ID
+  useEffect(() => {
+    const fetchTenantId = async () => {
+      if (!user?.id) return;
+      
+      const { data } = await supabase
+        .from('tenant_users')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (data?.tenant_id) {
+        setTenantId(data.tenant_id);
+      }
+    };
+    
+    fetchTenantId();
+  }, [user?.id]);
 
   const fetchRequests = useCallback(async () => {
     if (!tenantId) return;
@@ -91,7 +111,7 @@ export default function ResellerTopupRequests() {
   }, [fetchRequests]);
 
   const handleApprove = async () => {
-    if (!selectedRequest) return;
+    if (!selectedRequest || !tenantId) return;
     
     setIsProcessing(true);
     try {
@@ -115,15 +135,9 @@ export default function ResellerTopupRequests() {
       
       if (updateError) throw updateError;
       
-      // Create transaction record
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user?.id)
-        .single();
-      
+      // Create transaction record using tenantId from state
       await supabase.from('reseller_transactions').insert({
-        tenant_id: userData?.tenant_id,
+        tenant_id: tenantId,
         reseller_id: selectedRequest.reseller_id,
         type: 'topup',
         amount: selectedRequest.amount,
@@ -220,7 +234,7 @@ export default function ResellerTopupRequests() {
     .reduce((sum, r) => sum + r.amount, 0);
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Reseller Top-up Requests">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
