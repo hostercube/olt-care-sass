@@ -133,6 +133,7 @@ export default function GatewaySettings() {
   const [paymentConfigs, setPaymentConfigs] = useState<Record<string, any>>({});
   const [isInitializing, setIsInitializing] = useState(false);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [savingGateway, setSavingGateway] = useState<string | null>(null);
 
   const togglePasswordVisibility = (key: string) => {
     setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
@@ -202,16 +203,20 @@ export default function GatewaySettings() {
 
   const handlePaymentSave = async (gateway: string) => {
     const config = paymentConfigs[gateway];
-    if (config) {
-      // Build config object from fields - ensure all values are saved
-      const gatewayDef = GATEWAY_CONFIGS[gateway];
+    if (!config) return;
+    
+    setSavingGateway(gateway);
+    
+    try {
+      // Build config object from fields - include ALL values, even empty ones
       const configData: Record<string, any> = {};
       
-      // Copy all existing config values
-      if (config.config) {
-        Object.keys(config.config).forEach(key => {
-          if (config.config[key] !== undefined && config.config[key] !== '') {
-            configData[key] = config.config[key];
+      // Copy all config values - let the backend handle validation
+      if (config.config && typeof config.config === 'object') {
+        Object.entries(config.config).forEach(([key, value]) => {
+          // Include all values that are defined (even empty strings, let user clear fields)
+          if (value !== undefined && value !== null) {
+            configData[key] = value;
           }
         });
       }
@@ -225,7 +230,7 @@ export default function GatewaySettings() {
         is_enabled: config.is_enabled,
         sandbox_mode: config.sandbox_mode,
         config: configData,
-        instructions: config.instructions,
+        instructions: config.instructions || null,
         transaction_fee_percent: config.transaction_fee_percent || 0,
       };
       
@@ -234,14 +239,26 @@ export default function GatewaySettings() {
         updateData.bkash_mode = configData.bkash_mode;
       }
       
-      console.log('Saving gateway config:', { gateway, updateData });
-      await updateGateway(config.id, updateData);
+      console.log('Saving gateway config:', { gateway, id: config.id, updateData, configKeys: Object.keys(configData) });
       
-      // If this gateway has credentials, offer to sync to tenants
-      const hasCredentials = Object.keys(configData).length > 0;
-      if (hasCredentials && gateway !== 'manual') {
-        syncCredentialsToTenants(gateway);
+      const success = await updateGateway(config.id, updateData);
+      
+      if (success) {
+        // If this gateway has credentials, offer to sync to tenants
+        const hasCredentials = Object.keys(configData).filter(k => k !== 'bkash_mode' && configData[k]).length > 0;
+        if (hasCredentials && gateway !== 'manual') {
+          await syncCredentialsToTenants(gateway);
+        }
       }
+    } catch (err) {
+      console.error('Save error:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Save Failed',
+        description: 'Could not save gateway settings. Please try again.',
+      });
+    } finally {
+      setSavingGateway(null);
     }
   };
 
@@ -443,9 +460,16 @@ export default function GatewaySettings() {
             />
           </div>
 
-          <Button onClick={() => handlePaymentSave(gateway)}>
-            <Save className="h-4 w-4 mr-2" />
-            Save Settings
+          <Button 
+            onClick={() => handlePaymentSave(gateway)} 
+            disabled={savingGateway === gateway}
+          >
+            {savingGateway === gateway ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            {savingGateway === gateway ? 'Saving...' : 'Save Settings'}
           </Button>
         </CardContent>
       </Card>

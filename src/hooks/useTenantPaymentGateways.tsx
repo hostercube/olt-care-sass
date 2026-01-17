@@ -54,20 +54,54 @@ export function useTenantPaymentGateways() {
     }
   }, [tenantId, fetchGateways]);
 
-  const updateGateway = async (id: string, updates: Partial<TenantPaymentGateway>) => {
+  const updateGateway = async (id: string, updates: Partial<TenantPaymentGateway>): Promise<boolean> => {
     try {
-      const { error } = await supabase
-        .from('tenant_payment_gateways')
-        .update(updates as any)
-        .eq('id', id);
+      // Build clean update data
+      const updateData: Record<string, any> = {};
+      
+      if (updates.is_enabled !== undefined) updateData.is_enabled = updates.is_enabled;
+      if (updates.sandbox_mode !== undefined) updateData.sandbox_mode = updates.sandbox_mode;
+      if (updates.instructions !== undefined) updateData.instructions = updates.instructions;
+      if (updates.bkash_mode !== undefined) updateData.bkash_mode = updates.bkash_mode;
+      if (updates.transaction_fee_percent !== undefined) {
+        updateData.transaction_fee_percent = Number(updates.transaction_fee_percent) || 0;
+      }
+      
+      // Handle config - ensure it's a valid JSON object
+      if (updates.config !== undefined) {
+        const cleanConfig: Record<string, any> = {};
+        if (updates.config && typeof updates.config === 'object') {
+          Object.entries(updates.config).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+              cleanConfig[key] = value;
+            }
+          });
+        }
+        updateData.config = cleanConfig;
+      }
 
-      if (error) throw error;
-      toast.success('Payment gateway updated');
+      console.log('Updating tenant gateway:', { id, updateData });
+
+      const { data, error } = await supabase
+        .from('tenant_payment_gateways')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase update error:', error);
+        throw error;
+      }
+
+      console.log('Tenant gateway updated successfully:', data);
+      toast.success('Payment gateway updated successfully');
       await fetchGateways();
-    } catch (err) {
+      return true;
+    } catch (err: any) {
       console.error('Error updating payment gateway:', err);
-      toast.error('Failed to update payment gateway');
-      throw err;
+      toast.error(err.message || 'Failed to update payment gateway');
+      return false;
     }
   };
 
