@@ -178,10 +178,17 @@ export default function CustomerPayBill() {
       if (customerData) {
         setCustomer(customerData);
         
-        // Fetch wallet balance using RPC (includes all wallet credits)
+        // Fetch wallet balance using RPC (includes both wallet_balance + referral_bonus_balance)
         const { data: walletData } = await supabase
           .rpc('get_customer_wallet_balance', { p_customer_id: id });
-        setWalletBalance(Number(walletData) || 0);
+        const totalWalletBalance = Number(walletData) || 0;
+        setWalletBalance(totalWalletBalance);
+        
+        // Enable wallet usage if customer has any balance (wallet or referral)
+        if (totalWalletBalance > 0) {
+          setUseWalletEnabled(true);
+          setUseWalletBalance(true); // Auto-enable by default
+        }
       } else {
         // Use session data as basic fallback
         setCustomer({
@@ -191,19 +198,6 @@ export default function CustomerPayBill() {
           package: null,
           expiry_date: null,
         });
-      }
-      
-      // Fetch referral config to check if wallet usage is enabled
-      const { data: referralConfig } = await supabase
-        .rpc('get_referral_config', { p_tenant_id: effectiveTenantId });
-      
-      if (referralConfig && (referralConfig as any).use_wallet_for_recharge === true) {
-        setUseWalletEnabled(true);
-        // Auto-enable wallet usage if balance exists
-        const currentWalletBal = Number((await supabase.rpc('get_customer_wallet_balance', { p_customer_id: id })).data) || 0;
-        if (currentWalletBal > 0) {
-          setUseWalletBalance(true);
-        }
       }
 
       // Check for pending package change and fetch that package
@@ -464,6 +458,13 @@ export default function CustomerPayBill() {
       if (walletError) {
         console.error('Wallet deduction error:', walletError);
         throw new Error('Failed to deduct wallet balance');
+      }
+      
+      // Check the function response for success status
+      const walletResponse = walletResult as { success?: boolean; error?: string } | null;
+      if (walletResponse && walletResponse.success === false) {
+        console.error('Wallet deduction failed:', walletResponse.error);
+        throw new Error(walletResponse.error || 'Failed to deduct wallet balance');
       }
     }
 
