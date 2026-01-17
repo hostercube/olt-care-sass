@@ -276,6 +276,75 @@ const InstructionsField = memo(function InstructionsField({
   );
 });
 
+export default function GatewaySettings() {
+  const { toast } = useToast();
+  const { 
+    gateways, 
+    loading: gatewaysLoading, 
+    updateGateway,
+    fetchGateways
+  } = usePaymentGateways();
+  
+  const [paymentConfigs, setPaymentConfigs] = useState<Record<string, any>>({});
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [savingGateway, setSavingGateway] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
+
+  useEffect(() => {
+    if (gateways.length > 0) {
+      const configs: Record<string, any> = {};
+      gateways.forEach(gw => {
+        configs[gw.gateway] = {
+          id: gw.id,
+          is_enabled: gw.is_enabled,
+          sandbox_mode: gw.sandbox_mode,
+          config: gw.config || {},
+          instructions: gw.instructions,
+          transaction_fee_percent: gw.transaction_fee_percent || 0,
+        };
+      });
+      setPaymentConfigs(configs);
+    }
+  }, [gateways]);
+
+  const togglePasswordVisibility = useCallback((key: string) => {
+    setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const initializeGateways = async () => {
+    setIsInitializing(true);
+    try {
+      // Initialize default gateways by inserting if not exists
+      const defaultGateways: Array<'sslcommerz' | 'bkash' | 'nagad' | 'shurjopay' | 'uddoktapay' | 'piprapay' | 'aamarpay' | 'manual'> = 
+        ['sslcommerz', 'bkash', 'nagad', 'shurjopay', 'uddoktapay', 'piprapay', 'aamarpay', 'manual'];
+      
+      const existingGateways = gateways.map(g => g.gateway);
+      const toInsert = defaultGateways
+        .filter(gw => !existingGateways.includes(gw))
+        .map((gw, idx) => ({
+          gateway: gw,
+          display_name: GATEWAY_CONFIGS[gw]?.title || gw,
+          is_enabled: false,
+          sandbox_mode: true,
+          config: {},
+          sort_order: idx,
+        }));
+      
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from('payment_gateway_settings').insert(toInsert);
+        if (error) throw error;
+      }
+      
+      await fetchGateways();
+      toast({ title: 'Success', description: 'Default payment gateways initialized' });
+    } catch (err) {
+      console.error('Failed to initialize gateways:', err);
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to initialize gateways' });
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
   const handlePaymentSave = async (gateway: string) => {
     const config = paymentConfigs[gateway];
     if (!config) return;
