@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { 
   LayoutDashboard, Users, UserPlus, Wallet, ArrowRightLeft, 
-  Settings, LogOut, Menu, ChevronRight, ReceiptText, UserCog, MapPin
+  Settings, LogOut, Menu, ChevronRight, ReceiptText, UserCog, MapPin, CreditCard
 } from 'lucide-react';
 import type { Reseller, ResellerPermissionKey } from '@/types/reseller';
 import { RESELLER_ROLE_LABELS } from '@/types/reseller';
@@ -33,6 +33,7 @@ export function ResellerPortalLayout({ children, reseller, onLogout, hasPermissi
     { label: 'Dashboard', href: '/reseller/dashboard', icon: LayoutDashboard, show: true },
     { label: 'Billing Summary', href: '/reseller/billing', icon: ReceiptText, show: true },
     { label: 'My Wallet', href: '/reseller/wallet', icon: Wallet, show: true },
+    { label: 'Top Up Balance', href: '/reseller/wallet', icon: CreditCard, show: true },
     { label: 'My Customers', href: '/reseller/customers', icon: Users, show: true },
     { 
       label: 'Areas', 

@@ -13,6 +13,7 @@ export interface TenantPaymentGateway {
   config: Record<string, any>;
   instructions: string | null;
   sort_order: number;
+  transaction_fee_percent: number;
   bkash_mode?: string; // 'tokenized' | 'checkout_js'
   created_at: string;
   updated_at: string;

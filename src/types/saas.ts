@@ -186,6 +186,9 @@ export interface Payment {
   verified_by: string | null;
   verified_at: string | null;
   notes: string | null;
+  gateway_fee: number;
+  net_amount: number;
+  fee_percent: number;
   created_at: string;
   updated_at: string;
   // Joined data
@@ -228,6 +231,7 @@ export interface PaymentGatewaySettings {
   sandbox_mode: boolean;
   instructions: string | null;
   sort_order: number;
+  transaction_fee_percent: number;
   created_at: string;
   updated_at: string;
 }

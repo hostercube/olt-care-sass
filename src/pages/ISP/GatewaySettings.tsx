@@ -123,6 +123,7 @@ export default function ISPGatewaySettings() {
         sandbox_mode: config.sandbox_mode,
         config: config.config,
         instructions: config.instructions,
+        transaction_fee_percent: config.transaction_fee_percent || 0,
         bkash_mode: gateway === 'bkash' ? ((config.config as any)?.bkash_mode || 'tokenized') : undefined,
       });
     }
@@ -283,6 +284,27 @@ export default function ISPGatewaySettings() {
               })}
             />
             <Label className="text-xs text-muted-foreground">Sandbox/Test Mode</Label>
+          </div>
+
+          {/* Transaction Fee Percent */}
+          <div className="space-y-1">
+            <Label className="text-xs">Transaction Fee (%)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              value={config.transaction_fee_percent || 0}
+              onChange={(e) => setPaymentConfigs({
+                ...paymentConfigs,
+                [gatewayInfo.id]: { ...config, transaction_fee_percent: parseFloat(e.target.value) || 0 }
+              })}
+              placeholder="e.g., 2.5 for 2.5%"
+              className="h-8"
+            />
+            <p className="text-xs text-muted-foreground">
+              Fee added to payment (e.g., 2% on ৳1000 = ৳1020 total)
+            </p>
           </div>
 
           <div className="space-y-1">

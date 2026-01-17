@@ -4589,6 +4589,7 @@ export type Database = {
           is_enabled: boolean | null
           sandbox_mode: boolean | null
           sort_order: number | null
+          transaction_fee_percent: number | null
           updated_at: string
         }
         Insert: {
@@ -4602,6 +4603,7 @@ export type Database = {
           is_enabled?: boolean | null
           sandbox_mode?: boolean | null
           sort_order?: number | null
+          transaction_fee_percent?: number | null
           updated_at?: string
         }
         Update: {
@@ -4615,6 +4617,7 @@ export type Database = {
           is_enabled?: boolean | null
           sandbox_mode?: boolean | null
           sort_order?: number | null
+          transaction_fee_percent?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -4625,9 +4628,12 @@ export type Database = {
           created_at: string
           currency: string | null
           description: string | null
+          fee_percent: number | null
+          gateway_fee: number | null
           gateway_response: Json | null
           id: string
           invoice_number: string | null
+          net_amount: number | null
           notes: string | null
           paid_at: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
@@ -4644,9 +4650,12 @@ export type Database = {
           created_at?: string
           currency?: string | null
           description?: string | null
+          fee_percent?: number | null
+          gateway_fee?: number | null
           gateway_response?: Json | null
           id?: string
           invoice_number?: string | null
+          net_amount?: number | null
           notes?: string | null
           paid_at?: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
@@ -4663,9 +4672,12 @@ export type Database = {
           created_at?: string
           currency?: string | null
           description?: string | null
+          fee_percent?: number | null
+          gateway_fee?: number | null
           gateway_response?: Json | null
           id?: string
           invoice_number?: string | null
+          net_amount?: number | null
           notes?: string | null
           paid_at?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
@@ -7610,6 +7622,7 @@ export type Database = {
           sandbox_mode: boolean | null
           sort_order: number | null
           tenant_id: string
+          transaction_fee_percent: number | null
           updated_at: string | null
         }
         Insert: {
@@ -7624,6 +7637,7 @@ export type Database = {
           sandbox_mode?: boolean | null
           sort_order?: number | null
           tenant_id: string
+          transaction_fee_percent?: number | null
           updated_at?: string | null
         }
         Update: {
@@ -7638,6 +7652,7 @@ export type Database = {
           sandbox_mode?: boolean | null
           sort_order?: number | null
           tenant_id?: string
+          transaction_fee_percent?: number | null
           updated_at?: string | null
         }
         Relationships: [

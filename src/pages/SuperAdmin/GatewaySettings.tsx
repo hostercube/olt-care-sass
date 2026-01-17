@@ -211,6 +211,7 @@ export default function GatewaySettings() {
         sandbox_mode: config.sandbox_mode,
         config: configData,
         instructions: config.instructions,
+        transaction_fee_percent: config.transaction_fee_percent || 0,
       };
       
       // Save bkash_mode to column directly for bKash gateway
@@ -357,6 +358,26 @@ export default function GatewaySettings() {
               <Label>Sandbox/Test Mode</Label>
             </div>
           )}
+
+          {/* Transaction Fee Percent */}
+          <div className="space-y-2">
+            <Label>Transaction Fee (%)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              value={config.transaction_fee_percent || 0}
+              onChange={(e) => setPaymentConfigs({
+                ...paymentConfigs,
+                [gateway]: { ...config, transaction_fee_percent: parseFloat(e.target.value) || 0 }
+              })}
+              placeholder="e.g., 2.5 for 2.5%"
+            />
+            <p className="text-xs text-muted-foreground">
+              Fee charged to users on each transaction. Example: 2% fee on ৳1000 = ৳1020 total charge
+            </p>
+          </div>
 
           <div className="space-y-2">
             <Label>Payment Instructions (shown to customers)</Label>
