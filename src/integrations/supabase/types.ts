@@ -8449,6 +8449,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      add_referral_bonus: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_notes?: string
+          p_reference_id?: string
+        }
+        Returns: string
+      }
       add_wallet_transaction: {
         Args: {
           p_amount: number
@@ -8605,12 +8614,15 @@ export type Database = {
           package_price: number
           phone: string
           pppoe_username: string
+          referral_bonus_balance: number
+          referral_code: string
           status: string
           tenant_id: string
           tenant_logo_url: string
           tenant_name: string
           tenant_primary_color: string
           upload_speed: number
+          wallet_balance: number
         }[]
       }
       get_customer_referral_stats: {
@@ -8843,6 +8855,18 @@ export type Database = {
           _customer_code: string
           _tenant_id: string
           _trx_id: string
+        }
+        Returns: Json
+      }
+      process_customer_online_recharge: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_months: number
+          p_notes?: string
+          p_payment_method: string
+          p_tenant_id: string
+          p_transaction_id?: string
         }
         Returns: Json
       }

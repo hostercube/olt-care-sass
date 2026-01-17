@@ -53,6 +53,8 @@ export default function CustomerWallet() {
 
   const [customer, setCustomer] = useState<any>(null);
   const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [referralBalance, setReferralBalance] = useState<number>(0);
+  const [totalBalance, setTotalBalance] = useState<number>(0);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [gateways, setGateways] = useState<TenantGateway[]>([]);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | ''>('');
@@ -98,21 +100,24 @@ export default function CustomerWallet() {
       let effectiveTenantId = sessionTenantId;
       
       if (customerRpcData && Array.isArray(customerRpcData) && customerRpcData.length > 0) {
-        const c = customerRpcData[0];
+        const c = customerRpcData[0] as any;
         effectiveTenantId = c.tenant_id || sessionTenantId;
         setCustomer(c);
+        
+        // Get individual balance values from customer data (cast to any since RPC returns these)
+        const wb = Number(c.wallet_balance) || 0;
+        const rb = Number(c.referral_bonus_balance) || 0;
+        setWalletBalance(wb);
+        setReferralBalance(rb);
+        setTotalBalance(wb + rb);
       } else if (customerError) {
         console.error('Error fetching customer via RPC:', customerError);
+        
+        // Fallback: Fetch combined balance using RPC
+        const { data: walletData } = await supabase
+          .rpc('get_customer_wallet_balance', { p_customer_id: id });
+        setTotalBalance(Number(walletData) || 0);
       }
-
-      // Fetch wallet balance using RPC (includes referral bonus)
-      const { data: walletData, error: walletError } = await supabase
-        .rpc('get_customer_wallet_balance', { p_customer_id: id });
-      
-      if (walletError) {
-        console.error('Error fetching wallet balance:', walletError);
-      }
-      setWalletBalance(Number(walletData) || 0);
 
       // Fetch wallet transactions using RPC (bypasses RLS)
       const { data: txData, error: txError } = await supabase
@@ -361,22 +366,55 @@ export default function CustomerWallet() {
         <p className="text-muted-foreground">Manage your wallet balance and transactions</p>
       </div>
 
-      {/* Balance Card */}
-      <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-500/5 to-emerald-500/10">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
+      {/* Balance Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Total Balance */}
+        <Card className="border-2 border-green-500/30 bg-gradient-to-br from-green-500/5 to-emerald-500/10">
+          <CardContent className="p-6">
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-2xl bg-green-500/20 flex items-center justify-center">
-                <Wallet className="h-8 w-8 text-green-600" />
+              <div className="h-14 w-14 rounded-2xl bg-green-500/20 flex items-center justify-center">
+                <Wallet className="h-7 w-7 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Available Balance</p>
-                <p className="text-4xl font-bold text-green-600">৳{walletBalance.toFixed(2)}</p>
+                <p className="text-sm text-muted-foreground">Total Balance</p>
+                <p className="text-3xl font-bold text-green-600">৳{totalBalance.toFixed(2)}</p>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* Wallet Balance */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-blue-500/20 flex items-center justify-center">
+                <CreditCard className="h-7 w-7 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Wallet Balance</p>
+                <p className="text-3xl font-bold text-blue-600">৳{walletBalance.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">From top-ups</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Referral Bonus */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-purple-500/20 flex items-center justify-center">
+                <Receipt className="h-7 w-7 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Referral Bonus</p>
+                <p className="text-3xl font-bold text-purple-600">৳{referralBalance.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">From referrals</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Top Up Section */}
       <Card>
