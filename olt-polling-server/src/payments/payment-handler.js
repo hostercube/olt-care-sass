@@ -284,15 +284,40 @@ function generateTransactionId() {
 }
 
 /**
+ * Required credentials for each gateway
+ */
+const GATEWAY_REQUIRED_CREDENTIALS = {
+  sslcommerz: ['store_id', 'store_password'],
+  shurjopay: ['username', 'password'],
+  bkash: ['app_key', 'app_secret', 'username', 'password'],
+  nagad: ['merchant_id', 'merchant_number', 'public_key', 'private_key'],
+  uddoktapay: ['api_key'],
+  aamarpay: ['store_id', 'signature_key'],
+  piprapay: ['api_key', 'api_secret'],
+  portwallet: ['app_key', 'secret_key'],
+};
+
+/**
+ * Validate gateway credentials and return missing ones
+ */
+function validateGatewayCredentials(gateway, config) {
+  const required = GATEWAY_REQUIRED_CREDENTIALS[gateway] || [];
+  const missing = required.filter(key => !config[key] || config[key].toString().trim() === '');
+  return missing;
+}
+
+/**
  * Initiate SSLCommerz payment
  */
 async function initiateSSLCommerz(config, paymentData) {
   const { store_id, store_password, is_sandbox } = config;
   
-  // Validate required credentials
-  if (!store_id || !store_password) {
-    logger.error('SSLCommerz credentials not configured');
-    return { success: false, error: 'SSLCommerz credentials not configured. Please configure store_id and store_password in gateway settings.' };
+  // Validate required credentials with detailed error
+  const missing = validateGatewayCredentials('sslcommerz', config);
+  if (missing.length > 0) {
+    const errorMsg = `SSLCommerz credentials missing: ${missing.join(', ')}. Please configure these in Gateway Settings.`;
+    logger.error(errorMsg);
+    return { success: false, error: errorMsg, missing_credentials: missing };
   }
   
   const baseUrl = is_sandbox ? GATEWAY_CONFIGS.sslcommerz.sandbox : GATEWAY_CONFIGS.sslcommerz.live;
@@ -336,6 +361,14 @@ async function initiateSSLCommerz(config, paymentData) {
         session_key: data.sessionkey,
       };
     } else {
+      // Check for common credential errors
+      const failReason = data.failedreason || '';
+      if (failReason.toLowerCase().includes('store') || failReason.toLowerCase().includes('invalid')) {
+        return {
+          success: false,
+          error: `SSLCommerz: ${failReason}. Please verify your Store ID and Password are correct.`,
+        };
+      }
       return {
         success: false,
         error: data.failedreason || 'SSLCommerz initialization failed',
@@ -352,6 +385,15 @@ async function initiateSSLCommerz(config, paymentData) {
  */
 async function initiateShurjoPay(config, paymentData) {
   const { username, password, prefix, is_sandbox } = config;
+  
+  // Validate credentials
+  const missing = validateGatewayCredentials('shurjopay', config);
+  if (missing.length > 0) {
+    const errorMsg = `ShurjoPay credentials missing: ${missing.join(', ')}. Please configure these in Gateway Settings.`;
+    logger.error(errorMsg);
+    return { success: false, error: errorMsg, missing_credentials: missing };
+  }
+  
   const tokenUrl = is_sandbox ? GATEWAY_CONFIGS.shurjopay.sandbox : GATEWAY_CONFIGS.shurjopay.live;
 
   try {
@@ -365,7 +407,9 @@ async function initiateShurjoPay(config, paymentData) {
     const tokenData = await tokenResponse.json();
 
     if (!tokenData.token) {
-      return { success: false, error: 'Failed to get ShurjoPay token' };
+      // Provide more helpful error
+      const errMsg = tokenData.message || 'Failed to authenticate with ShurjoPay';
+      return { success: false, error: `ShurjoPay: ${errMsg}. Please verify your username and password.` };
     }
 
     // Make payment request
@@ -420,6 +464,15 @@ async function initiateShurjoPay(config, paymentData) {
  */
 async function initiateUddoktaPay(config, paymentData) {
   const { api_key, is_sandbox } = config;
+  
+  // Validate credentials
+  const missing = validateGatewayCredentials('uddoktapay', config);
+  if (missing.length > 0) {
+    const errorMsg = `UddoktaPay credentials missing: ${missing.join(', ')}. Please configure these in Gateway Settings.`;
+    logger.error(errorMsg);
+    return { success: false, error: errorMsg, missing_credentials: missing };
+  }
+  
   const baseUrl = is_sandbox ? GATEWAY_CONFIGS.uddoktapay.sandbox : GATEWAY_CONFIGS.uddoktapay.live;
 
   try {
@@ -468,6 +521,15 @@ async function initiateUddoktaPay(config, paymentData) {
  */
 async function initiateAamarPay(config, paymentData) {
   const { store_id, signature_key, is_sandbox } = config;
+  
+  // Validate credentials
+  const missing = validateGatewayCredentials('aamarpay', config);
+  if (missing.length > 0) {
+    const errorMsg = `aamarPay credentials missing: ${missing.join(', ')}. Please configure these in Gateway Settings.`;
+    logger.error(errorMsg);
+    return { success: false, error: errorMsg, missing_credentials: missing };
+  }
+  
   const baseUrl = is_sandbox ? GATEWAY_CONFIGS.aamarpay.sandbox : GATEWAY_CONFIGS.aamarpay.live;
 
   try {
@@ -516,6 +578,15 @@ async function initiateAamarPay(config, paymentData) {
  */
 async function initiatePipraPay(config, paymentData) {
   const { api_key, api_secret, is_sandbox } = config;
+  
+  // Validate credentials
+  const missing = validateGatewayCredentials('piprapay', config);
+  if (missing.length > 0) {
+    const errorMsg = `PipraPay credentials missing: ${missing.join(', ')}. Please configure these in Gateway Settings.`;
+    logger.error(errorMsg);
+    return { success: false, error: errorMsg, missing_credentials: missing };
+  }
+  
   const baseUrl = is_sandbox ? GATEWAY_CONFIGS.piprapay.sandbox : GATEWAY_CONFIGS.piprapay.live;
 
   try {
