@@ -204,79 +204,77 @@ const GatewayInputFieldSA = memo(function GatewayInputFieldSA({
   );
 });
 
-export default function GatewaySettings() {
-  const { gateways, loading: gatewaysLoading, updateGateway, fetchGateways, createGateway } = usePaymentGateways();
-  const { toast } = useToast();
-  const [paymentConfigs, setPaymentConfigs] = useState<Record<string, any>>({});
-  const [isInitializing, setIsInitializing] = useState(false);
-  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
-  const [savingGateway, setSavingGateway] = useState<string | null>(null);
-
-  const togglePasswordVisibility = (key: string) => {
-    setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
+// Memoized number input for fee (prevents focus loss)
+const FeeInputField = memo(function FeeInputField({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [localValue, setLocalValue] = useState(value.toString());
+  
   useEffect(() => {
-    fetchGateways();
-  }, []);
+    setLocalValue(value.toString());
+  }, [value]);
 
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setLocalValue(newValue);
+    onChange(parseFloat(newValue) || 0);
+  }, [onChange]);
+
+  return (
+    <div className="space-y-2">
+      <Label>Transaction Fee (%)</Label>
+      <Input
+        type="number"
+        step="0.01"
+        min="0"
+        max="100"
+        value={localValue}
+        onChange={handleChange}
+        placeholder="e.g., 2.5 for 2.5%"
+      />
+      <p className="text-xs text-muted-foreground">
+        Fee added on top of payment. Example: 2% on ৳1000 = Customer pays ৳1020
+      </p>
+    </div>
+  );
+});
+
+// Memoized textarea for instructions (prevents focus loss)
+const InstructionsField = memo(function InstructionsField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [localValue, setLocalValue] = useState(value);
+  
   useEffect(() => {
-    if (gateways.length > 0) {
-      const configs: Record<string, any> = {};
-      gateways.forEach(gw => {
-        // Include bkash_mode in config for UI
-        const gwConfig = { ...(gw.config || {}) };
-        if (gw.gateway === 'bkash' && (gw as any).bkash_mode) {
-          gwConfig.bkash_mode = (gw as any).bkash_mode;
-        }
-        configs[gw.gateway] = {
-          ...gw,
-          config: gwConfig,
-        };
-      });
-      setPaymentConfigs(configs);
-    }
-  }, [gateways]);
+    setLocalValue(value);
+  }, [value]);
 
-  const initializeGateways = async () => {
-    setIsInitializing(true);
-    try {
-      const defaultGateways = [
-        { gateway: 'sslcommerz', display_name: 'SSLCommerz', sort_order: 1 },
-        { gateway: 'shurjopay', display_name: 'ShurjoPay', sort_order: 2 },
-        { gateway: 'bkash', display_name: 'bKash', sort_order: 3 },
-        { gateway: 'nagad', display_name: 'Nagad', sort_order: 4 },
-        { gateway: 'rocket', display_name: 'Rocket', sort_order: 5 },
-        { gateway: 'portwallet', display_name: 'PortWallet', sort_order: 6 },
-        { gateway: 'piprapay', display_name: 'PipraPay', sort_order: 7 },
-        { gateway: 'uddoktapay', display_name: 'UddoktaPay', sort_order: 8 },
-        { gateway: 'aamarpay', display_name: 'aamarPay', sort_order: 9 },
-        { gateway: 'manual', display_name: 'Manual Payment', sort_order: 10, is_enabled: true, instructions: 'Please transfer to:\nBank Account: XXXXXX\nbKash: 01XXXXXXXXX' },
-      ];
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    setLocalValue(newValue);
+    onChange(newValue);
+  }, [onChange]);
 
-      for (const gw of defaultGateways) {
-        const exists = gateways.find(g => g.gateway === gw.gateway);
-        if (!exists) {
-          await createGateway({
-            gateway: gw.gateway as any,
-            display_name: gw.display_name,
-            is_enabled: gw.is_enabled || false,
-            sandbox_mode: true,
-            config: {},
-            sort_order: gw.sort_order,
-            instructions: gw.instructions || null,
-          });
-        }
-      }
-      
-      await fetchGateways();
-      toast({ title: 'Success', description: 'Payment gateways initialized' });
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Error', description: error.message });
-    } finally {
-      setIsInitializing(false);
-    }
-  };
+  return (
+    <div className="space-y-2">
+      <Label>Payment Instructions (shown to customers)</Label>
+      <Textarea
+        value={localValue}
+        onChange={handleChange}
+        placeholder="Instructions for customers..."
+        rows={3}
+      />
+    </div>
+  );
+});
 
   const handlePaymentSave = async (gateway: string) => {
     const config = paymentConfigs[gateway];
@@ -491,38 +489,27 @@ export default function GatewaySettings() {
             </div>
           )}
 
-          {/* Transaction Fee Percent */}
-          <div className="space-y-2">
-            <Label>Transaction Fee (%)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={config.transaction_fee_percent || 0}
-              onChange={(e) => setPaymentConfigs({
-                ...paymentConfigs,
-                [gateway]: { ...config, transaction_fee_percent: parseFloat(e.target.value) || 0 }
-              })}
-              placeholder="e.g., 2.5 for 2.5%"
-            />
-            <p className="text-xs text-muted-foreground">
-              Fee charged to users on each transaction. Example: 2% fee on ৳1000 = ৳1020 total charge
-            </p>
-          </div>
+          {/* Transaction Fee Percent - Using memoized component */}
+          <FeeInputField
+            value={config.transaction_fee_percent || 0}
+            onChange={(value) => {
+              setPaymentConfigs(prev => ({
+                ...prev,
+                [gateway]: { ...prev[gateway], transaction_fee_percent: value }
+              }));
+            }}
+          />
 
-          <div className="space-y-2">
-            <Label>Payment Instructions (shown to customers)</Label>
-            <Textarea
-              value={config.instructions || ''}
-              onChange={(e) => setPaymentConfigs({
-                ...paymentConfigs,
-                [gateway]: { ...config, instructions: e.target.value }
-              })}
-              placeholder="Instructions for customers..."
-              rows={3}
-            />
-          </div>
+          {/* Instructions - Using memoized component */}
+          <InstructionsField
+            value={config.instructions || ''}
+            onChange={(value) => {
+              setPaymentConfigs(prev => ({
+                ...prev,
+                [gateway]: { ...prev[gateway], instructions: value }
+              }));
+            }}
+          />
 
           <Button 
             onClick={() => handlePaymentSave(gateway)} 

@@ -98,6 +98,80 @@ const GatewayInputField = memo(function GatewayInputField({
   );
 });
 
+// Memoized number input for fee (prevents focus loss)
+const FeeInputFieldISP = memo(function FeeInputFieldISP({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [localValue, setLocalValue] = useState(value.toString());
+  
+  useEffect(() => {
+    setLocalValue(value.toString());
+  }, [value]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setLocalValue(newValue);
+    onChange(parseFloat(newValue) || 0);
+  }, [onChange]);
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">Transaction Fee (%)</Label>
+      <Input
+        type="number"
+        step="0.01"
+        min="0"
+        max="100"
+        value={localValue}
+        onChange={handleChange}
+        placeholder="e.g., 2.5 for 2.5%"
+        className="h-8"
+      />
+      <p className="text-xs text-muted-foreground">
+        Fee added on top (e.g., 2% on ৳1000 = Customer pays ৳1020)
+      </p>
+    </div>
+  );
+});
+
+// Memoized textarea for instructions (prevents focus loss)
+const InstructionsFieldISP = memo(function InstructionsFieldISP({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [localValue, setLocalValue] = useState(value);
+  
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    setLocalValue(newValue);
+    onChange(newValue);
+  }, [onChange]);
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">Payment Instructions</Label>
+      <Textarea
+        value={localValue}
+        onChange={handleChange}
+        placeholder="Payment instructions for customers..."
+        rows={2}
+        className="text-sm"
+      />
+    </div>
+  );
+});
+
 export default function ISPGatewaySettings() {
   const { tenantId } = useTenantContext();
   const { hasPaymentGatewayAccess, hasSMSGatewayAccess, hasAccess, isSuperAdmin } = useModuleAccess();
@@ -402,40 +476,27 @@ export default function ISPGatewaySettings() {
             <Label className="text-xs text-muted-foreground">Sandbox/Test Mode</Label>
           </div>
 
-          {/* Transaction Fee Percent */}
-          <div className="space-y-1">
-            <Label className="text-xs">Transaction Fee (%)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={config.transaction_fee_percent || 0}
-              onChange={(e) => setPaymentConfigs({
-                ...paymentConfigs,
-                [gatewayInfo.id]: { ...config, transaction_fee_percent: parseFloat(e.target.value) || 0 }
-              })}
-              placeholder="e.g., 2.5 for 2.5%"
-              className="h-8"
-            />
-            <p className="text-xs text-muted-foreground">
-              Fee added to payment (e.g., 2% on ৳1000 = ৳1020 total)
-            </p>
-          </div>
+          {/* Transaction Fee Percent - Using memoized component */}
+          <FeeInputFieldISP
+            value={config.transaction_fee_percent || 0}
+            onChange={(value) => {
+              setPaymentConfigs(prev => ({
+                ...prev,
+                [gatewayInfo.id]: { ...prev[gatewayInfo.id], transaction_fee_percent: value }
+              }));
+            }}
+          />
 
-          <div className="space-y-1">
-            <Label className="text-xs">Payment Instructions</Label>
-            <Textarea
-              value={config.instructions || ''}
-              onChange={(e) => setPaymentConfigs({
-                ...paymentConfigs,
-                [gatewayInfo.id]: { ...config, instructions: e.target.value }
-              })}
-              placeholder="Payment instructions for customers..."
-              rows={2}
-              className="text-sm"
-            />
-          </div>
+          {/* Instructions - Using memoized component */}
+          <InstructionsFieldISP
+            value={config.instructions || ''}
+            onChange={(value) => {
+              setPaymentConfigs(prev => ({
+                ...prev,
+                [gatewayInfo.id]: { ...prev[gatewayInfo.id], instructions: value }
+              }));
+            }}
+          />
 
           <Button 
             size="sm" 
