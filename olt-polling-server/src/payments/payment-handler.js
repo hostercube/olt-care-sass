@@ -938,6 +938,7 @@ export async function initiatePayment(supabase, gateway, paymentData) {
   let isSandbox = true;
   let configData = {};
   let transactionFeePercent = 0;
+  let useGlobalFallback = false;
 
   // First try tenant-specific gateways
   const { data: tenantGateway } = await supabase
@@ -949,12 +950,27 @@ export async function initiatePayment(supabase, gateway, paymentData) {
     .single();
 
   if (tenantGateway) {
-    gatewayConfig = tenantGateway;
-    configData = tenantGateway.config || {};
-    isSandbox = tenantGateway.sandbox_mode !== false;
-    transactionFeePercent = tenantGateway.transaction_fee_percent || 0;
+    const tenantConfig = tenantGateway.config || {};
+    const hasCredentials = Object.keys(tenantConfig).length > 0 && 
+      Object.values(tenantConfig).some(v => v && v.toString().trim() !== '');
+    
+    if (hasCredentials) {
+      // Tenant has credentials configured, use them
+      gatewayConfig = tenantGateway;
+      configData = tenantConfig;
+      isSandbox = tenantGateway.sandbox_mode !== false;
+      transactionFeePercent = tenantGateway.transaction_fee_percent || 0;
+    } else {
+      // Tenant gateway enabled but no credentials - will try global fallback
+      logger.info(`Tenant gateway ${gateway} enabled but no credentials, trying global fallback`);
+      useGlobalFallback = true;
+    }
   } else {
-    // Fall back to global payment gateway settings
+    useGlobalFallback = true;
+  }
+  
+  // Fall back to global payment gateway settings if needed
+  if (useGlobalFallback) {
     const { data: globalGateway, error: globalError } = await supabase
       .from('payment_gateway_settings')
       .select('*')
@@ -966,11 +982,25 @@ export async function initiatePayment(supabase, gateway, paymentData) {
       logger.error(`Gateway config not found for ${gateway}:`, globalError);
       return {
         success: false,
-        error: `Payment gateway ${gateway} is not configured or enabled`,
+        error: `Payment gateway ${gateway} is not configured or enabled. Please configure API credentials in Gateway Settings.`,
       };
     }
+    
+    const globalConfig = globalGateway.config || {};
+    const hasGlobalCredentials = Object.keys(globalConfig).length > 0 &&
+      Object.values(globalConfig).some(v => v && v.toString().trim() !== '');
+    
+    if (!hasGlobalCredentials && gateway !== 'manual' && gateway !== 'rocket') {
+      // Global gateway also has no credentials
+      const requiredFields = GATEWAY_REQUIRED_CREDENTIALS[gateway] || [];
+      return {
+        success: false,
+        error: `Payment gateway ${gateway} is enabled but API credentials are not configured. Required: ${requiredFields.join(', ')}. Please configure in Super Admin > Gateway Settings.`,
+      };
+    }
+    
     gatewayConfig = globalGateway;
-    configData = globalGateway.config || {};
+    configData = globalConfig;
     isSandbox = globalGateway.sandbox_mode !== false;
     transactionFeePercent = globalGateway.transaction_fee_percent || 0;
   }

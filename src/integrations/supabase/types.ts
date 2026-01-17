@@ -8907,6 +8907,10 @@ export type Database = {
         }
         Returns: Json
       }
+      sync_global_gateway_to_tenants: {
+        Args: { _gateway: string }
+        Returns: number
+      }
       track_referral_signup: {
         Args: { p_referral_code: string; p_referred_customer_id: string }
         Returns: boolean

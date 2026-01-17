@@ -9,25 +9,26 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePaymentGateways } from '@/hooks/usePaymentGateways';
-import { CreditCard, Save, Loader2, ExternalLink, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { CreditCard, Save, Loader2, ExternalLink, RefreshCw, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 
+// Gateway configurations with required fields for validation
 const GATEWAY_CONFIGS: Record<string, {
   title: string;
   description: string;
   docsUrl?: string;
   hasModeSelector?: boolean;
-  fields: { key: string; label: string; type: 'text' | 'password' | 'textarea'; placeholder: string }[];
+  fields: { key: string; label: string; type: 'text' | 'password' | 'textarea'; placeholder: string; required?: boolean }[];
 }> = {
   sslcommerz: {
     title: 'SSLCommerz',
     description: 'Bangladesh\'s largest payment gateway',
     docsUrl: 'https://developer.sslcommerz.com/doc/v4/',
     fields: [
-      { key: 'store_id', label: 'Store ID', type: 'text', placeholder: 'Your Store ID' },
-      { key: 'store_password', label: 'Store Password', type: 'password', placeholder: 'Store Password' },
+      { key: 'store_id', label: 'Store ID', type: 'text', placeholder: 'Your Store ID', required: true },
+      { key: 'store_password', label: 'Store Password', type: 'password', placeholder: 'Store Password', required: true },
     ]
   },
   shurjopay: {
@@ -37,20 +38,20 @@ const GATEWAY_CONFIGS: Record<string, {
     fields: [
       { key: 'merchant_id', label: 'Merchant ID', type: 'text', placeholder: 'Merchant ID' },
       { key: 'merchant_key', label: 'Merchant Key', type: 'password', placeholder: 'Merchant Key' },
-      { key: 'username', label: 'Username', type: 'text', placeholder: 'API Username' },
-      { key: 'password', label: 'Password', type: 'password', placeholder: 'API Password' },
+      { key: 'username', label: 'Username', type: 'text', placeholder: 'API Username', required: true },
+      { key: 'password', label: 'Password', type: 'password', placeholder: 'API Password', required: true },
     ]
   },
   bkash: {
     title: 'bKash',
     description: 'Mobile banking (Tokenized or PGW Checkout)',
     docsUrl: 'https://developer.bka.sh/docs',
-    hasModeSelector: true, // special flag for bKash mode
+    hasModeSelector: true,
     fields: [
-      { key: 'app_key', label: 'App Key', type: 'text', placeholder: 'App Key' },
-      { key: 'app_secret', label: 'App Secret', type: 'password', placeholder: 'App Secret' },
-      { key: 'username', label: 'Username (PGW)', type: 'text', placeholder: 'Merchant Username' },
-      { key: 'password', label: 'Password (PGW)', type: 'password', placeholder: 'Merchant Password' },
+      { key: 'app_key', label: 'App Key', type: 'text', placeholder: 'App Key', required: true },
+      { key: 'app_secret', label: 'App Secret', type: 'password', placeholder: 'App Secret', required: true },
+      { key: 'username', label: 'Username (PGW)', type: 'text', placeholder: 'Merchant Username', required: true },
+      { key: 'password', label: 'Password (PGW)', type: 'password', placeholder: 'Merchant Password', required: true },
     ]
   },
   nagad: {
@@ -58,10 +59,10 @@ const GATEWAY_CONFIGS: Record<string, {
     description: 'Digital financial service by Bangladesh Post',
     docsUrl: 'https://nagad.com.bd/developer-api/',
     fields: [
-      { key: 'merchant_id', label: 'Merchant ID', type: 'text', placeholder: 'Merchant ID' },
-      { key: 'merchant_number', label: 'Merchant Number', type: 'text', placeholder: 'Merchant Number' },
-      { key: 'public_key', label: 'Public Key', type: 'textarea', placeholder: 'PGP Public Key' },
-      { key: 'private_key', label: 'Private Key', type: 'textarea', placeholder: 'PGP Private Key' },
+      { key: 'merchant_id', label: 'Merchant ID', type: 'text', placeholder: 'Merchant ID', required: true },
+      { key: 'merchant_number', label: 'Merchant Number', type: 'text', placeholder: 'Merchant Number', required: true },
+      { key: 'public_key', label: 'Public Key', type: 'textarea', placeholder: 'PGP Public Key', required: true },
+      { key: 'private_key', label: 'Private Key', type: 'textarea', placeholder: 'PGP Private Key', required: true },
     ]
   },
   rocket: {
@@ -76,16 +77,16 @@ const GATEWAY_CONFIGS: Record<string, {
     description: 'Digital payment gateway',
     docsUrl: 'https://portwallet.com/developers',
     fields: [
-      { key: 'app_key', label: 'App Key', type: 'text', placeholder: 'App Key' },
-      { key: 'secret_key', label: 'Secret Key', type: 'password', placeholder: 'Secret Key' },
+      { key: 'app_key', label: 'App Key', type: 'text', placeholder: 'App Key', required: true },
+      { key: 'secret_key', label: 'Secret Key', type: 'password', placeholder: 'Secret Key', required: true },
     ]
   },
   piprapay: {
     title: 'PipraPay',
     description: 'Payment aggregator',
     fields: [
-      { key: 'api_key', label: 'API Key', type: 'text', placeholder: 'API Key' },
-      { key: 'api_secret', label: 'API Secret', type: 'password', placeholder: 'API Secret' },
+      { key: 'api_key', label: 'API Key', type: 'text', placeholder: 'API Key', required: true },
+      { key: 'api_secret', label: 'API Secret', type: 'password', placeholder: 'API Secret', required: true },
     ]
   },
   uddoktapay: {
@@ -93,7 +94,7 @@ const GATEWAY_CONFIGS: Record<string, {
     description: 'Digital payment solution',
     docsUrl: 'https://uddoktapay.com/documentation',
     fields: [
-      { key: 'api_key', label: 'API Key', type: 'text', placeholder: 'API Key' },
+      { key: 'api_key', label: 'API Key', type: 'text', placeholder: 'API Key', required: true },
     ]
   },
   aamarpay: {
@@ -101,8 +102,8 @@ const GATEWAY_CONFIGS: Record<string, {
     description: 'Payment gateway for Bangladesh',
     docsUrl: 'https://aamarpay.com/developers',
     fields: [
-      { key: 'store_id', label: 'Store ID', type: 'text', placeholder: 'Store ID' },
-      { key: 'signature_key', label: 'Signature Key', type: 'password', placeholder: 'Signature Key' },
+      { key: 'store_id', label: 'Store ID', type: 'text', placeholder: 'Store ID', required: true },
+      { key: 'signature_key', label: 'Signature Key', type: 'password', placeholder: 'Signature Key', required: true },
     ]
   },
   manual: {
@@ -110,6 +111,20 @@ const GATEWAY_CONFIGS: Record<string, {
     description: 'Bank transfer, cash, or other manual methods',
     fields: []
   }
+};
+
+// Helper to check if required credentials are configured
+const getMissingCredentials = (gateway: string, config: Record<string, any> | null): string[] => {
+  const gatewayDef = GATEWAY_CONFIGS[gateway];
+  if (!gatewayDef) return [];
+  
+  const missing: string[] = [];
+  gatewayDef.fields.forEach(field => {
+    if (field.required && (!config?.[field.key] || config[field.key].toString().trim() === '')) {
+      missing.push(field.label);
+    }
+  });
+  return missing;
 };
 
 export default function GatewaySettings() {
@@ -221,6 +236,23 @@ export default function GatewaySettings() {
       
       console.log('Saving gateway config:', { gateway, updateData });
       await updateGateway(config.id, updateData);
+      
+      // If this gateway has credentials, offer to sync to tenants
+      const hasCredentials = Object.keys(configData).length > 0;
+      if (hasCredentials && gateway !== 'manual') {
+        syncCredentialsToTenants(gateway);
+      }
+    }
+  };
+
+  const syncCredentialsToTenants = async (gateway: string) => {
+    try {
+      const { data, error } = await supabase.rpc('sync_global_gateway_to_tenants', { _gateway: gateway });
+      if (!error && data > 0) {
+        toast({ title: 'Synced', description: `Credentials synced to ${data} tenant(s) with empty config` });
+      }
+    } catch (err) {
+      console.error('Failed to sync gateway to tenants:', err);
     }
   };
 
@@ -231,21 +263,24 @@ export default function GatewaySettings() {
       description: 'Payment gateway',
       docsUrl: undefined,
       hasModeSelector: false,
-      fields: [] as { key: string; label: string; type: 'text' | 'password' | 'textarea'; placeholder: string }[]
+      fields: [] as { key: string; label: string; type: 'text' | 'password' | 'textarea'; placeholder: string; required?: boolean }[]
     };
     
     if (!config) return null;
 
     const isBkash = gateway === 'bkash';
+    const missingCreds = getMissingCredentials(gateway, config.config);
+    const hasWarning = config.is_enabled && missingCreds.length > 0;
 
     return (
-      <Card>
+      <Card className={hasWarning ? 'border-amber-500' : ''}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 flex-wrap">
                 {gatewayDef.title}
-                {config.is_enabled && <Badge variant="success">Active</Badge>}
+                {config.is_enabled && !hasWarning && <Badge variant="success">Active</Badge>}
+                {hasWarning && <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-500">Missing Credentials</Badge>}
                 {config.sandbox_mode && <Badge variant="outline">Sandbox</Badge>}
               </CardTitle>
               <CardDescription>{gatewayDef.description}</CardDescription>
@@ -253,18 +288,34 @@ export default function GatewaySettings() {
             <Switch
               checked={config.is_enabled}
               onCheckedChange={async (v) => {
-                // Immediately update local state
+                // Warn if enabling without credentials
+                if (v && missingCreds.length > 0) {
+                  toast({
+                    variant: 'destructive',
+                    title: 'Warning',
+                    description: `Missing credentials: ${missingCreds.join(', ')}. Payments will fail until configured.`
+                  });
+                }
                 setPaymentConfigs({
                   ...paymentConfigs,
                   [gateway]: { ...config, is_enabled: v }
                 });
-                // Also save to database immediately
                 await updateGateway(config.id, { is_enabled: v });
               }}
             />
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Warning alert for missing credentials */}
+          {hasWarning && (
+            <Alert variant="destructive" className="bg-amber-50 border-amber-300 text-amber-800">
+              <AlertTitle className="text-amber-900">Credentials Required</AlertTitle>
+              <AlertDescription>
+                Missing: {missingCreds.join(', ')}. Payments will fail until these are configured.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {gatewayDef.docsUrl && (
             <a 
               href={gatewayDef.docsUrl} 
@@ -401,6 +452,12 @@ export default function GatewaySettings() {
     );
   };
 
+  // Count gateways with missing credentials
+  const gatewaysWithIssues = Object.entries(paymentConfigs).filter(([gateway, config]) => {
+    if (gateway === 'manual' || gateway === 'rocket') return false;
+    return config.is_enabled && getMissingCredentials(gateway, config.config).length > 0;
+  });
+
   return (
     <DashboardLayout title="Payment Gateways" subtitle="Configure global payment gateway settings">
       <div className="space-y-6">
@@ -420,6 +477,19 @@ export default function GatewaySettings() {
             </Button>
           </div>
         </div>
+
+        {/* Global warning for missing credentials */}
+        {gatewaysWithIssues.length > 0 && (
+          <Alert variant="destructive" className="bg-red-50 border-red-300">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Payment Gateways Not Configured</AlertTitle>
+            <AlertDescription>
+              {gatewaysWithIssues.length} gateway(s) are enabled but missing API credentials: {' '}
+              <strong>{gatewaysWithIssues.map(([gw]) => GATEWAY_CONFIGS[gw]?.title || gw).join(', ')}</strong>.
+              {' '}All payments will fail until credentials are configured below.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {gatewaysLoading ? (
           <div className="flex items-center justify-center py-12">
