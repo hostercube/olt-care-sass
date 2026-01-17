@@ -52,29 +52,39 @@ export default function MakePayment() {
   const [globalGatewaysFromRpc, setGlobalGatewaysFromRpc] = useState<any[]>([]);
   const [globalGatewaysRpcLoading, setGlobalGatewaysRpcLoading] = useState(true);
 
-  // Fetch global gateways using RPC function (bypasses RLS for tenants)
+  // Fetch payment gateways using RPC functions (bypasses RLS for tenants)
   useEffect(() => {
-    const fetchGlobalGatewaysViaRpc = async () => {
+    const fetchGatewaysViaRpc = async () => {
       try {
-        const { data, error } = await supabase.rpc('get_enabled_payment_methods');
+        setGlobalGatewaysRpcLoading(true);
+
+        // If we have a tenantId, use the RPC that only returns properly configured gateways
+        // (tenant-specific if configured, otherwise global fallback).
+        const rpcName = tenantId ? 'get_tenant_enabled_payment_gateways' : 'get_enabled_payment_methods';
+        const rpcArgs = tenantId ? { p_tenant_id: tenantId } : undefined;
+
+        const { data, error } = rpcArgs
+          ? await supabase.rpc(rpcName as any, rpcArgs as any)
+          : await supabase.rpc(rpcName as any);
+
         if (error) {
-          console.error('Error fetching enabled payment methods via RPC:', error);
-          // Fallback to direct query if RPC fails
+          console.error(`Error fetching gateways via RPC (${rpcName}):`, error);
           setGlobalGatewaysFromRpc([]);
         } else {
           setGlobalGatewaysFromRpc(data || []);
         }
       } catch (err) {
-        console.error('Error calling get_enabled_payment_methods RPC:', err);
+        console.error('Error fetching gateways via RPC:', err);
         setGlobalGatewaysFromRpc([]);
       } finally {
         setGlobalGatewaysRpcLoading(false);
       }
     };
-    fetchGlobalGatewaysViaRpc();
-  }, []);
 
-  // Use RPC results for tenants, direct query for Super Admin
+    fetchGatewaysViaRpc();
+  }, [tenantId]);
+
+  // Use RPC results for tenants, direct query for Super Admin (non-impersonating)
   const globalGateways = isSuperAdmin && !isImpersonating ? globalGatewaysDirect : globalGatewaysFromRpc;
 
   // Check for payment callback status
