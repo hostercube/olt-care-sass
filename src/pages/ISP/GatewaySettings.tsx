@@ -68,6 +68,7 @@ export default function ISPGatewaySettings() {
         configs[gw.gateway] = {
           ...gw,
           config: gwConfig,
+          transaction_fee_percent: gw.transaction_fee_percent || 0,
         };
       });
       setPaymentConfigs(configs);
