@@ -147,11 +147,7 @@ export default function ResellerWallet() {
           setPaymentMode('online');
         } else if (hasManual) {
           setPaymentMode('manual');
-          // Set first enabled gateway for manual
-          const manualMethods = result.gateways.filter((g: PaymentGateway) => g.is_enabled);
-          if (manualMethods.length > 0) {
-            setPaymentMethod(manualMethods[0].gateway);
-          }
+          setPaymentMethod('manual');
         }
       }
     } catch (err) {
@@ -337,33 +333,18 @@ export default function ResellerWallet() {
 
   const hasOnlineGateways = onlineGateways.length > 0;
 
-  // Get available manual payment methods - ONLY from tenant's enabled gateways
+  // Get available manual payment methods - ONLY truly manual gateways (not API-based like bKash/Nagad/SSLCommerz)
   const manualPaymentMethods = useMemo(() => {
-    // Only show methods that are enabled by tenant
-    const enabledManualMethods = paymentGateways
-      .filter(g => g.is_enabled && (
-        g.gateway === 'manual' ||
-        g.gateway === 'bkash' ||
-        g.gateway === 'nagad' ||
-        g.gateway === 'rocket' ||
-        g.gateway === 'bank_transfer' ||
-        g.gateway === 'cash'
-      ))
-      .map(g => ({ value: g.gateway, label: g.display_name }));
+    // Only the "manual" gateway from tenant - this is the one where tenant puts account numbers/instructions
+    const manualGateway = paymentGateways.find(g => g.gateway === 'manual' && g.is_enabled);
     
-    // If manual gateway is enabled but no specific methods, show common ones
-    if (manualGatewayEnabled && enabledManualMethods.length === 0) {
-      return [
-        { value: 'bkash', label: 'bKash' },
-        { value: 'nagad', label: 'Nagad' },
-        { value: 'rocket', label: 'Rocket' },
-        { value: 'bank_transfer', label: 'Bank Transfer' },
-        { value: 'cash', label: 'Cash' },
-      ];
+    if (manualGateway) {
+      // Return just the manual gateway - tenant's configured manual payment option
+      return [{ value: 'manual', label: manualGateway.display_name || 'Manual Payment' }];
     }
     
-    return enabledManualMethods.length > 0 ? enabledManualMethods : [];
-  }, [paymentGateways, manualGatewayEnabled]);
+    return [];
+  }, [paymentGateways]);
 
   if (loading || !session) {
     return (
@@ -648,7 +629,15 @@ export default function ResellerWallet() {
                   <p className="text-sm text-muted-foreground">Please contact your ISP admin</p>
                 </div>
               ) : (
-              <Tabs value={paymentMode} onValueChange={(v) => setPaymentMode(v as 'online' | 'manual')}>
+              <Tabs value={paymentMode} onValueChange={(v) => {
+                setPaymentMode(v as 'online' | 'manual');
+                // Set payment method based on mode
+                if (v === 'manual') {
+                  setPaymentMethod('manual');
+                } else if (onlineGateways.length > 0) {
+                  setPaymentMethod(onlineGateways[0].gateway);
+                }
+              }}>
                 <TabsList className={`grid w-full ${hasOnlineGateways && manualGatewayEnabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   {hasOnlineGateways && (
                     <TabsTrigger value="online">
@@ -697,27 +686,10 @@ export default function ResellerWallet() {
                 </TabsContent>
 
                 <TabsContent value="manual" className="space-y-4 mt-4">
-                  {/* Manual Payment Method - Show active gateways from tenant */}
-                  <div>
-                    <Label>Payment Method</Label>
-                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select payment method" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {manualPaymentMethods.map(method => (
-                          <SelectItem key={method.value} value={method.value}>
-                            {method.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
                   {/* Gateway Instructions - Show payment instructions from tenant */}
                   {(() => {
-                    const selectedGateway = paymentGateways.find(g => g.gateway === paymentMethod);
-                    if (selectedGateway?.instructions) {
+                    const manualGateway = paymentGateways.find(g => g.gateway === 'manual' && g.is_enabled);
+                    if (manualGateway?.instructions) {
                       return (
                         <div className="p-4 rounded-lg border-2 border-primary/30 bg-primary/5">
                           <div className="flex items-start gap-3">
@@ -725,14 +697,20 @@ export default function ResellerWallet() {
                             <div className="space-y-2">
                               <p className="font-semibold text-primary">Payment Instructions</p>
                               <div className="text-sm text-foreground whitespace-pre-wrap">
-                                {selectedGateway.instructions}
+                                {manualGateway.instructions}
                               </div>
                             </div>
                           </div>
                         </div>
                       );
                     }
-                    return null;
+                    return (
+                      <div className="p-4 rounded-lg border bg-muted/50 text-center">
+                        <p className="text-muted-foreground">
+                          Please contact your ISP admin for payment instructions
+                        </p>
+                      </div>
+                    );
                   })()}
 
                   {/* Transaction ID */}
