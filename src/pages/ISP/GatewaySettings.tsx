@@ -252,8 +252,10 @@ export default function ISPGatewaySettings() {
             <Switch
               checked={config.is_enabled}
               onCheckedChange={(v) => {
+                // Block enabling without credentials (except manual/rocket)
                 if (v && missingCreds.length > 0 && gatewayInfo.id !== 'manual' && gatewayInfo.id !== 'rocket') {
-                  toast.warning(`Missing credentials for ${gatewayInfo.name}. Payments will fail until configured.`);
+                  toast.error(`Cannot enable ${gatewayInfo.name}. Please configure credentials first: ${missingCreds.join(', ')}`);
+                  return; // Don't enable
                 }
                 setPaymentConfigs({
                   ...paymentConfigs,

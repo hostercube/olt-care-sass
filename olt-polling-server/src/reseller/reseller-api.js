@@ -1383,14 +1383,12 @@ export function setupResellerRoutes(app, supabase) {
 // ============= Reseller Balance Top-up Requests =============
   
   // Get tenant enabled payment gateways for reseller top-up
+  // Uses the RPC that filters out gateways without credentials
   app.get('/api/reseller/payment-gateways', authMiddleware, async (req, res) => {
     try {
+      // Use the RPC function that only returns properly configured gateways
       const { data: gateways, error } = await supabase
-        .from('tenant_payment_gateways')
-        .select('id, gateway, display_name, is_enabled, instructions')
-        .eq('tenant_id', req.reseller.tenant_id)
-        .eq('is_enabled', true)
-        .order('sort_order', { ascending: true });
+        .rpc('get_tenant_enabled_payment_gateways', { p_tenant_id: req.reseller.tenant_id });
       
       if (error) {
         logger.error('Error fetching payment gateways:', error);

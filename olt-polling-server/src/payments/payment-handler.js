@@ -991,8 +991,10 @@ export async function initiatePayment(supabase, gateway, paymentData) {
     }
     
     const globalConfig = globalGateway.config || {};
-    const hasGlobalCredentials = Object.keys(globalConfig).length > 0 &&
-      Object.values(globalConfig).some(v => v && v.toString().trim() !== '');
+    // Exclude bkash_mode from credential check (it's not a credential)
+    const globalCredentialEntries = Object.entries(globalConfig).filter(([k]) => k !== 'bkash_mode');
+    const hasGlobalCredentials = globalCredentialEntries.length > 0 &&
+      globalCredentialEntries.some(([, v]) => v && v.toString().trim() !== '');
     
     if (!hasGlobalCredentials && gateway !== 'manual' && gateway !== 'rocket') {
       // Global gateway also has no credentials
