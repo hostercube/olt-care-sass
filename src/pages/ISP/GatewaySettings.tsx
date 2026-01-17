@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,67 @@ const getMissingCredentials = (gatewayId: string, config: Record<string, any> | 
   const required = GATEWAY_REQUIRED_FIELDS[gatewayId] || [];
   return required.filter(key => !config?.[key] || config[key].toString().trim() === '');
 };
+
+// Memoized input field component to prevent focus loss on parent re-render
+const GatewayInputField = memo(function GatewayInputField({
+  gatewayId,
+  field,
+  label,
+  value,
+  onChange,
+  isPassword,
+  showPassword,
+  onTogglePassword,
+}: {
+  gatewayId: string;
+  field: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  isPassword: boolean;
+  showPassword: boolean;
+  onTogglePassword: () => void;
+}) {
+  // Use local state to handle input without losing focus
+  const [localValue, setLocalValue] = useState(value);
+  
+  // Sync local state when parent value changes (e.g., after save/fetch)
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setLocalValue(newValue);
+    onChange(newValue);
+  }, [onChange]);
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <div className="relative">
+        <Input
+          type={isPassword ? (showPassword ? 'text' : 'password') : 'text'}
+          value={localValue}
+          onChange={handleChange}
+          placeholder={`Enter ${label}`}
+          className="h-8 pr-10"
+        />
+        {isPassword && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="absolute right-0 top-0 h-8 w-8 px-2"
+            onClick={onTogglePassword}
+          >
+            {showPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+});
 
 export default function ISPGatewaySettings() {
   const { tenantId } = useTenantContext();
@@ -307,37 +368,25 @@ export default function ISPGatewaySettings() {
           {gatewayInfo.fields && gatewayInfo.fields.length > 0 && (
             <div className="grid gap-3">
               {gatewayInfo.fields.filter(f => f !== 'bkash_mode').map((field) => (
-                <div key={field} className="space-y-1">
-                  <Label className="text-xs">{gatewayInfo.fieldLabels[field] || field}</Label>
-                  <div className="relative">
-                    <Input
-                      type={field.includes('password') || field.includes('secret') || field.includes('key') ? 
-                        (showPasswords[`${gatewayInfo.id}-${field}`] ? 'text' : 'password') : 'text'}
-                      value={(config.config as any)?.[field] || ''}
-                      onChange={(e) => setPaymentConfigs({
-                        ...paymentConfigs,
-                        [gatewayInfo.id]: { 
-                          ...config, 
-                          config: { ...config.config, [field]: e.target.value } 
-                        }
-                      })}
-                      placeholder={`Enter ${gatewayInfo.fieldLabels[field] || field}`}
-                      className="h-8 pr-10"
-                    />
-                    {(field.includes('password') || field.includes('secret') || field.includes('key')) && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-8 w-8 px-2"
-                        onClick={() => togglePasswordVisibility(`${gatewayInfo.id}-${field}`)}
-                      >
-                        {showPasswords[`${gatewayInfo.id}-${field}`] ? 
-                          <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                <GatewayInputField
+                  key={field}
+                  gatewayId={gatewayInfo.id}
+                  field={field}
+                  label={gatewayInfo.fieldLabels[field] || field}
+                  value={(config.config as any)?.[field] || ''}
+                  onChange={(value) => {
+                    setPaymentConfigs(prev => ({
+                      ...prev,
+                      [gatewayInfo.id]: {
+                        ...prev[gatewayInfo.id],
+                        config: { ...prev[gatewayInfo.id].config, [field]: value }
+                      }
+                    }));
+                  }}
+                  isPassword={field.includes('password') || field.includes('secret') || field.includes('key')}
+                  showPassword={showPasswords[`${gatewayInfo.id}-${field}`] || false}
+                  onTogglePassword={() => togglePasswordVisibility(`${gatewayInfo.id}-${field}`)}
+                />
               ))}
             </div>
           )}
