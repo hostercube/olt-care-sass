@@ -834,6 +834,19 @@ async function initiateNagad(config, paymentData) {
 }
 
 /**
+ * Calculate transaction fee
+ */
+function calculateTransactionFee(amount, feePercent) {
+  if (!feePercent || feePercent <= 0) return { fee: 0, totalAmount: amount, netAmount: amount };
+  const fee = Math.round((amount * feePercent) / 100);
+  return {
+    fee,
+    totalAmount: amount + fee, // What customer pays
+    netAmount: amount, // Original amount (what callback should return)
+  };
+}
+
+/**
  * Main payment initiation function
  */
 export async function initiatePayment(supabase, gateway, paymentData) {
@@ -853,6 +866,7 @@ export async function initiatePayment(supabase, gateway, paymentData) {
   let gatewayConfig = null;
   let isSandbox = true;
   let configData = {};
+  let transactionFeePercent = 0;
 
   // First try tenant-specific gateways
   const { data: tenantGateway } = await supabase
@@ -867,6 +881,7 @@ export async function initiatePayment(supabase, gateway, paymentData) {
     gatewayConfig = tenantGateway;
     configData = tenantGateway.config || {};
     isSandbox = tenantGateway.sandbox_mode !== false;
+    transactionFeePercent = tenantGateway.transaction_fee_percent || 0;
   } else {
     // Fall back to global payment gateway settings
     const { data: globalGateway, error: globalError } = await supabase
@@ -886,7 +901,17 @@ export async function initiatePayment(supabase, gateway, paymentData) {
     gatewayConfig = globalGateway;
     configData = globalGateway.config || {};
     isSandbox = globalGateway.sandbox_mode !== false;
+    transactionFeePercent = globalGateway.transaction_fee_percent || 0;
   }
+
+  // Calculate transaction fee
+  const originalAmount = paymentData.amount;
+  const { fee, totalAmount, netAmount } = calculateTransactionFee(originalAmount, transactionFeePercent);
+  
+  logger.info(`Payment fee calculation: original=${originalAmount}, fee=${fee} (${transactionFeePercent}%), total=${totalAmount}`);
+
+  // Use totalAmount (with fee) for the actual payment to gateway
+  const amountToCharge = totalAmount;
 
   // For manual payment, just create the payment record and return
   if (gateway === 'manual' || gateway === 'rocket') {
@@ -894,7 +919,10 @@ export async function initiatePayment(supabase, gateway, paymentData) {
       .from('payments')
       .insert({
         tenant_id: paymentData.tenant_id,
-        amount: paymentData.amount,
+        amount: totalAmount, // Total amount including fee
+        net_amount: netAmount, // Original amount without fee
+        gateway_fee: fee,
+        fee_percent: transactionFeePercent,
         payment_method: gateway,
         status: 'pending',
         transaction_id: transactionId,
@@ -906,6 +934,9 @@ export async function initiatePayment(supabase, gateway, paymentData) {
           payment_for: paymentData.payment_for,
           customer_id: paymentData.customer_id,
           instructions: gatewayConfig.instructions,
+          original_amount: originalAmount,
+          fee_amount: fee,
+          fee_percent: transactionFeePercent,
         },
       })
       .select()
@@ -922,6 +953,7 @@ export async function initiatePayment(supabase, gateway, paymentData) {
       transaction_id: transactionId,
       checkout_url: null, // No redirect for manual payments
       message: gatewayConfig.instructions || 'Please complete the payment manually',
+      fee_info: fee > 0 ? { fee, total_amount: totalAmount, net_amount: netAmount, fee_percent: transactionFeePercent } : null,
     };
   }
 
@@ -946,8 +978,10 @@ export async function initiatePayment(supabase, gateway, paymentData) {
   };
 
   // Send gateways to backend callback URL (handles POST + redirects to SPA)
+  // Use amountToCharge (includes fee) for the actual gateway payment
   const outboundPaymentData = {
     ...paymentData,
+    amount: amountToCharge, // Amount with fee for gateway
     return_url: gatewayCallbackUrl,
     cancel_url: gatewayCallbackUrl,
     ipn_url: gatewayCallbackUrl,
@@ -987,7 +1021,10 @@ export async function initiatePayment(supabase, gateway, paymentData) {
       .from('payments')
       .insert({
         tenant_id: paymentData.tenant_id,
-        amount: paymentData.amount,
+        amount: totalAmount, // Total amount including fee
+        net_amount: netAmount, // Original amount without fee
+        gateway_fee: fee,
+        fee_percent: transactionFeePercent,
         payment_method: gateway,
         status: 'pending',
         transaction_id: transactionId,
@@ -1001,6 +1038,12 @@ export async function initiatePayment(supabase, gateway, paymentData) {
           gateway_callback_url: gatewayCallbackUrl,
           gateway_init: result,
           bkash_mode: gateway === 'bkash' ? bkashMode : undefined,
+          original_amount: originalAmount,
+          fee_amount: fee,
+          fee_percent: transactionFeePercent,
+          // For reseller topup, store reseller_id and topup_request_id
+          reseller_id: paymentData.reseller_id,
+          topup_request_id: paymentData.topup_request_id,
         },
       })
       .select()
@@ -1017,6 +1060,7 @@ export async function initiatePayment(supabase, gateway, paymentData) {
       checkout_url: result.checkout_url,
       bkash_mode: result.bkash_mode || null,
       bkash_config: result.bkash_config || null,
+      fee_info: fee > 0 ? { fee, total_amount: totalAmount, net_amount: netAmount, fee_percent: transactionFeePercent } : null,
     };
   }
 

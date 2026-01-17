@@ -27,13 +27,38 @@ export function usePayments(tenantId?: string) {
 
       if (error) throw error;
       
-      // Transform data
-      const transformedData = (data || []).map(item => ({
+      // Transform data - exclude 'tenant' from spread and add it separately
+      const transformedData = (data || []).map(({ tenant, ...item }) => ({
         ...item,
         amount: Number(item.amount),
+        gateway_fee: Number(item.gateway_fee || 0),
+        net_amount: item.net_amount ? Number(item.net_amount) : Number(item.amount),
+        fee_percent: Number(item.fee_percent || 0),
         payment_method: item.payment_method as PaymentMethod,
         status: item.status as PaymentStatus,
-        gateway_response: item.gateway_response as Record<string, unknown> | null
+        gateway_response: item.gateway_response as Record<string, unknown> | null,
+        tenant: tenant ? {
+          id: '',
+          name: tenant.name,
+          email: tenant.email,
+          company_name: tenant.company_name,
+          phone: null,
+          address: null,
+          logo_url: null,
+          custom_domain: null,
+          subdomain: null,
+          status: 'active' as const,
+          owner_user_id: null,
+          max_olts: 0,
+          max_users: 0,
+          features: {},
+          notes: null,
+          trial_ends_at: null,
+          suspended_at: null,
+          suspended_reason: null,
+          created_at: '',
+          updated_at: '',
+        } : undefined
       })) as Payment[];
       
       setPayments(transformedData);
