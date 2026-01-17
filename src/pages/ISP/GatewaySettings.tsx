@@ -15,9 +15,27 @@ import { useTenantSMSGateway } from '@/hooks/useTenantSMSGateway';
 import { useTenantEmailGateway } from '@/hooks/useTenantEmailGateway';
 import { useTenantContext } from '@/hooks/useSuperAdmin';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
-import { CreditCard, MessageSquare, Mail, Save, TestTube, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
+import { CreditCard, MessageSquare, Mail, Save, TestTube, Loader2, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { PAYMENT_GATEWAYS, SMS_GATEWAYS, type PaymentGatewayType, type SMSGatewayType } from '@/types/saas';
+
+// Required credentials per gateway
+const GATEWAY_REQUIRED_FIELDS: Record<string, string[]> = {
+  sslcommerz: ['store_id', 'store_password'],
+  shurjopay: ['username', 'password'],
+  bkash: ['app_key', 'app_secret', 'username', 'password'],
+  nagad: ['merchant_id', 'merchant_number', 'public_key', 'private_key'],
+  uddoktapay: ['api_key'],
+  aamarpay: ['store_id', 'signature_key'],
+  piprapay: ['api_key', 'api_secret'],
+  portwallet: ['app_key', 'secret_key'],
+};
+
+// Check if credentials are missing
+const getMissingCredentials = (gatewayId: string, config: Record<string, any> | null): string[] => {
+  const required = GATEWAY_REQUIRED_FIELDS[gatewayId] || [];
+  return required.filter(key => !config?.[key] || config[key].toString().trim() === '');
+};
 
 export default function ISPGatewaySettings() {
   const { tenantId } = useTenantContext();
@@ -168,6 +186,10 @@ export default function ISPGatewaySettings() {
 
     if (!config) return null;
 
+    // Check for missing credentials
+    const missingCreds = getMissingCredentials(gatewayInfo.id, config.config as Record<string, any>);
+    const hasWarning = config.is_enabled && missingCreds.length > 0 && gatewayInfo.id !== 'manual' && gatewayInfo.id !== 'rocket';
+
     // If no access, show locked card
     if (!hasAccess) {
       return (
@@ -189,26 +211,46 @@ export default function ISPGatewaySettings() {
     }
 
     return (
-      <Card>
+      <Card className={hasWarning ? 'border-amber-500' : ''}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2 text-base">
+              <CardTitle className="flex items-center gap-2 text-base flex-wrap">
                 {gatewayInfo.name}
-                {config.is_enabled && <Badge variant="default" className="text-xs bg-green-500">Active</Badge>}
+                {config.is_enabled && !hasWarning && <Badge variant="default" className="text-xs bg-green-500">Active</Badge>}
+                {hasWarning && (
+                  <Badge variant="outline" className="text-xs bg-amber-100 text-amber-700 border-amber-500">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Not Configured
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription className="text-xs">{gatewayInfo.description}</CardDescription>
             </div>
             <Switch
               checked={config.is_enabled}
-              onCheckedChange={(v) => setPaymentConfigs({
-                ...paymentConfigs,
-                [gatewayInfo.id]: { ...config, is_enabled: v }
-              })}
+              onCheckedChange={(v) => {
+                if (v && missingCreds.length > 0 && gatewayInfo.id !== 'manual' && gatewayInfo.id !== 'rocket') {
+                  toast.warning(`Missing credentials for ${gatewayInfo.name}. Payments will fail until configured.`);
+                }
+                setPaymentConfigs({
+                  ...paymentConfigs,
+                  [gatewayInfo.id]: { ...config, is_enabled: v }
+                });
+              }}
             />
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* Warning for missing credentials */}
+          {hasWarning && (
+            <Alert className="bg-amber-50 border-amber-300 text-amber-800 py-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-xs">
+                API credentials not configured. Contact your administrator or configure in Super Admin panel.
+              </AlertDescription>
+            </Alert>
+          )}
           {/* bKash-specific: Mode selector */}
           {gatewayInfo.id === 'bkash' && (
             <div className="space-y-1">
