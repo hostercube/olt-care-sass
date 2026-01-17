@@ -198,6 +198,17 @@ export default function CustomerPayBill() {
           package: null,
           expiry_date: null,
         });
+        
+        // Still try to fetch wallet balance even in fallback case
+        const { data: walletData } = await supabase
+          .rpc('get_customer_wallet_balance', { p_customer_id: id });
+        const totalWalletBalance = Number(walletData) || 0;
+        setWalletBalance(totalWalletBalance);
+        
+        if (totalWalletBalance > 0) {
+          setUseWalletEnabled(true);
+          setUseWalletBalance(true);
+        }
       }
 
       // Check for pending package change and fetch that package
