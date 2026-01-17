@@ -16,10 +16,14 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { TablePagination } from '@/components/ui/table-pagination';
 import {
   Wallet, CheckCircle, XCircle, Clock, Loader2, Search, RefreshCw,
-  Users, Banknote, AlertCircle, Eye
+  Users, Banknote, AlertCircle, Eye, Filter, CreditCard
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -53,6 +57,11 @@ export default function ResellerTopupRequests() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('pending');
+  const [selectedGateway, setSelectedGateway] = useState('all');
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   
   // Dialog states
   const [selectedRequest, setSelectedRequest] = useState<TopupRequest | null>(null);
@@ -223,8 +232,22 @@ export default function ResellerTopupRequests() {
     
     const matchesTab = activeTab === 'all' || r.status === activeTab;
     
-    return matchesSearch && matchesTab;
+    const matchesGateway = selectedGateway === 'all' || 
+      r.payment_method?.toLowerCase() === selectedGateway.toLowerCase();
+    
+    return matchesSearch && matchesTab && matchesGateway;
   });
+
+  // Paginated data
+  const paginatedRequests = filteredRequests.slice(
+    (currentPage - 1) * pageSize, 
+    currentPage * pageSize
+  );
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeTab, selectedGateway]);
 
   const pendingCount = requests.filter(r => r.status === 'pending').length;
   const approvedCount = requests.filter(r => r.status === 'approved').length;
@@ -310,16 +333,32 @@ export default function ResellerTopupRequests() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <CardTitle className="flex items-center gap-2">
                 <Wallet className="h-5 w-5 text-primary" />
-                Top-up Requests
+                Top-up Requests ({filteredRequests.length})
               </CardTitle>
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search reseller, TxID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <Select value={selectedGateway} onValueChange={setSelectedGateway}>
+                  <SelectTrigger className="w-full sm:w-[150px]">
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="All Gateways" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Gateways</SelectItem>
+                    <SelectItem value="bkash">bKash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="rocket">Rocket</SelectItem>
+                    <SelectItem value="sslcommerz">SSLCommerz</SelectItem>
+                    <SelectItem value="manual">Manual</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search reseller, TxID..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -345,81 +384,92 @@ export default function ResellerTopupRequests() {
                     <p className="text-muted-foreground">No requests found</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Reseller</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Payment Method</TableHead>
-                          <TableHead>TxID</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredRequests.map((request) => (
-                          <TableRow key={request.id}>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium">{request.reseller?.name || 'Unknown'}</p>
-                                <p className="text-xs text-muted-foreground">{request.reseller?.phone}</p>
-                              </div>
-                            </TableCell>
-                            <TableCell className="font-semibold">৳{request.amount.toLocaleString()}</TableCell>
-                            <TableCell className="capitalize">{request.payment_method || 'N/A'}</TableCell>
-                            <TableCell className="font-mono text-sm">{request.transaction_id || 'N/A'}</TableCell>
-                            <TableCell>{getStatusBadge(request.status)}</TableCell>
-                            <TableCell className="text-sm">
-                              {format(new Date(request.created_at), 'dd MMM yyyy, hh:mm a')}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedRequest(request);
-                                    setShowDetailsDialog(true);
-                                  }}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                {request.status === 'pending' && (
-                                  <>
-                                    <Button
-                                      variant="default"
-                                      size="sm"
-                                      className="bg-green-600 hover:bg-green-700"
-                                      onClick={() => {
-                                        setSelectedRequest(request);
-                                        setShowApproveDialog(true);
-                                      }}
-                                    >
-                                      <CheckCircle className="h-4 w-4 mr-1" />
-                                      Approve
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      size="sm"
-                                      onClick={() => {
-                                        setSelectedRequest(request);
-                                        setShowRejectDialog(true);
-                                      }}
-                                    >
-                                      <XCircle className="h-4 w-4 mr-1" />
-                                      Reject
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </TableCell>
+                  <>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Reseller</TableHead>
+                            <TableHead>Amount</TableHead>
+                            <TableHead>Payment Method</TableHead>
+                            <TableHead>TxID</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        </TableHeader>
+                        <TableBody>
+                          {paginatedRequests.map((request) => (
+                            <TableRow key={request.id}>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium">{request.reseller?.name || 'Unknown'}</p>
+                                  <p className="text-xs text-muted-foreground">{request.reseller?.phone}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="font-semibold">৳{request.amount.toLocaleString()}</TableCell>
+                              <TableCell className="capitalize">{request.payment_method || 'N/A'}</TableCell>
+                              <TableCell className="font-mono text-sm">{request.transaction_id || 'N/A'}</TableCell>
+                              <TableCell>{getStatusBadge(request.status)}</TableCell>
+                              <TableCell className="text-sm">
+                                {format(new Date(request.created_at), 'dd MMM yyyy, hh:mm a')}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedRequest(request);
+                                      setShowDetailsDialog(true);
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  {request.status === 'pending' && (
+                                    <>
+                                      <Button
+                                        variant="default"
+                                        size="sm"
+                                        className="bg-green-600 hover:bg-green-700"
+                                        onClick={() => {
+                                          setSelectedRequest(request);
+                                          setShowApproveDialog(true);
+                                        }}
+                                      >
+                                        <CheckCircle className="h-4 w-4 mr-1" />
+                                        Approve
+                                      </Button>
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => {
+                                          setSelectedRequest(request);
+                                          setShowRejectDialog(true);
+                                        }}
+                                      >
+                                        <XCircle className="h-4 w-4 mr-1" />
+                                        Reject
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    
+                    {/* Pagination */}
+                    <TablePagination
+                      totalItems={filteredRequests.length}
+                      currentPage={currentPage}
+                      pageSize={pageSize}
+                      onPageChange={setCurrentPage}
+                      onPageSizeChange={setPageSize}
+                    />
+                  </>
                 )}
               </TabsContent>
             </Tabs>
