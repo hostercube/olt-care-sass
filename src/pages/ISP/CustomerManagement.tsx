@@ -824,6 +824,27 @@ export default function CustomerManagement() {
                               >
                                 <CreditCard className="h-4 w-4" />
                               </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  // Auto-login to customer portal
+                                  const session = {
+                                    id: customer.id,
+                                    tenant_id: customer.tenant_id,
+                                    name: customer.name,
+                                    phone: customer.phone,
+                                    logged_in_at: new Date().toISOString(),
+                                  };
+                                  localStorage.setItem('customer_session', JSON.stringify(session));
+                                  window.open('/portal/dashboard', '_blank');
+                                  toast.success(`Auto-logged in as ${customer.name}`);
+                                }}
+                                title="Auto Login to Portal"
+                              >
+                                <LogIn className="h-4 w-4" />
+                              </Button>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-8 w-8">
