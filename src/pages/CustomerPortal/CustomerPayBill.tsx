@@ -463,7 +463,9 @@ export default function CustomerPayBill() {
       const { data: walletResult, error: walletError } = await supabase.rpc('use_wallet_for_recharge', {
         p_customer_id: customerId,
         p_amount: walletDeduction,
-        p_notes: `Used for ${isPackageChange ? 'package change' : 'recharge'} - ${selectedMonths} month(s)`
+        p_notes: `Used for ${isPackageChange ? 'package change' : 'recharge'} - ${selectedMonths} month(s)`,
+        // Keep signature unambiguous + allow linking transaction later if needed
+        p_reference_id: null,
       });
       
       if (walletError) {

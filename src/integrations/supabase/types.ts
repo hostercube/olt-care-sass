@@ -8901,25 +8901,15 @@ export type Database = {
         }
         Returns: Json
       }
-      use_wallet_for_recharge:
-        | {
-            Args: {
-              p_amount: number
-              p_customer_id: string
-              p_notes?: string
-              p_reference_id?: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_amount: number
-              p_customer_id: string
-              p_notes?: string
-              p_reference_id?: string
-            }
-            Returns: Json
-          }
+      use_wallet_for_recharge: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_notes?: string
+          p_reference_id?: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       alert_severity: "critical" | "warning" | "info"
