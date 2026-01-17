@@ -1,18 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { 
   Wallet, Plus, History, Loader2, 
   Banknote, CheckCircle, XCircle, Clock,
-  AlertCircle, Send
+  AlertCircle, Send, CreditCard, Smartphone
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -34,10 +36,19 @@ interface TopupRequest {
   created_at: string;
 }
 
+interface PaymentGateway {
+  id: string;
+  gateway: string;
+  display_name: string;
+  is_enabled: boolean;
+  instructions: string | null;
+}
+
 const TOP_UP_AMOUNTS = [500, 1000, 2000, 5000, 10000];
 
 export default function ResellerWallet() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     session,
     reseller,
@@ -51,13 +62,32 @@ export default function ResellerWallet() {
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [showTopupDialog, setShowTopupDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([]);
+  const [loadingGateways, setLoadingGateways] = useState(true);
   
   // Form state
   const [topUpAmount, setTopUpAmount] = useState<number>(1000);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [transactionId, setTransactionId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('bkash');
+  const [paymentMethod, setPaymentMethod] = useState('manual');
   const [notes, setNotes] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'online' | 'manual'>('online');
+
+  // Handle payment status from URL
+  useEffect(() => {
+    const status = searchParams.get('status');
+    const paymentId = searchParams.get('payment_id');
+    
+    if (status === 'success' && paymentId) {
+      toast.success('Payment successful! Your balance has been updated.');
+      refetch?.();
+      // Clear the URL params
+      navigate('/reseller/wallet', { replace: true });
+    } else if (status === 'failed') {
+      toast.error('Payment failed. Please try again.');
+      navigate('/reseller/wallet', { replace: true });
+    }
+  }, [searchParams, navigate, refetch]);
 
   useEffect(() => {
     if (!loading && !session) {
@@ -79,11 +109,37 @@ export default function ResellerWallet() {
     }
   }, []);
 
+  const fetchPaymentGateways = useCallback(async () => {
+    try {
+      setLoadingGateways(true);
+      const result = await resellerApi.fetchPaymentGateways();
+      if (result.success && result.gateways) {
+        setPaymentGateways(result.gateways);
+        // Default to first online gateway if available
+        const onlineGateways = result.gateways.filter((g: PaymentGateway) => 
+          g.gateway !== 'manual' && g.gateway !== 'rocket'
+        );
+        if (onlineGateways.length > 0) {
+          setPaymentMethod(onlineGateways[0].gateway);
+          setPaymentMode('online');
+        } else {
+          setPaymentMode('manual');
+          setPaymentMethod('bkash');
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching payment gateways:', err);
+    } finally {
+      setLoadingGateways(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (session) {
       fetchTopupRequests();
+      fetchPaymentGateways();
     }
-  }, [session, fetchTopupRequests]);
+  }, [session, fetchTopupRequests, fetchPaymentGateways]);
 
   const getFinalAmount = () => {
     if (customAmount && parseFloat(customAmount) > 0) {
@@ -100,32 +156,57 @@ export default function ResellerWallet() {
       return;
     }
 
-    if (!transactionId.trim()) {
-      toast.error('Please enter a transaction ID');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      const result = await resellerApi.createTopupRequest({
-        amount,
-        payment_method: paymentMethod,
-        transaction_id: transactionId,
-        notes: notes || undefined,
-      });
+      if (paymentMode === 'online') {
+        // Initiate online payment
+        const baseUrl = window.location.origin;
+        const result = await resellerApi.initiateTopupPayment({
+          amount,
+          gateway: paymentMethod,
+          return_url: `${baseUrl}/reseller/wallet`,
+          cancel_url: `${baseUrl}/reseller/wallet`,
+        });
 
-      if (!result.success) {
-        toast.error(result.error || 'Failed to submit top up request');
-        return;
+        if (!result.success) {
+          toast.error(result.error || 'Failed to initiate payment');
+          return;
+        }
+
+        // Redirect to payment gateway
+        if (result.checkout_url) {
+          toast.success('Redirecting to payment gateway...');
+          window.location.href = result.checkout_url;
+        } else {
+          toast.error('No checkout URL received');
+        }
+      } else {
+        // Manual payment with TxID
+        if (!transactionId.trim()) {
+          toast.error('Please enter a transaction ID');
+          return;
+        }
+
+        const result = await resellerApi.createTopupRequest({
+          amount,
+          payment_method: paymentMethod,
+          transaction_id: transactionId,
+          notes: notes || undefined,
+        });
+
+        if (!result.success) {
+          toast.error(result.error || 'Failed to submit top up request');
+          return;
+        }
+
+        toast.success('Top up request submitted successfully! Awaiting approval.');
+        setShowTopupDialog(false);
+        setTransactionId('');
+        setNotes('');
+        setCustomAmount('');
+        fetchTopupRequests();
       }
-
-      toast.success('Top up request submitted successfully! Awaiting approval.');
-      setShowTopupDialog(false);
-      setTransactionId('');
-      setNotes('');
-      setCustomAmount('');
-      fetchTopupRequests();
     } catch (error: any) {
       console.error('Top up request error:', error);
       toast.error(error.message || 'Failed to submit request');
@@ -145,6 +226,22 @@ export default function ResellerWallet() {
         return <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
     }
   };
+
+  const getGatewayIcon = (gateway: string) => {
+    switch (gateway) {
+      case 'bkash':
+      case 'nagad':
+      case 'rocket':
+        return <Smartphone className="h-4 w-4" />;
+      default:
+        return <CreditCard className="h-4 w-4" />;
+    }
+  };
+
+  const onlineGateways = paymentGateways.filter(g => 
+    g.gateway !== 'manual' && g.gateway !== 'rocket'
+  );
+  const hasOnlineGateways = onlineGateways.length > 0;
 
   if (loading || !session) {
     return (
@@ -167,7 +264,7 @@ export default function ResellerWallet() {
           </div>
           <Button onClick={() => setShowTopupDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Request Top Up
+            Top Up Balance
           </Button>
         </div>
 
@@ -287,14 +384,14 @@ export default function ResellerWallet() {
 
         {/* Top-up Request Dialog */}
         <Dialog open={showTopupDialog} onOpenChange={setShowTopupDialog}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Send className="h-5 w-5 text-primary" />
-                Request Balance Top Up
+                Top Up Balance
               </DialogTitle>
               <DialogDescription>
-                Submit a top-up request with your payment details. Your balance will be updated after approval.
+                Add balance to your wallet using online payment or manual transfer.
               </DialogDescription>
             </DialogHeader>
             
@@ -335,55 +432,111 @@ export default function ResellerWallet() {
                 </div>
               </div>
 
-              {/* Payment Method */}
-              <div>
-                <Label>Payment Method</Label>
-                <select 
-                  className="w-full mt-1 p-2 rounded-lg border bg-background"
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                >
-                  <option value="bkash">bKash</option>
-                  <option value="nagad">Nagad</option>
-                  <option value="rocket">Rocket</option>
-                  <option value="bank_transfer">Bank Transfer</option>
-                  <option value="cash">Cash</option>
-                </select>
-              </div>
+              {/* Payment Mode Selection */}
+              <Tabs value={paymentMode} onValueChange={(v) => setPaymentMode(v as 'online' | 'manual')}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="online" disabled={!hasOnlineGateways}>
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Pay Online
+                  </TabsTrigger>
+                  <TabsTrigger value="manual">
+                    <Banknote className="h-4 w-4 mr-2" />
+                    Manual Payment
+                  </TabsTrigger>
+                </TabsList>
 
-              {/* Transaction ID */}
-              <div>
-                <Label>Transaction ID / Reference *</Label>
-                <Input
-                  placeholder="Enter TxID or payment reference"
-                  value={transactionId}
-                  onChange={(e) => setTransactionId(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
+                <TabsContent value="online" className="space-y-4 mt-4">
+                  {loadingGateways ? (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    </div>
+                  ) : onlineGateways.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground">
+                      No online payment gateways available. Please use manual payment.
+                    </div>
+                  ) : (
+                    <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
+                      <div className="grid gap-2">
+                        {onlineGateways.map((gateway) => (
+                          <Label
+                            key={gateway.id}
+                            htmlFor={gateway.gateway}
+                            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                              paymentMethod === gateway.gateway
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:border-primary/50'
+                            }`}
+                          >
+                            <RadioGroupItem value={gateway.gateway} id={gateway.gateway} />
+                            {getGatewayIcon(gateway.gateway)}
+                            <span className="font-medium">{gateway.display_name}</span>
+                          </Label>
+                        ))}
+                      </div>
+                    </RadioGroup>
+                  )}
+                </TabsContent>
 
-              {/* Notes */}
-              <div>
-                <Label>Notes (Optional)</Label>
-                <Textarea
-                  placeholder="Add any additional notes..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  className="mt-1"
-                />
-              </div>
+                <TabsContent value="manual" className="space-y-4 mt-4">
+                  {/* Manual Payment Method */}
+                  <div>
+                    <Label>Payment Method</Label>
+                    <select 
+                      className="w-full mt-1 p-2 rounded-lg border bg-background"
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                    >
+                      <option value="bkash">bKash</option>
+                      <option value="nagad">Nagad</option>
+                      <option value="rocket">Rocket</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="cash">Cash</option>
+                    </select>
+                  </div>
+
+                  {/* Transaction ID */}
+                  <div>
+                    <Label>Transaction ID / Reference *</Label>
+                    <Input
+                      placeholder="Enter TxID or payment reference"
+                      value={transactionId}
+                      onChange={(e) => setTransactionId(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <Label>Notes (Optional)</Label>
+                    <Textarea
+                      placeholder="Add any additional notes..."
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      rows={2}
+                      className="mt-1"
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowTopupDialog(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSubmitTopup} disabled={isSubmitting}>
+              <Button 
+                onClick={handleSubmitTopup} 
+                disabled={isSubmitting || (paymentMode === 'online' && !hasOnlineGateways)}
+              >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Submitting...
+                    Processing...
+                  </>
+                ) : paymentMode === 'online' ? (
+                  <>
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Pay ৳{getFinalAmount().toLocaleString()}
                   </>
                 ) : (
                   <>

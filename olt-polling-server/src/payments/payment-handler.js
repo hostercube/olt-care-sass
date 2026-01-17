@@ -176,6 +176,65 @@ async function processResellerCommissionChain(supabase, resellerId, customerId, 
   }
 }
 
+/**
+ * Process automatic wallet top-up for reseller after online payment
+ * Credits the amount to reseller's balance and creates transaction record
+ */
+async function processResellerAutoTopup(supabase, resellerId, amount, tenantId, paymentId, topupRequestId = null) {
+  logger.info(`Processing auto top-up for reseller ${resellerId}, amount: ${amount}`);
+
+  // Get reseller
+  const { data: reseller, error: resellerError } = await supabase
+    .from('resellers')
+    .select('*')
+    .eq('id', resellerId)
+    .single();
+
+  if (resellerError || !reseller) {
+    logger.error('Reseller not found for auto top-up:', resellerError);
+    throw new Error('Reseller not found');
+  }
+
+  const oldBalance = reseller.balance || 0;
+  const newBalance = oldBalance + amount;
+
+  // Update reseller balance
+  const { error: updateError } = await supabase
+    .from('resellers')
+    .update({ balance: newBalance })
+    .eq('id', resellerId);
+
+  if (updateError) {
+    logger.error('Failed to update reseller balance:', updateError);
+    throw updateError;
+  }
+
+  // Create transaction record
+  await supabase.from('reseller_transactions').insert({
+    tenant_id: tenantId,
+    reseller_id: resellerId,
+    type: 'topup',
+    amount: amount,
+    balance_before: oldBalance,
+    balance_after: newBalance,
+    description: `Wallet top-up via online payment (Payment ID: ${paymentId})`,
+  });
+
+  // Update topup request status if exists
+  if (topupRequestId) {
+    await supabase
+      .from('reseller_topup_requests')
+      .update({
+        status: 'approved',
+        processed_at: new Date().toISOString(),
+      })
+      .eq('id', topupRequestId);
+  }
+
+  logger.info(`Reseller ${resellerId} wallet topped up. Old: ${oldBalance}, New: ${newBalance}`);
+  return { success: true, newBalance };
+}
+
 // Gateway configurations
 const GATEWAY_CONFIGS = {
   sslcommerz: {
@@ -1072,13 +1131,28 @@ export async function handlePaymentCallback(supabase, gateway, callbackData) {
     return { success: false, error: 'Failed to update payment' };
   }
 
-  // Handle customer bill payment - AUTO RECHARGE with reseller commission
+// Handle customer bill payment - AUTO RECHARGE with reseller commission
   if (isSuccess && paymentFor === 'customer_bill' && customerId) {
     try {
       await processCustomerAutoRecharge(supabase, customerId, payment.amount, payment.tenant_id, payment.id);
     } catch (rechargeError) {
       logger.error('Auto recharge failed:', rechargeError);
       // Don't fail the callback, just log the error
+    }
+  }
+
+  // Handle reseller wallet top-up - AUTO CREDIT BALANCE
+  if (isSuccess && paymentFor === 'reseller_topup') {
+    const resellerId = originalGatewayResponse.reseller_id;
+    const topupRequestId = originalGatewayResponse.topup_request_id;
+    
+    if (resellerId) {
+      try {
+        await processResellerAutoTopup(supabase, resellerId, payment.amount, payment.tenant_id, payment.id, topupRequestId);
+        logger.info(`Reseller ${resellerId} wallet auto-credited with ${payment.amount}`);
+      } catch (topupError) {
+        logger.error('Reseller auto topup failed:', topupError);
+      }
     }
   }
 

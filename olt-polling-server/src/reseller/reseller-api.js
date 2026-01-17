@@ -1380,9 +1380,31 @@ export function setupResellerRoutes(app, supabase) {
     }
   });
   
-  // ============= Reseller Balance Top-up Requests =============
+// ============= Reseller Balance Top-up Requests =============
   
-  // Create balance topup request
+  // Get tenant enabled payment gateways for reseller top-up
+  app.get('/api/reseller/payment-gateways', authMiddleware, async (req, res) => {
+    try {
+      const { data: gateways, error } = await supabase
+        .from('tenant_payment_gateways')
+        .select('id, gateway, display_name, is_enabled, instructions')
+        .eq('tenant_id', req.reseller.tenant_id)
+        .eq('is_enabled', true)
+        .order('sort_order', { ascending: true });
+      
+      if (error) {
+        logger.error('Error fetching payment gateways:', error);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+      
+      res.json({ success: true, gateways: gateways || [] });
+    } catch (error) {
+      logger.error('Error fetching payment gateways:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // Create balance topup request (manual with TxID)
   app.post('/api/reseller/topup-request', authMiddleware, async (req, res) => {
     try {
       const { amount, payment_method, transaction_id, notes } = req.body;
@@ -1415,6 +1437,98 @@ export function setupResellerRoutes(app, supabase) {
       res.json({ success: true, topupRequest });
     } catch (error) {
       logger.error('Error creating topup request:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // Initiate online payment for reseller top-up
+  app.post('/api/reseller/topup-payment', authMiddleware, async (req, res) => {
+    try {
+      const { amount, gateway, return_url, cancel_url } = req.body;
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ success: false, error: 'Invalid amount' });
+      }
+      
+      if (!gateway) {
+        return res.status(400).json({ success: false, error: 'Payment gateway required' });
+      }
+      
+      // Import payment handler
+      const { initiatePayment } = await import('../payments/payment-handler.js');
+      
+      // Create topup request first (will be updated on callback)
+      const { data: topupRequest, error: topupError } = await supabase
+        .from('reseller_topup_requests')
+        .insert({
+          reseller_id: req.reseller.id,
+          tenant_id: req.reseller.tenant_id,
+          amount: parseFloat(amount),
+          payment_method: gateway,
+          notes: 'Online payment - pending gateway completion',
+          status: 'pending',
+        })
+        .select()
+        .single();
+      
+      if (topupError) {
+        logger.error('Error creating topup request:', topupError);
+        return res.status(500).json({ success: false, error: topupError.message });
+      }
+      
+      // Build callback URL
+      const baseUrl = process.env.VPS_BASE_URL || 'https://oltapp.isppoint.com/olt-polling-server';
+      const gatewayCallbackUrl = `${baseUrl}/payments/callback/${gateway}`;
+      
+      // Initiate payment
+      const paymentData = {
+        gateway,
+        amount: parseFloat(amount),
+        tenant_id: req.reseller.tenant_id,
+        description: `Reseller Wallet Top-up - ${req.reseller.name}`,
+        return_url: return_url || `${baseUrl}/reseller/wallet`,
+        cancel_url: cancel_url || `${baseUrl}/reseller/wallet`,
+        gateway_callback_url: gatewayCallbackUrl,
+        customer_name: req.reseller.name,
+        customer_phone: req.reseller.phone || '',
+        customer_email: req.reseller.email || '',
+        payment_for: 'reseller_topup',
+        reseller_id: req.reseller.id,
+        topup_request_id: topupRequest.id,
+      };
+      
+      const result = await initiatePayment(supabase, gateway, paymentData);
+      
+      if (result.success) {
+        // Update topup request with transaction ID
+        await supabase
+          .from('reseller_topup_requests')
+          .update({
+            transaction_id: result.transaction_id,
+            notes: `Online payment initiated - TxID: ${result.transaction_id}`,
+          })
+          .eq('id', topupRequest.id);
+        
+        logger.info(`Reseller ${req.reseller.id} initiated online top-up payment for ${amount} via ${gateway}`);
+        res.json({
+          success: true,
+          checkout_url: result.checkout_url,
+          payment_id: result.payment_id,
+          transaction_id: result.transaction_id,
+          bkash_mode: result.bkash_mode,
+          bkash_config: result.bkash_config,
+        });
+      } else {
+        // Delete the pending topup request if payment initiation failed
+        await supabase
+          .from('reseller_topup_requests')
+          .delete()
+          .eq('id', topupRequest.id);
+        
+        res.status(400).json({ success: false, error: result.error || 'Payment initiation failed' });
+      }
+    } catch (error) {
+      logger.error('Error initiating topup payment:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -1539,12 +1653,20 @@ export function setupResellerRoutes(app, supabase) {
     req.url = '/api/reseller/sub-reseller/deduct-balance';
     app.handle(req, res);
   });
-  app.post('/reseller/topup-request', (req, res) => {
+app.post('/reseller/topup-request', (req, res) => {
     req.url = '/api/reseller/topup-request';
     app.handle(req, res);
   });
   app.get('/reseller/topup-requests', (req, res) => {
     req.url = '/api/reseller/topup-requests';
+    app.handle(req, res);
+  });
+  app.get('/reseller/payment-gateways', (req, res) => {
+    req.url = '/api/reseller/payment-gateways';
+    app.handle(req, res);
+  });
+  app.post('/reseller/topup-payment', (req, res) => {
+    req.url = '/api/reseller/topup-payment';
     app.handle(req, res);
   });
   
