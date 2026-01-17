@@ -231,20 +231,18 @@ export default function ReferralManagement() {
 
       if (referralError) throw referralError;
 
-      // Credit bonus using RPC (bypasses RLS + creates wallet transaction)
+      // Credit bonus to referral_bonus_balance using dedicated RPC (not wallet_balance)
       if (bonus > 0 && referral.referrer_customer_id) {
-        const { error: walletError } = await supabase.rpc('add_wallet_transaction', {
+        const { error: bonusError } = await supabase.rpc('add_referral_bonus', {
           p_customer_id: referral.referrer_customer_id,
           p_amount: bonus,
-          p_type: 'referral_bonus',
           p_reference_id: referral.id,
-          p_reference_type: 'customer_referral',
           p_notes: `Referral bonus for code ${referral.referral_code || ''}`.trim(),
         });
 
-        if (walletError) {
-          console.error('Error crediting wallet via RPC:', walletError);
-          toast.error('Referral approved but failed to credit wallet');
+        if (bonusError) {
+          console.error('Error crediting referral bonus:', bonusError);
+          toast.error('Referral approved but failed to credit bonus');
           refetch();
           return;
         }
