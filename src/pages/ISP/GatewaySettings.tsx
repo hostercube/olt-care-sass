@@ -73,6 +73,7 @@ export default function ISPGatewaySettings() {
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [savingGateway, setSavingGateway] = useState<string | null>(null);
 
   useEffect(() => {
     if (gateways.length > 0) {
@@ -136,15 +137,30 @@ export default function ISPGatewaySettings() {
 
   const handlePaymentSave = async (gateway: string) => {
     const config = paymentConfigs[gateway];
-    if (config) {
+    if (!config) return;
+    
+    setSavingGateway(gateway);
+    try {
+      // Build config data properly
+      const configData: Record<string, any> = {};
+      if (config.config && typeof config.config === 'object') {
+        Object.entries(config.config).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            configData[key] = value;
+          }
+        });
+      }
+      
       await updateGateway(config.id, {
         is_enabled: config.is_enabled,
         sandbox_mode: config.sandbox_mode,
-        config: config.config,
+        config: configData,
         instructions: config.instructions,
         transaction_fee_percent: config.transaction_fee_percent || 0,
-        bkash_mode: gateway === 'bkash' ? ((config.config as any)?.bkash_mode || 'tokenized') : undefined,
+        bkash_mode: gateway === 'bkash' ? (configData.bkash_mode || 'tokenized') : undefined,
       });
+    } finally {
+      setSavingGateway(null);
     }
   };
 
@@ -364,9 +380,17 @@ export default function ISPGatewaySettings() {
             />
           </div>
 
-          <Button size="sm" onClick={() => handlePaymentSave(gatewayInfo.id)}>
-            <Save className="h-3 w-3 mr-1" />
-            Save
+          <Button 
+            size="sm" 
+            onClick={() => handlePaymentSave(gatewayInfo.id)}
+            disabled={savingGateway === gatewayInfo.id}
+          >
+            {savingGateway === gatewayInfo.id ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <Save className="h-3 w-3 mr-1" />
+            )}
+            {savingGateway === gatewayInfo.id ? 'Saving...' : 'Save'}
           </Button>
         </CardContent>
       </Card>

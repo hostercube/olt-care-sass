@@ -14,6 +14,7 @@ export interface PaymentGatewaySettings {
   config: Record<string, unknown> | null;
   sort_order: number;
   bkash_mode?: string;
+  transaction_fee_percent?: number; // Added for fee handling
   created_at: string;
   updated_at: string;
 }
@@ -44,33 +45,68 @@ export function usePaymentGateways() {
     fetchGateways();
   }, [fetchGateways]);
 
-  const updateGateway = async (id: string, updates: Partial<PaymentGatewaySettings>) => {
+  const updateGateway = async (id: string, updates: Partial<PaymentGatewaySettings>): Promise<boolean> => {
     try {
-      const updateData: any = { ...updates };
-      if (updates.config) {
-        updateData.config = updates.config as Json;
+      // Build update data, ensuring config is properly formatted
+      const updateData: Record<string, any> = {};
+      
+      // Copy simple fields
+      if (updates.is_enabled !== undefined) updateData.is_enabled = updates.is_enabled;
+      if (updates.sandbox_mode !== undefined) updateData.sandbox_mode = updates.sandbox_mode;
+      if (updates.instructions !== undefined) updateData.instructions = updates.instructions;
+      if (updates.sort_order !== undefined) updateData.sort_order = updates.sort_order;
+      if (updates.display_name !== undefined) updateData.display_name = updates.display_name;
+      if (updates.bkash_mode !== undefined) updateData.bkash_mode = updates.bkash_mode;
+      if (updates.transaction_fee_percent !== undefined) {
+        updateData.transaction_fee_percent = Number(updates.transaction_fee_percent) || 0;
+      }
+      
+      // Handle config - ensure it's a valid JSON object
+      if (updates.config !== undefined) {
+        // Make a clean copy of the config object
+        const cleanConfig: Record<string, any> = {};
+        if (updates.config && typeof updates.config === 'object') {
+          Object.entries(updates.config).forEach(([key, value]) => {
+            // Keep all values including empty strings (user might want to clear a field)
+            if (value !== undefined) {
+              cleanConfig[key] = value;
+            }
+          });
+        }
+        updateData.config = cleanConfig;
       }
 
-      const { error } = await supabase
+      console.log('Updating gateway:', { id, updateData });
+
+      const { data, error } = await supabase
         .from('payment_gateway_settings')
         .update(updateData)
-        .eq('id', id);
+        .eq('id', id)
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase update error:', error);
+        throw error;
+      }
+
+      console.log('Gateway updated successfully:', data);
 
       toast({
         title: 'Gateway Updated',
-        description: 'Payment gateway settings have been saved',
+        description: 'Payment gateway settings have been saved successfully',
       });
 
       await fetchGateways();
+      return true;
     } catch (error: any) {
       console.error('Error updating payment gateway:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to update gateway',
+        title: 'Error Saving Gateway',
+        description: error.message || 'Failed to update gateway. Check console for details.',
         variant: 'destructive',
       });
+      return false;
     }
   };
 
