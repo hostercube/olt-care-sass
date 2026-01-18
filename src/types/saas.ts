@@ -459,8 +459,8 @@ export const PAYMENT_GATEWAYS = [
     id: 'aamarpay', 
     name: 'aamarPay', 
     description: 'Multi-channel payment gateway',
-    fields: ['store_id', 'api_key'],
-    fieldLabels: { store_id: 'Store ID', api_key: 'Signature Key' }
+    fields: ['store_id', 'signature_key'],
+    fieldLabels: { store_id: 'Store ID', signature_key: 'Signature Key' }
   },
   { 
     id: 'portwallet', 
