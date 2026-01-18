@@ -175,7 +175,7 @@ const InstructionsFieldISP = memo(function InstructionsFieldISP({
 export default function ISPGatewaySettings() {
   const { tenantId } = useTenantContext();
   const { hasPaymentGatewayAccess, hasSMSGatewayAccess, hasAccess, isSuperAdmin } = useModuleAccess();
-  const { gateways, loading: gatewaysLoading, updateGateway, initializeGateways } = useTenantPaymentGateways();
+  const { gateways, loading: gatewaysLoading, updateGateway, initializeGateways, syncFromGlobal } = useTenantPaymentGateways();
   const { settings: smsSettings, loading: smsLoading, updateSettings: updateSMSSettings, sendTestSMS } = useTenantSMSGateway();
   const { settings: emailSettings, loading: emailLoading, updateSettings: updateEmailSettings } = useTenantEmailGateway();
 
@@ -264,7 +264,25 @@ export default function ISPGatewaySettings() {
     setIsInitializing(true);
     try {
       await initializeGateways(tenantId);
-      toast.success('Payment gateways initialized');
+      // Also sync credentials from global settings
+      await syncFromGlobal(tenantId);
+      toast.success('Payment gateways initialized and synced');
+    } catch (err) {
+      console.error('Failed to initialize gateways:', err);
+      toast.error('Failed to initialize gateways');
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  const handleSyncFromGlobal = async () => {
+    if (!tenantId) return;
+    setIsInitializing(true);
+    try {
+      const count = await syncFromGlobal(tenantId);
+      if (count === 0) {
+        toast.info('All gateways already have credentials configured');
+      }
     } finally {
       setIsInitializing(false);
     }
@@ -547,6 +565,25 @@ export default function ISPGatewaySettings() {
           </TabsList>
 
           <TabsContent value="payment" className="space-y-4">
+            {/* Sync button for existing gateways */}
+            {Object.keys(paymentConfigs).length > 0 && (
+              <div className="flex justify-end">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleSyncFromGlobal} 
+                  disabled={isInitializing}
+                >
+                  {isInitializing ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Lock className="h-4 w-4 mr-2" />
+                  )}
+                  Sync Credentials from Admin
+                </Button>
+              </div>
+            )}
+            
             {Object.keys(paymentConfigs).length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">

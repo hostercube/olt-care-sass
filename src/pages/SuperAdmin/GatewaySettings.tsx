@@ -315,8 +315,8 @@ export default function GatewaySettings() {
     setIsInitializing(true);
     try {
       // Initialize default gateways by inserting if not exists
-      const defaultGateways: Array<'sslcommerz' | 'bkash' | 'nagad' | 'shurjopay' | 'uddoktapay' | 'piprapay' | 'aamarpay' | 'manual'> = 
-        ['sslcommerz', 'bkash', 'nagad', 'shurjopay', 'uddoktapay', 'piprapay', 'aamarpay', 'manual'];
+      const defaultGateways: Array<'sslcommerz' | 'bkash' | 'rocket' | 'nagad' | 'shurjopay' | 'uddoktapay' | 'piprapay' | 'aamarpay' | 'portwallet' | 'manual'> = 
+        ['sslcommerz', 'bkash', 'rocket', 'nagad', 'shurjopay', 'uddoktapay', 'piprapay', 'aamarpay', 'manual'];
       
       const existingGateways = gateways.map(g => g.gateway);
       const toInsert = defaultGateways
